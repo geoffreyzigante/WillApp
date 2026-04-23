@@ -13,17 +13,67 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.geoffreyzigante.will",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Will utilise la camera pour detecter les coureurs et prendre des photos automatiquement.",
+        "NSPhotoLibraryUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
+        "NSPhotoLibraryAddUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "8e0d828b-39bb-4fa3-99a9-98e2712493d8"
+      }
+    },
+    "owner": "geoffreyzigante",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/8e0d828b-39bb-4fa3-99a9-98e2712493d8"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Will utilise la camera pour detecter les coureurs et prendre des photos."
+        }
+      ],
+      "expo-font",
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Will utilise la camera pour detecter les coureurs et prendre des photos.",
+          "enableFrameProcessors": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.0"
+          }
+        }
+      ]
+    ],
+    "fonts": [
+      "./assets/fonts/AV_Estiana-VF.ttf"
+    ]
   }
 }
