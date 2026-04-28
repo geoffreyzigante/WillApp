@@ -272,13 +272,17 @@ function EventCard({ event, onPress }) {
 
   return (
     <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={s.eventCard}>
+      {/* Image moitié droite */}
       {event.cover_image ? (
-        <ExpoImage
-          source={{ uri: event.cover_image }}
-          style={StyleSheet.absoluteFillObject}
-          contentFit="cover"
-        />
+        <View style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '55%' }}>
+          <ExpoImage
+            source={{ uri: event.cover_image }}
+            style={StyleSheet.absoluteFillObject}
+            contentFit="cover"
+          />
+        </View>
       ) : null}
+      {/* Fond couleur moitié gauche + dégradé qui mange un peu la droite */}
       <LinearGradient
         colors={[tint, tint, `${tint}00`]}
         locations={[0, 0.5, 1]}
@@ -366,12 +370,18 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
 
       {/* Cover */}
       <View style={s.coverCard}>
+        {/* Image moitié droite */}
         {event.cover_image ? (
-          <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+          <View style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '55%' }}>
+            <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+          </View>
         ) : null}
+        {/* Dégradé horizontal : couleur pleine à gauche, transparent à droite */}
         <LinearGradient
-          colors={[`${tint}00`, `${tint}AA`, tint]}
+          colors={[tint, tint, `${tint}00`]}
           locations={[0, 0.5, 1]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
           style={StyleSheet.absoluteFillObject}
         />
         <TouchableOpacity style={s.closeBtn} onPress={onClose} hitSlop={10}>
@@ -536,17 +546,23 @@ function PhotographerScreen({ session, onLogout }) {
         queue.push({ photo, index: photoIndex++, burstTs });
 
         if (isTestModeRef.current) {
+          // Limite à 5 photos test pour ne pas saturer la RAM (chaque photo = 4-8MB)
+          // On ne convertit que si on a moins de 5 photos
           const fileUri = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
-          // Convertir en base64 pour affichage fiable (le path natif peut être nettoyé)
           try {
             const blob = await (await fetch(fileUri)).blob();
             const reader = new FileReader();
             reader.onloadend = () => {
               const dataUri = reader.result;
-              if (dataUri && isMountedRef.current) {
-                setTestPhotos(prev => [{ uri: dataUri, ts: Date.now() + Math.random() }, ...prev].slice(0, 30));
+              if (dataUri && typeof dataUri === 'string' && isMountedRef.current) {
+                setTestPhotos(prev => {
+                  // Garde max 5 photos test
+                  if (prev.length >= 5) return prev;
+                  return [...prev, { uri: dataUri, ts: Date.now() + Math.random() }];
+                });
               }
             };
+            reader.onerror = (err) => console.warn('FileReader error', err);
             reader.readAsDataURL(blob);
           } catch (e) { console.warn('test photo encode', e); }
         }
@@ -681,8 +697,8 @@ function PhotographerScreen({ session, onLogout }) {
         )}
       </Animated.View>
 
-      {/* Compteur (mode normal) ou Voir (mode test) — haut droite */}
-      {isDetectionEnabled && !isTestMode && photoCount > 0 && (
+      {/* Compteur (mode normal) ou Voir (test) — haut droite */}
+      {photoCount > 0 && testPhotos.length === 0 && (
         <View style={{
           position: 'absolute',
           top: 60,
@@ -695,7 +711,7 @@ function PhotographerScreen({ session, onLogout }) {
           <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>{photoCount}</Text>
         </View>
       )}
-      {isDetectionEnabled && isTestMode && (
+      {testPhotos.length > 0 && (
         <TouchableOpacity
           onPress={() => setShowTestPanel(true)}
           style={{
@@ -801,7 +817,7 @@ function PhotographerScreen({ session, onLogout }) {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#EEE' }}>
             <View>
               <Text style={{ color: C.text, fontSize: 20, fontWeight: '700' }}>Photos de test</Text>
-              <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>{testPhotos.length} photo{testPhotos.length > 1 ? 's' : ''}</Text>
+              <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>{testPhotos.length} / 5 max</Text>
             </View>
             <TouchableOpacity onPress={() => setShowTestPanel(false)} style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
               <Text style={{ color: C.primary, fontSize: 15, fontWeight: '600' }}>Fermer</Text>
