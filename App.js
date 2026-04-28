@@ -424,20 +424,15 @@ function PhotographerScreen({ session, onLogout }) {
   const lastFaceSeenAtRef = useRef(0);
   const isMountedRef = useRef(true);
   const isDetectionEnabledRef = useRef(false);
-  const isTestModeRef = useRef(false);
 
   const [facesCount, setFacesCount] = useState(0);
   const [isShooting, setIsShooting] = useState(false);
   const [photoCount, setPhotoCount] = useState(0);
   const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
-  const [isTestMode, setIsTestMode] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [testPhotos, setTestPhotos] = useState([]);
-  const [showTestPanel, setShowTestPanel] = useState(false);
 
   const badgePulse = useRef(new Animated.Value(1)).current;
   const badgeOpacity = useRef(new Animated.Value(1)).current;
-  const testPanelY = useRef(new Animated.Value(900)).current;
 
   const faceDetectionOptions = useRef({
     performanceMode: 'fast',
@@ -488,15 +483,6 @@ function PhotographerScreen({ session, onLogout }) {
     ]).start();
   }, [facesCount > 0, isShooting, isDetectionEnabled]);
 
-  useEffect(() => {
-    Animated.spring(testPanelY, {
-      toValue: showTestPanel ? 0 : 900,
-      useNativeDriver: true,
-      tension: 60,
-      friction: 11,
-    }).start();
-  }, [showTestPanel]);
-
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
     const faces = detectFaces(frame);
@@ -506,18 +492,14 @@ function PhotographerScreen({ session, onLogout }) {
   const INTER_PHOTO_MS = 150;
   const NO_FACE_TIMEOUT_MS = 500;
 
-  function startSession(testMode) {
+  function startSession() {
     isDetectionEnabledRef.current = true;
-    isTestModeRef.current = testMode;
     setIsDetectionEnabled(true);
-    setIsTestMode(testMode);
   }
 
   function stopSession() {
     isDetectionEnabledRef.current = false;
     setIsDetectionEnabled(false);
-    setIsTestMode(false);
-    isTestModeRef.current = false;
     lastFaceSeenAtRef.current = 0;
   }
 
@@ -544,28 +526,6 @@ function PhotographerScreen({ session, onLogout }) {
           enableShutterSound: false,
         });
         queue.push({ photo, index: photoIndex++, burstTs });
-
-        if (isTestModeRef.current) {
-          // Limite à 5 photos test pour ne pas saturer la RAM (chaque photo = 4-8MB)
-          // On ne convertit que si on a moins de 5 photos
-          const fileUri = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
-          try {
-            const blob = await (await fetch(fileUri)).blob();
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              const dataUri = reader.result;
-              if (dataUri && typeof dataUri === 'string' && isMountedRef.current) {
-                setTestPhotos(prev => {
-                  // Garde max 5 photos test
-                  if (prev.length >= 5) return prev;
-                  return [...prev, { uri: dataUri, ts: Date.now() + Math.random() }];
-                });
-              }
-            };
-            reader.onerror = (err) => console.warn('FileReader error', err);
-            reader.readAsDataURL(blob);
-          } catch (e) { console.warn('test photo encode', e); }
-        }
       } catch (e) { console.warn('takePhoto', e); }
 
       await new Promise(r => setTimeout(r, INTER_PHOTO_MS));
@@ -574,9 +534,7 @@ function PhotographerScreen({ session, onLogout }) {
     isCapturingRef.current = false;
     setIsShooting(false);
 
-    if (!isTestModeRef.current) {
-      uploadQueue(queue).catch(e => console.warn('upload', e));
-    }
+    uploadQueue(queue).catch(e => console.warn('upload', e));
   }
 
   async function uploadQueue(queue) {
@@ -690,15 +648,10 @@ function PhotographerScreen({ session, onLogout }) {
             {badgeText}
           </Text>
         </View>
-        {isTestMode && (
-          <View style={{ marginTop: 6, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: 'rgba(245, 158, 11, 0.9)' }}>
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 10, letterSpacing: 1 }}>TEST</Text>
-          </View>
-        )}
       </Animated.View>
 
-      {/* Compteur (mode normal) ou Voir (test) — haut droite */}
-      {photoCount > 0 && testPhotos.length === 0 && (
+      {/* Compteur photos — haut droite */}
+      {photoCount > 0 && (
         <View style={{
           position: 'absolute',
           top: 60,
@@ -711,26 +664,8 @@ function PhotographerScreen({ session, onLogout }) {
           <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>{photoCount}</Text>
         </View>
       )}
-      {testPhotos.length > 0 && (
-        <TouchableOpacity
-          onPress={() => setShowTestPanel(true)}
-          style={{
-            position: 'absolute',
-            top: 60,
-            right: 16,
-            backgroundColor: 'rgba(245, 158, 11, 0.95)',
-            paddingHorizontal: 14,
-            paddingVertical: 7,
-            borderRadius: 999,
-          }}
-        >
-          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
-            Voir ({testPhotos.length})
-          </Text>
-        </TouchableOpacity>
-      )}
 
-      {/* Sélecteur zoom (toujours visible, bas centre au-dessus des contrôles) */}
+      {/* Sélecteur zoom */}
       <View style={{
         position: 'absolute',
         bottom: 130,
@@ -758,38 +693,21 @@ function PhotographerScreen({ session, onLogout }) {
         ))}
       </View>
 
-      {/* Boutons bas */}
+      {/* Bouton Démarrer / Arrêter */}
       <View style={{ position: 'absolute', bottom: 30, left: 24, right: 24 }}>
         {!isDetectionEnabled ? (
-          // État idle : Tester / Démarrer côte à côte
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <TouchableOpacity
-              onPress={() => startSession(true)}
-              style={{
-                flex: 1,
-                backgroundColor: 'rgba(255,255,255,0.95)',
-                paddingVertical: 18,
-                borderRadius: 16,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: '#000', fontSize: 16, fontWeight: '700' }}>Tester</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => startSession(false)}
-              style={{
-                flex: 1,
-                backgroundColor: C.primary,
-                paddingVertical: 18,
-                borderRadius: 16,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Démarrer</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={startSession}
+            style={{
+              backgroundColor: C.primary,
+              paddingVertical: 18,
+              borderRadius: 16,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Démarrer</Text>
+          </TouchableOpacity>
         ) : (
-          // État actif : Arrêter pleine largeur
           <TouchableOpacity
             onPress={stopSession}
             style={{
@@ -803,52 +721,6 @@ function PhotographerScreen({ session, onLogout }) {
           </TouchableOpacity>
         )}
       </View>
-
-      {/* Panneau test (slide-up plein écran) */}
-      <Animated.View
-        style={{
-          position: 'absolute',
-          top: 0, bottom: 0, left: 0, right: 0,
-          backgroundColor: C.bg,
-          transform: [{ translateY: testPanelY }],
-        }}
-      >
-        <SafeAreaView style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#EEE' }}>
-            <View>
-              <Text style={{ color: C.text, fontSize: 20, fontWeight: '700' }}>Photos de test</Text>
-              <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>{testPhotos.length} / 5 max</Text>
-            </View>
-            <TouchableOpacity onPress={() => setShowTestPanel(false)} style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-              <Text style={{ color: C.primary, fontSize: 15, fontWeight: '600' }}>Fermer</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView contentContainerStyle={{ padding: 8 }}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              {testPhotos.map((p, i) => (
-                <Image
-                  key={p.ts + '_' + i}
-                  source={{ uri: p.uri }}
-                  style={{ width: '32%', aspectRatio: 0.75, margin: '0.66%', borderRadius: 8, backgroundColor: '#EEE' }}
-                />
-              ))}
-              {testPhotos.length === 0 && (
-                <Text style={{ color: C.textSoft, textAlign: 'center', width: '100%', marginTop: 60 }}>
-                  Aucune photo de test
-                </Text>
-              )}
-            </View>
-          </ScrollView>
-          {testPhotos.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setTestPhotos([])}
-              style={{ marginHorizontal: 20, marginBottom: 20, paddingVertical: 14, borderRadius: 12, backgroundColor: '#FEE', alignItems: 'center' }}
-            >
-              <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Effacer toutes les photos</Text>
-            </TouchableOpacity>
-          )}
-        </SafeAreaView>
-      </Animated.View>
     </View>
   );
 }
