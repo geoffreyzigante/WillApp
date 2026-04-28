@@ -541,23 +541,37 @@ function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpen
 }
 
 function PhotoGrid({ photos = [], onPress }) {
-  // Grille 4 colonnes, placeholders si vide
-  const items = photos.length > 0 ? photos : Array.from({ length: 16 }, (_, i) => ({ placeholder: true, id: `ph-${i}` }));
+  // Si pas de photos : grille de placeholders
+  if (photos.length === 0) {
+    return (
+      <View style={s.grid}>
+        {Array.from({ length: 16 }, (_, i) => (
+          <View key={`ph-${i}`} style={s.gridItem}>
+            <View style={s.gridPlaceholder} />
+          </View>
+        ))}
+      </View>
+    );
+  }
+
   return (
     <View style={s.grid}>
-      {items.map((p, i) => (
+      {photos.map((p, i) => (
         <TouchableOpacity
-          key={p.id || i}
+          key={p.id || `p-${i}`}
           style={s.gridItem}
           activeOpacity={0.85}
-          onPress={() => !p.placeholder && onPress?.(p, i, photos)}
-          disabled={p.placeholder}
+          onPress={() => onPress?.(p, i, photos)}
         >
-          {p.placeholder ? (
-            <View style={s.gridPlaceholder} />
-          ) : (
-            <ExpoImage source={{ uri: p.uri }} style={s.gridImg} contentFit="cover" />
-          )}
+          <ExpoImage
+            source={{ uri: p.uri }}
+            style={s.gridImg}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            priority="low"
+            transition={100}
+            recyclingKey={p.id}
+          />
         </TouchableOpacity>
       ))}
     </View>
@@ -576,7 +590,7 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
       .then(r => r.ok ? r.json() : { photos: [] })
       .then(data => {
         if (!mounted) return;
-        const list = (data.photos || []).map(p => ({
+        const list = (data.photos || []).slice(0, 200).map(p => ({
           uri: p.url || `${R2_PUBLIC}/${p.key}`,
           id: p.key,
         }));
