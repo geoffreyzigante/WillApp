@@ -8,7 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import * as Font from 'expo-font';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
@@ -264,8 +264,7 @@ function PhotosScreen({ onOpenSelfie, gallery }) {
         </LinearGradient>
       </TouchableOpacity>
 
-      <Text style={s.galleryTitle}>Ma galerie</Text>
-      <PhotoGrid photos={gallery} />
+      <Text style={s.empty}>Pas encore de photos disponibles</Text>
     </ScrollView>
   );
 }
@@ -365,6 +364,172 @@ function EventDetailScreen({ event, onClose, onOpenSelfie }) {
   );
 }
 
+function PhotographerScreen({ session, onLogout }) {
+  const [permission, requestPermission] = useCameraPermissions();
+  const [status, setStatus] = useState('idle');
+  const [count, setCount] = useState(0);
+  const cameraRef = useRef(null);
+  const shootingRef = useRef(false);
+
+  useEffect(() => {
+    if (!permission) return;
+    if (!permission.granted) requestPermission();
+  }, [permission]);
+
+  const burst = async () => {
+    if (!cameraRef.current || shootingRef.current) return;
+    shootingRef.current = true;
+    setStatus('shooting');
+    try {
+      for (let i = 0; i < 8; i++) {
+        const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, skipProcessing: true });
+        const ts = Date.now();
+        const d = new Date();
+        const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+        const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
+        const key = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${ts}_${i}.jpg`;
+
+        const blob = await fetch(photo.uri).then(r => r.blob());
+        await fetch(`${API_URL}/${key}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg', Authorization: `Bearer ${session.token}` },
+          body: blob,
+        });
+        setCount(c => c + 1);
+        await new Promise(r => setTimeout(r, 150));
+      }
+    } catch (e) {
+      Alert.alert('Erreur', e.message);
+    } finally {
+      shootingRef.current = false;
+      setStatus('idle');
+    }
+  };
+
+  if (!permission?.granted) {
+    return (
+      <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+        <Text style={{ color: C.text, textAlign: 'center', marginBottom: 16 }}>Permission caméra requise</Text>
+        <TouchableOpacity style={s.btnPrimary} onPress={requestPermission}>
+          <Text style={s.btnPrimaryText}>Autoriser</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" />
+      <View style={s.camTopBar}>
+        <Text style={s.camTitle} numberOfLines={1}>{session.event.name}</Text>
+        <TouchableOpacity onPress={onLogout}><Text style={s.camLogout}>Quitter</Text></TouchableOpacity>
+      </View>
+      <View style={s.camBottomBar}>
+        <Text style={s.camCount}>{count} photo{count > 1 ? 's' : ''} envoyée{count > 1 ? 's' : ''}</Text>
+        <TouchableOpacity
+          style={[s.camShutter, status === 'shooting' && { opacity: 0.5 }]}
+          onPress={burst}
+          disabled={status === 'shooting'}
+        >
+          {status === 'shooting' ? <ActivityIndicator color="#fff" /> : <View style={s.camShutterInner} />}
+        </TouchableOpacity>
+        <Text style={s.camHint}>Rafale 8 photos</Text>
+      </View>
+    </View>
+  );
+}
+
+function CreateEventModal({ visible, onClose, onCreated }) {
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [location, setLocation] = useState('');
+  const [eventType, setEventType] = useState('');
+  const [website, setWebsite] = useState('');
+  const [contact, setContact] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setName(''); setCode(''); setPassword('');
+      setEventDate(''); setLocation(''); setEventType('');
+      setWebsite(''); setContact('');
+    }
+  }, [visible]);
+
+  const submit = async () => {
+    if (!name || !code || !password) return Alert.alert('Champs requis', 'Nom, code et mot de passe.');
+    setBusy(true);
+    try {
+      const r = await fetch(`${API_URL}/auth/submit-event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name, code, password,
+          contact,
+          event_date: eventDate,
+          location,
+          event_type: eventType,
+          website,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        Alert.alert('Erreur', data.error || 'Échec');
+      } else {
+        Alert.alert('Demande envoyée', 'Ton événement sera validé sous peu.');
+        onCreated?.();
+        onClose();
+      }
+    } catch (e) {
+      Alert.alert('Erreur', e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const types = ['Trail', 'Course sur route', 'Cross', 'Hyrox', 'Triathlon', 'Velo', 'Marche', 'Autre'];
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
+          <TouchableOpacity activeOpacity={1} style={[s.modalSheet, { maxHeight: '90%' }]} onPress={() => {}}>
+            <TouchableOpacity onPress={onClose} hitSlop={20}>
+              <View style={s.modalHandle} />
+            </TouchableOpacity>
+            <Text style={s.modalTitle}>Créer un événement</Text>
+            <ScrollView style={{ maxHeight: 460 }}>
+              <TextInput placeholder="Nom de l'événement *" placeholderTextColor={C.textSoft} value={name} onChangeText={setName} style={s.input} />
+              <TextInput placeholder="Code unique (ex: trail-2027) *" placeholderTextColor={C.textSoft} value={code} onChangeText={setCode} autoCapitalize="none" style={s.input} />
+              <TextInput placeholder="Mot de passe photographe *" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} secureTextEntry style={s.input} />
+              <TextInput placeholder="Date (YYYY-MM-DD)" placeholderTextColor={C.textSoft} value={eventDate} onChangeText={setEventDate} style={s.input} />
+              <TextInput placeholder="Lieu (ex: Louviers (27))" placeholderTextColor={C.textSoft} value={location} onChangeText={setLocation} style={s.input} />
+              <Text style={[s.modalSub, { textAlign: 'left', marginTop: 12, marginBottom: 6 }]}>Type d'épreuve</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {types.map(t => (
+                  <TouchableOpacity key={t} onPress={() => setEventType(t)} style={[s.typePill, eventType === t && s.typePillActive]}>
+                    <Text style={[s.typePillText, eventType === t && { color: '#fff' }]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput placeholder="Site web" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={s.input} />
+              <TextInput placeholder="Email de contact" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={s.input} />
+            </ScrollView>
+            <TouchableOpacity style={s.btnPrimary} onPress={submit} disabled={busy}>
+              {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnPrimaryText}>Soumettre</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={s.modalCancel} onPress={onClose}>
+              <Text style={s.modalCancelText}>Annuler</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 function OrganizationModal({ visible, onClose, onPickRole }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -423,10 +588,8 @@ function SelfieModal({ visible, onClose, onSaved }) {
     if (!uri) return;
     setBusy(true);
     try {
-      const dest = `${FileSystem.documentDirectory}selfie.jpg`;
-      await FileSystem.copyAsync({ from: uri, to: dest });
-      await AsyncStorage.setItem('@will_selfie', dest);
-      onSaved?.(dest);
+      await AsyncStorage.setItem('@will_selfie', uri);
+      onSaved?.(uri);
       onClose();
     } catch (e) {
       Alert.alert('Erreur', e.message);
@@ -601,8 +764,10 @@ export default function App() {
   const [orgModal, setOrgModal] = useState(false);
   const [selfieModal, setSelfieModal] = useState(false);
   const [searchModal, setSearchModal] = useState(false);
+  const [createEventModal, setCreateEventModal] = useState(false);
   const [loginRole, setLoginRole] = useState(null);
   const [selfieUri, setSelfieUri] = useState(null);
+  const [session, setSession] = useState(null);
 
   useEffect(() => {
     Font.loadAsync({
@@ -618,7 +783,7 @@ export default function App() {
   const handlePickRole = (role) => {
     setOrgModal(false);
     if (role === 'create') {
-      Alert.alert('Bientôt', 'La création publique d\'événement arrive bientôt.');
+      setCreateEventModal(true);
       return;
     }
     setLoginRole(role);
@@ -626,6 +791,16 @@ export default function App() {
 
   if (!fontsLoaded) {
     return <View style={[s.root, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator color={C.primary} /></View>;
+  }
+
+  // Mode photographe (full screen caméra)
+  if (session?.role === 'photographer' || session?.role === 'organizer') {
+    return (
+      <SafeAreaView style={s.root}>
+        <StatusBar barStyle="light-content" backgroundColor="#000" />
+        <PhotographerScreen session={session} onLogout={() => setSession(null)} />
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -697,8 +872,13 @@ export default function App() {
         onClose={() => setLoginRole(null)}
         onSuccess={(r) => {
           setLoginRole(null);
-          Alert.alert('Connecté', `Bienvenue ${loginRole === 'organizer' ? 'organisateur' : 'photographe'}`);
+          setSession({ ...r, role: loginRole });
         }}
+      />
+
+      <CreateEventModal
+        visible={createEventModal}
+        onClose={() => setCreateEventModal(false)}
       />
     </SafeAreaView>
   );
@@ -788,4 +968,17 @@ const s = StyleSheet.create({
 
   selfiePreviewWrap: { alignItems: 'center', marginVertical: 16 },
   selfiePreview: { width: 160, height: 160, borderRadius: 80 },
+
+  camTopBar: { position: 'absolute', top: 50, left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  camTitle: { color: '#fff', fontSize: 16, fontWeight: '700', flex: 1, marginRight: 16 },
+  camLogout: { color: '#fff', fontSize: 14, opacity: 0.8 },
+  camBottomBar: { position: 'absolute', bottom: 40, left: 0, right: 0, alignItems: 'center', gap: 8 },
+  camCount: { color: '#fff', fontSize: 14, marginBottom: 4 },
+  camShutter: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.25)', borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  camShutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#fff' },
+  camHint: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
+
+  typePill: { backgroundColor: C.white, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 6 },
+  typePillActive: { backgroundColor: C.primary },
+  typePillText: { fontSize: 12, color: C.text, fontWeight: '600' },
 });
