@@ -161,15 +161,24 @@ const api = {
 
 // ---------- SCREENS ----------
 
-function SelfieBlock({ selfieUri, onPress }) {
+function SelfieBlock({ selfieUri, onPress, onDelete }) {
   if (selfieUri) {
     return (
       <View style={s.selfieDoneBanner}>
-        <ExpoImage source={{ uri: selfieUri }} style={s.selfieDoneAvatar} contentFit="cover" />
+        <View style={s.selfieCheckCircle}>
+          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+            <Path d="m5 12 5 5L20 7" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={s.selfieDoneTitle}>Selfie enregistré</Text>
-          <Text style={s.selfieDoneSub}>Will t'envoie tes photos automatiquement dans l'onglet Photos</Text>
+          <Text style={s.selfieDoneSub}>Will t'envoie tes photos automatiquement</Text>
         </View>
+        <TouchableOpacity onPress={onDelete} hitSlop={10} style={s.selfieDelete}>
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+            <Path d="M6 6l12 12M18 6l-12 12" stroke={C.textSoft} strokeWidth={2} strokeLinecap="round" />
+          </Svg>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -188,7 +197,7 @@ function SelfieBlock({ selfieUri, onPress }) {
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab, onOpenSearch, selfieUri }) {
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie }) {
   const filtered = events.filter(e => tab === 'upcoming' ? isUpcoming(e.event_date) : !isUpcoming(e.event_date));
 
   return (
@@ -210,10 +219,10 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
 
       <View style={s.welcomeRow}>
         <Text style={s.welcome}>Bienvenue chez </Text>
-        <Icon.Logo width={70} color={C.primary} />
+        <Icon.Logo width={50} color={C.primary} />
       </View>
 
-      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} />
+      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
 
       {/* Search button (style maquette : bouton plein) */}
       <TouchableOpacity style={s.searchBtn} activeOpacity={0.85} onPress={onOpenSearch}>
@@ -263,22 +272,22 @@ function EventCard({ event, onPress }) {
         />
       ) : null}
       <LinearGradient
-        colors={[`${tint}00`, `${tint}CC`, tint]}
-        locations={[0, 0.55, 1]}
+        colors={[tint, tint, `${tint}00`]}
+        locations={[0, 0.5, 1]}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={StyleSheet.absoluteFillObject}
       />
-      <View style={s.eventCardBottom}>
+      <View style={s.eventCardCenter}>
         <Text style={s.eventDate}>{formatDateLong(event.event_date)}</Text>
-        <Text style={s.eventName} numberOfLines={2}>{event.name}</Text>
+        <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
         <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
       </View>
     </TouchableOpacity>
   );
 }
 
-function PhotosScreen({ onOpenSelfie, gallery, selfieUri }) {
+function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie }) {
   return (
     <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
@@ -290,7 +299,7 @@ function PhotosScreen({ onOpenSelfie, gallery, selfieUri }) {
 
       <Text style={s.pageTitleCenter}>Mes photos</Text>
 
-      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} />
+      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
 
       <Text style={s.empty}>Pas encore de photos disponibles</Text>
     </ScrollView>
@@ -315,7 +324,7 @@ function PhotoGrid({ photos = [] }) {
   );
 }
 
-function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri }) {
+function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
@@ -368,7 +377,7 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri }) {
       </View>
 
       {/* Selfie */}
-      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} />
+      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
 
       {/* Galerie */}
       <Text style={[s.sectionTitle, { marginVertical: 14 }]}>Photos</Text>
@@ -798,6 +807,16 @@ export default function App() {
     AsyncStorage.getItem('@will_selfie').then(v => v && setSelfieUri(v));
   }, []);
 
+  const deleteSelfie = useCallback(() => {
+    Alert.alert('Supprimer le selfie ?', 'Tu pourras en reprendre un nouveau.', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: async () => {
+        await AsyncStorage.removeItem('@will_selfie');
+        setSelfieUri(null);
+      }},
+    ]);
+  }, []);
+
   const handlePickRole = (role) => {
     setOrgModal(false);
     if (role === 'create') {
@@ -835,6 +854,7 @@ export default function App() {
           tab={tab}
           setTab={setTab}
           selfieUri={selfieUri}
+          onDeleteSelfie={deleteSelfie}
         />
       )}
 
@@ -843,6 +863,7 @@ export default function App() {
           onOpenSelfie={() => setSelfieModal(true)}
           gallery={[]}
           selfieUri={selfieUri}
+          onDeleteSelfie={deleteSelfie}
         />
       )}
 
@@ -852,6 +873,7 @@ export default function App() {
           onClose={() => setOpenedEvent(null)}
           onOpenSelfie={() => setSelfieModal(true)}
           selfieUri={selfieUri}
+          onDeleteSelfie={deleteSelfie}
         />
       )}
 
@@ -917,14 +939,15 @@ const s = StyleSheet.create({
   orgPill: { backgroundColor: C.pinkPill, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 22 },
   orgPillText: { color: C.pinkPillText, fontWeight: '600', fontSize: 14 },
 
-  welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 26, color: C.text, fontWeight: '700' },
+  welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 18, color: C.text, fontWeight: '700' },
   welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 14, marginBottom: 14 },
   welcomeAccent: { color: C.primary },
 
-  selfieDoneBanner: { backgroundColor: C.white, borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16, borderWidth: 1, borderColor: C.primaryLight },
-  selfieDoneAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primaryLight },
+  selfieDoneBanner: { backgroundColor: C.white, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16, borderWidth: 1, borderColor: C.primaryLight },
+  selfieCheckCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F4A6FF', alignItems: 'center', justifyContent: 'center' },
   selfieDoneTitle: { fontWeight: '700', fontSize: 15, color: C.primary, fontFamily: 'AVEstiana', fontStyle: 'normal' },
   selfieDoneSub: { fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
+  selfieDelete: { padding: 6 },
 
   selfieCard: { borderRadius: 22, padding: 22, flexDirection: 'row', alignItems: 'center', minHeight: 150, marginBottom: 16 },
   selfieTitle: { color: '#fff', fontSize: 28, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 32 },
@@ -949,9 +972,10 @@ const s = StyleSheet.create({
 
   empty: { textAlign: 'center', color: C.textSoft, marginTop: 24, fontSize: 14 },
 
-  eventCard: { height: 110, borderRadius: 18, overflow: 'hidden', marginBottom: 12, backgroundColor: '#222' },
+  eventCard: { height: 90, borderRadius: 16, overflow: 'hidden', marginBottom: 10, backgroundColor: '#222', justifyContent: 'center' },
   heartBtn: { position: 'absolute', top: 12, right: 12, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center', zIndex: 5 },
   eventCardBottom: { position: 'absolute', left: 14, right: 14, bottom: 12 },
+  eventCardCenter: { paddingHorizontal: 16, zIndex: 2 },
   eventDate: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 1, opacity: 0.9, marginBottom: 2 },
   eventName: { color: '#fff', fontSize: 18, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal' },
   eventLocation: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 1 },
