@@ -59,7 +59,7 @@ const Icon = {
     </Svg>
   ),
   User: ({ size = 22, color = '#FFFFFF' }) => (
-    <Svg width={size} height={size * (17.61/18.96)} viewBox="0 0 18.96 17.61" fill={color}>
+    <Svg width={size * (18.96/17.61)} height={size} viewBox="0 0 18.96 17.61" fill={color}>
       <Path d="M10.16,0h-1.35C3.94,0,0,3.94,0,8.8s3.94,8.8,8.8,8.8h1.35c4.86,0,8.8-3.94,8.8-8.8S15.02,0,10.16,0ZM9.48,2.77c1.28,0,2.32,1.14,2.32,2.55s-1.04,2.55-2.32,2.55-2.32-1.14-2.32-2.55,1.04-2.55,2.32-2.55ZM9.48,14.33c-2.58,0-4.67-1.23-4.67-2.75s2.09-2.75,4.67-2.75,4.67,1.23,4.67,2.75-2.09,2.75-4.67,2.75Z" />
     </Svg>
   ),
@@ -194,8 +194,8 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
     <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
       <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
         <View style={{ flex: 1 }}>
-          <Text style={s.selfieTitle}>Prendre{'\n'}un selfie</Text>
-          <Text style={s.selfieSub}>Recevoir mes photos{'\n'}automatiquement</Text>
+          <Text style={s.selfieTitle}>Un selfie{'\n'}suffit</Text>
+          <Text style={s.selfieSub}>Pour recevoir tes photos{'\n'}de tous les événements Will</Text>
         </View>
         <View style={s.selfieAvatar}>
           <Icon.User size={48} color="#FFFFFF" />
@@ -205,7 +205,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie }) {
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile }) {
   const filtered = events.filter(e => tab === 'upcoming' ? isUpcoming(e.event_date) : !isUpcoming(e.event_date));
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -233,10 +233,10 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
           <TouchableOpacity hitSlop={10}>
-            <Icon.Bell color={C.textSoft} />
+            <Icon.Bell color="#c9beed" />
           </TouchableOpacity>
-          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }}>
-            <Icon.User color={C.textSoft} />
+          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
+            <Icon.User color="#c9beed" />
             {selfieUri && (
               <View style={{
                 position: 'absolute',
@@ -258,9 +258,14 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
       </View>
 
       <View style={s.welcomeRow}>
-        <Text style={s.welcome}>Bienvenue chez </Text>
+        <Text style={[s.welcome, { color: '#c9beed' }]}>Bienvenue chez </Text>
         <Icon.Logo width={50} color="#c9beed" />
       </View>
+
+      {/* Carte selfie : uniquement si pas encore pris */}
+      {!selfieUri && (
+        <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
+      )}
 
       {/* Bouton Trouver mon événement (dépliable) */}
       <TouchableOpacity
@@ -396,19 +401,39 @@ function EventCard({ event, onPress }) {
   );
 }
 
-function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie }) {
+function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile }) {
   return (
     <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
-          <TouchableOpacity style={s.iconBtn}><Icon.Bell /></TouchableOpacity>
-          <TouchableOpacity style={s.avatarBtn}><Icon.User /></TouchableOpacity>
+          <TouchableOpacity hitSlop={10}>
+            <Icon.Bell color="#c9beed" />
+          </TouchableOpacity>
+          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
+            <Icon.User color="#c9beed" />
+            {selfieUri && (
+              <View style={{
+                position: 'absolute',
+                top: -2,
+                right: -2,
+                width: 10,
+                height: 10,
+                borderRadius: 5,
+                backgroundColor: '#10B981',
+                borderWidth: 2,
+                borderColor: C.bg,
+              }} />
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 
       <Text style={s.pageTitleCenter}>Mes photos</Text>
 
-      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
+      {/* Carte ajout selfie : uniquement si pas encore de selfie */}
+      {!selfieUri && (
+        <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
+      )}
 
       <Text style={s.empty}>Pas encore de photos disponibles</Text>
     </ScrollView>
@@ -433,7 +458,7 @@ function PhotoGrid({ photos = [] }) {
   );
 }
 
-function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie }) {
+function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
@@ -461,10 +486,10 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
           <TouchableOpacity hitSlop={10}>
-            <Icon.Bell color={C.textSoft} />
+            <Icon.Bell color="#c9beed" />
           </TouchableOpacity>
-          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }}>
-            <Icon.User color={C.textSoft} />
+          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
+            <Icon.User color="#c9beed" />
             {selfieUri && (
               <View style={{
                 position: 'absolute',
@@ -1155,6 +1180,63 @@ function SearchModal({ visible, events, onClose, onPick }) {
 }
 
 // ---------- ROOT ----------
+function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete }) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
+          <TouchableOpacity onPress={onClose} hitSlop={20}>
+            <View style={s.modalHandle} />
+          </TouchableOpacity>
+          <Text style={s.modalTitle}>Mon selfie</Text>
+          {!selfieUri ? (
+            <>
+              <Text style={{ color: C.textSoft, textAlign: 'center', marginVertical: 16, fontSize: 14 }}>
+                Tu n'as pas encore enregistré de selfie.
+              </Text>
+              <TouchableOpacity style={s.modalOption} onPress={() => { onClose(); onRetake(); }}>
+                <Text style={s.modalOptionText}>Prendre un selfie</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity style={s.modalOption} onPress={onView}>
+                <Text style={s.modalOptionText}>Voir mon selfie</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalOption} onPress={() => { onClose(); onRetake(); }}>
+                <Text style={s.modalOptionText}>Reprendre un selfie</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalOption} onPress={() => { onClose(); onDelete(); }}>
+                <Text style={[s.modalOptionText, { color: '#DC2626' }]}>Supprimer mon selfie</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          <TouchableOpacity style={s.modalCancel} onPress={onClose}>
+            <Text style={s.modalCancelText}>Fermer</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+function SelfieViewerModal({ visible, uri, onClose }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}>
+        <TouchableOpacity onPress={onClose} style={{ position: 'absolute', top: 60, right: 20, padding: 10 }} hitSlop={20}>
+          <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+          </Svg>
+        </TouchableOpacity>
+        {uri ? (
+          <ExpoImage source={{ uri }} style={{ width: '85%', aspectRatio: 1, borderRadius: 24 }} contentFit="cover" />
+        ) : null}
+      </View>
+    </Modal>
+  );
+}
+
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [tab, setTab] = useState('upcoming');
@@ -1168,6 +1250,8 @@ export default function App() {
   const [loginRole, setLoginRole] = useState(null);
   const [selfieUri, setSelfieUri] = useState(null);
   const [session, setSession] = useState(null);
+  const [profileMenu, setProfileMenu] = useState(false);
+  const [selfieViewer, setSelfieViewer] = useState(false);
 
   useEffect(() => {
     Font.loadAsync({
@@ -1228,6 +1312,7 @@ export default function App() {
           setTab={setTab}
           selfieUri={selfieUri}
           onDeleteSelfie={deleteSelfie}
+          onOpenProfile={() => setProfileMenu(true)}
         />
       )}
 
@@ -1237,6 +1322,7 @@ export default function App() {
           gallery={[]}
           selfieUri={selfieUri}
           onDeleteSelfie={deleteSelfie}
+          onOpenProfile={() => setProfileMenu(true)}
         />
       )}
 
@@ -1247,6 +1333,7 @@ export default function App() {
           onOpenSelfie={() => setSelfieModal(true)}
           selfieUri={selfieUri}
           onDeleteSelfie={deleteSelfie}
+          onOpenProfile={() => setProfileMenu(true)}
         />
       )}
 
@@ -1296,6 +1383,21 @@ export default function App() {
         visible={createEventModal}
         onClose={() => setCreateEventModal(false)}
       />
+
+      <ProfileMenuModal
+        visible={profileMenu}
+        onClose={() => setProfileMenu(false)}
+        selfieUri={selfieUri}
+        onView={() => { setProfileMenu(false); setSelfieViewer(true); }}
+        onRetake={() => setSelfieModal(true)}
+        onDelete={deleteSelfie}
+      />
+
+      <SelfieViewerModal
+        visible={selfieViewer}
+        uri={selfieUri}
+        onClose={() => setSelfieViewer(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -1313,7 +1415,7 @@ const s = StyleSheet.create({
   orgPillText: { color: C.pinkPillText, fontWeight: '600', fontSize: 14 },
 
   welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 18, color: C.text, fontWeight: '700' },
-  welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 6, marginBottom: 16 },
+  welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, marginBottom: 18 },
   welcomeAccent: { color: C.primary },
 
   selfieDoneBanner: { backgroundColor: C.white, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16, borderWidth: 1, borderColor: C.primaryLight },
