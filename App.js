@@ -537,7 +537,18 @@ function PhotographerScreen({ session, onLogout }) {
 
         if (isTestModeRef.current) {
           const fileUri = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
-          setTestPhotos(prev => [{ uri: fileUri, ts: Date.now() }, ...prev].slice(0, 30));
+          // Convertir en base64 pour affichage fiable (le path natif peut être nettoyé)
+          try {
+            const blob = await (await fetch(fileUri)).blob();
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const dataUri = reader.result;
+              if (dataUri && isMountedRef.current) {
+                setTestPhotos(prev => [{ uri: dataUri, ts: Date.now() + Math.random() }, ...prev].slice(0, 30));
+              }
+            };
+            reader.readAsDataURL(blob);
+          } catch (e) { console.warn('test photo encode', e); }
         }
       } catch (e) { console.warn('takePhoto', e); }
 
