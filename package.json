@@ -30,5 +30,8 @@
     "react-native-vision-camera-face-detector": "^1.10.2",
     "react-native-worklets-core": "^1.6.3"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "babel-preset-expo": "^55.0.18"
+  }
 }

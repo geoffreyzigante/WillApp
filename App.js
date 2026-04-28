@@ -396,12 +396,14 @@ function PhotographerScreen({ session, onLogout }) {
   const device = useCameraDevice('back');
   const cameraRef = useRef(null);
 
-  const isBurstingRef = useRef(false);
-  const lastBurstAtRef = useRef(0);
+  // Refs de pilotage
+  const isCapturingRef = useRef(false);       // une boucle de capture est en cours
+  const lastFaceSeenAtRef = useRef(0);        // timestamp du dernier visage détecté
   const isMountedRef = useRef(true);
 
+  // State UI
   const [facesCount, setFacesCount] = useState(0);
-  const [burstCount, setBurstCount] = useState(0);
+  const [isShooting, setIsShooting] = useState(false);
   const [photoCount, setPhotoCount] = useState(0);
   const [flashVisible, setFlashVisible] = useState(false);
 
@@ -416,12 +418,14 @@ function PhotographerScreen({ session, onLogout }) {
 
   const { detectFaces } = useFaceDetector(faceDetectionOptions);
 
-  const triggerBurstFromWorklet = useMemo(
-    () => Worklets.createRunOnJS(() => triggerBurst()),
-    []
-  );
-  const setFacesCountFromWorklet = useMemo(
-    () => Worklets.createRunOnJS((n) => setFacesCount(n)),
+  const onFacesDetectedJS = useMemo(
+    () => Worklets.createRunOnJS((count) => {
+      setFacesCount(count);
+      if (count > 0) {
+        lastFaceSeenAtRef.current = Date.now();
+        if (!isCapturingRef.current) startCaptureLoop();
+      }
+    }),
     []
   );
 
@@ -434,54 +438,55 @@ function PhotographerScreen({ session, onLogout }) {
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
     const faces = detectFaces(frame);
-    setFacesCountFromWorklet(faces.length);
-    if (faces.length > 0) triggerBurstFromWorklet();
-  }, [detectFaces, setFacesCountFromWorklet, triggerBurstFromWorklet]);
+    onFacesDetectedJS(faces.length);
+  }, [detectFaces, onFacesDetectedJS]);
 
-  const COOLDOWN_MS = 2000;
-  const PHOTOS_PER_BURST = 8;
-  const INTER_PHOTO_MS = 150;
+  // Paramètres
+  const INTER_PHOTO_MS = 150;       // intervalle entre photos
+  const NO_FACE_TIMEOUT_MS = 500;   // arrêt si plus de visage pendant 500ms
 
-  async function triggerBurst() {
-    const now = Date.now();
-    if (isBurstingRef.current) return;
-    if (now - lastBurstAtRef.current < COOLDOWN_MS) return;
+  async function startCaptureLoop() {
+    if (isCapturingRef.current) return;
     if (!cameraRef.current || !isMountedRef.current) return;
 
-    isBurstingRef.current = true;
-    lastBurstAtRef.current = now;
-    setBurstCount((c) => c + 1);
+    isCapturingRef.current = true;
+    setIsShooting(true);
     setFlashVisible(true);
     setTimeout(() => setFlashVisible(false), 120);
 
-    try {
-      const photos = [];
-      for (let i = 0; i < PHOTOS_PER_BURST; i++) {
-        if (!isMountedRef.current) break;
-        try {
-          const photo = await cameraRef.current.takePhoto({
-            qualityPrioritization: 'speed',
-            flash: 'off',
-            enableShutterSound: false,
-          });
-          photos.push({ photo, index: i });
-        } catch (e) { console.warn('takePhoto', i, e); }
-        if (i < PHOTOS_PER_BURST - 1) await new Promise(r => setTimeout(r, INTER_PHOTO_MS));
-      }
-      uploadBurst(photos).catch(e => console.warn('upload', e));
-    } finally {
-      isBurstingRef.current = false;
+    const burstStartedAt = Date.now();
+    const burstTs = burstStartedAt;
+    let photoIndex = 0;
+    const queue = [];
+
+    while (isMountedRef.current) {
+      const sinceLastFace = Date.now() - lastFaceSeenAtRef.current;
+      if (sinceLastFace > NO_FACE_TIMEOUT_MS) break;
+
+      try {
+        const photo = await cameraRef.current.takePhoto({
+          qualityPrioritization: 'speed',
+          flash: 'off',
+          enableShutterSound: false,
+        });
+        queue.push({ photo, index: photoIndex++, burstTs });
+      } catch (e) { console.warn('takePhoto', e); }
+
+      await new Promise(r => setTimeout(r, INTER_PHOTO_MS));
     }
+
+    isCapturingRef.current = false;
+    setIsShooting(false);
+    uploadQueue(queue).catch(e => console.warn('upload', e));
   }
 
-  async function uploadBurst(photos) {
-    if (photos.length === 0) return;
+  async function uploadQueue(queue) {
+    if (queue.length === 0) return;
     const d = new Date();
     const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
     const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
-    const burstTs = d.getTime();
 
-    for (const { photo, index } of photos) {
+    for (const { photo, index, burstTs } of queue) {
       const key = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${index}.jpg`;
       try {
         const fileUri = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
@@ -534,24 +539,18 @@ function PhotographerScreen({ session, onLogout }) {
         <TouchableOpacity onPress={onLogout}><Text style={s.camLogout}>Quitter</Text></TouchableOpacity>
       </View>
       <View style={{ position: 'absolute', top: 90, left: 16, right: 16, alignItems: 'center' }}>
-        <View style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: facesCount > 0 ? '#10b981cc' : '#ef4444cc' }}>
+        <View style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: isShooting ? '#10b981dd' : (facesCount > 0 ? '#10b981cc' : '#ef4444cc') }}>
           <Text style={{ color: '#fff', fontWeight: '600' }}>
-            {facesCount > 0 ? `🟢 ${facesCount} visage${facesCount > 1 ? 's' : ''}` : '🔴 En attente'}
+            {isShooting ? `📸 Capture en cours — ${facesCount} visage${facesCount > 1 ? 's' : ''}` : (facesCount > 0 ? `🟢 ${facesCount} visage${facesCount > 1 ? 's' : ''}` : '🔴 En attente')}
           </Text>
         </View>
       </View>
       <View style={s.camBottomBar}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginBottom: 8 }}>
-          <View style={{ alignItems: 'center' }}>
-            <Text style={{ color: '#aaa', fontSize: 11 }}>RAFALES</Text>
-            <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700' }}>{burstCount}</Text>
-          </View>
-          <View style={{ alignItems: 'center' }}>
-            <Text style={{ color: '#aaa', fontSize: 11 }}>PHOTOS</Text>
-            <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700' }}>{photoCount}</Text>
-          </View>
+        <View style={{ alignItems: 'center', width: '100%' }}>
+          <Text style={{ color: '#aaa', fontSize: 11 }}>PHOTOS ENVOYÉES</Text>
+          <Text style={{ color: '#fff', fontSize: 28, fontWeight: '700' }}>{photoCount}</Text>
         </View>
-        <Text style={s.camHint}>Détection automatique</Text>
+        <Text style={s.camHint}>Détection automatique en continu</Text>
       </View>
     </View>
   );
