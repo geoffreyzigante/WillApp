@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import * as Font from 'expo-font';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import {
   Camera as VisionCamera,
@@ -438,8 +439,38 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
   );
 }
 
-function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites }) {
+function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites, userId, onOpenPhoto }) {
   const hasFavorites = favorites && favorites.length > 0;
+  const [photos, setPhotos] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!hasFavorites || !selfieUri || !userId) {
+      setPhotos([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const all = [];
+      for (const code of favorites) {
+        try {
+          const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}?user_id=${encodeURIComponent(userId)}`);
+          if (r.ok) {
+            const data = await r.json();
+            for (const p of (data.photos || [])) {
+              all.push({ uri: p.url, id: p.key });
+            }
+          }
+        } catch (e) { console.warn('fetch perso', code, e); }
+      }
+      if (!cancelled) {
+        setPhotos(all);
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [favorites, selfieUri, userId]);
 
   return (
     <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
@@ -485,32 +516,55 @@ function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpen
             Ajoute tes courses en favoris{'\n'}pour recevoir tes photos
           </Text>
         </View>
+      ) : !selfieUri ? (
+        <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+          <Text style={{ color: C.textSoft, fontSize: 13, textAlign: 'center' }}>
+            Prends un selfie pour qu'on te reconnaisse{'\n'}sur les photos.
+          </Text>
+        </View>
+      ) : loading ? (
+        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+          <ActivityIndicator color={C.primary} />
+          <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 10 }}>Recherche en cours…</Text>
+        </View>
+      ) : photos.length === 0 ? (
+        <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 }}>
+          <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+            Aucune photo trouvée pour le moment.{'\n'}Reviens après l'événement !
+          </Text>
+        </View>
       ) : (
-        <Text style={s.empty}>Pas encore de photos disponibles</Text>
+        <PhotoGrid photos={photos} onPress={onOpenPhoto} />
       )}
     </ScrollView>
   );
 }
 
-function PhotoGrid({ photos = [] }) {
+function PhotoGrid({ photos = [], onPress }) {
   // Grille 4 colonnes, placeholders si vide
   const items = photos.length > 0 ? photos : Array.from({ length: 16 }, (_, i) => ({ placeholder: true, id: `ph-${i}` }));
   return (
     <View style={s.grid}>
       {items.map((p, i) => (
-        <View key={p.id || i} style={s.gridItem}>
+        <TouchableOpacity
+          key={p.id || i}
+          style={s.gridItem}
+          activeOpacity={0.85}
+          onPress={() => !p.placeholder && onPress?.(p, i, photos)}
+          disabled={p.placeholder}
+        >
           {p.placeholder ? (
             <View style={s.gridPlaceholder} />
           ) : (
             <ExpoImage source={{ uri: p.uri }} style={s.gridImg} contentFit="cover" />
           )}
-        </View>
+        </TouchableOpacity>
       ))}
     </View>
   );
 }
 
-function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile }) {
+function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
@@ -600,7 +654,7 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
           <Text style={{ color: C.textSoft }}>Aucune photo pour le moment</Text>
         </View>
       ) : (
-        <PhotoGrid photos={photos} />
+        <PhotoGrid photos={photos} onPress={onOpenPhoto} />
       )}
     </ScrollView>
   );
@@ -1034,7 +1088,7 @@ function OrganizationModal({ visible, onClose, onPickRole }) {
   );
 }
 
-function SelfieModal({ visible, onClose, onSaved }) {
+function SelfieModal({ visible, onClose, onSaved, userId }) {
   const [uri, setUri] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -1065,8 +1119,26 @@ function SelfieModal({ visible, onClose, onSaved }) {
     if (!uri) return;
     setBusy(true);
     try {
+      // 1. Sauvegarde locale (réactivité immédiate)
       await AsyncStorage.setItem('@will_selfie', uri);
       onSaved?.(uri);
+
+      // 2. Upload sur R2 pour la reconnaissance faciale (en background, non bloquant)
+      if (userId) {
+        (async () => {
+          try {
+            const blob = await (await fetch(uri)).blob();
+            await fetch(`${API_URL}/selfie/${userId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'image/jpeg' },
+              body: blob,
+            });
+          } catch (e) {
+            console.warn('selfie upload R2', e);
+          }
+        })();
+      }
+
       onClose();
     } catch (e) {
       Alert.alert('Erreur', e.message);
@@ -1289,6 +1361,79 @@ function SelfieViewerModal({ visible, uri, onClose }) {
   );
 }
 
+function PhotoViewerModal({ visible, photo, photos, onClose }) {
+  const [busy, setBusy] = useState(false);
+
+  const download = async () => {
+    if (!photo?.uri || busy) return;
+    setBusy(true);
+    try {
+      const perm = await MediaLibrary.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission refusée', 'Autorise l\'accès aux photos pour sauvegarder.');
+        return;
+      }
+      // Télécharge en cache local d'abord (MediaLibrary ne sait pas saver depuis URL distante directement sur iOS)
+      const blob = await (await fetch(photo.uri)).blob();
+      const reader = new FileReader();
+      const dataUri = await new Promise((resolve, reject) => {
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      // Sauvegarde via MediaLibrary
+      const asset = await MediaLibrary.createAssetAsync(dataUri);
+      Alert.alert('Photo sauvegardée', 'Disponible dans ton album Photos.');
+    } catch (e) {
+      Alert.alert('Erreur', e?.message || 'Impossible de sauvegarder');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center' }}>
+        <TouchableOpacity onPress={onClose} style={{ position: 'absolute', top: 60, right: 20, padding: 10, zIndex: 10 }} hitSlop={20}>
+          <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+          </Svg>
+        </TouchableOpacity>
+        {photo?.uri ? (
+          <ExpoImage source={{ uri: photo.uri }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
+        ) : null}
+        <View style={{ position: 'absolute', bottom: 40, left: 20, right: 20 }}>
+          <TouchableOpacity
+            onPress={download}
+            disabled={busy}
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.95)',
+              paddingVertical: 16,
+              borderRadius: 14,
+              alignItems: 'center',
+              flexDirection: 'row',
+              justifyContent: 'center',
+              gap: 8,
+              opacity: busy ? 0.6 : 1,
+            }}
+          >
+            {busy ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <>
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                  <Path d="M12 4v12m0 0l-5-5m5 5l5-5M4 20h16" stroke="#000" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+                <Text style={{ color: '#000', fontSize: 15, fontWeight: '700' }}>Télécharger</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [tab, setTab] = useState('upcoming');
@@ -1304,7 +1449,9 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [profileMenu, setProfileMenu] = useState(false);
   const [selfieViewer, setSelfieViewer] = useState(false);
+  const [openedPhoto, setOpenedPhoto] = useState(null);
   const [favorites, setFavorites] = useState([]);
+  const [userId, setUserId] = useState(null);
 
   useEffect(() => {
     Font.loadAsync({
@@ -1318,6 +1465,19 @@ export default function App() {
     AsyncStorage.getItem('@will_favorites').then(v => {
       if (v) {
         try { setFavorites(JSON.parse(v)); } catch { setFavorites([]); }
+      }
+    });
+    // user_id unique généré au premier lancement
+    AsyncStorage.getItem('@will_user_id').then(v => {
+      if (v) {
+        setUserId(v);
+      } else {
+        // Génère un ID aléatoire (Math.random + timestamp, suffisant pour identifier un device)
+        const id = Date.now().toString(36) +
+          Math.random().toString(36).substring(2, 10) +
+          Math.random().toString(36).substring(2, 10);
+        AsyncStorage.setItem('@will_user_id', id);
+        setUserId(id);
       }
     });
   }, []);
@@ -1394,6 +1554,8 @@ export default function App() {
           onDeleteSelfie={deleteSelfie}
           onOpenProfile={() => setProfileMenu(true)}
           favorites={favorites}
+          userId={userId}
+          onOpenPhoto={(photo) => setOpenedPhoto(photo)}
         />
       )}
 
@@ -1405,6 +1567,7 @@ export default function App() {
           selfieUri={selfieUri}
           onDeleteSelfie={deleteSelfie}
           onOpenProfile={() => setProfileMenu(true)}
+          onOpenPhoto={(photo) => setOpenedPhoto(photo)}
         />
       )}
 
@@ -1437,6 +1600,7 @@ export default function App() {
         visible={selfieModal}
         onClose={() => setSelfieModal(false)}
         onSaved={setSelfieUri}
+        userId={userId}
       />
 
       <LoginModal
@@ -1468,6 +1632,12 @@ export default function App() {
         visible={selfieViewer}
         uri={selfieUri}
         onClose={() => setSelfieViewer(false)}
+      />
+
+      <PhotoViewerModal
+        visible={!!openedPhoto}
+        photo={openedPhoto}
+        onClose={() => setOpenedPhoto(null)}
       />
     </SafeAreaView>
   );
