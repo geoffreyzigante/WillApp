@@ -207,17 +207,49 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
 
 function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie }) {
   const filtered = events.filter(e => tab === 'upcoming' ? isUpcoming(e.event_date) : !isUpcoming(e.event_date));
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchHeight = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(searchHeight, {
+      toValue: searchOpen ? 1 : 0,
+      duration: 220,
+      useNativeDriver: false,
+    }).start();
+  }, [searchOpen]);
+
+  const matchingEvents = searchQuery.trim().length > 0
+    ? events.filter(e =>
+        e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (e.location || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (e.code || '').toLowerCase().includes(searchQuery.toLowerCase())
+      ).slice(0, 6)
+    : [];
 
   return (
     <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
-          <TouchableOpacity style={s.iconBtn}>
-            <Icon.Bell />
+          <TouchableOpacity hitSlop={10}>
+            <Icon.Bell color={C.textSoft} />
           </TouchableOpacity>
-          <TouchableOpacity style={s.avatarBtn}>
-            <Icon.User />
+          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }}>
+            <Icon.User color={C.textSoft} />
+            {selfieUri && (
+              <View style={{
+                position: 'absolute',
+                top: -2,
+                right: -2,
+                width: 10,
+                height: 10,
+                borderRadius: 5,
+                backgroundColor: '#10B981',
+                borderWidth: 2,
+                borderColor: C.bg,
+              }} />
+            )}
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={s.orgPill} onPress={onOpenOrg}>
@@ -227,16 +259,74 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
 
       <View style={s.welcomeRow}>
         <Text style={s.welcome}>Bienvenue chez </Text>
-        <Icon.Logo width={50} color={C.primary} />
+        <Icon.Logo width={50} color="#c9beed" />
       </View>
 
-      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
-
-      {/* Search button (style maquette : bouton plein) */}
-      <TouchableOpacity style={s.searchBtn} activeOpacity={0.85} onPress={onOpenSearch}>
-        <Icon.Search size={18} color="#FFFFFF" />
+      {/* Bouton Trouver mon événement (dépliable) */}
+      <TouchableOpacity
+        style={s.searchBtn}
+        activeOpacity={0.85}
+        onPress={() => setSearchOpen(o => !o)}
+      >
         <Text style={s.searchInputBtn}>Trouver mon événement</Text>
+        <Animated.View style={{
+          transform: [{ rotate: searchHeight.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }],
+        }}>
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+            <Path d="M6 9l6 6 6-6" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+        </Animated.View>
       </TouchableOpacity>
+
+      {/* Zone dépliable de recherche */}
+      {searchOpen && (
+        <View style={{ marginBottom: 16 }}>
+          <TextInput
+            placeholder="Nom de l'événement, ville..."
+            placeholderTextColor={C.textSoft}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={{
+              backgroundColor: C.white,
+              borderRadius: 14,
+              paddingHorizontal: 16,
+              paddingVertical: 14,
+              fontSize: 15,
+              color: C.text,
+              borderWidth: 1,
+              borderColor: C.primaryLight,
+              marginBottom: 8,
+            }}
+            autoFocus
+          />
+          {matchingEvents.length > 0 && (
+            <View style={{ backgroundColor: C.white, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: C.primaryLight }}>
+              {matchingEvents.map((e, i) => (
+                <TouchableOpacity
+                  key={e.code}
+                  onPress={() => { setSearchOpen(false); setSearchQuery(''); onOpenEvent(e); }}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderTopWidth: i === 0 ? 0 : 1,
+                    borderTopColor: '#F0F0F0',
+                  }}
+                >
+                  <Text style={{ color: C.text, fontWeight: '600', fontSize: 14 }}>{e.name}</Text>
+                  <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>
+                    {[formatDateLong(e.event_date), cityLabel(e.location)].filter(Boolean).join(' · ')}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {searchQuery.trim().length > 0 && matchingEvents.length === 0 && (
+            <Text style={{ color: C.textSoft, fontSize: 13, textAlign: 'center', paddingVertical: 16 }}>
+              Aucun événement trouvé
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* Tabs row */}
       <View style={s.tabsRow}>
@@ -251,9 +341,16 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
         </View>
       </View>
 
-      {/* Events list */}
+      {/* Events list / état vide */}
       {filtered.length === 0 ? (
-        <Text style={s.empty}>Aucun événement {tab === 'upcoming' ? 'à venir' : 'passé'}</Text>
+        <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+          <View style={{ marginBottom: 12, opacity: 0.4 }}>
+            <Icon.Calendar size={36} color={C.textSoft} />
+          </View>
+          <Text style={{ color: C.textSoft, fontSize: 14 }}>
+            Aucun événement {tab === 'upcoming' ? 'à venir' : 'passé'}
+          </Text>
+        </View>
       ) : (
         filtered.map((event) => (
           <EventCard
@@ -363,20 +460,40 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
     <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
-          <TouchableOpacity style={s.iconBtn}><Icon.Bell /></TouchableOpacity>
-          <TouchableOpacity style={s.avatarBtn}><Icon.User /></TouchableOpacity>
+          <TouchableOpacity hitSlop={10}>
+            <Icon.Bell color={C.textSoft} />
+          </TouchableOpacity>
+          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }}>
+            <Icon.User color={C.textSoft} />
+            {selfieUri && (
+              <View style={{
+                position: 'absolute',
+                top: -2,
+                right: -2,
+                width: 10,
+                height: 10,
+                borderRadius: 5,
+                backgroundColor: '#10B981',
+                borderWidth: 2,
+                borderColor: C.bg,
+              }} />
+            )}
+          </TouchableOpacity>
         </View>
+        <TouchableOpacity onPress={onClose} hitSlop={10}>
+          <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+            <Path d="m8 8 8 8M16 8l-8 8" stroke={C.textSoft} strokeWidth={2} strokeLinecap="round" />
+          </Svg>
+        </TouchableOpacity>
       </View>
 
-      {/* Cover */}
-      <View style={s.coverCard}>
-        {/* Image moitié droite */}
+      {/* Cover compacte (même style que cartes accueil) */}
+      <View style={[s.eventCard, { marginTop: 12, marginBottom: 18 }]}>
         {event.cover_image ? (
           <View style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '55%' }}>
             <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           </View>
         ) : null}
-        {/* Dégradé horizontal : couleur pleine à gauche, transparent à droite */}
         <LinearGradient
           colors={[tint, tint, `${tint}00`]}
           locations={[0, 0.5, 1]}
@@ -384,12 +501,9 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
           end={{ x: 1, y: 0.5 }}
           style={StyleSheet.absoluteFillObject}
         />
-        <TouchableOpacity style={s.closeBtn} onPress={onClose} hitSlop={10}>
-          <Icon.Close />
-        </TouchableOpacity>
-        <View style={s.coverBottom}>
+        <View style={s.eventCardCenter}>
           <Text style={s.eventDate}>{formatDateLong(event.event_date)}</Text>
-          <Text style={s.coverTitle} numberOfLines={2}>{event.name}</Text>
+          <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
           <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
         </View>
       </View>
@@ -1199,7 +1313,7 @@ const s = StyleSheet.create({
   orgPillText: { color: C.pinkPillText, fontWeight: '600', fontSize: 14 },
 
   welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 18, color: C.text, fontWeight: '700' },
-  welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 14, marginBottom: 14 },
+  welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 6, marginBottom: 16 },
   welcomeAccent: { color: C.primary },
 
   selfieDoneBanner: { backgroundColor: C.white, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16, borderWidth: 1, borderColor: C.primaryLight },
@@ -1213,7 +1327,7 @@ const s = StyleSheet.create({
   selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 10, fontSize: 13, lineHeight: 18 },
   selfieAvatar: { width: 88, height: 88, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 
-  searchBtn: { backgroundColor: C.primary, borderRadius: 16, height: 54, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 12, marginBottom: 22 },
+  searchBtn: { backgroundColor: C.primary, borderRadius: 16, height: 54, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 12, marginBottom: 16 },
   searchInputBtn: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '500' },
 
   eventPick: { backgroundColor: C.white, borderRadius: 14, padding: 14, marginTop: 8 },
