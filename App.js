@@ -54,7 +54,7 @@ const TYPE_COLORS = {
 // ---------- ICONS (custom SVG) ----------
 const Icon = {
   Bell: ({ size = 22, color = '#0A0A0A' }) => (
-    <Svg width={size} height={size * (17.61/16.93)} viewBox="0 0 16.93 17.61" fill={color}>
+    <Svg width={size * (16.93/17.61)} height={size} viewBox="0 0 16.93 17.61" fill={color}>
       <Path d="M14.14,8.93l.02-1.68c.02-1.39-.31-2.76-1.09-3.91-.74-1.09-1.92-1.7-3.21-1.95C9.81.58,9.2,0,8.44,0c-.76,0-1.36.59-1.4,1.38-1.28.27-2.43.87-3.16,1.94-.76,1.11-1.11,2.44-1.1,3.78l.02,2.01c0,.75-.11,1.49-.44,2.15-.51,1.01-1.65,1.33-2.16,2.08-.21.31-.24.69-.09,1.05.1.24.41.56.78.57h4.93c.03,1.56,1.26,2.67,2.69,2.64,1.42-.03,2.56-1.16,2.59-2.63h5.02c.37-.01.66-.38.75-.62.13-.33.08-.76-.14-1.04-.9-1.16-2.63-1.08-2.59-4.38Z" />
     </Svg>
   ),
@@ -205,8 +205,13 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile }) {
-  const filtered = events.filter(e => tab === 'upcoming' ? isUpcoming(e.event_date) : !isUpcoming(e.event_date));
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, favorites, onToggleFavorite }) {
+  const filtered = events.filter(e => {
+    if (tab === 'upcoming') return isUpcoming(e.event_date);
+    if (tab === 'past') return !isUpcoming(e.event_date);
+    if (tab === 'favorites') return favorites.includes(e.code);
+    return true;
+  });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchHeight = useRef(new Animated.Value(0)).current;
@@ -333,17 +338,23 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
         </View>
       )}
 
-      {/* Tabs row */}
-      <View style={s.tabsRow}>
-        <Text style={s.sectionTitle}>Événements</Text>
-        <View style={s.pillRow}>
-          <TouchableOpacity onPress={() => setTab('upcoming')} style={[s.pill, tab === 'upcoming' && s.pillActive]}>
-            <Text style={[s.pillText, tab === 'upcoming' && s.pillTextActive]}>à venir</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setTab('past')} style={[s.pill, tab === 'past' && s.pillActive]}>
-            <Text style={[s.pillText, tab === 'past' && s.pillTextActive]}>passés</Text>
-          </TouchableOpacity>
-        </View>
+      {/* Tabs row : À venir / Passés / Favoris (pleine largeur) */}
+      <View style={{
+        flexDirection: 'row',
+        backgroundColor: C.pillBg,
+        borderRadius: 16,
+        padding: 4,
+        marginBottom: 14,
+      }}>
+        <TouchableOpacity onPress={() => setTab('upcoming')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'upcoming' && s.pillActive]}>
+          <Text style={[s.pillText, tab === 'upcoming' && s.pillTextActive]}>À venir</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setTab('past')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'past' && s.pillActive]}>
+          <Text style={[s.pillText, tab === 'past' && s.pillTextActive]}>Passés</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setTab('favorites')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'favorites' && s.pillActive]}>
+          <Text style={[s.pillText, tab === 'favorites' && s.pillTextActive]}>Favoris</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Events list / état vide */}
@@ -353,7 +364,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
             <Icon.Calendar size={36} color={C.textSoft} />
           </View>
           <Text style={{ color: C.textSoft, fontSize: 14 }}>
-            Aucun événement {tab === 'upcoming' ? 'à venir' : 'passé'}
+            {tab === 'favorites' ? 'Aucun favori' : tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
           </Text>
         </View>
       ) : (
@@ -362,6 +373,8 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
             key={event.code}
             event={event}
             onPress={() => onOpenEvent(event)}
+            isFavorite={favorites.includes(event.code)}
+            onToggleFavorite={() => onToggleFavorite(event.code)}
           />
         ))
       )}
@@ -369,11 +382,11 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
   );
 }
 
-function EventCard({ event, onPress }) {
+function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
   const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
 
   return (
-    <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={s.eventCard}>
+    <View style={s.eventCard}>
       {/* Image moitié droite */}
       {event.cover_image ? (
         <View style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '55%' }}>
@@ -392,16 +405,42 @@ function EventCard({ event, onPress }) {
         end={{ x: 1, y: 0.5 }}
         style={StyleSheet.absoluteFillObject}
       />
-      <View style={s.eventCardCenter}>
+      {/* Zone tactile principale (ouvre l'événement) */}
+      <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={StyleSheet.absoluteFillObject} />
+      {/* Texte par-dessus la zone tactile (pointerEvents none pour que le tap passe au TouchableOpacity en dessous) */}
+      <View style={s.eventCardCenter} pointerEvents="none">
         <Text style={s.eventDate}>{formatDateLong(event.event_date)}</Text>
         <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
         <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
       </View>
-    </TouchableOpacity>
+      {/* Bouton favori (sa propre zone tactile, au-dessus de tout) */}
+      {onToggleFavorite && (
+        <TouchableOpacity
+          onPress={onToggleFavorite}
+          hitSlop={10}
+          style={{
+            position: 'absolute',
+            top: 6,
+            right: 6,
+            width: 40,
+            height: 40,
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+          }}
+        >
+          <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61" fill={isFavorite ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}>
+            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+          </Svg>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
-function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile }) {
+function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites }) {
+  const hasFavorites = favorites && favorites.length > 0;
+
   return (
     <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
@@ -435,7 +474,20 @@ function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpen
         <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
       )}
 
-      <Text style={s.empty}>Pas encore de photos disponibles</Text>
+      {!hasFavorites ? (
+        <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 }}>
+          <View style={{ marginBottom: 14, opacity: 0.4 }}>
+            <Svg width={40} height={34} viewBox="0 0 20.78 17.61" fill={C.textSoft}>
+              <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+            </Svg>
+          </View>
+          <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+            Ajoute tes courses en favoris{'\n'}pour recevoir tes photos
+          </Text>
+        </View>
+      ) : (
+        <Text style={s.empty}>Pas encore de photos disponibles</Text>
+      )}
     </ScrollView>
   );
 }
@@ -1252,6 +1304,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [profileMenu, setProfileMenu] = useState(false);
   const [selfieViewer, setSelfieViewer] = useState(false);
+  const [favorites, setFavorites] = useState([]);
 
   useEffect(() => {
     Font.loadAsync({
@@ -1262,6 +1315,21 @@ export default function App() {
   useEffect(() => {
     api.getEvents().then(data => setEvents(Array.isArray(data) ? data : []));
     AsyncStorage.getItem('@will_selfie').then(v => v && setSelfieUri(v));
+    AsyncStorage.getItem('@will_favorites').then(v => {
+      if (v) {
+        try { setFavorites(JSON.parse(v)); } catch { setFavorites([]); }
+      }
+    });
+  }, []);
+
+  const toggleFavorite = useCallback((eventCode) => {
+    setFavorites(prev => {
+      const next = prev.includes(eventCode)
+        ? prev.filter(c => c !== eventCode)
+        : [...prev, eventCode];
+      AsyncStorage.setItem('@will_favorites', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
   }, []);
 
   const deleteSelfie = useCallback(() => {
@@ -1313,6 +1381,8 @@ export default function App() {
           selfieUri={selfieUri}
           onDeleteSelfie={deleteSelfie}
           onOpenProfile={() => setProfileMenu(true)}
+          favorites={favorites}
+          onToggleFavorite={toggleFavorite}
         />
       )}
 
@@ -1323,6 +1393,7 @@ export default function App() {
           selfieUri={selfieUri}
           onDeleteSelfie={deleteSelfie}
           onOpenProfile={() => setProfileMenu(true)}
+          favorites={favorites}
         />
       )}
 
