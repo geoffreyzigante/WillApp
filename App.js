@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions,
@@ -9,6 +9,14 @@ import { Image as ExpoImage } from 'expo-image';
 import * as Font from 'expo-font';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import {
+  Camera as VisionCamera,
+  useCameraDevice,
+  useCameraPermission,
+  useFrameProcessor,
+} from 'react-native-vision-camera';
+import { useFaceDetector } from 'react-native-vision-camera-face-detector';
+import { Worklets } from 'react-native-worklets-core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 
@@ -383,57 +391,112 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
       <Text style={[s.sectionTitle, { marginVertical: 14 }]}>Photos</Text>
 
       {loading ? (
-        <ActivityIndicator color={C.primary} style={{ marginTop: 24 }} />
-      ) : (
-        <PhotoGrid photos={photos} />
-      )}
-    </ScrollView>
-  );
-}
-
 function PhotographerScreen({ session, onLogout }) {
-  const [permission, requestPermission] = useCameraPermissions();
-  const [status, setStatus] = useState('idle');
-  const [count, setCount] = useState(0);
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice('back');
   const cameraRef = useRef(null);
-  const shootingRef = useRef(false);
+
+  const isBurstingRef = useRef(false);
+  const lastBurstAtRef = useRef(0);
+  const isMountedRef = useRef(true);
+
+  const [facesCount, setFacesCount] = useState(0);
+  const [burstCount, setBurstCount] = useState(0);
+  const [photoCount, setPhotoCount] = useState(0);
+  const [flashVisible, setFlashVisible] = useState(false);
+
+  const faceDetectionOptions = useRef({
+    performanceMode: 'fast',
+    landmarkMode: 'none',
+    contourMode: 'none',
+    classificationMode: 'none',
+    minFaceSize: 0.05,
+    trackingEnabled: false,
+  }).current;
+
+  const { detectFaces } = useFaceDetector(faceDetectionOptions);
+
+  const triggerBurstFromWorklet = useMemo(
+    () => Worklets.createRunOnJS(() => triggerBurst()),
+    []
+  );
+  const setFacesCountFromWorklet = useMemo(
+    () => Worklets.createRunOnJS((n) => setFacesCount(n)),
+    []
+  );
 
   useEffect(() => {
-    if (!permission) return;
-    if (!permission.granted) requestPermission();
-  }, [permission]);
+    isMountedRef.current = true;
+    if (!hasPermission) requestPermission();
+    return () => { isMountedRef.current = false; };
+  }, [hasPermission]);
 
-  const burst = async () => {
-    if (!cameraRef.current || shootingRef.current) return;
-    shootingRef.current = true;
-    setStatus('shooting');
+  const frameProcessor = useFrameProcessor((frame) => {
+    'worklet';
+    const faces = detectFaces(frame);
+    setFacesCountFromWorklet(faces.length);
+    if (faces.length > 0) triggerBurstFromWorklet();
+  }, [detectFaces, setFacesCountFromWorklet, triggerBurstFromWorklet]);
+
+  const COOLDOWN_MS = 2000;
+  const PHOTOS_PER_BURST = 8;
+  const INTER_PHOTO_MS = 150;
+
+  async function triggerBurst() {
+    const now = Date.now();
+    if (isBurstingRef.current) return;
+    if (now - lastBurstAtRef.current < COOLDOWN_MS) return;
+    if (!cameraRef.current || !isMountedRef.current) return;
+
+    isBurstingRef.current = true;
+    lastBurstAtRef.current = now;
+    setBurstCount((c) => c + 1);
+    setFlashVisible(true);
+    setTimeout(() => setFlashVisible(false), 120);
+
     try {
-      for (let i = 0; i < 8; i++) {
-        const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, skipProcessing: true });
-        const ts = Date.now();
-        const d = new Date();
-        const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
-        const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
-        const key = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${ts}_${i}.jpg`;
+      const photos = [];
+      for (let i = 0; i < PHOTOS_PER_BURST; i++) {
+        if (!isMountedRef.current) break;
+        try {
+          const photo = await cameraRef.current.takePhoto({
+            qualityPrioritization: 'speed',
+            flash: 'off',
+            enableShutterSound: false,
+          });
+          photos.push({ photo, index: i });
+        } catch (e) { console.warn('takePhoto', i, e); }
+        if (i < PHOTOS_PER_BURST - 1) await new Promise(r => setTimeout(r, INTER_PHOTO_MS));
+      }
+      uploadBurst(photos).catch(e => console.warn('upload', e));
+    } finally {
+      isBurstingRef.current = false;
+    }
+  }
 
-        const blob = await fetch(photo.uri).then(r => r.blob());
-        await fetch(`${API_URL}/${key}`, {
+  async function uploadBurst(photos) {
+    if (photos.length === 0) return;
+    const d = new Date();
+    const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
+    const burstTs = d.getTime();
+
+    for (const { photo, index } of photos) {
+      const key = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${index}.jpg`;
+      try {
+        const fileUri = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
+        const blob = await (await fetch(fileUri)).blob();
+        const res = await fetch(`${API_URL}/${key}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'image/jpeg', Authorization: `Bearer ${session.token}` },
           body: blob,
         });
-        setCount(c => c + 1);
-        await new Promise(r => setTimeout(r, 150));
-      }
-    } catch (e) {
-      Alert.alert('Erreur', e.message);
-    } finally {
-      shootingRef.current = false;
-      setStatus('idle');
+        if (res.ok && isMountedRef.current) setPhotoCount(c => c + 1);
+      } catch (e) { console.warn('upload', key, e); }
     }
-  };
+  }
 
-  if (!permission?.granted) {
+  if (!hasPermission) {
     return (
       <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
         <Text style={{ color: C.text, textAlign: 'center', marginBottom: 16 }}>Permission caméra requise</Text>
@@ -444,23 +507,51 @@ function PhotographerScreen({ session, onLogout }) {
     );
   }
 
+  if (!device) {
+    return (
+      <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+        <Text style={{ color: C.text, textAlign: 'center' }}>Caméra arrière indisponible</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
-      <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" />
+      <VisionCamera
+        ref={cameraRef}
+        style={StyleSheet.absoluteFill}
+        device={device}
+        isActive={true}
+        photo={true}
+        frameProcessor={frameProcessor}
+        pixelFormat="yuv"
+      />
+      {flashVisible && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: 0.6 }]} pointerEvents="none" />
+      )}
       <View style={s.camTopBar}>
         <Text style={s.camTitle} numberOfLines={1}>{session.event.name}</Text>
         <TouchableOpacity onPress={onLogout}><Text style={s.camLogout}>Quitter</Text></TouchableOpacity>
       </View>
+      <View style={{ position: 'absolute', top: 90, left: 16, right: 16, alignItems: 'center' }}>
+        <View style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: facesCount > 0 ? '#10b981cc' : '#ef4444cc' }}>
+          <Text style={{ color: '#fff', fontWeight: '600' }}>
+            {facesCount > 0 ? `🟢 ${facesCount} visage${facesCount > 1 ? 's' : ''}` : '🔴 En attente'}
+          </Text>
+        </View>
+      </View>
       <View style={s.camBottomBar}>
-        <Text style={s.camCount}>{count} photo{count > 1 ? 's' : ''} envoyée{count > 1 ? 's' : ''}</Text>
-        <TouchableOpacity
-          style={[s.camShutter, status === 'shooting' && { opacity: 0.5 }]}
-          onPress={burst}
-          disabled={status === 'shooting'}
-        >
-          {status === 'shooting' ? <ActivityIndicator color="#fff" /> : <View style={s.camShutterInner} />}
-        </TouchableOpacity>
-        <Text style={s.camHint}>Rafale 8 photos</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-around', width: '100%', marginBottom: 8 }}>
+          <View style={{ alignItems: 'center' }}>
+            <Text style={{ color: '#aaa', fontSize: 11 }}>RAFALES</Text>
+            <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700' }}>{burstCount}</Text>
+          </View>
+          <View style={{ alignItems: 'center' }}>
+            <Text style={{ color: '#aaa', fontSize: 11 }}>PHOTOS</Text>
+            <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700' }}>{photoCount}</Text>
+          </View>
+        </View>
+        <Text style={s.camHint}>Détection automatique</Text>
       </View>
     </View>
   );
