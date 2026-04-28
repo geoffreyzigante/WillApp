@@ -391,6 +391,20 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
       <Text style={[s.sectionTitle, { marginVertical: 14 }]}>Photos</Text>
 
       {loading ? (
+        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+          <ActivityIndicator color={C.primary} />
+        </View>
+      ) : photos.length === 0 ? (
+        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+          <Text style={{ color: C.textSoft }}>Aucune photo pour le moment</Text>
+        </View>
+      ) : (
+        <PhotoGrid photos={photos} />
+      )}
+    </ScrollView>
+  );
+}
+
 function PhotographerScreen({ session, onLogout }) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
