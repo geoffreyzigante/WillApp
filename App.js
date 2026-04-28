@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions,
-  StatusBar, SafeAreaView, Platform, KeyboardAvoidingView,
+  StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -411,15 +411,26 @@ function PhotographerScreen({ session, onLogout }) {
   const cameraRef = useRef(null);
 
   // Refs de pilotage
-  const isCapturingRef = useRef(false);       // une boucle de capture est en cours
-  const lastFaceSeenAtRef = useRef(0);        // timestamp du dernier visage détecté
+  const isCapturingRef = useRef(false);
+  const lastFaceSeenAtRef = useRef(0);
   const isMountedRef = useRef(true);
+  const isDetectionEnabledRef = useRef(false);
+  const isTestModeRef = useRef(false);
 
   // State UI
   const [facesCount, setFacesCount] = useState(0);
   const [isShooting, setIsShooting] = useState(false);
   const [photoCount, setPhotoCount] = useState(0);
-  const [flashVisible, setFlashVisible] = useState(false);
+  const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
+  const [isTestMode, setIsTestMode] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [testPhotos, setTestPhotos] = useState([]);
+  const [showTestPanel, setShowTestPanel] = useState(false);
+
+  // Animations
+  const badgePulse = useRef(new Animated.Value(1)).current;
+  const badgeOpacity = useRef(new Animated.Value(1)).current;
+  const testPanelY = useRef(new Animated.Value(300)).current;
 
   const faceDetectionOptions = useRef({
     performanceMode: 'fast',
@@ -435,7 +446,7 @@ function PhotographerScreen({ session, onLogout }) {
   const onFacesDetectedJS = useMemo(
     () => Worklets.createRunOnJS((count) => {
       setFacesCount(count);
-      if (count > 0) {
+      if (count > 0 && isDetectionEnabledRef.current) {
         lastFaceSeenAtRef.current = Date.now();
         if (!isCapturingRef.current) startCaptureLoop();
       }
@@ -449,31 +460,72 @@ function PhotographerScreen({ session, onLogout }) {
     return () => { isMountedRef.current = false; };
   }, [hasPermission]);
 
+  // Animation pulse pendant la capture
+  useEffect(() => {
+    if (isShooting) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(badgePulse, { toValue: 1.05, duration: 600, useNativeDriver: true }),
+          Animated.timing(badgePulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      badgePulse.stopAnimation();
+      Animated.timing(badgePulse, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    }
+  }, [isShooting]);
+
+  // Fade des badges sur changement
+  useEffect(() => {
+    Animated.sequence([
+      Animated.timing(badgeOpacity, { toValue: 0.6, duration: 100, useNativeDriver: true }),
+      Animated.timing(badgeOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start();
+  }, [isDetectionEnabled, isTestMode, isShooting]);
+
+  // Slide-up du panneau de test
+  useEffect(() => {
+    Animated.spring(testPanelY, {
+      toValue: showTestPanel ? 0 : 300,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 9,
+    }).start();
+  }, [showTestPanel]);
+
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
     const faces = detectFaces(frame);
     onFacesDetectedJS(faces.length);
   }, [detectFaces, onFacesDetectedJS]);
 
-  // Paramètres
-  const INTER_PHOTO_MS = 150;       // intervalle entre photos
-  const NO_FACE_TIMEOUT_MS = 500;   // arrêt si plus de visage pendant 500ms
+  const INTER_PHOTO_MS = 150;
+  const NO_FACE_TIMEOUT_MS = 500;
+
+  function toggleDetection(enabled, testMode) {
+    isDetectionEnabledRef.current = enabled;
+    isTestModeRef.current = testMode;
+    setIsDetectionEnabled(enabled);
+    setIsTestMode(testMode);
+    if (!enabled) {
+      // Stop everything
+      lastFaceSeenAtRef.current = 0;
+    }
+  }
 
   async function startCaptureLoop() {
     if (isCapturingRef.current) return;
     if (!cameraRef.current || !isMountedRef.current) return;
+    if (!isDetectionEnabledRef.current) return;
 
     isCapturingRef.current = true;
     setIsShooting(true);
-    setFlashVisible(true);
-    setTimeout(() => setFlashVisible(false), 120);
 
-    const burstStartedAt = Date.now();
-    const burstTs = burstStartedAt;
+    const burstTs = Date.now();
     let photoIndex = 0;
     const queue = [];
 
-    while (isMountedRef.current) {
+    while (isMountedRef.current && isDetectionEnabledRef.current) {
       const sinceLastFace = Date.now() - lastFaceSeenAtRef.current;
       if (sinceLastFace > NO_FACE_TIMEOUT_MS) break;
 
@@ -484,6 +536,12 @@ function PhotographerScreen({ session, onLogout }) {
           enableShutterSound: false,
         });
         queue.push({ photo, index: photoIndex++, burstTs });
+
+        // En mode test, on affiche aussi en local
+        if (isTestModeRef.current) {
+          const fileUri = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
+          setTestPhotos(prev => [{ uri: fileUri, ts: Date.now() }, ...prev].slice(0, 30));
+        }
       } catch (e) { console.warn('takePhoto', e); }
 
       await new Promise(r => setTimeout(r, INTER_PHOTO_MS));
@@ -491,7 +549,11 @@ function PhotographerScreen({ session, onLogout }) {
 
     isCapturingRef.current = false;
     setIsShooting(false);
-    uploadQueue(queue).catch(e => console.warn('upload', e));
+
+    // Upload uniquement si pas en mode test
+    if (!isTestModeRef.current) {
+      uploadQueue(queue).catch(e => console.warn('upload', e));
+    }
   }
 
   async function uploadQueue(queue) {
@@ -534,6 +596,23 @@ function PhotographerScreen({ session, onLogout }) {
     );
   }
 
+  // Couleur badge selon état
+  const badgeColor = !isDetectionEnabled
+    ? 'rgba(60, 60, 60, 0.85)'
+    : isShooting
+      ? 'rgba(16, 185, 129, 0.92)'
+      : facesCount > 0
+        ? 'rgba(16, 185, 129, 0.75)'
+        : 'rgba(239, 68, 68, 0.78)';
+
+  const badgeText = !isDetectionEnabled
+    ? '⏸ Détection désactivée'
+    : isShooting
+      ? `📸 Capture — ${facesCount} visage${facesCount > 1 ? 's' : ''}`
+      : facesCount > 0
+        ? `🟢 ${facesCount} visage${facesCount > 1 ? 's' : ''}`
+        : '🔴 En attente';
+
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <VisionCamera
@@ -542,30 +621,161 @@ function PhotographerScreen({ session, onLogout }) {
         device={device}
         isActive={true}
         photo={true}
-        frameProcessor={frameProcessor}
+        frameProcessor={isDetectionEnabled ? frameProcessor : undefined}
         pixelFormat="yuv"
+        zoom={zoomLevel}
       />
-      {flashVisible && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', opacity: 0.6 }]} pointerEvents="none" />
-      )}
+
+      {/* Top bar */}
       <View style={s.camTopBar}>
         <Text style={s.camTitle} numberOfLines={1}>{session.event.name}</Text>
         <TouchableOpacity onPress={onLogout}><Text style={s.camLogout}>Quitter</Text></TouchableOpacity>
       </View>
-      <View style={{ position: 'absolute', top: 90, left: 16, right: 16, alignItems: 'center' }}>
-        <View style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: isShooting ? '#10b981dd' : (facesCount > 0 ? '#10b981cc' : '#ef4444cc') }}>
-          <Text style={{ color: '#fff', fontWeight: '600' }}>
-            {isShooting ? `📸 Capture en cours — ${facesCount} visage${facesCount > 1 ? 's' : ''}` : (facesCount > 0 ? `🟢 ${facesCount} visage${facesCount > 1 ? 's' : ''}` : '🔴 En attente')}
+
+      {/* Badge état (animé) */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: 90,
+          left: 16,
+          right: 16,
+          alignItems: 'center',
+          opacity: badgeOpacity,
+          transform: [{ scale: badgePulse }],
+        }}
+        pointerEvents="none"
+      >
+        <View style={{ paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999, backgroundColor: badgeColor }}>
+          <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>
+            {badgeText}
           </Text>
         </View>
+        {isTestMode && (
+          <View style={{ marginTop: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: 'rgba(245, 158, 11, 0.9)' }}>
+            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 11 }}>MODE TEST — pas d'envoi</Text>
+          </View>
+        )}
+      </Animated.View>
+
+      {/* Slider zoom (vertical à droite) */}
+      <View style={{ position: 'absolute', right: 12, top: 180, alignItems: 'center' }}>
+        {[1, 1.5, 2, 3].map(z => (
+          <TouchableOpacity
+            key={z}
+            onPress={() => setZoomLevel(z)}
+            style={{
+              width: 38, height: 38, borderRadius: 19, marginVertical: 4,
+              backgroundColor: zoomLevel === z ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.5)',
+              justifyContent: 'center', alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: zoomLevel === z ? '#000' : '#fff', fontWeight: '700', fontSize: 12 }}>{z}×</Text>
+          </TouchableOpacity>
+        ))}
       </View>
-      <View style={s.camBottomBar}>
-        <View style={{ alignItems: 'center', width: '100%' }}>
-          <Text style={{ color: '#aaa', fontSize: 11 }}>PHOTOS ENVOYÉES</Text>
-          <Text style={{ color: '#fff', fontSize: 28, fontWeight: '700' }}>{photoCount}</Text>
+
+      {/* Bottom controls */}
+      <View style={{ position: 'absolute', bottom: 30, left: 16, right: 16 }}>
+        {/* Compteur */}
+        {!isTestMode && (
+          <View style={{ alignItems: 'center', marginBottom: 16 }}>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, letterSpacing: 1 }}>PHOTOS ENVOYÉES</Text>
+            <Text style={{ color: '#fff', fontSize: 30, fontWeight: '700' }}>{photoCount}</Text>
+          </View>
+        )}
+
+        {/* Bouton voir tests */}
+        {isTestMode && testPhotos.length > 0 && (
+          <TouchableOpacity
+            onPress={() => setShowTestPanel(true)}
+            style={{ alignItems: 'center', marginBottom: 16, backgroundColor: 'rgba(0,0,0,0.5)', paddingVertical: 10, borderRadius: 12 }}
+          >
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>↑ Voir les {testPhotos.length} photo{testPhotos.length > 1 ? 's' : ''} test</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Boutons Test / Démarrer */}
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TouchableOpacity
+            onPress={() => {
+              if (isDetectionEnabled && isTestMode) {
+                toggleDetection(false, false);
+              } else {
+                toggleDetection(true, true);
+              }
+            }}
+            style={{
+              flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center',
+              backgroundColor: isDetectionEnabled && isTestMode ? '#f59e0b' : 'rgba(255,255,255,0.15)',
+              borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
+              {isDetectionEnabled && isTestMode ? '■ Arrêter test' : 'Tester'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              if (isDetectionEnabled && !isTestMode) {
+                toggleDetection(false, false);
+              } else {
+                toggleDetection(true, false);
+              }
+            }}
+            style={{
+              flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center',
+              backgroundColor: isDetectionEnabled && !isTestMode ? '#ef4444' : C.primary,
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
+              {isDetectionEnabled && !isTestMode ? '■ Arrêter' : 'Démarrer'}
+            </Text>
+          </TouchableOpacity>
         </View>
-        <Text style={s.camHint}>Détection automatique en continu</Text>
       </View>
+
+      {/* Panneau de test (slide-up) */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          bottom: 0, left: 0, right: 0,
+          height: '70%',
+          backgroundColor: '#111',
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          transform: [{ translateY: testPanelY }],
+          paddingTop: 14,
+        }}
+      >
+        <View style={{ alignItems: 'center', marginBottom: 8 }}>
+          <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 }}>
+          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>Photos de test ({testPhotos.length})</Text>
+          <TouchableOpacity onPress={() => setShowTestPanel(false)}>
+            <Text style={{ color: '#3b82f6', fontSize: 15 }}>Fermer</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ flexDirection: 'row', flexWrap: 'wrap', padding: 8 }}>
+          {testPhotos.map((p, i) => (
+            <Image
+              key={p.ts + '_' + i}
+              source={{ uri: p.uri }}
+              style={{ width: '32%', aspectRatio: 0.75, margin: '0.66%', borderRadius: 6, backgroundColor: '#222' }}
+            />
+          ))}
+          {testPhotos.length === 0 && (
+            <Text style={{ color: '#888', textAlign: 'center', width: '100%', marginTop: 40 }}>Aucune photo de test</Text>
+          )}
+        </ScrollView>
+        <TouchableOpacity
+          onPress={() => setTestPhotos([])}
+          style={{ margin: 16, paddingVertical: 12, borderRadius: 10, backgroundColor: 'rgba(239,68,68,0.2)', alignItems: 'center' }}
+        >
+          <Text style={{ color: '#ef4444', fontWeight: '600' }}>Effacer les photos de test</Text>
+        </TouchableOpacity>
+      </Animated.View>
     </View>
   );
 }
