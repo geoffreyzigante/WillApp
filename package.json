@@ -11,7 +11,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "@shopify/react-native-skia": "2.2.12",
-    "babel-preset-expo": "^55.0.18",
+    "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.34",
     "expo-build-properties": "~1.0.10",
     "expo-camera": "~17.0.10",
