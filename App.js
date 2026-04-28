@@ -43,41 +43,51 @@ const TYPE_COLORS = {
   Autre: '#6A6A6A',
 };
 
-// ---------- ICONS ----------
+// ---------- ICONS (custom SVG) ----------
 const Icon = {
   Bell: ({ size = 22, color = '#0A0A0A' }) => (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M12 2a6 6 0 0 0-6 6v3.5L4 14h16l-2-2.5V8a6 6 0 0 0-6-6Z" stroke={color} strokeWidth={2} strokeLinejoin="round" />
-      <Path d="M10 18a2 2 0 0 0 4 0" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Svg width={size} height={size * (17.61/16.93)} viewBox="0 0 16.93 17.61" fill={color}>
+      <Path d="M14.14,8.93l.02-1.68c.02-1.39-.31-2.76-1.09-3.91-.74-1.09-1.92-1.7-3.21-1.95C9.81.58,9.2,0,8.44,0c-.76,0-1.36.59-1.4,1.38-1.28.27-2.43.87-3.16,1.94-.76,1.11-1.11,2.44-1.1,3.78l.02,2.01c0,.75-.11,1.49-.44,2.15-.51,1.01-1.65,1.33-2.16,2.08-.21.31-.24.69-.09,1.05.1.24.41.56.78.57h4.93c.03,1.56,1.26,2.67,2.69,2.64,1.42-.03,2.56-1.16,2.59-2.63h5.02c.37-.01.66-.38.75-.62.13-.33.08-.76-.14-1.04-.9-1.16-2.63-1.08-2.59-4.38Z" />
     </Svg>
   ),
   User: ({ size = 22, color = '#FFFFFF' }) => (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx="12" cy="8" r="4" fill={color} />
-      <Path d="M4 21c0-4 4-7 8-7s8 3 8 7" fill={color} />
+    <Svg width={size} height={size * (17.61/18.96)} viewBox="0 0 18.96 17.61" fill={color}>
+      <Path d="M10.16,0h-1.35C3.94,0,0,3.94,0,8.8s3.94,8.8,8.8,8.8h1.35c4.86,0,8.8-3.94,8.8-8.8S15.02,0,10.16,0ZM9.48,2.77c1.28,0,2.32,1.14,2.32,2.55s-1.04,2.55-2.32,2.55-2.32-1.14-2.32-2.55,1.04-2.55,2.32-2.55ZM9.48,14.33c-2.58,0-4.67-1.23-4.67-2.75s2.09-2.75,4.67-2.75,4.67,1.23,4.67,2.75-2.09,2.75-4.67,2.75Z" />
     </Svg>
   ),
-  Search: ({ size = 18, color = '#7B2FFF' }) => (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx="11" cy="11" r="7" stroke={color} strokeWidth={2} />
-      <Path d="m20 20-3.5-3.5" stroke={color} strokeWidth={2} strokeLinecap="round" />
+  Search: ({ size = 18, color = '#FFFFFF' }) => (
+    <Svg width={size} height={size} viewBox="0 0 17.61 17.61" fill={color}>
+      <Path d="M8.8,0C3.94,0,0,3.94,0,8.8s3.94,8.8,8.8,8.8,8.8-3.94,8.8-8.8S13.67,0,8.8,0ZM8.8,15.98c-3.96,0-7.18-3.21-7.18-7.18S4.84,1.63,8.8,1.63s7.18,3.21,7.18,7.18-3.21,7.18-7.18,7.18Z" />
+      <Path d="M8.8,3.07c-3.17,0-5.73,2.57-5.73,5.73s2.57,5.73,5.73,5.73,5.73-2.57,5.73-5.73-2.57-5.73-5.73-5.73Z" />
     </Svg>
   ),
-  Heart: ({ size = 22, color = '#FFFFFF', filled = false }) => (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : 'none'}>
-      <Path d="M12 21s-7-4.5-9.5-9C.8 8.6 3 5 6.5 5 8.7 5 10.5 6.2 12 8c1.5-1.8 3.3-3 5.5-3 3.5 0 5.7 3.6 4 7-2.5 4.5-9.5 9-9.5 9Z" stroke={color} strokeWidth={2} strokeLinejoin="round" fill={filled ? color : 'none'} />
+  Home: ({ size = 24, color = '#7B2FFF' }) => (
+    <Svg width={size} height={size * (17.61/16.44)} viewBox="0 0 16.44 17.61" fill={color}>
+      <Path d="M9.38.44c-.66-.59-1.66-.59-2.32,0L.58,6.23c-.37.33-.58.8-.58,1.3v8.34c0,.96.78,1.74,1.74,1.74h12.96c.96,0,1.74-.78,1.74-1.74V7.53c0-.5-.21-.97-.58-1.3L9.38.44ZM10.81,15.11c0,.62-.5,1.12-1.12,1.12h-2.95c-.62,0-1.12-.5-1.12-1.12v-4.21c0-.62.5-1.12,1.12-1.12h2.95c.62,0,1.12.5,1.12,1.12v4.21Z" />
     </Svg>
   ),
-  Home: ({ size = 24, color = '#7B2FFF', filled = false }) => (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9Z" stroke={color} strokeWidth={2} strokeLinejoin="round" fill={filled ? color : 'none'} />
+  Photos: ({ size = 24, color = '#0A0A0A' }) => (
+    <Svg width={size} height={size} viewBox="0 0 17.61 17.61" fill={color}>
+      <Path d="M16.21,0H1.4C.62,0,0,.62,0,1.4v14.82c0,.77.62,1.4,1.4,1.4h14.82c.77,0,1.4-.62,1.4-1.4V1.4c0-.77-.62-1.4-1.4-1.4ZM15.75,11.73c0,.77-.62,1.4-1.4,1.4h-1.01c-.43-2.28-2.29-4-4.53-4s-4.11,1.72-4.53,4h-1.01c-.77,0-1.4-.62-1.4-1.4V3.28c0-.77.62-1.4,1.4-1.4h11.09c.77,0,1.4.62,1.4,1.4v8.45Z" />
+      <Path d="M8.8,2.52c-1.44,0-2.61,1.26-2.61,2.82s1.17,2.82,2.61,2.82,2.61-1.26,2.61-2.82-1.17-2.82-2.61-2.82Z" />
     </Svg>
   ),
-  Photos: ({ size = 24, color = '#0A0A0A', filled = false }) => (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Rect x="3" y="5" width="18" height="14" rx="2" stroke={color} strokeWidth={2} fill={filled ? color : 'none'} />
-      <Circle cx="8.5" cy="10" r="1.5" fill={filled ? '#fff' : color} />
-      <Path d="m4 17 5-5 4 4 3-3 4 4" stroke={filled ? '#fff' : color} strokeWidth={2} strokeLinejoin="round" fill="none" />
+  Calendar: ({ size = 22, color = '#7B2FFF' }) => (
+    <Svg width={size} height={size * (17.61/18.58)} viewBox="0 0 18.58 17.61" fill={color}>
+      <Path d="M17.11,2.19h-2.91v-1.15c0-.57-.47-1.04-1.04-1.04h0c-.57,0-1.04.47-1.04,1.04v1.15h-5.98v-1.15c0-.57-.47-1.04-1.04-1.04s-1.04.47-1.04,1.04v1.15H1.47c-.81,0-1.47.66-1.47,1.47v12.48c0,.81.66,1.47,1.47,1.47h15.64c.81,0,1.47-.66,1.47-1.47V3.66c0-.81-.66-1.47-1.47-1.47ZM16.52,13.77c0,.8-.65,1.44-1.44,1.44H3.5c-.8,0-1.44-.65-1.44-1.44v-6.07c0-.8.65-1.44,1.44-1.44h11.57c.8,0,1.44.65,1.44,1.44v6.07Z" />
+      <Path d="M14.2,8.47H4.38c-.37,0-.68.3-.68.68s.3.68.68.68h9.81c.37,0,.68-.3.68-.68s-.3-.68-.68-.68Z" />
+      <Path d="M14.2,11.74H4.38c-.37,0-.68.3-.68.68s.3.68.68.68h9.81c.37,0,.68-.3.68-.68s-.3-.68-.68-.68Z" />
+    </Svg>
+  ),
+  Heart: ({ size = 22, color = '#FFFFFF' }) => (
+    <Svg width={size} height={size * (17.61/20.78)} viewBox="0 0 20.78 17.61" fill={color}>
+      <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+    </Svg>
+  ),
+  Direct: ({ size = 22, color = '#7B2FFF' }) => (
+    <Svg width={size} height={size} viewBox="0 0 17.61 17.61" fill={color}>
+      <Path d="M8.8,0C3.94,0,0,3.94,0,8.8s3.94,8.8,8.8,8.8,8.8-3.94,8.8-8.8S13.67,0,8.8,0ZM8.8,15.98c-3.96,0-7.18-3.21-7.18-7.18S4.84,1.63,8.8,1.63s7.18,3.21,7.18,7.18-3.21,7.18-7.18,7.18Z" />
+      <Path d="M8.8,3.07c-3.17,0-5.73,2.57-5.73,5.73s2.57,5.73,5.73,5.73,5.73-2.57,5.73-5.73-2.57-5.73-5.73-5.73Z" />
     </Svg>
   ),
   Close: ({ size = 22, color = '#FFFFFF' }) => (
@@ -91,6 +101,15 @@ const Icon = {
       <Rect x="8" y="18" width="48" height="36" rx="6" stroke={color} strokeWidth={2} fill="none" />
       <Circle cx="32" cy="36" r="10" stroke={color} strokeWidth={2} fill="none" />
       <Rect x="24" y="12" width="16" height="8" rx="2" stroke={color} strokeWidth={2} fill="none" />
+    </Svg>
+  ),
+  Logo: ({ width = 80, color = '#5313B7' }) => (
+    <Svg width={width} height={width * (66.36/127.33)} viewBox="0 0 127.33 66.36" fill={color}>
+      <Path d="M80.01,20.33c-9.07,1.29-11.83-10.42-3.21-13.19,9.56-2.16,14.01,11.8,3.21,13.19Z" />
+      <Path d="M103.25,65.19c-9.47-.6-9.54-35.03-10.66-43.66-.66-5.07-1.51-11.09.7-15.8,2.11-4.28,5.82-2.22,7.54,1.11,4.05,8.13,3.56,16.1,5.36,25.37,1.01,7.78,6.52,33.58-2.95,32.98Z" />
+      <Path d="M112.92,37.52c-.69-7.04-1.66-13.5-2.64-20.04-.65-4.7-1.19-10.78.89-14.94,2.14-4.13,5.55-2.82,7.58,1.13,3.45,7.32,4.39,16.8,5.58,24.99.93,7.63,1.92,16.11,2.58,22.84.33,4.05,1.91,15.3-4.43,14.86s-8.49-21.49-9.57-28.83Z" />
+      <Path d="M81.5,63.99c-9.82-.59-8.03-40.1-1.97-38.95,7.97,1.52,15.08,39.74,1.97,38.95Z" />
+      <Path d="M2.68,9.21c9.2,1.81,11.16,28.79,20.62,31.64s1.71-26.61,13.11-24.42,9.84,27.02,18.65,27.02.09-22.85,9.46-21.01c5.56,1.1,5.97,40.86-4.93,40.1s-11.66-21.66-20.46-20.49-3.22,18.82-14.62,18.02S-7.36,7.24,2.68,9.21Z" />
     </Svg>
   ),
 };
@@ -142,7 +161,34 @@ const api = {
 
 // ---------- SCREENS ----------
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab, onOpenSearch }) {
+function SelfieBlock({ selfieUri, onPress }) {
+  if (selfieUri) {
+    return (
+      <View style={s.selfieDoneBanner}>
+        <ExpoImage source={{ uri: selfieUri }} style={s.selfieDoneAvatar} contentFit="cover" />
+        <View style={{ flex: 1 }}>
+          <Text style={s.selfieDoneTitle}>Selfie enregistré</Text>
+          <Text style={s.selfieDoneSub}>Will t'envoie tes photos automatiquement dans l'onglet Photos</Text>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
+      <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.selfieTitle}>Prendre{'\n'}un selfie</Text>
+          <Text style={s.selfieSub}>Recevoir mes photos{'\n'}automatiquement</Text>
+        </View>
+        <View style={s.selfieAvatar}>
+          <Icon.User size={48} color="#FFFFFF" />
+        </View>
+      </LinearGradient>
+    </TouchableOpacity>
+  );
+}
+
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab, onOpenSearch, selfieUri }) {
   const filtered = events.filter(e => tab === 'upcoming' ? isUpcoming(e.event_date) : !isUpcoming(e.event_date));
 
   return (
@@ -162,22 +208,12 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
         </TouchableOpacity>
       </View>
 
-      <Text style={s.welcome}>
-        Bienvenue chez<Text style={s.welcomeAccent}>will</Text>
-      </Text>
+      <View style={s.welcomeRow}>
+        <Text style={s.welcome}>Bienvenue chez </Text>
+        <Icon.Logo width={70} color={C.primary} />
+      </View>
 
-      {/* Selfie Block */}
-      <TouchableOpacity activeOpacity={0.9} onPress={onOpenSelfie}>
-        <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.selfieTitle}>Prendre{'\n'}un selfie</Text>
-            <Text style={s.selfieSub}>Recevoir mes photos{'\n'}automatiquement</Text>
-          </View>
-          <View style={s.selfieAvatar}>
-            <Icon.User size={48} color="#FFFFFF" />
-          </View>
-        </LinearGradient>
-      </TouchableOpacity>
+      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} />
 
       {/* Search button (style maquette : bouton plein) */}
       <TouchableOpacity style={s.searchBtn} activeOpacity={0.85} onPress={onOpenSearch}>
@@ -240,7 +276,7 @@ function EventCard({ event, onPress }) {
   );
 }
 
-function PhotosScreen({ onOpenSelfie, gallery }) {
+function PhotosScreen({ onOpenSelfie, gallery, selfieUri }) {
   return (
     <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
@@ -252,17 +288,7 @@ function PhotosScreen({ onOpenSelfie, gallery }) {
 
       <Text style={s.pageTitleCenter}>Mes photos</Text>
 
-      <TouchableOpacity activeOpacity={0.9} onPress={onOpenSelfie}>
-        <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.selfieTitle}>Prendre{'\n'}un selfie</Text>
-            <Text style={s.selfieSub}>Recevoir mes photos{'\n'}automatiquement</Text>
-          </View>
-          <View style={s.selfieAvatar}>
-            <Icon.User size={48} color="#FFFFFF" />
-          </View>
-        </LinearGradient>
-      </TouchableOpacity>
+      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} />
 
       <Text style={s.empty}>Pas encore de photos disponibles</Text>
     </ScrollView>
@@ -287,7 +313,7 @@ function PhotoGrid({ photos = [] }) {
   );
 }
 
-function EventDetailScreen({ event, onClose, onOpenSelfie }) {
+function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
@@ -340,17 +366,7 @@ function EventDetailScreen({ event, onClose, onOpenSelfie }) {
       </View>
 
       {/* Selfie */}
-      <TouchableOpacity activeOpacity={0.9} onPress={onOpenSelfie}>
-        <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.selfieTitle}>Prendre{'\n'}un selfie</Text>
-            <Text style={s.selfieSub}>Recevoir mes photos{'\n'}automatiquement</Text>
-          </View>
-          <View style={s.selfieAvatar}>
-            <Icon.User size={48} color="#FFFFFF" />
-          </View>
-        </LinearGradient>
-      </TouchableOpacity>
+      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} />
 
       {/* Galerie */}
       <Text style={[s.sectionTitle, { marginVertical: 14 }]}>Photos</Text>
@@ -816,6 +832,7 @@ export default function App() {
           onOpenSearch={() => setSearchModal(true)}
           tab={tab}
           setTab={setTab}
+          selfieUri={selfieUri}
         />
       )}
 
@@ -823,6 +840,7 @@ export default function App() {
         <PhotosScreen
           onOpenSelfie={() => setSelfieModal(true)}
           gallery={[]}
+          selfieUri={selfieUri}
         />
       )}
 
@@ -831,6 +849,7 @@ export default function App() {
           event={openedEvent}
           onClose={() => setOpenedEvent(null)}
           onOpenSelfie={() => setSelfieModal(true)}
+          selfieUri={selfieUri}
         />
       )}
 
@@ -896,8 +915,14 @@ const s = StyleSheet.create({
   orgPill: { backgroundColor: C.pinkPill, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 22 },
   orgPillText: { color: C.pinkPillText, fontWeight: '600', fontSize: 14 },
 
-  welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 30, color: C.text, marginTop: 14, marginBottom: 14, fontWeight: '700' },
+  welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 26, color: C.text, fontWeight: '700' },
+  welcomeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, marginBottom: 14 },
   welcomeAccent: { color: C.primary },
+
+  selfieDoneBanner: { backgroundColor: C.white, borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16, borderWidth: 1, borderColor: C.primaryLight },
+  selfieDoneAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primaryLight },
+  selfieDoneTitle: { fontWeight: '700', fontSize: 15, color: C.primary, fontFamily: 'AVEstiana', fontStyle: 'normal' },
+  selfieDoneSub: { fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
 
   selfieCard: { borderRadius: 22, padding: 22, flexDirection: 'row', alignItems: 'center', minHeight: 150, marginBottom: 16 },
   selfieTitle: { color: '#fff', fontSize: 28, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 32 },
