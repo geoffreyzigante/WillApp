@@ -55,7 +55,14 @@
           "cameraPermission": "Will utilise la camera pour detecter les coureurs et prendre des photos."
         }
       ],
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/AV_Estiana-VF.ttf"
+          ]
+        }
+      ],
       [
         "react-native-vision-camera",
         {
@@ -71,9 +78,6 @@
           }
         }
       ]
-    ],
-    "fonts": [
-      "./assets/fonts/AV_Estiana-VF.ttf"
     ]
   }
 }
