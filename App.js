@@ -20,6 +20,7 @@ import { useFaceDetector } from 'react-native-vision-camera-face-detector';
 import { Worklets } from 'react-native-worklets-core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const API_URL = 'https://will-api.geoffreyzigante.workers.dev';
 const R2_PUBLIC = 'https://pub-f9a5894e66a44f8cbb34582302930449.r2.dev';
@@ -125,9 +126,9 @@ const Icon = {
 
 // ---------- HELPERS ----------
 const formatDateLong = (iso) => {
-  if (!iso) return '';
+  if (!iso) return 'DATE À VENIR';
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
+  if (isNaN(d.getTime())) return 'DATE À VENIR';
   const months = ['JANVIER','FÉVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOÛT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DÉCEMBRE'];
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 };
@@ -710,6 +711,44 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
         </View>
       </View>
 
+      {/* Distances */}
+      {Array.isArray(event.distances) && event.distances.length > 0 && (
+        <View style={{ marginTop: 16 }}>
+          <Text style={[s.sectionTitle, { marginBottom: 10 }]}>Distances</Text>
+          {event.distances.map((d, idx) => {
+            const upcoming = isUpcoming(event.event_date);
+            return (
+              <View
+                key={idx}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  backgroundColor: '#faf9ff',
+                  borderRadius: 12,
+                  marginBottom: 8,
+                }}
+              >
+                <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', flex: 1 }}>
+                  {d.km} km
+                </Text>
+                {upcoming && d.time ? (
+                  <Text style={{ color: C.textSoft, fontSize: 13, marginRight: 14 }}>
+                    {d.time}
+                  </Text>
+                ) : null}
+                {upcoming && d.elevation ? (
+                  <Text style={{ color: C.textSoft, fontSize: 13 }}>
+                    {d.elevation}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      )}
+
       {/* Galerie */}
       <Text style={[s.sectionTitle, { marginVertical: 14 }]}>Photos</Text>
 
@@ -1042,23 +1081,58 @@ function CreateEventModal({ visible, onClose, onCreated }) {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
-  const [eventDate, setEventDate] = useState('');
-  const [location, setLocation] = useState('');
+  const [eventDate, setEventDate] = useState(null); // Date object | null
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [postalCode, setPostalCode] = useState('');
+  const [city, setCity] = useState('');
+  const [citySuggestions, setCitySuggestions] = useState([]);
   const [eventType, setEventType] = useState('');
   const [website, setWebsite] = useState('');
   const [contact, setContact] = useState('');
+  const [distances, setDistances] = useState([]); // [{km, time, elevation}]
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setName(''); setCode(''); setPassword('');
-      setEventDate(''); setLocation(''); setEventType('');
-      setWebsite(''); setContact('');
+      setEventDate(null); setPostalCode(''); setCity(''); setCitySuggestions([]);
+      setEventType('');
+      setWebsite(''); setContact(''); setDistances([]);
     }
   }, [visible]);
 
+  // Suggestions de villes selon code postal
+  useEffect(() => {
+    if (!/^\d{5}$/.test(postalCode)) {
+      setCitySuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`);
+        if (!r.ok) return;
+        const data = await r.json();
+        if (cancelled) return;
+        const cities = (data || []).map(c => c.nom);
+        setCitySuggestions(cities);
+        if (cities.length === 1 && !city) setCity(cities[0]);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [postalCode]);
+
+  const addDistance = () => setDistances(d => [...d, { km: '', time: '', elevation: '' }]);
+  const updateDistance = (idx, field, value) => {
+    setDistances(d => d.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  };
+  const removeDistance = (idx) => setDistances(d => d.filter((_, i) => i !== idx));
+
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((contact || '').trim());
+  const isValid = !!name?.trim() && !!code?.trim() && !!password && /^\d{5}$/.test(postalCode) && emailOk && !busy;
+
   const submit = async () => {
-    if (!name || !code || !password) return Alert.alert('Champs requis', 'Nom, code et mot de passe.');
+    if (!isValid) return;
     setBusy(true);
     try {
       const r = await fetch(`${API_URL}/auth/submit-event`, {
@@ -1067,10 +1141,17 @@ function CreateEventModal({ visible, onClose, onCreated }) {
         body: JSON.stringify({
           name, code, password,
           contact,
-          event_date: eventDate,
-          location,
+          event_date: eventDate ? eventDate.toISOString().slice(0, 10) : '',
+          location: city ? `${city} (${postalCode})` : '',
           event_type: eventType,
           website,
+          distances: distances
+            .filter(d => d.km)
+            .map(d => ({
+              km: parseFloat(d.km) || 0,
+              time: d.time || '',
+              elevation: d.elevation || '',
+            })),
         }),
       });
       const data = await r.json();
@@ -1099,12 +1180,74 @@ function CreateEventModal({ visible, onClose, onCreated }) {
               <View style={s.modalHandle} />
             </TouchableOpacity>
             <Text style={s.modalTitle}>Créer un événement</Text>
-            <ScrollView style={{ maxHeight: 460 }}>
+            <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
               <TextInput placeholder="Nom de l'événement *" placeholderTextColor={C.textSoft} value={name} onChangeText={setName} style={s.input} />
               <TextInput placeholder="Code unique (ex: trail-2027) *" placeholderTextColor={C.textSoft} value={code} onChangeText={setCode} autoCapitalize="none" style={s.input} />
               <TextInput placeholder="Mot de passe photographe *" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} secureTextEntry style={s.input} />
-              <TextInput placeholder="Date (YYYY-MM-DD)" placeholderTextColor={C.textSoft} value={eventDate} onChangeText={setEventDate} style={s.input} />
-              <TextInput placeholder="Lieu (ex: Louviers (27))" placeholderTextColor={C.textSoft} value={location} onChangeText={setLocation} style={s.input} />
+              {/* Date */}
+              <TouchableOpacity
+                onPress={() => setShowDatePicker(true)}
+                style={[s.input, { justifyContent: 'center' }]}
+              >
+                <Text style={{ color: eventDate ? C.text : C.textSoft, fontSize: 15 }}>
+                  {eventDate
+                    ? eventDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+                    : 'Date de l\'événement'}
+                </Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={eventDate || new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  onChange={(_e, selected) => {
+                    if (Platform.OS === 'android') setShowDatePicker(false);
+                    if (selected) setEventDate(selected);
+                  }}
+                  locale="fr-FR"
+                />
+              )}
+              {Platform.OS === 'ios' && showDatePicker && (
+                <TouchableOpacity onPress={() => setShowDatePicker(false)} style={{ alignSelf: 'flex-end', paddingHorizontal: 8, paddingVertical: 6 }}>
+                  <Text style={{ color: C.primary, fontWeight: '600' }}>OK</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Lieu */}
+              <TextInput
+                placeholder="Code postal *"
+                placeholderTextColor={C.textSoft}
+                value={postalCode}
+                onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
+                keyboardType="number-pad"
+                maxLength={5}
+                style={s.input}
+              />
+              {citySuggestions.length > 0 && !city && (
+                <ScrollView
+                  style={{ maxHeight: 140, marginBottom: 10, borderRadius: 12, backgroundColor: '#f5f3ff' }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {citySuggestions.map((c) => (
+                    <TouchableOpacity
+                      key={c}
+                      onPress={() => { setCity(c); setCitySuggestions([]); }}
+                      style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
+                    >
+                      <Text style={{ color: C.text, fontSize: 14 }}>{c}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+              {city ? (
+                <TouchableOpacity
+                  onPress={() => setCity('')}
+                  style={[s.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                >
+                  <Text style={{ color: C.text, fontSize: 15 }}>{city}</Text>
+                  <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+                </TouchableOpacity>
+              ) : null}
               <Text style={[s.modalSub, { textAlign: 'left', marginTop: 12, marginBottom: 6 }]}>Type d'épreuve</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                 {types.map(t => (
@@ -1114,10 +1257,75 @@ function CreateEventModal({ visible, onClose, onCreated }) {
                 ))}
               </View>
               <TextInput placeholder="Site web" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={s.input} />
-              <TextInput placeholder="Email de contact" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={s.input} />
+              <TextInput placeholder="Email de contact *" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={s.input} />
+
+              {/* Distances */}
+              <Text style={[s.modalSub, { textAlign: 'left', marginTop: 12, marginBottom: 6 }]}>Distances</Text>
+              {distances.map((d, idx) => (
+                <View key={idx} style={{ backgroundColor: '#faf9ff', borderRadius: 12, padding: 10, marginBottom: 8 }}>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TextInput
+                      placeholder="km"
+                      placeholderTextColor={C.textSoft}
+                      value={d.km}
+                      onChangeText={(v) => updateDistance(idx, 'km', v.replace(/[^0-9.]/g, ''))}
+                      keyboardType="decimal-pad"
+                      style={[s.input, { flex: 1, marginBottom: 6 }]}
+                    />
+                    <TextInput
+                      placeholder="9h00"
+                      placeholderTextColor={C.textSoft}
+                      value={d.time}
+                      onChangeText={(v) => updateDistance(idx, 'time', v)}
+                      style={[s.input, { flex: 1, marginBottom: 6 }]}
+                    />
+                    <TextInput
+                      placeholder="120m D+"
+                      placeholderTextColor={C.textSoft}
+                      value={d.elevation}
+                      onChangeText={(v) => updateDistance(idx, 'elevation', v)}
+                      style={[s.input, { flex: 1.2, marginBottom: 6 }]}
+                    />
+                  </View>
+                  <TouchableOpacity onPress={() => removeDistance(idx)} style={{ alignSelf: 'flex-end', marginTop: 2 }}>
+                    <Text style={{ color: '#DC2626', fontSize: 12, fontWeight: '600' }}>Supprimer</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <TouchableOpacity
+                onPress={addDistance}
+                style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 12, backgroundColor: '#f5f3ff', marginBottom: 12 }}
+              >
+                <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>+ Ajouter une distance</Text>
+              </TouchableOpacity>
             </ScrollView>
-            <TouchableOpacity style={s.btnPrimary} onPress={submit} disabled={busy}>
-              {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnPrimaryText}>Soumettre</Text>}
+            {!isValid && !busy && (
+              <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>
+                {!name?.trim() && 'Nom · '}
+                {!code?.trim() && 'Code · '}
+                {!password && 'Mot de passe · '}
+                {!/^\d{5}$/.test(postalCode) && 'Code postal · '}
+                {!emailOk && 'Email valide'}
+              </Text>
+            )}
+            <TouchableOpacity
+              onPress={submit}
+              disabled={!isValid}
+              style={{
+                backgroundColor: isValid ? C.pinkPill : '#e9e4f9',
+                paddingVertical: 14,
+                borderRadius: 14,
+                alignItems: 'center',
+                marginTop: 6,
+              }}
+            >
+              {busy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={{ color: isValid ? '#fff' : C.textSoft, fontSize: 15, fontWeight: '700' }}>
+                  Soumettre
+                </Text>
+              )}
             </TouchableOpacity>
             <TouchableOpacity style={s.modalCancel} onPress={onClose}>
               <Text style={s.modalCancelText}>Annuler</Text>
