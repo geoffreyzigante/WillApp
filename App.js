@@ -139,6 +139,17 @@ const isUpcoming = (iso) => {
   return d.getTime() >= Date.now() - 86400000;
 };
 
+// Extrait le burstTs (timestamp unix ms) depuis le filename d'une photo
+// Format: {event}/{photographer}/{date}/{time}_{burstTs}_{idx}.jpg
+const extractBurstTs = (key) => {
+  if (!key) return 0;
+  const filename = key.split('/').pop().replace('.jpg', '');
+  const parts = filename.split('_');
+  if (parts.length < 3) return 0;
+  const ts = parseInt(parts[parts.length - 2], 10);
+  return isNaN(ts) ? 0 : ts;
+};
+
 const cityLabel = (location) => {
   if (!location) return '';
   // Si location contient déjà un (XX), on garde tel quel
@@ -238,10 +249,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, tab, setTab,
       {/* Header */}
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
-          <TouchableOpacity hitSlop={10}>
-            <Icon.Bell color="#c9beed" />
-          </TouchableOpacity>
-          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
+<TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
             <Icon.User color="#c9beed" />
             {selfieUri && (
               <View style={{
@@ -439,10 +447,17 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
   );
 }
 
-function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites, userId, onOpenPhoto }) {
+function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites, userId, onOpenPhoto }) {
   const hasFavorites = favorites && favorites.length > 0;
   const [photos, setPhotos] = useState([]);
+  const [visibleCount, setVisibleCount] = useState(20);
   const [loading, setLoading] = useState(false);
+
+  // Map event_code → couleur
+  const eventTintMap = {};
+  for (const e of events) {
+    eventTintMap[e.code] = TYPE_COLORS[e.event_type] || TYPE_COLORS.Autre;
+  }
 
   useEffect(() => {
     if (!hasFavorites || !selfieUri || !userId) {
@@ -451,19 +466,23 @@ function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpen
     }
     let cancelled = false;
     setLoading(true);
+    setVisibleCount(20);
     (async () => {
       const all = [];
       for (const code of favorites) {
+        const tint = eventTintMap[code] || TYPE_COLORS.Autre;
         try {
           const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}?user_id=${encodeURIComponent(userId)}`);
           if (r.ok) {
             const data = await r.json();
             for (const p of (data.photos || [])) {
-              all.push({ uri: p.url, id: p.key });
+              all.push({ uri: p.url, id: p.key, tint });
             }
           }
         } catch (e) { console.warn('fetch perso', code, e); }
       }
+      // Tri chronologique inverse
+      all.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
       if (!cancelled) {
         setPhotos(all);
         setLoading(false);
@@ -472,14 +491,20 @@ function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpen
     return () => { cancelled = true; };
   }, [favorites, selfieUri, userId]);
 
+  // Affichage progressif
+  useEffect(() => {
+    if (visibleCount >= photos.length) return;
+    const timer = setTimeout(() => {
+      setVisibleCount(v => Math.min(v + 20, photos.length));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [visibleCount, photos.length]);
+
   return (
     <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
-          <TouchableOpacity hitSlop={10}>
-            <Icon.Bell color="#c9beed" />
-          </TouchableOpacity>
-          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
+<TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
             <Icon.User color="#c9beed" />
             {selfieUri && (
               <View style={{
@@ -534,7 +559,7 @@ function PhotosScreen({ onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpen
           </Text>
         </View>
       ) : (
-        <PhotoGrid photos={photos} onPress={onOpenPhoto} />
+        <PhotoGrid photos={photos.slice(0, visibleCount)} onPress={onOpenPhoto} />
       )}
     </ScrollView>
   );
@@ -572,6 +597,23 @@ function PhotoGrid({ photos = [], onPress }) {
             transition={100}
             recyclingKey={p.id}
           />
+          {p.tint ? (
+            <LinearGradient
+              colors={['transparent', p.tint, p.tint]}
+              locations={[0.7, 0.9, 1]}
+              start={{ x: 1, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                borderRadius: 12,
+              }}
+              pointerEvents="none"
+            />
+          ) : null}
         </TouchableOpacity>
       ))}
     </View>
@@ -580,35 +622,50 @@ function PhotoGrid({ photos = [], onPress }) {
 
 function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto }) {
   const [photos, setPhotos] = useState([]);
+  const [visibleCount, setVisibleCount] = useState(20);
   const [loading, setLoading] = useState(true);
   const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
+    setVisibleCount(20);
     fetch(`${API_URL}/list-public/${event.code}`)
       .then(r => r.ok ? r.json() : { photos: [] })
       .then(data => {
         if (!mounted) return;
-        const list = (data.photos || []).slice(0, 200).map(p => ({
+        const list = (data.photos || []).map(p => ({
           uri: p.url || `${R2_PUBLIC}/${p.key}`,
           id: p.key,
+          tint,
         }));
-        setPhotos(list);
+        // Tri chronologique inverse : on extrait le burstTs depuis la clé
+        list.sort((a, b) => {
+          const tsA = extractBurstTs(a.id);
+          const tsB = extractBurstTs(b.id);
+          return tsB - tsA;
+        });
+        setPhotos(list.slice(0, 200));
       })
       .catch(() => setPhotos([]))
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
   }, [event.code]);
 
+  // Affichage progressif : ajoute 20 photos toutes les 300ms
+  useEffect(() => {
+    if (visibleCount >= photos.length) return;
+    const timer = setTimeout(() => {
+      setVisibleCount(v => Math.min(v + 20, photos.length));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [visibleCount, photos.length]);
+
   return (
     <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
-          <TouchableOpacity hitSlop={10}>
-            <Icon.Bell color="#c9beed" />
-          </TouchableOpacity>
-          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
+<TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
             <Icon.User color="#c9beed" />
             {selfieUri && (
               <View style={{
@@ -653,9 +710,6 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
         </View>
       </View>
 
-      {/* Selfie */}
-      <SelfieBlock selfieUri={selfieUri} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
-
       {/* Galerie */}
       <Text style={[s.sectionTitle, { marginVertical: 14 }]}>Photos</Text>
 
@@ -668,7 +722,7 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
           <Text style={{ color: C.textSoft }}>Aucune photo pour le moment</Text>
         </View>
       ) : (
-        <PhotoGrid photos={photos} onPress={onOpenPhoto} />
+        <PhotoGrid photos={photos.slice(0, visibleCount)} onPress={onOpenPhoto} />
       )}
     </ScrollView>
   );
@@ -1318,50 +1372,237 @@ function SearchModal({ visible, events, onClose, onPick }) {
 }
 
 // ---------- ROOT ----------
-function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete }) {
+function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, onLogout, onLogin, onUpdateProfile }) {
+  const [editing, setEditing] = useState(false);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [city, setCity] = useState('');
+  const [citySuggestions, setCitySuggestions] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  const profile = runnerSession?.profile;
+
+  // Parse "27400 Louviers" → postalCode "27400", city "Louviers"
+  const parseDept = (str = '') => {
+    const m = String(str).match(/^(\d{5})\s+(.+)$/);
+    return m ? { postalCode: m[1], city: m[2] } : { postalCode: '', city: str };
+  };
+
+  // Pré-remplit les champs en mode édition
+  useEffect(() => {
+    if (editing && profile) {
+      setFirstName(profile.firstName || '');
+      setLastName(profile.lastName || '');
+      const { postalCode: pc, city: cy } = parseDept(profile.department);
+      setPostalCode(pc);
+      setCity(cy);
+    }
+  }, [editing, profile]);
+
+  // Suggestions ville
+  useEffect(() => {
+    if (!editing) return;
+    if (!/^\d{5}$/.test(postalCode)) {
+      setCitySuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`);
+        if (!r.ok) return;
+        const data = await r.json();
+        if (cancelled) return;
+        setCitySuggestions((data || []).map(c => c.nom));
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [postalCode, editing]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await onUpdateProfile?.({
+        firstName,
+        lastName,
+        department: `${postalCode} ${city}`.trim(),
+      });
+      setEditing(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
-          <TouchableOpacity onPress={onClose} hitSlop={20}>
-            <View style={s.modalHandle} />
-          </TouchableOpacity>
-          <Text style={s.modalTitle}>Mon selfie</Text>
-          {!selfieUri ? (
-            <>
-              <Text style={{ color: C.textSoft, textAlign: 'center', marginVertical: 16, fontSize: 14 }}>
-                Tu n'as pas encore enregistré de selfie.
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
+          <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
+            <TouchableOpacity onPress={onClose} hitSlop={20}>
+              <View style={s.modalHandle} />
+            </TouchableOpacity>
+
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {/* En-tête */}
+            {profile ? (
+              <Text style={[s.welcome, { color: '#c9beed', marginBottom: 20, marginTop: 4, fontSize: 26 }]}>
+                Hello {profile.firstName}
               </Text>
-              <TouchableOpacity style={s.modalOption} onPress={() => { onClose(); onRetake(); }}>
-                <Text style={s.modalOptionText}>Prendre un selfie</Text>
+            ) : (
+              <View style={{ alignItems: 'center', marginVertical: 12 }}>
+                <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 10, textAlign: 'center' }}>
+                  Connecte-toi pour retrouver tes photos sur tous tes appareils
+                </Text>
+                <TouchableOpacity
+                  style={{ backgroundColor: C.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 12 }}
+                  onPress={() => { onClose(); onLogin?.(); }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Se connecter / S'inscrire</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Bloc Selfie */}
+            {profile && (
+              <View style={profileCardStyles.card}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={profileCardStyles.label}>Selfie</Text>
+                  {!selfieUri ? (
+                    <TouchableOpacity onPress={() => { onClose(); onRetake(); }}>
+                      <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Ajouter</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ flexDirection: 'row', gap: 18 }}>
+                      <TouchableOpacity onPress={onView}>
+                        <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Voir</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => { onClose(); onDelete(); }}>
+                        <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Supprimer</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* Bloc Infos */}
+            {profile && !editing && (
+              <View style={profileCardStyles.card}>
+                <InfoRow label="Prénom" value={profile.firstName} />
+                <InfoRow label="Nom" value={profile.lastName} />
+                <InfoRow label="Email" value={profile.email} />
+                <InfoRow label="Ville" value={profile.department} last />
+                <TouchableOpacity
+                  onPress={() => setEditing(true)}
+                  style={{ marginTop: 14, alignItems: 'center' }}
+                >
+                  <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Modifier les infos</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Bloc Édition */}
+            {profile && editing && (
+              <View style={profileCardStyles.card}>
+                <TextInput
+                  placeholder="Prénom" placeholderTextColor={C.textSoft}
+                  value={firstName} onChangeText={setFirstName}
+                  style={authStyles.input}
+                />
+                <TextInput
+                  placeholder="Nom" placeholderTextColor={C.textSoft}
+                  value={lastName} onChangeText={setLastName}
+                  style={authStyles.input}
+                />
+                <TextInput
+                  placeholder="Code postal" placeholderTextColor={C.textSoft}
+                  value={postalCode}
+                  onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
+                  keyboardType="number-pad" maxLength={5}
+                  style={authStyles.input}
+                />
+                {citySuggestions.length > 0 && !city && (
+                  <ScrollView
+                    style={{ maxHeight: 140, marginBottom: 10, borderRadius: 12, backgroundColor: '#f5f3ff' }}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {citySuggestions.map((c) => (
+                      <TouchableOpacity
+                        key={c}
+                        onPress={() => { setCity(c); setCitySuggestions([]); }}
+                        style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
+                      >
+                        <Text style={{ color: C.text, fontSize: 14 }}>{c}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+                {city ? (
+                  <TouchableOpacity
+                    onPress={() => setCity('')}
+                    style={[authStyles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                  >
+                    <Text style={{ color: C.text, fontSize: 15 }}>{city}</Text>
+                    <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setEditing(false)}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: '#f5f3ff' }}
+                  >
+                    <Text style={{ color: C.text, fontWeight: '600' }}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={save} disabled={busy}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.primary, opacity: busy ? 0.6 : 1 }}
+                  >
+                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Enregistrer</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {profile && (
+              <TouchableOpacity onPress={() => { onClose(); onLogout?.(); }} style={{ alignItems: 'center', marginTop: 12, paddingVertical: 12 }}>
+                <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
               </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <TouchableOpacity style={s.modalOption} onPress={onView}>
-                <Text style={s.modalOptionText}>Voir mon selfie</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalOption} onPress={() => { onClose(); onRetake(); }}>
-                <Text style={s.modalOptionText}>Reprendre un selfie</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.modalOption} onPress={() => { onClose(); onDelete(); }}>
-                <Text style={[s.modalOptionText, { color: '#DC2626' }]}>Supprimer mon selfie</Text>
-              </TouchableOpacity>
-            </>
-          )}
-          <TouchableOpacity style={s.modalCancel} onPress={onClose}>
-            <Text style={s.modalCancelText}>Fermer</Text>
+            )}
+          </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
-      </TouchableOpacity>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
+function InfoRow({ label, value, last }) {
+  return (
+    <View style={{
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      paddingVertical: 10,
+      borderBottomWidth: last ? 0 : 1, borderBottomColor: '#f0eaff',
+    }}>
+      <Text style={{ color: C.textSoft, fontSize: 14 }}>{label}</Text>
+      <Text style={{ color: C.text, fontSize: 14, fontWeight: '500', flex: 1, textAlign: 'right' }} numberOfLines={1}>{value || '—'}</Text>
+    </View>
+  );
+}
+
+const profileCardStyles = StyleSheet.create({
+  card: { backgroundColor: '#faf9ff', borderRadius: 16, padding: 16, marginBottom: 12 },
+  label: { color: C.text, fontSize: 16, fontWeight: '600' },
+});
+
 function SelfieViewerModal({ visible, uri, onClose }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center' }}>
         <TouchableOpacity onPress={onClose} style={{ position: 'absolute', top: 60, right: 20, padding: 10 }} hitSlop={20}>
           <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
             <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
@@ -1448,6 +1689,256 @@ function PhotoViewerModal({ visible, photo, photos, onClose }) {
   );
 }
 
+function passwordStrength(pwd) {
+  if (!pwd) return { score: 0, label: '', color: C.textSoft };
+  let score = 0;
+  if (pwd.length >= 6) score++;
+  if (pwd.length >= 10) score++;
+  if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score++;
+  if (/\d/.test(pwd)) score++;
+  if (/[^A-Za-z0-9]/.test(pwd)) score++;
+  // 0-1: faible, 2: moyen, 3-4: fort, 5: très fort
+  if (score <= 1) return { score: 1, label: 'Faible', color: '#EF4444' };
+  if (score === 2) return { score: 2, label: 'Moyen', color: '#F59E0B' };
+  if (score <= 4) return { score: 3, label: 'Fort', color: '#10B981' };
+  return { score: 4, label: 'Très fort', color: '#059669' };
+}
+
+function AuthRunnerModal({ visible, onClose, onSuccess }) {
+  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [city, setCity] = useState('');
+  const [citySuggestions, setCitySuggestions] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const reset = () => {
+    setEmail(''); setPassword(''); setFirstName(''); setLastName('');
+    setPostalCode(''); setCity(''); setCitySuggestions([]);
+    setError(''); setBusy(false);
+  };
+
+  const pwdStrength = passwordStrength(password);
+
+  // Quand le code postal change → fetch les villes
+  useEffect(() => {
+    if (mode !== 'register') return;
+    if (!/^\d{5}$/.test(postalCode)) {
+      setCitySuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`);
+        if (!r.ok) return;
+        const data = await r.json();
+        if (cancelled) return;
+        const cities = (data || []).map(c => c.nom);
+        setCitySuggestions(cities);
+        // Auto-sélectionne si 1 seule ville pour ce code postal
+        if (cities.length === 1 && !city) setCity(cities[0]);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [postalCode, mode]);
+
+  const submit = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const url = mode === 'login' ? '/runner/login' : '/runner/register';
+      const body = mode === 'login'
+        ? { email, password }
+        : { email, password, firstName, lastName, department: `${postalCode} ${city}`.trim() };
+      const r = await fetch(`${API_URL}${url}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        setError(data.error || 'Erreur');
+        setBusy(false);
+        return;
+      }
+      onSuccess({ token: data.token, profile: data.profile });
+      reset();
+    } catch (e) {
+      setError(e.message || 'Erreur réseau');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
+      >
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+        >
+          <View style={{ backgroundColor: C.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <Text style={{ color: C.text, fontSize: 22, fontWeight: '700' }}>
+              {mode === 'login' ? 'Connexion' : 'Inscription'}
+            </Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10}>
+              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                <Path d="m8 8 8 8M16 8l-8 8" stroke={C.text} strokeWidth={2.4} strokeLinecap="round" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+
+          {mode === 'register' && (
+            <>
+              <TextInput
+                placeholder="Prénom"
+                placeholderTextColor={C.textSoft}
+                value={firstName}
+                onChangeText={setFirstName}
+                style={authStyles.input}
+              />
+              <TextInput
+                placeholder="Nom"
+                placeholderTextColor={C.textSoft}
+                value={lastName}
+                onChangeText={setLastName}
+                style={authStyles.input}
+              />
+              <TextInput
+                placeholder="Code postal"
+                placeholderTextColor={C.textSoft}
+                value={postalCode}
+                onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
+                keyboardType="number-pad"
+                maxLength={5}
+                style={authStyles.input}
+              />
+              {citySuggestions.length > 0 && !city && (
+                <ScrollView
+                  style={{ maxHeight: 140, marginBottom: 10, borderRadius: 12, backgroundColor: '#f5f3ff' }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {citySuggestions.map((c) => (
+                    <TouchableOpacity
+                      key={c}
+                      onPress={() => { setCity(c); setCitySuggestions([]); }}
+                      style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
+                    >
+                      <Text style={{ color: C.text, fontSize: 14 }}>{c}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+              {city ? (
+                <TouchableOpacity
+                  onPress={() => setCity('')}
+                  style={[authStyles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                >
+                  <Text style={{ color: C.text, fontSize: 15 }}>{city}</Text>
+                  <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+                </TouchableOpacity>
+              ) : null}
+            </>
+          )}
+          <TextInput
+            placeholder="Email"
+            placeholderTextColor={C.textSoft}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={authStyles.input}
+          />
+          <TextInput
+            placeholder="Mot de passe"
+            placeholderTextColor={C.textSoft}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            style={authStyles.input}
+          />
+          {mode === 'register' && password ? (
+            <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
+              <View style={{ flexDirection: 'row', gap: 4, marginBottom: 6 }}>
+                {[1, 2, 3, 4].map((i) => (
+                  <View
+                    key={i}
+                    style={{
+                      flex: 1,
+                      height: 3,
+                      borderRadius: 2,
+                      backgroundColor: i <= pwdStrength.score ? pwdStrength.color : '#e9e4f9',
+                    }}
+                  />
+                ))}
+              </View>
+              <Text style={{ color: pwdStrength.color, fontSize: 11, fontWeight: '600' }}>
+                {pwdStrength.label}
+              </Text>
+            </View>
+          ) : null}
+
+          {error ? (
+            <Text style={{ color: '#ff6b6b', fontSize: 13, marginTop: 4, marginBottom: 8 }}>{error}</Text>
+          ) : null}
+
+          <TouchableOpacity
+            onPress={submit}
+            disabled={busy}
+            style={{
+              backgroundColor: C.primary,
+              paddingVertical: 14,
+              borderRadius: 14,
+              alignItems: 'center',
+              marginTop: 12,
+              opacity: busy ? 0.6 : 1,
+            }}
+          >
+            {busy ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                {mode === 'login' ? 'Se connecter' : "S'inscrire"}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
+            style={{ marginTop: 16, alignItems: 'center' }}
+          >
+            <Text style={{ color: C.textSoft, fontSize: 13 }}>
+              {mode === 'login' ? "Pas encore de compte ? S'inscrire" : 'Déjà un compte ? Se connecter'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const authStyles = StyleSheet.create({
+  input: {
+    backgroundColor: '#f5f3ff',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: C.text,
+    marginBottom: 10,
+  },
+});
+
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [tab, setTab] = useState('upcoming');
@@ -1466,6 +1957,9 @@ export default function App() {
   const [openedPhoto, setOpenedPhoto] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [userId, setUserId] = useState(null);
+  const [runnerSession, setRunnerSession] = useState(null); // { token, profile }
+  const [authModalVisible, setAuthModalVisible] = useState(false);
+  const pendingActionRef = useRef(null); // action à exécuter après login
 
   useEffect(() => {
     Font.loadAsync({
@@ -1494,7 +1988,72 @@ export default function App() {
         setUserId(id);
       }
     });
+    // Session runner (compte coureur)
+    AsyncStorage.getItem('@will_runner').then(v => {
+      if (v) {
+        try { setRunnerSession(JSON.parse(v)); } catch {}
+      }
+    });
   }, []);
+
+  // Quand un compte runner est connecté, on aligne userId sur runner.userId
+  // pour que selfie + galerie perso utilisent le même identifiant
+  useEffect(() => {
+    if (runnerSession?.profile?.userId) {
+      setUserId(runnerSession.profile.userId);
+      AsyncStorage.setItem('@will_user_id', runnerSession.profile.userId).catch(() => {});
+    }
+  }, [runnerSession?.profile?.userId]);
+
+  const handleAuthSuccess = useCallback((session) => {
+    setRunnerSession(session);
+    AsyncStorage.setItem('@will_runner', JSON.stringify(session)).catch(() => {});
+    setAuthModalVisible(false);
+    // Exécute l'action en attente (ex: ouvrir selfie modal après login)
+    if (pendingActionRef.current) {
+      const a = pendingActionRef.current;
+      pendingActionRef.current = null;
+      setTimeout(() => a(), 100);
+    }
+  }, []);
+
+  const requireAuth = useCallback((action) => {
+    if (runnerSession) {
+      action();
+    } else {
+      pendingActionRef.current = action;
+      setAuthModalVisible(true);
+    }
+  }, [runnerSession]);
+
+  const logoutRunner = useCallback(() => {
+    setRunnerSession(null);
+    AsyncStorage.removeItem('@will_runner').catch(() => {});
+  }, []);
+
+  const updateRunnerProfile = useCallback(async (changes) => {
+    if (!runnerSession?.token) return;
+    try {
+      const r = await fetch(`${API_URL}/runner/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${runnerSession.token}`,
+        },
+        body: JSON.stringify(changes),
+      });
+      const data = await r.json();
+      if (r.ok && data.profile) {
+        const next = { ...runnerSession, profile: data.profile };
+        setRunnerSession(next);
+        AsyncStorage.setItem('@will_runner', JSON.stringify(next)).catch(() => {});
+      } else {
+        Alert.alert('Erreur', data.error || 'Impossible de modifier les infos');
+      }
+    } catch (e) {
+      Alert.alert('Erreur', e.message || 'Erreur réseau');
+    }
+  }, [runnerSession]);
 
   const toggleFavorite = useCallback((eventCode) => {
     setFavorites(prev => {
@@ -1547,7 +2106,7 @@ export default function App() {
         <HomeScreen
           events={events}
           onOpenEvent={setOpenedEvent}
-          onOpenSelfie={() => setSelfieModal(true)}
+          onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
           onOpenOrg={() => setOrgModal(true)}
           onOpenSearch={() => setSearchModal(true)}
           tab={tab}
@@ -1556,13 +2115,14 @@ export default function App() {
           onDeleteSelfie={deleteSelfie}
           onOpenProfile={() => setProfileMenu(true)}
           favorites={favorites}
-          onToggleFavorite={toggleFavorite}
+          onToggleFavorite={(code) => requireAuth(() => toggleFavorite(code))}
         />
       )}
 
       {bottomTab === 'photos' && !openedEvent && (
         <PhotosScreen
-          onOpenSelfie={() => setSelfieModal(true)}
+          events={events}
+          onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
           gallery={[]}
           selfieUri={selfieUri}
           onDeleteSelfie={deleteSelfie}
@@ -1577,7 +2137,7 @@ export default function App() {
         <EventDetailScreen
           event={openedEvent}
           onClose={() => setOpenedEvent(null)}
-          onOpenSelfie={() => setSelfieModal(true)}
+          onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
           selfieUri={selfieUri}
           onDeleteSelfie={deleteSelfie}
           onOpenProfile={() => setProfileMenu(true)}
@@ -1591,7 +2151,7 @@ export default function App() {
           <Icon.Home filled={bottomTab === 'home'} color={bottomTab === 'home' ? C.primary : C.text} />
           <Text style={[s.navLabel, bottomTab === 'home' && { color: C.primary, fontWeight: '700' }]}>Accueil</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('photos'); setOpenedEvent(null); }}>
+        <TouchableOpacity style={s.navBtn} onPress={() => requireAuth(() => { setBottomTab('photos'); setOpenedEvent(null); })}>
           <Icon.Photos filled={bottomTab === 'photos'} color={bottomTab === 'photos' ? C.primary : C.text} />
           <Text style={[s.navLabel, bottomTab === 'photos' && { color: C.primary, fontWeight: '700' }]}>Photos</Text>
         </TouchableOpacity>
@@ -1638,20 +2198,30 @@ export default function App() {
         onClose={() => setProfileMenu(false)}
         selfieUri={selfieUri}
         onView={() => { setProfileMenu(false); setSelfieViewer(true); }}
-        onRetake={() => setSelfieModal(true)}
+        onRetake={() => requireAuth(() => setSelfieModal(true))}
         onDelete={deleteSelfie}
+        runnerSession={runnerSession}
+        onLogout={logoutRunner}
+        onLogin={() => setAuthModalVisible(true)}
+        onUpdateProfile={updateRunnerProfile}
       />
 
       <SelfieViewerModal
         visible={selfieViewer}
         uri={selfieUri}
-        onClose={() => setSelfieViewer(false)}
+        onClose={() => { setSelfieViewer(false); setProfileMenu(true); }}
       />
 
       <PhotoViewerModal
         visible={!!openedPhoto}
         photo={openedPhoto}
         onClose={() => setOpenedPhoto(null)}
+      />
+
+      <AuthRunnerModal
+        visible={authModalVisible}
+        onClose={() => setAuthModalVisible(false)}
+        onSuccess={handleAuthSuccess}
       />
     </SafeAreaView>
   );
