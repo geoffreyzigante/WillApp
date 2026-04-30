@@ -4386,29 +4386,60 @@ export default function App() {
     return t;
   }, [organizerSession]);
 
-  const swipeNav = useMemo(() => Gesture.Pan()
-    .activeOffsetX([-25, 25])
-    .failOffsetY([-15, 15])
-    .runOnJS(true)
-    .onEnd((e) => {
-      if (openedEvent || organizerEventPhotosTarget) return;
-      const idx = tabs.indexOf(bottomTab);
-      if (idx === -1) return;
-      if (e.translationX < -60 && idx < tabs.length - 1) {
-        const next = tabs[idx + 1];
-        if (next === 'photos') {
-          requireAuth(() => { setBottomTab('photos'); setOpenedEvent(null); });
-        } else {
-          setBottomTab(next);
-          setOpenedEvent(null);
-          setOrganizerEventPhotosTarget(null);
+  const tabsTranslateX = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const idx = tabs.indexOf(bottomTab);
+    if (idx === -1) return;
+    Animated.spring(tabsTranslateX, {
+      toValue: -idx * SCREEN_W,
+      useNativeDriver: true,
+      tension: 90, friction: 13,
+    }).start();
+  }, [bottomTab, tabs]);
+
+  const swipeNav = useMemo(() => {
+    const idx = tabs.indexOf(bottomTab);
+    return Gesture.Pan()
+      .activeOffsetX([-15, 15])
+      .failOffsetY([-15, 15])
+      .runOnJS(true)
+      .onUpdate((e) => {
+        if (idx === -1) return;
+        let val = -idx * SCREEN_W + e.translationX;
+        const minX = -(tabs.length - 1) * SCREEN_W;
+        if (val > 0) val = val * 0.3;
+        if (val < minX) val = minX + (val - minX) * 0.3;
+        tabsTranslateX.setValue(val);
+      })
+      .onEnd((e) => {
+        if (idx === -1) return;
+        const threshold = SCREEN_W * 0.22;
+        let nextIdx = idx;
+        if ((e.translationX < -threshold || e.velocityX < -800) && idx < tabs.length - 1) {
+          nextIdx = idx + 1;
+        } else if ((e.translationX > threshold || e.velocityX > 800) && idx > 0) {
+          nextIdx = idx - 1;
         }
-      } else if (e.translationX > 60 && idx > 0) {
-        setBottomTab(tabs[idx - 1]);
+        const target = tabs[nextIdx];
+        if (target === bottomTab) {
+          Animated.spring(tabsTranslateX, {
+            toValue: -idx * SCREEN_W, useNativeDriver: true, tension: 90, friction: 13,
+          }).start();
+          return;
+        }
+        if (target === 'photos' && !runnerSession) {
+          Animated.spring(tabsTranslateX, {
+            toValue: -idx * SCREEN_W, useNativeDriver: true, tension: 90, friction: 13,
+          }).start();
+          requireAuth(() => { setBottomTab('photos'); setOpenedEvent(null); });
+          return;
+        }
+        setBottomTab(target);
         setOpenedEvent(null);
-        setOrganizerEventPhotosTarget(null);
-      }
-    }), [tabs, bottomTab, openedEvent, organizerEventPhotosTarget, requireAuth]);
+        if (target !== 'events') setOrganizerEventPhotosTarget(null);
+      });
+  }, [tabs, bottomTab, runnerSession, requireAuth]);
 
   if (!fontsLoaded) {
     return <View style={[s.root, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator color={C.primary} /></View>;
@@ -4434,39 +4465,61 @@ export default function App() {
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
 
-      <GestureDetector gesture={swipeNav}>
-      <View style={{ flex: 1 }}>
-      {bottomTab === 'home' && !openedEvent && (
-        <HomeScreen
-          events={events}
-          onOpenEvent={setOpenedEvent}
-          onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
-          onOpenOrg={() => setOrgModal(true)}
-          onOpenOrgRole={handlePickRole}
-          onOpenSearch={() => setSearchModal(true)}
-          tab={tab}
-          setTab={setTab}
-          selfieUri={selfieUri}
-          onDeleteSelfie={deleteSelfie}
-          onOpenProfile={() => setProfileMenu(true)}
-          favorites={favorites}
-          onToggleFavorite={(code) => requireAuth(() => toggleFavorite(code))}
-          onRefresh={reloadEvents}
-        />
-      )}
-
-      {bottomTab === 'photos' && !openedEvent && (
-        <PhotosScreen
-          events={events}
-          onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
-          gallery={[]}
-          selfieUri={selfieUri}
-          onDeleteSelfie={deleteSelfie}
-          onOpenProfile={() => setProfileMenu(true)}
-          favorites={favorites}
-          userId={userId}
-          onOpenPhoto={(photo, list) => setOpenedPhoto({ photo, photos: list })}
-        />
+      {!openedEvent && !organizerEventPhotosTarget && (
+        <GestureDetector gesture={swipeNav}>
+          <View style={{ flex: 1, overflow: 'hidden' }}>
+            <Animated.View style={{
+              flex: 1,
+              flexDirection: 'row',
+              width: SCREEN_W * tabs.length,
+              transform: [{ translateX: tabsTranslateX }],
+            }}>
+              <View style={{ width: SCREEN_W }}>
+                <HomeScreen
+                  events={events}
+                  onOpenEvent={setOpenedEvent}
+                  onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
+                  onOpenOrg={() => setOrgModal(true)}
+                  onOpenOrgRole={handlePickRole}
+                  onOpenSearch={() => setSearchModal(true)}
+                  tab={tab}
+                  setTab={setTab}
+                  selfieUri={selfieUri}
+                  onDeleteSelfie={deleteSelfie}
+                  onOpenProfile={() => setProfileMenu(true)}
+                  favorites={favorites}
+                  onToggleFavorite={(code) => requireAuth(() => toggleFavorite(code))}
+                  onRefresh={reloadEvents}
+                />
+              </View>
+              <View style={{ width: SCREEN_W }}>
+                <PhotosScreen
+                  events={events}
+                  onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
+                  gallery={[]}
+                  selfieUri={selfieUri}
+                  onDeleteSelfie={deleteSelfie}
+                  onOpenProfile={() => setProfileMenu(true)}
+                  favorites={favorites}
+                  userId={userId}
+                  onOpenPhoto={(photo, list) => setOpenedPhoto({ photo, photos: list })}
+                />
+              </View>
+              {organizerSession && (
+                <View style={{ width: SCREEN_W }}>
+                  <OrganizerDashboardScreen
+                    session={organizerSession}
+                    onLogout={logoutOrganizer}
+                    onCreateEvent={() => setCreateEventModal(true)}
+                    onEditEvent={(e) => setEditEventTarget(e)}
+                    onOpenProfile={() => setOrganizerProfileMenu(true)}
+                    onOpenEventPhotos={(e) => setOrganizerEventPhotosTarget(e)}
+                  />
+                </View>
+              )}
+            </Animated.View>
+          </View>
+        </GestureDetector>
       )}
 
       {openedEvent && (
@@ -4483,18 +4536,7 @@ export default function App() {
         />
       )}
 
-      {bottomTab === 'events' && organizerSession && !openedEvent && !organizerEventPhotosTarget && (
-        <OrganizerDashboardScreen
-          session={organizerSession}
-          onLogout={logoutOrganizer}
-          onCreateEvent={() => setCreateEventModal(true)}
-          onEditEvent={(e) => setEditEventTarget(e)}
-          onOpenProfile={() => setOrganizerProfileMenu(true)}
-          onOpenEventPhotos={(e) => setOrganizerEventPhotosTarget(e)}
-        />
-      )}
-
-      {bottomTab === 'events' && organizerSession && organizerEventPhotosTarget && (
+      {organizerEventPhotosTarget && bottomTab === 'events' && organizerSession && (
         <OrganizerEventPhotosScreen
           session={organizerSession}
           event={organizerEventPhotosTarget}
@@ -4502,8 +4544,6 @@ export default function App() {
           onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...opts })}
         />
       )}
-      </View>
-      </GestureDetector>
 
       {/* Bottom Nav */}
       <View style={s.bottomNav}>
