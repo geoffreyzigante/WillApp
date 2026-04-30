@@ -4380,6 +4380,36 @@ export default function App() {
     setLoginRole(role);
   };
 
+  const tabs = useMemo(() => {
+    const t = ['home', 'photos'];
+    if (organizerSession) t.push('events');
+    return t;
+  }, [organizerSession]);
+
+  const swipeNav = useMemo(() => Gesture.Pan()
+    .activeOffsetX([-25, 25])
+    .failOffsetY([-15, 15])
+    .runOnJS(true)
+    .onEnd((e) => {
+      if (openedEvent || organizerEventPhotosTarget) return;
+      const idx = tabs.indexOf(bottomTab);
+      if (idx === -1) return;
+      if (e.translationX < -60 && idx < tabs.length - 1) {
+        const next = tabs[idx + 1];
+        if (next === 'photos') {
+          requireAuth(() => { setBottomTab('photos'); setOpenedEvent(null); });
+        } else {
+          setBottomTab(next);
+          setOpenedEvent(null);
+          setOrganizerEventPhotosTarget(null);
+        }
+      } else if (e.translationX > 60 && idx > 0) {
+        setBottomTab(tabs[idx - 1]);
+        setOpenedEvent(null);
+        setOrganizerEventPhotosTarget(null);
+      }
+    }), [tabs, bottomTab, openedEvent, organizerEventPhotosTarget, requireAuth]);
+
   if (!fontsLoaded) {
     return <View style={[s.root, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator color={C.primary} /></View>;
   }
@@ -4404,6 +4434,8 @@ export default function App() {
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
 
+      <GestureDetector gesture={swipeNav}>
+      <View style={{ flex: 1 }}>
       {bottomTab === 'home' && !openedEvent && (
         <HomeScreen
           events={events}
@@ -4470,6 +4502,8 @@ export default function App() {
           onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...opts })}
         />
       )}
+      </View>
+      </GestureDetector>
 
       {/* Bottom Nav */}
       <View style={s.bottomNav}>
