@@ -198,16 +198,22 @@ const PULL_THRESHOLD = 70;
 
 const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, children, ...props }, ref) => {
   const [refreshing, setRefreshing] = useState(false);
-  const [pullDist, setPullDist] = useState(0);
   const scrollPosRef = useRef(0);
   const refreshingRef = useRef(false);
   const rotation = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const translateYAnim = useRef(new Animated.Value(15)).current;
 
   useEffect(() => { refreshingRef.current = refreshing; }, [refreshing]);
 
   useEffect(() => {
     if (refreshing) {
+      Animated.spring(translateYAnim, {
+        toValue: 40, useNativeDriver: true, tension: 90, friction: 12,
+      }).start();
+      Animated.timing(opacityAnim, {
+        toValue: 1, duration: 120, useNativeDriver: true,
+      }).start();
       const anim = Animated.loop(
         Animated.timing(rotation, {
           toValue: 1, duration: 900, useNativeDriver: true, easing: Easing.linear,
@@ -216,20 +222,12 @@ const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, chi
       anim.start();
       return () => anim.stop();
     }
-    rotation.setValue(0);
-  }, [refreshing, rotation]);
-
-  useEffect(() => {
-    if (refreshing) {
-      Animated.timing(opacityAnim, {
-        toValue: 1, duration: 100, useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(opacityAnim, {
-        toValue: 0, duration: 320, useNativeDriver: true,
-      }).start();
-    }
-  }, [refreshing, opacityAnim]);
+    Animated.timing(opacityAnim, {
+      toValue: 0, duration: 320, useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) translateYAnim.setValue(15);
+    });
+  }, [refreshing, rotation, opacityAnim, translateYAnim]);
 
   const onScroll = (e) => {
     scrollPosRef.current = e.nativeEvent.contentOffset.y;
@@ -241,7 +239,6 @@ const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, chi
       await Promise.resolve(onRefresh?.());
     } finally {
       setRefreshing(false);
-      setPullDist(0);
     }
   };
 
@@ -251,8 +248,10 @@ const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, chi
     .onUpdate((e) => {
       if (scrollPosRef.current <= 0 && !refreshingRef.current && e.translationY > 0) {
         const dist = Math.min(e.translationY * 0.55, 140);
-        setPullDist(dist);
-        opacityAnim.setValue(Math.min(1, dist / PULL_THRESHOLD));
+        const progress = Math.min(1, dist / PULL_THRESHOLD);
+        translateYAnim.setValue(Math.max(15, dist * 0.5));
+        rotation.setValue(progress);
+        opacityAnim.setValue(progress);
       }
     })
     .onEnd((e) => {
@@ -260,27 +259,28 @@ const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, chi
       if (e.translationY * 0.55 >= PULL_THRESHOLD && scrollPosRef.current <= 0) {
         triggerRefresh();
       } else {
-        setPullDist(0);
-        Animated.timing(opacityAnim, {
-          toValue: 0, duration: 220, useNativeDriver: true,
-        }).start();
+        Animated.parallel([
+          Animated.timing(translateYAnim, { toValue: 15, duration: 220, useNativeDriver: true }),
+          Animated.timing(opacityAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+          Animated.timing(rotation, { toValue: 0, duration: 220, useNativeDriver: true }),
+        ]).start();
       }
     });
 
   const composed = Gesture.Simultaneous(panGesture, Gesture.Native());
 
   const spin = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const dragRotate = `${(pullDist / PULL_THRESHOLD) * 360}deg`;
-  const iconTop = refreshing ? 40 : Math.max(15, pullDist * 0.5);
 
   return (
     <View style={{ flex: 1 }}>
       {!hideTopRefresh && (
         <Animated.View pointerEvents="none" style={{
-          position: 'absolute', top: iconTop, left: 0, right: 0,
-          alignItems: 'center', zIndex: 1000, opacity: opacityAnim,
+          position: 'absolute', top: 0, left: 0, right: 0,
+          alignItems: 'center', zIndex: 1000,
+          opacity: opacityAnim,
+          transform: [{ translateY: translateYAnim }],
         }}>
-          <Animated.View style={{ transform: [{ rotate: refreshing ? spin : dragRotate }] }}>
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
             <LoadingIcon size={26} color="#c9beed" />
           </Animated.View>
         </Animated.View>
