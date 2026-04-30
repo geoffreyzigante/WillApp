@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -167,7 +166,7 @@ const Icon = {
 };
 
 // ---------- LOADING / PULL-TO-REFRESH ----------
-const LoadingIcon = ({ size = 36, color = '#5313b7' }) => (
+const LoadingIcon = ({ size = 36, color = '#c9beed' }) => (
   <Svg width={size} height={size} viewBox="0 0 57.49 57.49">
     <Path
       fill={color}
@@ -176,9 +175,16 @@ const LoadingIcon = ({ size = 36, color = '#5313b7' }) => (
   </Svg>
 );
 
+const PULL_THRESHOLD = 70;
+
 const RefreshableScrollView = React.forwardRef(({ onRefresh, children, ...props }, ref) => {
   const [refreshing, setRefreshing] = useState(false);
+  const [pullDist, setPullDist] = useState(0);
+  const scrollPosRef = useRef(0);
+  const refreshingRef = useRef(false);
   const rotation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => { refreshingRef.current = refreshing; }, [refreshing]);
 
   useEffect(() => {
     if (refreshing) {
@@ -193,45 +199,67 @@ const RefreshableScrollView = React.forwardRef(({ onRefresh, children, ...props 
     rotation.setValue(0);
   }, [refreshing, rotation]);
 
-  const handleRefresh = async () => {
-    if (refreshing) return;
+  const onScroll = (e) => {
+    scrollPosRef.current = e.nativeEvent.contentOffset.y;
+  };
+
+  const triggerRefresh = async () => {
     setRefreshing(true);
     try {
       await Promise.resolve(onRefresh?.());
     } finally {
       setRefreshing(false);
+      setPullDist(0);
     }
   };
 
+  const panGesture = Gesture.Pan()
+    .activeOffsetY(8)
+    .runOnJS(true)
+    .onUpdate((e) => {
+      if (scrollPosRef.current <= 0 && !refreshingRef.current && e.translationY > 0) {
+        setPullDist(Math.min(e.translationY * 0.55, 140));
+      }
+    })
+    .onEnd((e) => {
+      if (refreshingRef.current) return;
+      if (e.translationY * 0.55 >= PULL_THRESHOLD && scrollPosRef.current <= 0) {
+        triggerRefresh();
+      } else {
+        setPullDist(0);
+      }
+    });
+
+  const composed = Gesture.Simultaneous(panGesture, Gesture.Native());
+
   const spin = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const visible = refreshing || pullDist > 4;
+  const opacity = refreshing ? 1 : Math.min(1, pullDist / PULL_THRESHOLD);
+  const dragRotate = `${(pullDist / PULL_THRESHOLD) * 360}deg`;
+  const iconTop = refreshing ? 40 : Math.max(15, pullDist * 0.5);
 
   return (
     <View style={{ flex: 1 }}>
-      {refreshing && (
+      {visible && (
         <View pointerEvents="none" style={{
-          position: 'absolute', top: 50, left: 0, right: 0,
-          alignItems: 'center', zIndex: 1000,
+          position: 'absolute', top: iconTop, left: 0, right: 0,
+          alignItems: 'center', zIndex: 1000, opacity,
         }}>
-          <Animated.View style={{ transform: [{ rotate: spin }] }}>
-            <LoadingIcon size={36} />
+          <Animated.View style={{ transform: [{ rotate: refreshing ? spin : dragRotate }] }}>
+            <LoadingIcon size={36} color="#c9beed" />
           </Animated.View>
         </View>
       )}
-      <ScrollView
-        ref={ref}
-        {...props}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="transparent"
-            colors={['transparent']}
-            progressBackgroundColor="transparent"
-          />
-        }
-      >
-        {children}
-      </ScrollView>
+      <GestureDetector gesture={composed}>
+        <ScrollView
+          ref={ref}
+          {...props}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+        >
+          {children}
+        </ScrollView>
+      </GestureDetector>
     </View>
   );
 });
