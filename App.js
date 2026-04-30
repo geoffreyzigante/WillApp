@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -46,7 +47,7 @@ const C = {
   pillBg: '#EFE7FF',
   pinkPill: '#F4A6FF',
   pinkPillText: '#FFFFFF',
-  pinkPillBg: '#FAD3FF',
+  pinkPillBg: '#FDECFF',
   pinkPillActive: '#E673FF',
   card: '#FFFFFF',
   shadow: 'rgba(123, 47, 255, 0.08)',
@@ -165,6 +166,76 @@ const Icon = {
   ),
 };
 
+// ---------- LOADING / PULL-TO-REFRESH ----------
+const LoadingIcon = ({ size = 36, color = '#5313b7' }) => (
+  <Svg width={size} height={size} viewBox="0 0 57.49 57.49">
+    <Path
+      fill={color}
+      d="M51.14,31.27c.13-.05.26-.1.39-.16,4.9-2.25,7.25-7.59,5.25-11.93-1.72-3.74-6.1-5.5-10.41-4.49.05-.13.11-.25.16-.39,1.87-5.05-.25-10.49-4.73-12.15-3.86-1.43-8.21.42-10.53,4.19-.05-.13-.1-.26-.16-.39C28.86,1.07,23.52-1.28,19.18.71c-3.74,1.72-5.5,6.1-4.49,10.41-.13-.05-.25-.11-.39-.16-5.05-1.87-10.49.25-12.15,4.73-1.43,3.86.42,8.21,4.19,10.53-.13.05-.26.1-.39.16-4.9,2.25-7.25,7.59-5.25,11.93,1.72,3.74,6.1,5.5,10.41,4.49-.05.13-.11.25-.16.39-1.87,5.05.25,10.49,4.73,12.15,3.86,1.43,8.21-.42,10.53-4.19.05.13.1.26.16.39,2.25,4.9,7.59,7.25,11.93,5.25,3.74-1.72,5.5-6.1,4.49-10.41.13.05.25.11.39.16,5.05,1.87,10.49-.25,12.15-4.73,1.43-3.86-.42-8.21-4.19-10.53ZM36.36,39.02c-5.03,3.73-12.52,2.15-16.72-3.53-4.2-5.68-3.53-13.3,1.5-17.02s12.52-2.15,16.72,3.53c4.2,5.68,3.53,13.3-1.5,17.02Z"
+    />
+  </Svg>
+);
+
+const RefreshableScrollView = React.forwardRef(({ onRefresh, children, ...props }, ref) => {
+  const [refreshing, setRefreshing] = useState(false);
+  const rotation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (refreshing) {
+      const anim = Animated.loop(
+        Animated.timing(rotation, {
+          toValue: 1, duration: 900, useNativeDriver: true, easing: Easing.linear,
+        })
+      );
+      anim.start();
+      return () => anim.stop();
+    }
+    rotation.setValue(0);
+  }, [refreshing, rotation]);
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.resolve(onRefresh?.());
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const spin = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
+  return (
+    <View style={{ flex: 1 }}>
+      {refreshing && (
+        <View pointerEvents="none" style={{
+          position: 'absolute', top: 50, left: 0, right: 0,
+          alignItems: 'center', zIndex: 1000,
+        }}>
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <LoadingIcon size={36} />
+          </Animated.View>
+        </View>
+      )}
+      <ScrollView
+        ref={ref}
+        {...props}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="transparent"
+            colors={['transparent']}
+            progressBackgroundColor="transparent"
+          />
+        }
+      >
+        {children}
+      </ScrollView>
+    </View>
+  );
+});
+
 // ---------- HELPERS ----------
 const formatDateLong = (iso) => {
   if (!iso) return 'DATE À VENIR';
@@ -258,7 +329,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, favorites, onToggleFavorite }) {
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, favorites, onToggleFavorite, onRefresh }) {
   const filtered = events.filter(e => {
     if (tab === 'upcoming') return isUpcoming(e.event_date);
     if (tab === 'past') return !isUpcoming(e.event_date);
@@ -295,12 +366,12 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
     : [];
 
   return (
-    <ScrollView ref={scrollRef} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+    <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
 <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
-            <Icon.User color="#c9beed" />
+            <Icon.User size={30} color="#c9beed" />
             {selfieUri && (
               <View style={{
                 position: 'absolute',
@@ -323,7 +394,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             activeOpacity={0.7}
             hitSlop={6}
           >
-            <Icon.GearOrg size={22} color="#FFFFFF" />
+            <Icon.GearOrg size={22} color={C.pinkPillActive} />
           </TouchableOpacity>
           <TouchableOpacity
             style={s.orgToggleBtn}
@@ -331,7 +402,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             activeOpacity={0.7}
             hitSlop={6}
           >
-            <Icon.CamOrg size={24} color="#FFFFFF" />
+            <Icon.CamOrg size={24} color={C.pinkPillActive} />
           </TouchableOpacity>
         </View>
       </View>
@@ -452,7 +523,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
           />
         ))
       )}
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 
@@ -524,37 +595,39 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
     eventTintMap[e.code] = TYPE_COLORS[e.event_type] || TYPE_COLORS.Autre;
   }
 
-  useEffect(() => {
+  const loadPhotos = useCallback(async () => {
     if (!hasFavorites || !selfieUri || !userId) {
       setPhotos([]);
       return;
     }
-    let cancelled = false;
     setLoading(true);
     setVisibleCount(20);
-    (async () => {
-      const all = [];
-      for (const code of favorites) {
-        const tint = eventTintMap[code] || TYPE_COLORS.Autre;
-        try {
-          const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}?user_id=${encodeURIComponent(userId)}`);
-          if (r.ok) {
-            const data = await r.json();
-            for (const p of (data.photos || [])) {
-              all.push({ uri: p.url, id: p.key, tint });
-            }
+    const all = [];
+    for (const code of favorites) {
+      const tint = eventTintMap[code] || TYPE_COLORS.Autre;
+      try {
+        const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}?user_id=${encodeURIComponent(userId)}`);
+        if (r.ok) {
+          const data = await r.json();
+          for (const p of (data.photos || [])) {
+            all.push({ uri: p.url, id: p.key, tint });
           }
-        } catch (e) { console.warn('fetch perso', code, e); }
-      }
-      // Tri chronologique inverse
-      all.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
-      if (!cancelled) {
-        setPhotos(all);
-        setLoading(false);
-      }
+        }
+      } catch (e) { console.warn('fetch perso', code, e); }
+    }
+    all.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
+    setPhotos(all);
+    setLoading(false);
+  }, [favorites, selfieUri, userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await loadPhotos();
+      if (cancelled) return;
     })();
     return () => { cancelled = true; };
-  }, [favorites, selfieUri, userId]);
+  }, [loadPhotos]);
 
   // Affichage progressif
   useEffect(() => {
@@ -566,11 +639,11 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
   }, [visibleCount, photos.length]);
 
   return (
-    <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+    <RefreshableScrollView onRefresh={loadPhotos} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
 <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
-            <Icon.User color="#c9beed" />
+            <Icon.User size={30} color="#c9beed" />
             {selfieUri && (
               <View style={{
                 position: 'absolute',
@@ -626,7 +699,7 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
       ) : (
         <PhotoGrid photos={photos.slice(0, visibleCount)} onPress={(p) => onOpenPhoto?.(p, photos)} />
       )}
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 
@@ -703,38 +776,41 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
     return diffDays;
   })();
 
-  useEffect(() => {
-    let mounted = true;
+  const loadPhotos = useCallback(async () => {
     setLoading(true);
     setVisibleCount(20);
-    fetch(`${API_URL}/list-public/${event.code}`)
-      .then(r => r.ok ? r.json() : { photos: [] })
-      .then(data => {
-        if (!mounted) return;
-        const list = (data.photos || []).map(p => {
-          // photographer_id extrait depuis la key: {event}/{photographer}/{date}/...
-          const parts = (p.key || '').split('/');
-          const photographerId = parts.length >= 2 ? parts[1] : null;
-          return {
-            uri: p.url || `${R2_PUBLIC}/${p.key}`,
-            id: p.key,
-            tint,
-            race: p.race,
-            km: p.km,
-            photographer: photographerId,
-          };
-        });
-        list.sort((a, b) => {
-          const tsA = extractBurstTs(a.id);
-          const tsB = extractBurstTs(b.id);
-          return tsB - tsA;
-        });
-        setPhotos(list.slice(0, 200));
-      })
-      .catch(() => setPhotos([]))
-      .finally(() => mounted && setLoading(false));
+    try {
+      const r = await fetch(`${API_URL}/list-public/${event.code}`);
+      const data = r.ok ? await r.json() : { photos: [] };
+      const list = (data.photos || []).map(p => {
+        const parts = (p.key || '').split('/');
+        const photographerId = parts.length >= 2 ? parts[1] : null;
+        return {
+          uri: p.url || `${R2_PUBLIC}/${p.key}`,
+          id: p.key,
+          tint,
+          race: p.race,
+          km: p.km,
+          photographer: photographerId,
+        };
+      });
+      list.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
+      setPhotos(list.slice(0, 200));
+    } catch {
+      setPhotos([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [event.code, tint]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      await loadPhotos();
+      if (!mounted) return;
+    })();
     return () => { mounted = false; };
-  }, [event.code]);
+  }, [loadPhotos]);
 
   useEffect(() => {
     if (visibleCount >= photos.length) return;
@@ -812,11 +888,11 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
   };
 
   return (
-    <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+    <RefreshableScrollView onRefresh={loadPhotos} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
           <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
-            <Icon.User color="#c9beed" />
+            <Icon.User size={30} color="#c9beed" />
             {selfieUri && (
               <View style={{
                 position: 'absolute', top: -2, right: -2, width: 10, height: 10,
@@ -1027,7 +1103,7 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
           )}
         </>
       )}
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 
@@ -2462,7 +2538,7 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
             <TouchableOpacity onPress={onClose} hitSlop={20}>
               <View style={s.modalHandle} />
             </TouchableOpacity>
-            <Text style={[s.welcome, { color: C.primary, fontSize: 22, marginBottom: 4, marginTop: 4 }]}>
+            <Text style={[s.welcome, { color: role === 'photographer' ? C.pinkPill : C.primary, fontSize: 22, marginBottom: 4, marginTop: 4 }]}>
               {role === 'organizer' ? 'Espace organisateur' : 'Espace photographe'}
             </Text>
             <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18 }}>
@@ -2478,15 +2554,15 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                       <Text style={{ color: C.textSoft, fontSize: 13 }}>Aucun événement à venir</Text>
                     </View>
                   )}
-                  {upcoming.map(e => {
+                  {(code ? upcoming.filter(e => e.code === code) : upcoming).map(e => {
                     const active = code === e.code;
                     return (
                       <TouchableOpacity
                         key={e.code}
-                        onPress={() => setCode(e.code)}
+                        onPress={() => setCode(active ? '' : e.code)}
                         activeOpacity={0.85}
                         style={{
-                          backgroundColor: active ? C.primary : '#faf9ff',
+                          backgroundColor: active ? C.pinkPill : '#faf9ff',
                           borderRadius: 12,
                           padding: 14,
                           marginBottom: 8,
@@ -2503,7 +2579,7 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         {active && (
                           <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
                             <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-                              <Path d="M5 12l5 5L20 7" stroke={C.primary} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+                              <Path d="M5 12l5 5L20 7" stroke={C.pinkPill} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
                             </Svg>
                           </View>
                         )}
@@ -3586,34 +3662,38 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   const [deleting, setDeleting] = useState(false);
   const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
 
-  useEffect(() => {
-    let mounted = true;
+  const loadPhotos = useCallback(async () => {
     setLoading(true);
     setVisibleCount(20);
-    fetch(`${API_URL}/organizer/event-photos/${event.code}`, {
-      headers: { Authorization: `Bearer ${session.token}` },
-    })
-      .then(r => r.ok ? r.json() : { photos: [] })
-      .then(data => {
-        if (!mounted) return;
-        const list = (data.photos || []).map(p => ({
-          uri: p.url,
-          id: p.key,
-          tint,
-          race: p.race,
-          km: p.km,
-        }));
-        list.sort((a, b) => {
-          const tsA = extractBurstTs(a.id);
-          const tsB = extractBurstTs(b.id);
-          return tsB - tsA;
-        });
-        setPhotos(list.slice(0, 500));
-      })
-      .catch(() => setPhotos([]))
-      .finally(() => mounted && setLoading(false));
+    try {
+      const r = await fetch(`${API_URL}/organizer/event-photos/${event.code}`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+      const data = r.ok ? await r.json() : { photos: [] };
+      const list = (data.photos || []).map(p => ({
+        uri: p.url,
+        id: p.key,
+        tint,
+        race: p.race,
+        km: p.km,
+      }));
+      list.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
+      setPhotos(list.slice(0, 500));
+    } catch {
+      setPhotos([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [event.code, session.token, tint]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      await loadPhotos();
+      if (!mounted) return;
+    })();
     return () => { mounted = false; };
-  }, [event.code]);
+  }, [loadPhotos]);
 
   useEffect(() => {
     if (visibleCount >= photos.length) return;
@@ -3708,7 +3788,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   };
 
   return (
-    <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+    <RefreshableScrollView onRefresh={loadPhotos} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
           <Text style={[s.welcome, { color: C.primary, fontSize: 18 }]}>
@@ -3893,7 +3973,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
           </TouchableOpacity>
         </View>
       )}
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 
@@ -3970,7 +4050,7 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
   };
 
   return (
-    <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+    <RefreshableScrollView onRefresh={reload} style={s.scroll} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
       {/* Header avec icône profil + Hello */}
       <View style={[s.headerRow, { paddingVertical: 12 }]}>
         <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.8} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -4055,7 +4135,7 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
           );
         })
       )}
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 
@@ -4086,6 +4166,11 @@ export default function App() {
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const pendingActionRef = useRef(null); // action à exécuter après login
 
+  const reloadEvents = useCallback(async () => {
+    const data = await api.getEvents();
+    setEvents(Array.isArray(data) ? data : []);
+  }, []);
+
   useEffect(() => {
     Font.loadAsync({
       AVEstiana: require('./assets/fonts/AV_Estiana-VF.ttf'),
@@ -4093,7 +4178,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    api.getEvents().then(data => setEvents(Array.isArray(data) ? data : []));
+    reloadEvents();
     AsyncStorage.getItem('@will_selfie').then(v => v && setSelfieUri(v));
     AsyncStorage.getItem('@will_favorites').then(v => {
       if (v) {
@@ -4306,6 +4391,7 @@ export default function App() {
           onOpenProfile={() => setProfileMenu(true)}
           favorites={favorites}
           onToggleFavorite={(code) => requireAuth(() => toggleFavorite(code))}
+          onRefresh={reloadEvents}
         />
       )}
 
@@ -4360,16 +4446,22 @@ export default function App() {
       {/* Bottom Nav */}
       <View style={s.bottomNav}>
         <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('home'); setOpenedEvent(null); }}>
-          <Icon.Home filled={bottomTab === 'home'} color={bottomTab === 'home' ? C.primary : C.text} />
+          <View style={s.navIconWrap}>
+            <Icon.Home size={22} filled={bottomTab === 'home'} color={bottomTab === 'home' ? C.primary : C.text} />
+          </View>
           <Text style={[s.navLabel, bottomTab === 'home' && { color: C.primary, fontWeight: '700' }]}>Accueil</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.navBtn} onPress={() => requireAuth(() => { setBottomTab('photos'); setOpenedEvent(null); })}>
-          <Icon.Photos filled={bottomTab === 'photos'} color={bottomTab === 'photos' ? C.primary : C.text} />
+          <View style={s.navIconWrap}>
+            <Icon.Photos size={22} filled={bottomTab === 'photos'} color={bottomTab === 'photos' ? C.primary : C.text} />
+          </View>
           <Text style={[s.navLabel, bottomTab === 'photos' && { color: C.primary, fontWeight: '700' }]}>Photos</Text>
         </TouchableOpacity>
         {organizerSession && (
           <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('events'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
-            <Icon.ListEvents color={bottomTab === 'events' ? C.pinkPill : C.text} />
+            <View style={s.navIconWrap}>
+              <Icon.ListEvents size={26} color={bottomTab === 'events' ? C.pinkPill : C.text} />
+            </View>
             <Text style={[s.navLabel, bottomTab === 'events' && { color: C.pinkPill, fontWeight: '700' }]}>Mes events</Text>
           </TouchableOpacity>
         )}
@@ -4497,7 +4589,6 @@ const s = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 999,
-    backgroundColor: C.pinkPillActive,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -4560,6 +4651,7 @@ const s = StyleSheet.create({
 
   bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: C.white, flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 28, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingHorizontal: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: -4 } },
   navBtn: { alignItems: 'center', justifyContent: 'flex-start', gap: 4, minWidth: 80 },
+  navIconWrap: { height: 26, alignItems: 'center', justifyContent: 'center' },
   navLabel: { fontSize: 12, color: C.text, marginTop: 2 },
   badge: { position: 'absolute', top: -4, right: -8, backgroundColor: '#FF3B7F', borderRadius: 10, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
   badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
