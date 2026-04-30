@@ -166,7 +166,7 @@ const Icon = {
 };
 
 // ---------- LOADING / PULL-TO-REFRESH ----------
-const LoadingIcon = ({ size = 36, color = '#c9beed' }) => (
+const LoadingIcon = ({ size = 26, color = '#c9beed' }) => (
   <Svg width={size} height={size} viewBox="0 0 57.49 57.49">
     <Path
       fill={color}
@@ -175,14 +175,34 @@ const LoadingIcon = ({ size = 36, color = '#c9beed' }) => (
   </Svg>
 );
 
+const SpinningLoader = ({ size = 24, color = '#c9beed' }) => {
+  const rotation = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.timing(rotation, {
+        toValue: 1, duration: 900, useNativeDriver: true, easing: Easing.linear,
+      })
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [rotation]);
+  const spin = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  return (
+    <Animated.View style={{ transform: [{ rotate: spin }] }}>
+      <LoadingIcon size={size} color={color} />
+    </Animated.View>
+  );
+};
+
 const PULL_THRESHOLD = 70;
 
-const RefreshableScrollView = React.forwardRef(({ onRefresh, children, ...props }, ref) => {
+const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, children, ...props }, ref) => {
   const [refreshing, setRefreshing] = useState(false);
   const [pullDist, setPullDist] = useState(0);
   const scrollPosRef = useRef(0);
   const refreshingRef = useRef(false);
   const rotation = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => { refreshingRef.current = refreshing; }, [refreshing]);
 
@@ -198,6 +218,18 @@ const RefreshableScrollView = React.forwardRef(({ onRefresh, children, ...props 
     }
     rotation.setValue(0);
   }, [refreshing, rotation]);
+
+  useEffect(() => {
+    if (refreshing) {
+      Animated.timing(opacityAnim, {
+        toValue: 1, duration: 100, useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(opacityAnim, {
+        toValue: 0, duration: 320, useNativeDriver: true,
+      }).start();
+    }
+  }, [refreshing, opacityAnim]);
 
   const onScroll = (e) => {
     scrollPosRef.current = e.nativeEvent.contentOffset.y;
@@ -218,7 +250,9 @@ const RefreshableScrollView = React.forwardRef(({ onRefresh, children, ...props 
     .runOnJS(true)
     .onUpdate((e) => {
       if (scrollPosRef.current <= 0 && !refreshingRef.current && e.translationY > 0) {
-        setPullDist(Math.min(e.translationY * 0.55, 140));
+        const dist = Math.min(e.translationY * 0.55, 140);
+        setPullDist(dist);
+        opacityAnim.setValue(Math.min(1, dist / PULL_THRESHOLD));
       }
     })
     .onEnd((e) => {
@@ -227,28 +261,29 @@ const RefreshableScrollView = React.forwardRef(({ onRefresh, children, ...props 
         triggerRefresh();
       } else {
         setPullDist(0);
+        Animated.timing(opacityAnim, {
+          toValue: 0, duration: 220, useNativeDriver: true,
+        }).start();
       }
     });
 
   const composed = Gesture.Simultaneous(panGesture, Gesture.Native());
 
   const spin = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const visible = refreshing || pullDist > 4;
-  const opacity = refreshing ? 1 : Math.min(1, pullDist / PULL_THRESHOLD);
   const dragRotate = `${(pullDist / PULL_THRESHOLD) * 360}deg`;
   const iconTop = refreshing ? 40 : Math.max(15, pullDist * 0.5);
 
   return (
     <View style={{ flex: 1 }}>
-      {visible && (
-        <View pointerEvents="none" style={{
+      {!hideTopRefresh && (
+        <Animated.View pointerEvents="none" style={{
           position: 'absolute', top: iconTop, left: 0, right: 0,
-          alignItems: 'center', zIndex: 1000, opacity,
+          alignItems: 'center', zIndex: 1000, opacity: opacityAnim,
         }}>
           <Animated.View style={{ transform: [{ rotate: refreshing ? spin : dragRotate }] }}>
-            <LoadingIcon size={36} color="#c9beed" />
+            <LoadingIcon size={26} color="#c9beed" />
           </Animated.View>
-        </View>
+        </Animated.View>
       )}
       <GestureDetector gesture={composed}>
         <ScrollView
@@ -667,7 +702,7 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
   }, [visibleCount, photos.length]);
 
   return (
-    <RefreshableScrollView onRefresh={loadPhotos} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+    <RefreshableScrollView hideTopRefresh onRefresh={loadPhotos} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
 <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
@@ -715,7 +750,7 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
         </View>
       ) : loading ? (
         <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-          <ActivityIndicator color={C.primary} />
+          <SpinningLoader size={26} color="#c9beed" />
           <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 10 }}>Recherche en cours…</Text>
         </View>
       ) : photos.length === 0 ? (
