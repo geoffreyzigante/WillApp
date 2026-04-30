@@ -214,6 +214,7 @@ const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, chi
       Animated.timing(opacityAnim, {
         toValue: 1, duration: 120, useNativeDriver: true,
       }).start();
+      rotation.setValue(0);
       const anim = Animated.loop(
         Animated.timing(rotation, {
           toValue: 1, duration: 900, useNativeDriver: true, easing: Easing.linear,
