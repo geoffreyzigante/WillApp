@@ -41,3 +41,4 @@ yarn-error.*
 /android
 App.js.bak
 App.js.bak2
+.claude/
