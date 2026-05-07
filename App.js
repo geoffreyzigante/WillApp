@@ -3640,23 +3640,36 @@ function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDele
     setBusy(true);
     let staged = null;
     try {
-      const perm = await MediaLibrary.requestPermissionsAsync();
+      // Permission iOS : write-only suffit pour ajouter à la pellicule (moins invasif).
+      const perm = await MediaLibrary.requestPermissionsAsync(true);
       if (!perm.granted) {
-        Alert.alert('Permission refusée', 'Autorise l\'accès aux photos pour sauvegarder.');
+        Alert.alert('Permission refusée', 'Autorise l\'accès aux photos pour sauvegarder dans la pellicule.');
         return;
       }
-      // MediaLibrary.createAssetAsync attend un file:// URI local (pas un data URI ni HTTPS).
-      // On télécharge dans le cache, on enregistre dans Photos, puis on nettoie.
+
+      // Garde-fou réseau : message explicite plutôt qu'une erreur de download obscure.
+      const net = await NetInfo.fetch().catch(() => null);
+      if (net && net.isConnected === false) {
+        Alert.alert('Hors ligne', 'Pas de connexion internet — impossible de télécharger la photo.');
+        return;
+      }
+
+      // saveToLibraryAsync attend un file:// URI local : on stage la HQ dans le cache.
       const url = currentPhoto.uri;
       const m = url.match(/\.(jpe?g|png|heic|dng)(\?|$)/i);
       const ext = m ? m[1].toLowerCase() : 'jpg';
       const filename = `will_${Date.now()}.${ext === 'jpeg' ? 'jpg' : ext}`;
       staged = new File(Paths.cache, filename);
       await File.downloadFileAsync(url, staged, { idempotent: true });
-      await MediaLibrary.createAssetAsync(staged.uri);
-      Alert.alert('Photo sauvegardée', 'Disponible dans ton album Photos.');
+      await MediaLibrary.saveToLibraryAsync(staged.uri);
+      Alert.alert('Photo sauvegardée', 'Disponible dans ta pellicule Photos.');
     } catch (e) {
-      Alert.alert('Erreur', e?.message || 'Impossible de sauvegarder');
+      const msg = e?.message || '';
+      const friendly =
+        /Network|network|ENOTFOUND|ECONN|timeout|UnableToDownload/i.test(msg)
+          ? 'Échec du téléchargement — vérifie ta connexion et réessaie.'
+          : (msg || 'Impossible de sauvegarder');
+      Alert.alert('Erreur', friendly);
     } finally {
       try { if (staged?.exists) staged.delete(); } catch {}
       setBusy(false);
