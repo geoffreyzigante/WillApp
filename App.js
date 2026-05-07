@@ -3638,24 +3638,27 @@ function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDele
   const download = async () => {
     if (!currentPhoto?.uri || busy) return;
     setBusy(true);
+    let staged = null;
     try {
       const perm = await MediaLibrary.requestPermissionsAsync();
       if (!perm.granted) {
         Alert.alert('Permission refusée', 'Autorise l\'accès aux photos pour sauvegarder.');
         return;
       }
-      const blob = await (await fetch(currentPhoto.uri)).blob();
-      const reader = new FileReader();
-      const dataUri = await new Promise((resolve, reject) => {
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      const asset = await MediaLibrary.createAssetAsync(dataUri);
+      // MediaLibrary.createAssetAsync attend un file:// URI local (pas un data URI ni HTTPS).
+      // On télécharge dans le cache, on enregistre dans Photos, puis on nettoie.
+      const url = currentPhoto.uri;
+      const m = url.match(/\.(jpe?g|png|heic|dng)(\?|$)/i);
+      const ext = m ? m[1].toLowerCase() : 'jpg';
+      const filename = `will_${Date.now()}.${ext === 'jpeg' ? 'jpg' : ext}`;
+      staged = new File(Paths.cache, filename);
+      await File.downloadFileAsync(url, staged, { idempotent: true });
+      await MediaLibrary.createAssetAsync(staged.uri);
       Alert.alert('Photo sauvegardée', 'Disponible dans ton album Photos.');
     } catch (e) {
       Alert.alert('Erreur', e?.message || 'Impossible de sauvegarder');
     } finally {
+      try { if (staged?.exists) staged.delete(); } catch {}
       setBusy(false);
     }
   };
