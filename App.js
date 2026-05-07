@@ -1177,7 +1177,7 @@ function PhotographerScreen({ session, onLogout }) {
 
   // Configuration par event (chargée au mount, défauts si offline)
   const [eventConfig, setEventConfig] = useState({
-    camera: { photoResolution: "3024x2268", fps: 120, qualityPrioritization: "quality", enableAutoStabilization: true },
+    camera: { photoResolution: "max", fps: 30, qualityPrioritization: "quality", enableAutoStabilization: true },
     mlkit: { minFaceSize: 0.05, performanceMode: "fast", trackingEnabled: true },
     detection: { zoneType: "vertical", zoneSizePercent: 33, triggerZonePercent: 10, burstCount: 3, interBurstMs: 100 },
   });
@@ -1191,17 +1191,31 @@ function PhotographerScreen({ session, onLogout }) {
 
   // Parse résolution depuis la config
   const photoResolution = (() => {
-    const r = eventConfig.camera?.photoResolution || "3024x2268";
+    const r = eventConfig.camera?.photoResolution || "max";
     if (r === "max") return undefined; // Vision Camera prend max disponible
     const [w, h] = r.split("x").map(Number);
     return { width: w, height: h };
   })();
 
+  // Photo HQ d'abord (résolution capteur max), preview en basse résolution
+  // pour garder le frame processor MLKit fluide.
   const format = useCameraFormat(device, [
-    { fps: eventConfig.camera?.fps || 120 },
-    ...(photoResolution ? [{ photoResolution }] : []),
+    photoResolution ? { photoResolution } : { photoResolution: 'max' },
+    { photoAspectRatio: 4 / 3 },
+    { videoResolution: { width: 1280, height: 720 } },
+    { fps: eventConfig.camera?.fps || 30 },
   ]);
   const cameraRef = useRef(null);
+
+  const photoHdrEnabled = !!format?.supportsPhotoHdr;
+  const videoStabilizationMode = useMemo(() => {
+    const modes = format?.videoStabilizationModes || [];
+    if (modes.includes('cinematic-extended')) return 'cinematic-extended';
+    if (modes.includes('cinematic')) return 'cinematic';
+    if (modes.includes('standard')) return 'standard';
+    return 'off';
+  }, [format]);
+  const proRawEnabled = !!device?.supportsRawCapture && !!format?.supportsPhotoHdr;
 
   const isCapturingRef = useRef(false);
   const lastFaceSeenAtRef = useRef(0);
@@ -1416,7 +1430,7 @@ function PhotographerScreen({ session, onLogout }) {
             const fileUri = item.path.startsWith('file://') ? item.path : `file://${item.path}`;
             const blob = await (await fetch(fileUri)).blob();
             const headers = {
-              'Content-Type': 'image/jpeg',
+              'Content-Type': item.isRaw ? 'image/x-adobe-dng' : 'image/jpeg',
               Authorization: `Bearer ${session.token}`,
             };
             if (item.race) headers['X-Will-Race'] = String(item.race);
@@ -1470,15 +1484,25 @@ function PhotographerScreen({ session, onLogout }) {
     const BURST_COUNT = eventConfig.detection?.burstCount ?? 3;
     const INTER_BURST_MS = eventConfig.detection?.interBurstMs ?? 100;
 
+    // Capture HQ découplée du frame processor: chaque takePhoto utilise
+    // la pleine résolution du capteur. Pas de throttle iOS-side, on laisse
+    // AVFoundation enchaîner tant qu'il peut. ProRAW si dispo, sinon HEIC HQ
+    // (photoQualityBalance="quality" + photoHdr réglés sur le composant Camera).
+    const takePhotoOpts = {
+      qualityPrioritization: eventConfig.camera?.qualityPrioritization || 'quality',
+      flash: 'off',
+      enableShutterSound: false,
+      enableAutoStabilization: eventConfig.camera?.enableAutoStabilization ?? true,
+      enableAutoRedEyeReduction: false,
+    };
+    if (proRawEnabled) {
+      takePhotoOpts.enableRawCapture = true;
+    }
+
     for (let i = 0; i < BURST_COUNT; i++) {
       if (!isMountedRef.current || !isDetectionEnabledRef.current) break;
       try {
-        const photo = await cameraRef.current.takePhoto({
-          qualityPrioritization: eventConfig.camera?.qualityPrioritization || 'quality',
-          flash: 'off',
-          enableShutterSound: false,
-          enableAutoStabilization: eventConfig.camera?.enableAutoStabilization ?? true,
-        });
+        const photo = await cameraRef.current.takePhoto(takePhotoOpts);
         queue.push({ photo, index: i, burstTs });
       } catch (e) { console.warn('takePhoto', e); }
       if (i < BURST_COUNT - 1) {
@@ -1493,12 +1517,16 @@ function PhotographerScreen({ session, onLogout }) {
       const d = new Date();
       const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
       const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
-      const items = queue.map(({ photo, index, burstTs }) => ({
-        key: `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${index}.jpg`,
-        path: photo.path,
-        race: selectedRace ? String(selectedRace.km) : null,
-        km: selectedKm ? String(selectedKm) : null,
-      }));
+      const items = queue.map(({ photo, index, burstTs }) => {
+        const ext = photo.isRawPhoto ? 'dng' : 'jpg';
+        return {
+          key: `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${index}.${ext}`,
+          path: photo.path,
+          isRaw: !!photo.isRawPhoto,
+          race: selectedRace ? String(selectedRace.km) : null,
+          km: selectedKm ? String(selectedKm) : null,
+        };
+      });
       persistPending(items).then(() => {
         retryPendingUploads();
       });
@@ -1553,6 +1581,10 @@ function PhotographerScreen({ session, onLogout }) {
         pixelFormat="yuv"
         zoom={zoomLevel}
         resizeMode="contain"
+        photoQualityBalance="quality"
+        photoHdr={photoHdrEnabled}
+        videoStabilizationMode={videoStabilizationMode}
+        enableLocation={false}
       />
 
       {/* Header riche : nom event + date + bouton fermer */}
