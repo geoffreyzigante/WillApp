@@ -387,6 +387,27 @@ const cityLabel = (location) => {
   return String(location).replace(/\((\d{2})\d{3}\)/, '($1)');
 };
 
+// Détecte l'extension d'une photo depuis l'URL (puis HEAD si absent).
+// MediaLibrary.saveToLibraryAsync exige un fichier local nommé avec une
+// extension valide, sinon échoue avec "Could not get the file's extension".
+async function detectPhotoExtension(url) {
+  const fromUrl = String(url || '').match(/\.(jpe?g|png|heic|heif|dng|webp)(\?|#|$)/i);
+  if (fromUrl) {
+    const e = fromUrl[1].toLowerCase();
+    return e === 'jpeg' ? 'jpg' : e;
+  }
+  try {
+    const r = await fetch(url, { method: 'HEAD' });
+    const ct = (r.headers.get('content-type') || '').toLowerCase();
+    if (ct.includes('heic') || ct.includes('heif')) return 'heic';
+    if (ct.includes('png')) return 'png';
+    if (ct.includes('x-adobe-dng') || ct.includes('dng')) return 'dng';
+    if (ct.includes('webp')) return 'webp';
+    if (ct.includes('jpeg') || ct.includes('jpg')) return 'jpg';
+  } catch {}
+  return 'jpg';
+}
+
 // ---------- API ----------
 const api = {
   async getEvents() {
@@ -1298,6 +1319,14 @@ function PhotographerScreen({ session, onLogout }) {
   const [photoCount, setPhotoCount] = useState(0);
   const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [showSessionModal, setShowSessionModal] = useState(false);
+
+  // Bande noire haut/bas issue du letterbox 4:3 sur écran portrait.
+  // Permet d'ancrer les éléments soit DANS le bandeau, soit DANS la preview.
+  const winW = Dimensions.get('window').width;
+  const winH = Dimensions.get('window').height;
+  const previewH = Math.min(winH, winW * (4 / 3));
+  const bandH = Math.max(0, (winH - previewH) / 2);
 
   // Course + km posté
   const [selectedRace, setSelectedRace] = useState(null); // null = "Toutes les courses"
@@ -1456,7 +1485,6 @@ function PhotographerScreen({ session, onLogout }) {
   // - status: 'pending' | 'uploading' | 'failed' (max retries atteint)
   const [queueStats, setQueueStats] = useState({ total: 0, pending: 0, uploading: 0, failed: 0 });
   const [isOnline, setIsOnline] = useState(true);
-  const [showQueueModal, setShowQueueModal] = useState(false);
   const queueRef = useRef([]);
   const drainingRef = useRef(false);
 
@@ -1677,30 +1705,6 @@ function PhotographerScreen({ session, onLogout }) {
     drainQueue();
   }
 
-  async function clearUploaded() {
-    // No-op : items uploadés sont déjà retirés. On expose juste un cleanup
-    // de la queue (drop des 'failed' irrécupérables) sur demande utilisateur.
-    Alert.alert(
-      'Vider les uploadées',
-      'Les photos uploadées sont déjà supprimées. Veux-tu aussi supprimer les photos en échec définitif ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer les échecs',
-          style: 'destructive',
-          onPress: async () => {
-            const failed = queueRef.current.filter(it => it.status === 'failed');
-            for (const it of failed) {
-              try { new File(it.localUri).delete(); } catch {}
-            }
-            const next = queueRef.current.filter(it => it.status !== 'failed');
-            await commitQueue(next);
-          },
-        },
-      ],
-    );
-  }
-
   function startSession() {
     isDetectionEnabledRef.current = true;
     setIsDetectionEnabled(true);
@@ -1830,166 +1834,161 @@ function PhotographerScreen({ session, onLogout }) {
         enableLocation={false}
       />
 
-      {/* Header riche : nom event + date + bouton fermer */}
+      {/* ─── BANDEAU TOP ─── event + pill état + close */}
       <View style={{
-        position: 'absolute',
-        top: 60,
-        left: 16,
-        right: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        position: 'absolute', top: 0, left: 0, right: 0, height: bandH,
+        flexDirection: 'row', alignItems: 'center',
+        paddingTop: 44, paddingHorizontal: 14, gap: 10,
         zIndex: 5,
       }}>
-        <TouchableOpacity
-          onPress={onLogout}
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 18,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          hitSlop={10}
-        >
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-          </Svg>
-        </TouchableOpacity>
-
-        <View style={{ flex: 1, alignItems: 'center', marginHorizontal: 12 }}>
-          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 }} numberOfLines={1}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
             {session?.event?.name || 'Événement'}
           </Text>
           {session?.event?.event_date ? (
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 1, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 }}>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginTop: 1 }} numberOfLines={1}>
               {formatDateLong(session.event.event_date)}
             </Text>
           ) : null}
         </View>
 
-        {/* Compteur photos uploadées + badge queue offline (tappable) */}
-        <View style={{ flexDirection: 'row', gap: 6 }}>
-          {(queueStats.total > 0 || !isOnline) && (
-            <TouchableOpacity
-              onPress={() => setShowQueueModal(true)}
-              hitSlop={6}
-              style={{
-                height: 36, borderRadius: 18,
-                backgroundColor:
-                  queueStats.failed > 0
-                    ? 'rgba(239, 68, 68, 0.92)'  // rouge
-                    : queueStats.total > 0
-                      ? 'rgba(245, 158, 11, 0.92)' // orange
-                      : 'rgba(34, 197, 94, 0.92)', // vert (online, queue vide)
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                paddingHorizontal: 10, gap: 5,
-              }}
-            >
-              {!isOnline ? (
-                // icône cloud-off
-                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                  <Path d="M3 3l18 18M7 8a5 5 0 0 1 9-1.5M19 14a4 4 0 0 0-2-7.5M9 17h7a3 3 0 0 0 .5-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
-                </Svg>
-              ) : (
-                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                  <Path d="M12 22a10 10 0 1 1 10-10" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
-                </Svg>
-              )}
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
-                {queueStats.total}
-              </Text>
-            </TouchableOpacity>
-          )}
-          <View style={{
-            height: 36, borderRadius: 18,
-            backgroundColor: photoCount > 0 ? C.primary : 'rgba(0,0,0,0.5)',
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            paddingHorizontal: 12,
-            gap: 5,
-          }}>
-            <Icon.PhotoCam size={14} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{photoCount}</Text>
-          </View>
-        </View>
+        {(() => {
+          const label = isShooting ? 'Capture' : (facesCount > 0 ? 'Détection' : 'Prêt');
+          const bg = isShooting
+            ? 'rgba(239, 68, 68, 0.92)'
+            : (facesCount > 0 ? 'rgba(245, 158, 11, 0.92)' : 'rgba(34, 197, 94, 0.92)');
+          return (
+            <View style={{
+              paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+              backgroundColor: bg, flexDirection: 'row', alignItems: 'center', gap: 6,
+            }}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#fff' }} />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{label}</Text>
+            </View>
+          );
+        })()}
+
+        <TouchableOpacity
+          onPress={onLogout}
+          hitSlop={10}
+          style={{
+            width: 36, height: 36, borderRadius: 18,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+          </Svg>
+        </TouchableOpacity>
       </View>
 
-      {/* Zone de déclenchement : bande verticale, position gauche / centre / droite */}
+      {/* ─── PREVIEW OVERLAYS ─── */}
+      {/* Lignes verticales zone déclenchement, dégradé d'opacité 0/1/0 sur l'axe Y */}
       <View
         pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFillObject,
-          {
-            flexDirection: 'row',
-            justifyContent:
-              zonePosition === 'left' ? 'flex-start' :
-              zonePosition === 'right' ? 'flex-end' : 'center',
-          },
-        ]}
+        style={{
+          position: 'absolute',
+          top: bandH, bottom: bandH, left: 0, right: 0,
+          flexDirection: 'row',
+          justifyContent:
+            zonePosition === 'left' ? 'flex-start' :
+            zonePosition === 'right' ? 'flex-end' : 'center',
+        }}
       >
-        <View style={{
-          width: `${zonePct * 100}%`,
-          height: '100%',
-          borderLeftWidth: 1.5,
-          borderRightWidth: 1.5,
-          borderColor: facesInZoneCount > 0 ? '#10B981' : 'rgba(255,255,255,0.6)',
-        }} />
-      </View>
-
-      {/* Badge "En attente" / "Capture..." minimal en haut */}
-      {!isDetectionEnabled && (
-        <View
-          pointerEvents="none"
-          style={{ position: 'absolute', top: 110, left: 0, right: 0, alignItems: 'center' }}
-        >
-          <View style={{
-            paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-            backgroundColor: 'rgba(255, 255, 255, 0.18)',
-            borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
-          }}>
-            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>En attente</Text>
-          </View>
+        <View style={{ width: `${zonePct * 100}%`, height: '100%' }}>
+          {(() => {
+            const center = facesInZoneCount > 0
+              ? 'rgba(16, 185, 129, 0.95)'
+              : 'rgba(255,255,255,0.85)';
+            const colors = ['rgba(255,255,255,0)', center, 'rgba(255,255,255,0)'];
+            return (
+              <>
+                <LinearGradient
+                  colors={colors}
+                  locations={[0, 0.5, 1]}
+                  style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 1.5 }}
+                />
+                <LinearGradient
+                  colors={colors}
+                  locations={[0, 0.5, 1]}
+                  style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 1.5 }}
+                />
+              </>
+            );
+          })()}
         </View>
-      )}
-
-      {/* Sélecteur zoom */}
-      <View style={{
-        position: 'absolute',
-        bottom: 180,
-        alignSelf: 'center',
-        flexDirection: 'row',
-        backgroundColor: 'rgba(0,0,0,0.4)',
-        borderRadius: 999,
-        padding: 4,
-      }}>
-        {[1, 1.5, 2].map(z => (
-          <TouchableOpacity
-            key={z}
-            onPress={() => setZoomLevel(z)}
-            style={{
-              paddingHorizontal: 14,
-              paddingVertical: 6,
-              borderRadius: 999,
-              backgroundColor: zoomLevel === z ? 'rgba(255,255,255,0.95)' : 'transparent',
-            }}
-          >
-            <Text style={{ color: zoomLevel === z ? '#000' : '#fff', fontWeight: '700', fontSize: 12 }}>
-              {z}×
-            </Text>
-          </TouchableOpacity>
-        ))}
       </View>
 
-      {/* Bouton Démarrer / Arrêter + sélecteurs course/km */}
-      <View style={{ position: 'absolute', bottom: 30, left: 24, right: 24, zIndex: 10 }}>
+      {/* Compteur 📷 cliquable, ancré bas-droite de la preview (au-dessus du bandeau bas) */}
+      <TouchableOpacity
+        onPress={() => setShowSessionModal(true)}
+        activeOpacity={0.85}
+        hitSlop={8}
+        style={{
+          position: 'absolute',
+          bottom: bandH + 12,
+          right: 16,
+          height: 34, borderRadius: 17,
+          backgroundColor: photoCount > 0 ? C.primary : 'rgba(0,0,0,0.55)',
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+          paddingHorizontal: 12, gap: 6,
+          zIndex: 5,
+        }}
+      >
+        {!isOnline ? (
+          <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+            <Path d="M3 3l18 18M7 8a5 5 0 0 1 9-1.5M19 14a4 4 0 0 0-2-7.5M9 17h7a3 3 0 0 0 .5-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+          </Svg>
+        ) : (
+          <Icon.PhotoCam size={14} color="#fff" />
+        )}
+        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
+          {photoCount + queueStats.total}
+        </Text>
+        {queueStats.failed > 0 && (
+          <View style={{
+            minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: 8,
+            backgroundColor: 'rgba(239,68,68,0.95)', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>!</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+
+      {/* ─── BANDEAU BAS ─── zoom + GO + course/km */}
+      <View style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        paddingBottom: 24, paddingHorizontal: 24, paddingTop: 8,
+        zIndex: 5,
+      }}>
+        {/* Sélecteur zoom 1× / 1.5× */}
+        <View style={{
+          alignSelf: 'center', flexDirection: 'row',
+          backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 999,
+          padding: 4, marginBottom: 10,
+        }}>
+          {[1, 1.5].map(z => (
+            <TouchableOpacity
+              key={z}
+              onPress={() => setZoomLevel(z)}
+              style={{
+                paddingHorizontal: 14, paddingVertical: 5, borderRadius: 999,
+                backgroundColor: zoomLevel === z ? 'rgba(255,255,255,0.95)' : 'transparent',
+              }}
+            >
+              <Text style={{ color: zoomLevel === z ? '#000' : '#fff', fontWeight: '700', fontSize: 12 }}>
+                {z}×
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {!isDetectionEnabled ? (
           <TouchableOpacity
             onPress={startSession}
             style={{
-              backgroundColor: C.primary,
-              paddingVertical: 18,
-              borderRadius: 16,
+              backgroundColor: C.primary, paddingVertical: 16, borderRadius: 16,
               alignItems: 'center',
             }}
           >
@@ -1999,9 +1998,7 @@ function PhotographerScreen({ session, onLogout }) {
           <TouchableOpacity
             onPress={stopSession}
             style={{
-              backgroundColor: 'rgba(255,255,255,0.95)',
-              paddingVertical: 18,
-              borderRadius: 16,
+              backgroundColor: 'rgba(255,255,255,0.95)', paddingVertical: 16, borderRadius: 16,
               alignItems: 'center',
             }}
           >
@@ -2009,11 +2006,10 @@ function PhotographerScreen({ session, onLogout }) {
           </TouchableOpacity>
         )}
 
-        {/* Pills course + km */}
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
           <TouchableOpacity
             onPress={() => { setRacePickerOpen(true); setKmPickerOpen(false); }}
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 10, borderRadius: 12, alignItems: 'center' }}
           >
             <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10, marginBottom: 2 }}>COURSE</Text>
             <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }} numberOfLines={1}>
@@ -2022,7 +2018,7 @@ function PhotographerScreen({ session, onLogout }) {
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => { setKmPickerOpen(true); setRacePickerOpen(false); }}
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 10, borderRadius: 12, alignItems: 'center' }}
           >
             <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10, marginBottom: 2 }}>KM POSTÉ</Text>
             <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
@@ -2113,116 +2109,153 @@ function PhotographerScreen({ session, onLogout }) {
         </TouchableOpacity>
       </Modal>
 
-      <UploadQueueModal
-        visible={showQueueModal}
-        onClose={() => setShowQueueModal(false)}
+      <SessionPhotosModal
+        visible={showSessionModal}
+        onClose={() => setShowSessionModal(false)}
+        queueItems={queueRef.current}
+        uploadedCount={photoCount}
         stats={queueStats}
-        isOnline={isOnline}
         onRetryAll={retryAllFailed}
-        onClearUploaded={clearUploaded}
-        onDrainNow={drainQueue}
       />
     </View>
   );
 }
 
-function UploadQueueModal({ visible, onClose, stats, isOnline, onRetryAll, onClearUploaded, onDrainNow }) {
+function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats, onRetryAll }) {
+  // Réfresh à chaque ouverture : queueRef.current peut muter sans déclencher de re-render
+  const items = visible ? (queueItems || []) : [];
+  // Tri : plus récents en premier
+  const sorted = [...items].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const COLS = 3;
+  const GUTTER = 4;
+  const screenW = Dimensions.get('window').width;
+  const cell = Math.floor((screenW - 32 - GUTTER * (COLS - 1)) / COLS);
+
+  const totalSession = uploadedCount + (stats?.total || 0);
+  const inFlight = (stats?.pending || 0) + (stats?.uploading || 0);
+  const failed = stats?.failed || 0;
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={onClose}
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
-      >
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => {}}
-          style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingBottom: 36, paddingHorizontal: 20 }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <Text style={{ color: C.text, fontSize: 18, fontWeight: '700' }}>File d'upload</Text>
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 6,
-              paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
-              backgroundColor: isOnline ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-            }}>
-              <View style={{
-                width: 8, height: 8, borderRadius: 4,
-                backgroundColor: isOnline ? '#22c55e' : '#ef4444',
-              }} />
-              <Text style={{ color: isOnline ? '#16a34a' : '#dc2626', fontSize: 12, fontWeight: '600' }}>
-                {isOnline ? 'En ligne' : 'Hors ligne'}
-              </Text>
-            </View>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)' }}>
+        {/* Header */}
+        <View style={{
+          paddingTop: 56, paddingBottom: 12, paddingHorizontal: 16,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
+        }}>
+          <View>
+            <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>
+              Photos de cette session
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 }}>
+              {totalSession} prise{totalSession > 1 ? 's' : ''} depuis ta connexion
+            </Text>
           </View>
-
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
-            <QueueStatCard label="Total" value={stats.total} color={C.text} />
-            <QueueStatCard label="En attente" value={stats.pending + stats.uploading} color="#f59e0b" />
-            <QueueStatCard label="Échec" value={stats.failed} color="#ef4444" />
-          </View>
-
-          {stats.failed > 0 && (
-            <TouchableOpacity
-              onPress={() => { onRetryAll(); }}
-              style={{
-                backgroundColor: C.primary, borderRadius: 12,
-                paddingVertical: 14, alignItems: 'center', marginBottom: 10,
-              }}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
-                Réessayer les {stats.failed} échec{stats.failed > 1 ? 's' : ''}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {stats.pending > 0 && isOnline && (
-            <TouchableOpacity
-              onPress={() => { onDrainNow(); }}
-              style={{
-                backgroundColor: '#f5f3ff', borderRadius: 12,
-                paddingVertical: 14, alignItems: 'center', marginBottom: 10,
-              }}
-            >
-              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 15 }}>
-                Forcer l'upload maintenant
-              </Text>
-            </TouchableOpacity>
-          )}
-
           <TouchableOpacity
-            onPress={() => { onClearUploaded(); }}
+            onPress={onClose}
+            hitSlop={10}
             style={{
-              borderRadius: 12, paddingVertical: 14, alignItems: 'center',
-              borderWidth: 1, borderColor: '#e5e7eb', marginBottom: 4,
+              width: 36, height: 36, borderRadius: 18,
+              backgroundColor: 'rgba(255,255,255,0.12)',
+              alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <Text style={{ color: C.textSoft, fontWeight: '600', fontSize: 14 }}>
-              Vider les échecs définitifs
-            </Text>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+            </Svg>
           </TouchableOpacity>
+        </View>
 
-          {!isOnline && (
-            <Text style={{ color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 12 }}>
-              L'upload reprendra automatiquement au retour du réseau.
+        {/* Grille thumbnails */}
+        {sorted.length === 0 ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', textAlign: 'center', fontSize: 13 }}>
+              Aucune photo en attente locale.{'\n'}
+              {uploadedCount > 0
+                ? `${uploadedCount} photo${uploadedCount > 1 ? 's ont' : ' a'} déjà été upload${uploadedCount > 1 ? 'ées' : 'ée'} (le fichier local est supprimé après l'envoi).`
+                : 'Lance la détection avec GO ! pour capturer des coureurs.'}
             </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={sorted}
+            keyExtractor={(it) => it.id}
+            numColumns={COLS}
+            contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+            columnWrapperStyle={{ gap: GUTTER, marginBottom: GUTTER }}
+            renderItem={({ item }) => {
+              const failedItem = item.status === 'failed';
+              const uploading = item.status === 'uploading';
+              return (
+                <View style={{ width: cell, height: cell, borderRadius: 8, overflow: 'hidden', backgroundColor: '#222' }}>
+                  <Image
+                    source={{ uri: item.localUri }}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                  />
+                  {(failedItem || uploading) && (
+                    <View style={{
+                      position: 'absolute', top: 4, right: 4,
+                      paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
+                      backgroundColor: failedItem ? 'rgba(239,68,68,0.92)' : 'rgba(245,158,11,0.92)',
+                    }}>
+                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>
+                        {failedItem ? 'ÉCHEC' : 'UPLOAD'}
+                      </Text>
+                    </View>
+                  )}
+                  {item.isRaw && (
+                    <View style={{
+                      position: 'absolute', bottom: 4, left: 4,
+                      paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4,
+                      backgroundColor: 'rgba(0,0,0,0.65)',
+                    }}>
+                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700' }}>RAW</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            }}
+          />
+        )}
+
+        {/* Footer stats */}
+        <View style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28,
+          backgroundColor: 'rgba(0,0,0,0.95)',
+          borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <View style={{ flexDirection: 'row', gap: 14, flex: 1, flexWrap: 'wrap' }}>
+            <SessionStat label="Total" value={totalSession} color="#fff" />
+            <SessionStat label="Uploadées" value={uploadedCount} color="#22C55E" />
+            <SessionStat label="En attente" value={inFlight} color="#F59E0B" />
+            <SessionStat label="Échouées" value={failed} color="#EF4444" />
+          </View>
+          {failed > 0 && (
+            <TouchableOpacity
+              onPress={onRetryAll}
+              style={{
+                paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+                backgroundColor: 'rgba(255,255,255,0.95)',
+              }}
+            >
+              <Text style={{ color: '#000', fontSize: 12, fontWeight: '700' }}>Réessayer</Text>
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </View>
+      </View>
     </Modal>
   );
 }
 
-function QueueStatCard({ label, value, color }) {
+function SessionStat({ label, value, color }) {
   return (
-    <View style={{
-      flex: 1,
-      paddingVertical: 14, paddingHorizontal: 8,
-      backgroundColor: '#f9fafb', borderRadius: 12,
-      alignItems: 'center',
-    }}>
-      <Text style={{ color, fontSize: 22, fontWeight: '800' }}>{value}</Text>
-      <Text style={{ color: C.textSoft, fontSize: 11, marginTop: 2 }}>{label}</Text>
+    <View>
+      <Text style={{ color, fontSize: 18, fontWeight: '800' }}>{value}</Text>
+      <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, marginTop: 1 }}>{label}</Text>
     </View>
   );
 }
@@ -3647,22 +3680,33 @@ function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDele
         return;
       }
 
-      // Garde-fou réseau : message explicite plutôt qu'une erreur de download obscure.
       const net = await NetInfo.fetch().catch(() => null);
       if (net && net.isConnected === false) {
         Alert.alert('Hors ligne', 'Pas de connexion internet — impossible de télécharger la photo.');
         return;
       }
 
-      // saveToLibraryAsync attend un file:// URI local : on stage la HQ dans le cache.
       const url = currentPhoto.uri;
-      const m = url.match(/\.(jpe?g|png|heic|dng)(\?|$)/i);
-      const ext = m ? m[1].toLowerCase() : 'jpg';
-      const filename = `will_${Date.now()}.${ext === 'jpeg' ? 'jpg' : ext}`;
+      const ext = await detectPhotoExtension(url);
+      const filename = `will_${Date.now()}.${ext}`;
       staged = new File(Paths.cache, filename);
-      await File.downloadFileAsync(url, staged, { idempotent: true });
-      await MediaLibrary.saveToLibraryAsync(staged.uri);
-      Alert.alert('Photo sauvegardée', 'Disponible dans ta pellicule Photos.');
+      const downloaded = await File.downloadFileAsync(url, staged, { idempotent: true });
+      const localUri = downloaded?.uri || staged.uri;
+
+      try {
+        await MediaLibrary.saveToLibraryAsync(localUri);
+        Alert.alert('Photo sauvegardée', 'Disponible dans ta pellicule Photos.');
+      } catch (saveErr) {
+        // ProRAW (.dng) : la pellicule peut refuser sur certains iOS.
+        if (ext === 'dng') {
+          Alert.alert(
+            'Format DNG non supporté',
+            'La pellicule iOS n\'accepte pas ce fichier RAW. Demande au photographe une version JPEG.'
+          );
+        } else {
+          throw saveErr;
+        }
+      }
     } catch (e) {
       const msg = e?.message || '';
       const friendly =
