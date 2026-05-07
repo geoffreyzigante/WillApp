@@ -29,10 +29,64 @@ import ReAnimated, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import NetInfo from '@react-native-community/netinfo';
+import { Paths, File, Directory } from 'expo-file-system';
 
 const API_URL = 'https://will-api.geoffreyzigante.workers.dev';
 const R2_PUBLIC = 'https://pub-f9a5894e66a44f8cbb34582302930449.r2.dev';
 const { width: SCREEN_W } = Dimensions.get('window');
+
+// Mode photographe offline-first : queue persistante d'uploads
+// + photos stockées hors-cache pour survivre au kill / nettoyage iOS.
+const UPLOAD_QUEUE_KEY = '@will_upload_queue';
+const PENDING_DIR_NAME = 'will_pending';
+const MAX_RETRIES_DEFAULT = 5;
+const STORAGE_WARN_BYTES = 5 * 1024 * 1024 * 1024; // 5 Go
+
+function pendingDir() {
+  return new Directory(Paths.document, PENDING_DIR_NAME);
+}
+
+function ensurePendingDir() {
+  try {
+    const d = pendingDir();
+    if (!d.exists) d.create({ intermediates: true, idempotent: true });
+    return d;
+  } catch (e) {
+    console.warn('ensurePendingDir', e?.message);
+    return null;
+  }
+}
+
+async function loadUploadQueue() {
+  try {
+    const raw = await AsyncStorage.getItem(UPLOAD_QUEUE_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+
+async function saveUploadQueue(arr) {
+  try {
+    await AsyncStorage.setItem(UPLOAD_QUEUE_KEY, JSON.stringify(arr));
+  } catch (e) { console.warn('saveUploadQueue', e?.message); }
+}
+
+function pendingDirSizeBytes() {
+  try {
+    const d = pendingDir();
+    if (!d.exists) return 0;
+    let total = 0;
+    for (const node of d.list()) {
+      if (node instanceof File) total += node.size || 0;
+    }
+    return total;
+  } catch { return 0; }
+}
+
+function generateItemId() {
+  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+}
 
 // ---------- DESIGN TOKENS ----------
 const C = {
@@ -1242,7 +1296,6 @@ function PhotographerScreen({ session, onLogout }) {
   const [facesInZoneCount, setFacesInZoneCount] = useState(0);
   const [isShooting, setIsShooting] = useState(false);
   const [photoCount, setPhotoCount] = useState(0);
-  const [pendingUploads, setPendingUploads] = useState(0);
   const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
 
@@ -1395,74 +1448,184 @@ function PhotographerScreen({ session, onLogout }) {
 
   const NO_FACE_TIMEOUT_MS = 500;
   const INTER_PHOTO_MS = 100; // ~5 photos/sec, optimum vitesse/utilité
-  const PENDING_KEY = `@will_pending_uploads_${session?.event?.code || 'default'}`;
 
-  // Recharger les uploads en attente au démarrage et lancer le retry loop
-  useEffect(() => {
-    if (!session?.token) return;
-    AsyncStorage.getItem(PENDING_KEY).then(v => {
-      if (!v) return;
-      try {
-        const queue = JSON.parse(v);
-        if (Array.isArray(queue)) setPendingUploads(queue.length);
-      } catch {}
-    });
-    // Loop retry: tente d'uploader ce qui est en attente toutes les 5s
-    const interval = setInterval(() => {
-      retryPendingUploads();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [session?.token]);
+  // === Mode offline-first : queue persistante ===
+  // - Photos copiées dans Paths.document/will_pending/ (survit au kill app)
+  // - Métadonnées dans AsyncStorage UPLOAD_QUEUE_KEY (single global queue)
+  // - Upload gated par NetInfo (pas de tentative si offline)
+  // - status: 'pending' | 'uploading' | 'failed' (max retries atteint)
+  const [queueStats, setQueueStats] = useState({ total: 0, pending: 0, uploading: 0, failed: 0 });
+  const [isOnline, setIsOnline] = useState(true);
+  const [showQueueModal, setShowQueueModal] = useState(false);
+  const queueRef = useRef([]);
+  const drainingRef = useRef(false);
 
-  async function persistPending(items) {
-    try {
-      const cur = await AsyncStorage.getItem(PENDING_KEY);
-      const arr = cur ? JSON.parse(cur) : [];
-      arr.push(...items);
-      await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(arr));
-      if (isMountedRef.current) setPendingUploads(arr.length);
-    } catch (e) { console.warn('persistPending', e); }
+  function recomputeStats(arr) {
+    const stats = { total: arr.length, pending: 0, uploading: 0, failed: 0 };
+    for (const it of arr) {
+      if (it.status === 'failed') stats.failed++;
+      else if (it.status === 'uploading') stats.uploading++;
+      else stats.pending++;
+    }
+    return stats;
   }
 
-  // Flag pour empêcher des retries concurrents
-  const retryRunningRef = useRef(false);
+  async function commitQueue(arr) {
+    queueRef.current = arr;
+    await saveUploadQueue(arr);
+    if (isMountedRef.current) {
+      setQueueStats(recomputeStats(arr));
+    }
+  }
 
-  async function retryPendingUploads() {
-    if (retryRunningRef.current) return;
-    retryRunningRef.current = true;
+  // Charge la queue au démarrage du screen + reconcile fichiers manquants
+  // + reset des items 'uploading' (interrompus par crash/kill)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      ensurePendingDir();
+      const arr = await loadUploadQueue();
+      const cleaned = [];
+      for (const it of arr) {
+        // file:// → strip
+        const fileExists = (() => {
+          try { return new File(it.localUri).exists; } catch { return false; }
+        })();
+        if (!fileExists) continue; // drop silencieusement
+        // recovery: tout 'uploading' redevient 'pending'
+        if (it.status === 'uploading') cleaned.push({ ...it, status: 'pending' });
+        else cleaned.push(it);
+      }
+      if (!alive) return;
+      await commitQueue(cleaned);
+      drainQueue();
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // NetInfo: relance le drain au retour du réseau, met à jour l'indicateur
+  useEffect(() => {
+    const unsub = NetInfo.addEventListener(state => {
+      const online = !!state.isConnected && state.isInternetReachable !== false;
+      if (isMountedRef.current) setIsOnline(online);
+      if (online) drainQueue();
+    });
+    return () => unsub();
+  }, []);
+
+  // Heartbeat 30s : filet de sécurité au cas où NetInfo manquerait un évènement
+  useEffect(() => {
+    const t = setInterval(() => drainQueue(), 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Enqueue: copie le fichier capturé vers le dossier persistant et ajoute à la queue
+  async function enqueueBurstItems(rawItems) {
+    if (rawItems.length === 0) return;
+    ensurePendingDir();
+    const dir = pendingDir();
+    const newQueueItems = [];
+    for (const r of rawItems) {
+      try {
+        const ext = r.isRaw ? 'dng' : 'jpg';
+        const id = generateItemId();
+        const dest = new File(dir, `${id}.${ext}`);
+        const src = new File(r.tempPath.startsWith('file://') ? r.tempPath : `file://${r.tempPath}`);
+        try { src.copy(dest); }
+        catch (e) {
+          // Si copy échoue (ex. fichier source déjà déplacé), on essaie move pour éviter de perdre la photo
+          try { src.move(dest); } catch { console.warn('copy/move failed', e?.message); continue; }
+        }
+        newQueueItems.push({
+          id,
+          localUri: dest.uri,
+          eventCode: session?.event?.code || 'unknown',
+          photographerName: session?.photographer_name || session?.photographer_id || 'unknown',
+          burstTs: r.burstTs,
+          idx: r.idx,
+          createdAt: Date.now(),
+          retries: 0,
+          status: 'pending',
+          // métadonnées pour upload
+          key: r.key,
+          isRaw: !!r.isRaw,
+          race: r.race,
+          km: r.km,
+        });
+      } catch (e) { console.warn('enqueueBurstItems', e?.message); }
+    }
+    const next = [...queueRef.current, ...newQueueItems];
+    await commitQueue(next);
+
+    // Alerte de stockage
+    const sizeBytes = pendingDirSizeBytes();
+    if (sizeBytes > STORAGE_WARN_BYTES) {
+      Alert.alert(
+        'Stockage local plein',
+        `Plus de 5 Go de photos en attente d'upload (${(sizeBytes / 1024 / 1024 / 1024).toFixed(1)} Go). Connecte-toi à un wifi pour libérer de l'espace.`,
+      );
+    }
+
+    drainQueue();
+  }
+
+  async function drainQueue() {
+    if (drainingRef.current) return;
+    if (!session?.token) return;
+
+    // Gate réseau : on lit l'état NetInfo en synchrone via fetch sync (mais c'est async).
+    // On utilise isOnline pour éviter un await coûteux. Si offline, on quitte direct.
+    const state = await NetInfo.fetch().catch(() => null);
+    const online = state ? (!!state.isConnected && state.isInternetReachable !== false) : isOnline;
+    if (!online) return;
+
+    drainingRef.current = true;
     try {
-      const cur = await AsyncStorage.getItem(PENDING_KEY);
-      if (!cur) { retryRunningRef.current = false; return; }
-      const arr = JSON.parse(cur);
-      if (!Array.isArray(arr) || arr.length === 0) { retryRunningRef.current = false; return; }
+      const arr = [...queueRef.current];
+      const uploadable = arr
+        .map((it, i) => ({ it, i }))
+        .filter(({ it }) => it.status === 'pending' || it.status === 'failed');
+      if (uploadable.length === 0) { drainingRef.current = false; return; }
 
-      // Mode batch : on attend d'avoir au moins batchSize items en attente
-      // avant de tenter l'upload (sauf si c'est le retry périodique qui tourne).
-      // mode "wifi" non implémenté (NetInfo absent) → traité comme "immediate".
+      const verbose = !!eventConfig.debug?.verboseLogs;
+      const maxRetries = eventConfig.upload?.maxRetries ?? MAX_RETRIES_DEFAULT;
       const uploadMode = eventConfig.upload?.mode || 'immediate';
       const batchSize = eventConfig.upload?.batchSize ?? 10;
-      if (uploadMode === 'batch' && arr.length < batchSize) {
-        retryRunningRef.current = false;
+      // mode 'wifi' : si Cellular, on défère
+      if (uploadMode === 'wifi' && state?.type && state.type !== 'wifi') {
+        if (verbose) console.log('[upload] mode=wifi, type=', state.type, '— on attend');
+        drainingRef.current = false;
+        return;
+      }
+      if (uploadMode === 'batch' && uploadable.length < batchSize) {
+        if (verbose) console.log(`[upload] mode=batch, ${uploadable.length}/${batchSize} pending`);
+        drainingRef.current = false;
         return;
       }
 
-      const maxRetries = eventConfig.upload?.maxRetries ?? 5;
-      const verbose = !!eventConfig.debug?.verboseLogs;
-      if (verbose) console.log(`[upload] retrying ${arr.length} pending (mode=${uploadMode})`);
+      if (verbose) console.log(`[upload] drain ${uploadable.length} items (online=${online})`);
 
       const CONCURRENCY = 4;
-      const remaining = [];
-      const dropped = [];
-      let i = 0;
+      let cursor = 0;
+      // mark all as uploading upfront so UI reflète
+      for (const { i } of uploadable) arr[i] = { ...arr[i], status: 'uploading' };
+      await commitQueue(arr);
 
       async function worker() {
-        while (i < arr.length) {
-          const myIdx = i++;
-          const item = arr[myIdx];
-          const attempts = (item.attempts || 0) + 1;
+        while (cursor < uploadable.length) {
+          const { i } = uploadable[cursor++];
+          const item = arr[i];
+          if (!item) continue;
+          // sanity: file still there?
+          let fileExists = false;
+          try { fileExists = new File(item.localUri).exists; } catch {}
+          if (!fileExists) {
+            if (verbose) console.warn('[upload] file missing, drop', item.id);
+            arr[i] = null;
+            continue;
+          }
           try {
-            const fileUri = item.path.startsWith('file://') ? item.path : `file://${item.path}`;
-            const blob = await (await fetch(fileUri)).blob();
+            const blob = await (await fetch(item.localUri)).blob();
             const headers = {
               'Content-Type': item.isRaw ? 'image/x-adobe-dng' : 'image/jpeg',
               Authorization: `Bearer ${session.token}`,
@@ -1470,38 +1633,72 @@ function PhotographerScreen({ session, onLogout }) {
             if (item.race) headers['X-Will-Race'] = String(item.race);
             if (item.km) headers['X-Will-Km'] = String(item.km);
             const res = await fetch(`${API_URL}/${item.key}`, { method: 'PUT', headers, body: blob });
-            if (!res.ok) {
-              if (verbose) console.warn(`[upload] failed ${item.key} status=${res.status} attempts=${attempts}`);
-              if (attempts >= maxRetries) {
-                console.warn(`[upload] giving up on ${item.key} after ${attempts} attempts`);
-                dropped.push(item);
-              } else {
-                remaining.push({ ...item, attempts });
-              }
-            } else {
+            if (res.ok) {
+              // succès → delete fichier local + drop item
+              try { new File(item.localUri).delete(); } catch {}
+              arr[i] = null;
               if (isMountedRef.current) setPhotoCount(c => c + 1);
+            } else {
+              const retries = (item.retries || 0) + 1;
+              if (verbose) console.warn(`[upload] HTTP ${res.status} ${item.id} retries=${retries}`);
+              arr[i] = {
+                ...item,
+                retries,
+                status: retries >= maxRetries ? 'failed' : 'pending',
+              };
             }
           } catch (e) {
-            if (verbose) console.warn(`[upload] error ${item.key}`, e?.message);
-            if (attempts >= maxRetries) {
-              console.warn(`[upload] giving up on ${item.key} after ${attempts} attempts (network)`);
-              dropped.push(item);
-            } else {
-              remaining.push({ ...item, attempts });
-            }
+            const retries = (item.retries || 0) + 1;
+            if (verbose) console.warn(`[upload] err ${item.id}`, e?.message);
+            arr[i] = {
+              ...item,
+              retries,
+              status: retries >= maxRetries ? 'failed' : 'pending',
+            };
           }
         }
       }
 
       await Promise.all(Array.from({ length: CONCURRENCY }).map(() => worker()));
-      if (verbose) console.log(`[upload] done, ${remaining.length} remaining, ${dropped.length} dropped`);
-      await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(remaining));
-      if (isMountedRef.current) setPendingUploads(remaining.length);
+      const cleaned = arr.filter(Boolean);
+      await commitQueue(cleaned);
     } catch (e) {
-      console.warn('retryPendingUploads', e);
+      console.warn('drainQueue', e?.message);
     } finally {
-      retryRunningRef.current = false;
+      drainingRef.current = false;
     }
+  }
+
+  async function retryAllFailed() {
+    const next = queueRef.current.map(it =>
+      it.status === 'failed' ? { ...it, retries: 0, status: 'pending' } : it,
+    );
+    await commitQueue(next);
+    drainQueue();
+  }
+
+  async function clearUploaded() {
+    // No-op : items uploadés sont déjà retirés. On expose juste un cleanup
+    // de la queue (drop des 'failed' irrécupérables) sur demande utilisateur.
+    Alert.alert(
+      'Vider les uploadées',
+      'Les photos uploadées sont déjà supprimées. Veux-tu aussi supprimer les photos en échec définitif ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer les échecs',
+          style: 'destructive',
+          onPress: async () => {
+            const failed = queueRef.current.filter(it => it.status === 'failed');
+            for (const it of failed) {
+              try { new File(it.localUri).delete(); } catch {}
+            }
+            const next = queueRef.current.filter(it => it.status !== 'failed');
+            await commitQueue(next);
+          },
+        },
+      ],
+    );
   }
 
   function startSession() {
@@ -1562,19 +1759,20 @@ function PhotographerScreen({ session, onLogout }) {
       const d = new Date();
       const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
       const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
-      const items = queue.map(({ photo, index, burstTs }) => {
+      const rawItems = queue.map(({ photo, index, burstTs: ts }) => {
         const ext = photo.isRawPhoto ? 'dng' : 'jpg';
         return {
-          key: `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${index}.${ext}`,
-          path: photo.path,
+          key: `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${ts}_${index}.${ext}`,
+          tempPath: photo.path,
           isRaw: !!photo.isRawPhoto,
+          burstTs: ts,
+          idx: index,
           race: selectedRace ? String(selectedRace.km) : null,
           km: selectedKm ? String(selectedKm) : null,
         };
       });
-      persistPending(items).then(() => {
-        retryPendingUploads();
-      });
+      // copie persistante + enqueue (non bloquant) — drain au prochain online
+      enqueueBurstItems(rawItems);
     }
   }
 
@@ -1671,20 +1869,38 @@ function PhotographerScreen({ session, onLogout }) {
           ) : null}
         </View>
 
-        {/* Compteur photos avec icône + pending uploads */}
+        {/* Compteur photos uploadées + badge queue offline (tappable) */}
         <View style={{ flexDirection: 'row', gap: 6 }}>
-          {pendingUploads > 0 && (
-            <View style={{
-              height: 36, borderRadius: 18,
-              backgroundColor: 'rgba(245, 158, 11, 0.85)',
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-              paddingHorizontal: 10, gap: 4,
-            }}>
-              <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 22a10 10 0 1 1 10-10" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
-              </Svg>
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{pendingUploads}</Text>
-            </View>
+          {(queueStats.total > 0 || !isOnline) && (
+            <TouchableOpacity
+              onPress={() => setShowQueueModal(true)}
+              hitSlop={6}
+              style={{
+                height: 36, borderRadius: 18,
+                backgroundColor:
+                  queueStats.failed > 0
+                    ? 'rgba(239, 68, 68, 0.92)'  // rouge
+                    : queueStats.total > 0
+                      ? 'rgba(245, 158, 11, 0.92)' // orange
+                      : 'rgba(34, 197, 94, 0.92)', // vert (online, queue vide)
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                paddingHorizontal: 10, gap: 5,
+              }}
+            >
+              {!isOnline ? (
+                // icône cloud-off
+                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                  <Path d="M3 3l18 18M7 8a5 5 0 0 1 9-1.5M19 14a4 4 0 0 0-2-7.5M9 17h7a3 3 0 0 0 .5-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+                </Svg>
+              ) : (
+                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                  <Path d="M12 22a10 10 0 1 1 10-10" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+                </Svg>
+              )}
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+                {queueStats.total}
+              </Text>
+            </TouchableOpacity>
           )}
           <View style={{
             height: 36, borderRadius: 18,
@@ -1896,6 +2112,117 @@ function PhotographerScreen({ session, onLogout }) {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <UploadQueueModal
+        visible={showQueueModal}
+        onClose={() => setShowQueueModal(false)}
+        stats={queueStats}
+        isOnline={isOnline}
+        onRetryAll={retryAllFailed}
+        onClearUploaded={clearUploaded}
+        onDrainNow={drainQueue}
+      />
+    </View>
+  );
+}
+
+function UploadQueueModal({ visible, onClose, stats, isOnline, onRetryAll, onClearUploaded, onDrainNow }) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onClose}
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => {}}
+          style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingBottom: 36, paddingHorizontal: 20 }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <Text style={{ color: C.text, fontSize: 18, fontWeight: '700' }}>File d'upload</Text>
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+              paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+              backgroundColor: isOnline ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+            }}>
+              <View style={{
+                width: 8, height: 8, borderRadius: 4,
+                backgroundColor: isOnline ? '#22c55e' : '#ef4444',
+              }} />
+              <Text style={{ color: isOnline ? '#16a34a' : '#dc2626', fontSize: 12, fontWeight: '600' }}>
+                {isOnline ? 'En ligne' : 'Hors ligne'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+            <QueueStatCard label="Total" value={stats.total} color={C.text} />
+            <QueueStatCard label="En attente" value={stats.pending + stats.uploading} color="#f59e0b" />
+            <QueueStatCard label="Échec" value={stats.failed} color="#ef4444" />
+          </View>
+
+          {stats.failed > 0 && (
+            <TouchableOpacity
+              onPress={() => { onRetryAll(); }}
+              style={{
+                backgroundColor: C.primary, borderRadius: 12,
+                paddingVertical: 14, alignItems: 'center', marginBottom: 10,
+              }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>
+                Réessayer les {stats.failed} échec{stats.failed > 1 ? 's' : ''}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {stats.pending > 0 && isOnline && (
+            <TouchableOpacity
+              onPress={() => { onDrainNow(); }}
+              style={{
+                backgroundColor: '#f5f3ff', borderRadius: 12,
+                paddingVertical: 14, alignItems: 'center', marginBottom: 10,
+              }}
+            >
+              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 15 }}>
+                Forcer l'upload maintenant
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            onPress={() => { onClearUploaded(); }}
+            style={{
+              borderRadius: 12, paddingVertical: 14, alignItems: 'center',
+              borderWidth: 1, borderColor: '#e5e7eb', marginBottom: 4,
+            }}
+          >
+            <Text style={{ color: C.textSoft, fontWeight: '600', fontSize: 14 }}>
+              Vider les échecs définitifs
+            </Text>
+          </TouchableOpacity>
+
+          {!isOnline && (
+            <Text style={{ color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 12 }}>
+              L'upload reprendra automatiquement au retour du réseau.
+            </Text>
+          )}
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+function QueueStatCard({ label, value, color }) {
+  return (
+    <View style={{
+      flex: 1,
+      paddingVertical: 14, paddingHorizontal: 8,
+      backgroundColor: '#f9fafb', borderRadius: 12,
+      alignItems: 'center',
+    }}>
+      <Text style={{ color, fontSize: 22, fontWeight: '800' }}>{value}</Text>
+      <Text style={{ color: C.textSoft, fontSize: 11, marginTop: 2 }}>{label}</Text>
     </View>
   );
 }
