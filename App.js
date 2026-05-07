@@ -874,23 +874,6 @@ function PhotoGrid({ photos = [], onPress }) {
             transition={100}
             recyclingKey={p.id}
           />
-          {p.tint ? (
-            <LinearGradient
-              colors={['transparent', p.tint, p.tint]}
-              locations={[0.7, 0.9, 1]}
-              start={{ x: 1, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                top: 0,
-                bottom: 0,
-                borderRadius: 12,
-              }}
-              pointerEvents="none"
-            />
-          ) : null}
         </TouchableOpacity>
       ))}
     </View>
@@ -3018,9 +3001,17 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  // Reset flow (organisateur uniquement) : 'login' → 'reset-request' → 'reset-verify'
+  const [resetMode, setResetMode] = useState('login');
+  const [resetCode, setResetCode] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
 
   useEffect(() => {
-    if (visible) { setCode(''); setPassword(''); }
+    if (visible) {
+      setCode(''); setPassword('');
+      setResetMode('login'); setResetCode(''); setResetNewPassword('');
+    }
   }, [visible]);
 
   const upcoming = events.filter(e => isUpcoming(e.event_date));
@@ -3033,6 +3024,57 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
     setBusy(false);
     if (!r?.token) return Alert.alert('Échec', 'Identifiants invalides.');
     onSuccess(r);
+  };
+
+  const requestReset = async () => {
+    const slug = code.trim().toLowerCase();
+    if (!slug) return Alert.alert('Code requis', 'Saisis le code de ton événement avant de demander un reset.');
+    setResetBusy(true);
+    try {
+      const r = await fetch(`${API_URL}/auth/request-org-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: slug }),
+      });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        Alert.alert('Erreur', data.error || 'Impossible d\'envoyer le code.');
+        return;
+      }
+      setResetMode('reset-verify');
+    } catch (e) {
+      Alert.alert('Hors ligne', 'Vérifie ta connexion et réessaie.');
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
+  const verifyReset = async () => {
+    const slug = code.trim().toLowerCase();
+    if (!resetCode.trim()) return Alert.alert('Code requis', 'Saisis le code reçu par email.');
+    if (!resetNewPassword || resetNewPassword.length < 4) return Alert.alert('Mot de passe trop court', '4 caractères minimum.');
+    setResetBusy(true);
+    try {
+      const r = await fetch(`${API_URL}/auth/verify-org-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: slug, reset_code: resetCode.trim(), new_password: resetNewPassword }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        Alert.alert('Échec', data.error || 'Code invalide.');
+        return;
+      }
+      // Mdp réinitialisé : on prépare l'auto-fill et on reviens à login
+      setPassword(resetNewPassword);
+      setResetMode('login');
+      setResetCode(''); setResetNewPassword('');
+      Alert.alert('Mot de passe réinitialisé', 'Tu peux maintenant te connecter avec ton nouveau mot de passe.');
+    } catch (e) {
+      Alert.alert('Hors ligne', 'Vérifie ta connexion et réessaie.');
+    } finally {
+      setResetBusy(false);
+    }
   };
 
   return (
@@ -3107,6 +3149,48 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   </>
                 ) : null}
               </>
+            ) : resetMode !== 'login' ? (
+              <>
+                <Text style={{ color: C.text, fontSize: 14, fontWeight: '600', marginBottom: 6 }}>
+                  {resetMode === 'reset-request' ? 'Réinitialiser ton mot de passe' : 'Vérifier le code reçu'}
+                </Text>
+                <Text style={{ color: C.textSoft, fontSize: 12, marginBottom: 14 }}>
+                  {resetMode === 'reset-request'
+                    ? `Un code à 6 chiffres sera envoyé à l'email enregistré pour cet événement.`
+                    : `Code envoyé à l'email de l'organisateur. Valable 15 minutes.`}
+                </Text>
+                <TextInput
+                  placeholder="Code de l'événement"
+                  placeholderTextColor={C.textSoft}
+                  value={code}
+                  onChangeText={setCode}
+                  autoCapitalize="none"
+                  editable={resetMode === 'reset-request'}
+                  style={[formSectionStyle.input, resetMode !== 'reset-request' && { opacity: 0.6 }]}
+                />
+                {resetMode === 'reset-verify' && (
+                  <>
+                    <TextInput
+                      placeholder="Code reçu (6 chiffres)"
+                      placeholderTextColor={C.textSoft}
+                      value={resetCode}
+                      onChangeText={setResetCode}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      autoFocus
+                      style={formSectionStyle.input}
+                    />
+                    <TextInput
+                      placeholder="Nouveau mot de passe"
+                      placeholderTextColor={C.textSoft}
+                      value={resetNewPassword}
+                      onChangeText={setResetNewPassword}
+                      secureTextEntry
+                      style={formSectionStyle.input}
+                    />
+                  </>
+                )}
+              </>
             ) : (
               <>
                 <TextInput
@@ -3125,19 +3209,55 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   secureTextEntry
                   style={formSectionStyle.input}
                 />
+                <TouchableOpacity
+                  onPress={() => setResetMode('reset-request')}
+                  hitSlop={8}
+                  style={{ alignSelf: 'flex-end', paddingVertical: 6, paddingHorizontal: 4, marginTop: -4, marginBottom: 4 }}
+                >
+                  <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600' }}>Mot de passe oublié ?</Text>
+                </TouchableOpacity>
               </>
             )}
 
-            <TouchableOpacity
-              onPress={submit}
-              disabled={busy || !code || !password}
-              style={{
-                backgroundColor: (code && password) ? C.primary : '#e9e4f9',
-                paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 8,
-              }}
-            >
-              {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: (code && password) ? '#fff' : C.textSoft, fontSize: 15, fontWeight: '700' }}>Continuer</Text>}
-            </TouchableOpacity>
+            {resetMode !== 'login' ? (
+              <>
+                <TouchableOpacity
+                  onPress={resetMode === 'reset-request' ? requestReset : verifyReset}
+                  disabled={resetBusy || (resetMode === 'reset-request' ? !code : (!resetCode || !resetNewPassword))}
+                  style={{
+                    backgroundColor: C.primary, paddingVertical: 14, borderRadius: 14,
+                    alignItems: 'center', marginTop: 8,
+                    opacity: resetBusy ? 0.7 : 1,
+                  }}
+                >
+                  {resetBusy ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                      {resetMode === 'reset-request' ? 'M\'envoyer un code' : 'Réinitialiser le mot de passe'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => { setResetMode('login'); setResetCode(''); setResetNewPassword(''); }}
+                  hitSlop={6}
+                  style={{ alignItems: 'center', paddingVertical: 10, marginTop: 4 }}
+                >
+                  <Text style={{ color: C.textSoft, fontSize: 13 }}>Annuler</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity
+                onPress={submit}
+                disabled={busy || !code || !password}
+                style={{
+                  backgroundColor: (code && password) ? C.primary : '#e9e4f9',
+                  paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 8,
+                }}
+              >
+                {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: (code && password) ? '#fff' : C.textSoft, fontSize: 15, fontWeight: '700' }}>Continuer</Text>}
+              </TouchableOpacity>
+            )}
           </TouchableOpacity>
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -3398,7 +3518,36 @@ function OrganizerProfileMenuModal({ visible, onClose, organizerSession, onLogou
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [changingPwd, setChangingPwd] = useState(false);
+  const [oldPwd, setOldPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [pwdConfirm, setPwdConfirm] = useState('');
+  const [pwdBusy, setPwdBusy] = useState(false);
+  const [pwdError, setPwdError] = useState('');
   const profile = organizerSession?.profile;
+
+  const submitPwd = async () => {
+    setPwdError('');
+    if (newPwd !== pwdConfirm) { setPwdError('Les deux mots de passe ne correspondent pas.'); return; }
+    if (newPwd.length < 6) { setPwdError('Mot de passe : 6 caractères minimum.'); return; }
+    setPwdBusy(true);
+    try {
+      const r = await fetch(`${API_URL}/organizer/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${organizerSession.token}` },
+        body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setPwdError(data.error || 'Erreur'); return; }
+      setOldPwd(''); setNewPwd(''); setPwdConfirm('');
+      setChangingPwd(false);
+      Alert.alert('Mot de passe modifié', 'Ton nouveau mot de passe est actif.');
+    } catch (e) {
+      setPwdError('Erreur réseau');
+    } finally {
+      setPwdBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (editing && profile) {
@@ -3468,6 +3617,50 @@ function OrganizerProfileMenuModal({ visible, onClose, organizerSession, onLogou
                       style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.primary, opacity: busy ? 0.6 : 1 }}
                     >
                       {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Enregistrer</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {profile && !editing && !changingPwd && (
+                <TouchableOpacity onPress={() => setChangingPwd(true)} style={{ alignItems: 'center', marginTop: 6, paddingVertical: 10 }}>
+                  <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Modifier mon mot de passe</Text>
+                </TouchableOpacity>
+              )}
+
+              {profile && changingPwd && (
+                <View style={profileCardStyles.card}>
+                  <Text style={{ color: C.text, fontSize: 14, fontWeight: '700', marginBottom: 10 }}>
+                    Changer mon mot de passe
+                  </Text>
+                  <TextInput
+                    placeholder="Ancien mot de passe" placeholderTextColor={C.textSoft}
+                    value={oldPwd} onChangeText={setOldPwd} secureTextEntry
+                    style={authStyles.input}
+                  />
+                  <TextInput
+                    placeholder="Nouveau mot de passe" placeholderTextColor={C.textSoft}
+                    value={newPwd} onChangeText={setNewPwd} secureTextEntry
+                    style={authStyles.input}
+                  />
+                  <TextInput
+                    placeholder="Confirmer le nouveau" placeholderTextColor={C.textSoft}
+                    value={pwdConfirm} onChangeText={setPwdConfirm} secureTextEntry
+                    style={authStyles.input}
+                  />
+                  {pwdError ? <Text style={{ color: '#ff6b6b', fontSize: 12, marginTop: 4 }}>{pwdError}</Text> : null}
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => { setChangingPwd(false); setOldPwd(''); setNewPwd(''); setPwdConfirm(''); setPwdError(''); }}
+                      style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: '#f5f3ff' }}
+                    >
+                      <Text style={{ color: C.text, fontWeight: '600' }}>Annuler</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={submitPwd} disabled={pwdBusy}
+                      style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.primary, opacity: pwdBusy ? 0.6 : 1 }}
+                    >
+                      {pwdBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Modifier</Text>}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -4440,10 +4633,6 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
               >
                 <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#eee', position: 'relative' }}>
                   <ExpoImage source={{ uri: photo.uri }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-                  <LinearGradient
-                    colors={[`${tint}33`, `${tint}00`]}
-                    style={StyleSheet.absoluteFillObject}
-                  />
                   {selectionMode && (
                     <View style={{
                       position: 'absolute', top: 6, right: 6,
