@@ -110,7 +110,6 @@ const TYPE_COLORS = {
   Trail: '#4A9E7A',
   'Course sur route': '#5B82C4',
   Cross: '#B05A4A',
-  Hyrox: '#4A4A4A',
   Triathlon: '#4A8A9E',
   Velo: '#7A5AB0',
   Marche: '#9E8A4A',
@@ -457,11 +456,11 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
     <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
       <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
         <View style={{ flex: 1 }}>
-          <Text style={s.selfieTitle}>Un selfie{'\n'}suffit</Text>
+          <Text style={s.selfieTitle}>Un selfie suffit</Text>
           <Text style={s.selfieSub}>Pour recevoir tes photos{'\n'}de tous les événements Will</Text>
         </View>
         <View style={s.selfieAvatar}>
-          <Icon.User size={48} color="#FFFFFF" />
+          <Icon.User size={40} color="#FFFFFF" />
         </View>
       </LinearGradient>
     </TouchableOpacity>
@@ -469,24 +468,18 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
 }
 
 function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, favorites, onToggleFavorite, onRefresh }) {
-  const filtered = events.filter(e => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const tabFiltered = events.filter(e => {
     if (tab === 'upcoming') return isUpcoming(e.event_date);
     if (tab === 'past') return !isUpcoming(e.event_date);
     if (tab === 'favorites') return favorites.includes(e.code);
     return true;
   });
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const searchHeight = useRef(new Animated.Value(0)).current;
+  const q = searchQuery.trim().toLowerCase();
+  const filtered = q
+    ? tabFiltered.filter(e => (e.name || '').toLowerCase().includes(q))
+    : tabFiltered;
   const scrollRef = useRef(null);
-
-  useEffect(() => {
-    Animated.timing(searchHeight, {
-      toValue: searchOpen ? 1 : 0,
-      duration: 220,
-      useNativeDriver: false,
-    }).start();
-  }, [searchOpen]);
 
   // Quand le clavier se ferme : remonter le scroll en haut
   useEffect(() => {
@@ -495,14 +488,6 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
     });
     return () => sub.remove();
   }, []);
-
-  const matchingEvents = searchQuery.trim().length > 0
-    ? events.filter(e =>
-        e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (e.location || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (e.code || '').toLowerCase().includes(searchQuery.toLowerCase())
-      ).slice(0, 6)
-    : [];
 
   return (
     <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
@@ -547,7 +532,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
       </View>
 
       <View style={s.welcomeRow}>
-        <Text style={[s.welcome, { color: '#c9beed' }]}>Bienvenue chez </Text>
+        <Text style={[s.welcome, { color: '#c9beed' }]}>Bienvenue sur </Text>
         <Icon.Logo width={50} color="#c9beed" />
       </View>
 
@@ -556,71 +541,33 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
       )}
 
-      {/* Bouton Trouver mon événement (dépliable) */}
-      <TouchableOpacity
-        style={s.searchBtn}
-        activeOpacity={0.85}
-        onPress={() => setSearchOpen(o => !o)}
-      >
-        <Text style={s.searchInputBtn}>Trouver mon événement</Text>
-        <Animated.View style={{
-          transform: [{ rotate: searchHeight.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }],
-        }}>
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-            <Path d="M6 9l6 6 6-6" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-          </Svg>
-        </Animated.View>
-      </TouchableOpacity>
-
-      {/* Zone dépliable de recherche */}
-      {searchOpen && (
-        <View style={{ marginBottom: 16 }}>
-          <TextInput
-            placeholder="Nom de l'événement, ville..."
-            placeholderTextColor={C.textSoft}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={{
-              backgroundColor: C.white,
-              borderRadius: 14,
-              paddingHorizontal: 16,
-              paddingVertical: 14,
-              fontSize: 15,
-              color: C.text,
-              borderWidth: 1,
-              borderColor: C.primaryLight,
-              marginBottom: 8,
-            }}
-            autoFocus
-          />
-          {matchingEvents.length > 0 && (
-            <View style={{ backgroundColor: C.white, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: C.primaryLight }}>
-              {matchingEvents.map((e, i) => (
-                <TouchableOpacity
-                  key={e.code}
-                  onPress={() => { setSearchOpen(false); setSearchQuery(''); onOpenEvent(e); }}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 12,
-                    borderTopWidth: i === 0 ? 0 : 1,
-                    borderTopColor: '#F0F0F0',
-                  }}
-                >
-                  <Text style={{ color: C.text, fontWeight: '600', fontSize: 14 }}>{e.name}</Text>
-                  <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>
-                    {[formatDateLong(e.event_date), cityLabel(e.location)].filter(Boolean).join(' · ')}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          {searchQuery.trim().length > 0 && matchingEvents.length === 0 && (
-            <Text style={{ color: C.textSoft, fontSize: 13, textAlign: 'center', paddingVertical: 16 }}>
-              Aucun événement trouvé
-            </Text>
-          )}
-        </View>
-      )}
+      {/* Champ recherche : filtre la liste juste en dessous */}
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        borderRadius: 14,
+        borderWidth: 1.5,
+        borderColor: '#E5E0FF',
+        paddingHorizontal: 16,
+        paddingVertical: 4,
+        marginBottom: 14,
+      }}>
+        <Icon.Search size={18} color={C.primary} />
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Rechercher un événement..."
+          placeholderTextColor={C.textSoft}
+          style={{ flex: 1, marginLeft: 10, fontSize: 14, color: C.text, paddingVertical: 8 }}
+          returnKeyType="search"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={10} style={{ paddingHorizontal: 6 }}>
+            <Text style={{ color: C.textSoft, fontSize: 16 }}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Tabs row : À venir / Passés / Favoris (pleine largeur) */}
       <View style={{
@@ -683,7 +630,7 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
       ) : null}
       {/* Fond couleur moitié gauche + dégradé qui mange un peu la droite */}
       <LinearGradient
-        colors={[tint, tint, `${tint}00`]}
+        colors={[tint, `${tint}99`, `${tint}00`]}
         locations={[0, 0.5, 1]}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
@@ -1039,7 +986,7 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
             </View>
           ) : null}
           <LinearGradient
-            colors={[tint, tint, `${tint}00`]}
+            colors={[tint, `${tint}99`, `${tint}00`]}
             locations={[0, 0.5, 1]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
@@ -2503,7 +2450,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
     }
   };
 
-  const types = ['Trail', 'Course sur route', 'Cross', 'Hyrox', 'Triathlon', 'Velo', 'Marche', 'Autre'];
+  const types = ['Trail', 'Course sur route', 'Cross', 'Triathlon', 'Velo', 'Marche', 'Autre'];
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -3069,7 +3016,7 @@ function SelfieModal({ visible, onClose, onSaved, userId }) {
               <ExpoImage source={{ uri }} style={s.selfiePreview} contentFit="cover" />
             ) : (
               <View style={[s.selfiePreview, { backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center' }]}>
-                <Icon.Camera size={64} color={C.primary} />
+                <Icon.User size={64} color={C.primary} />
               </View>
             )}
           </View>
@@ -4645,7 +4592,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
           </View>
         ) : null}
         <LinearGradient
-          colors={[tint, tint, `${tint}00`]}
+          colors={[tint, `${tint}99`, `${tint}00`]}
           locations={[0, 0.5, 1]}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
@@ -5496,7 +5443,7 @@ const s = StyleSheet.create({
   },
 
   welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 18, color: C.text, fontWeight: '700' },
-  welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, marginBottom: 18 },
+  welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 18, marginBottom: 18 },
   welcomeAccent: { color: C.primary },
 
   selfieDoneBanner: { backgroundColor: C.white, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16, borderWidth: 1, borderColor: C.primaryLight },
@@ -5505,10 +5452,10 @@ const s = StyleSheet.create({
   selfieDoneSub: { fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
   selfieDelete: { padding: 6 },
 
-  selfieCard: { borderRadius: 22, padding: 22, flexDirection: 'row', alignItems: 'center', minHeight: 150, marginBottom: 16 },
-  selfieTitle: { color: '#fff', fontSize: 28, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 32 },
-  selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 10, fontSize: 13, lineHeight: 18 },
-  selfieAvatar: { width: 88, height: 88, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  selfieCard: { borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 14 },
+  selfieTitle: { color: '#fff', fontSize: 24, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 28 },
+  selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
+  selfieAvatar: { width: 68, height: 68, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 
   searchBtn: { backgroundColor: C.primary, borderRadius: 16, height: 54, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 12, marginBottom: 16 },
   searchInputBtn: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '500' },
