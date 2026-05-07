@@ -1175,35 +1175,43 @@ function PhotographerScreen({ session, onLogout }) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
 
-  // Configuration par event (chargée au mount, défauts si offline)
+  // Configuration globale (chargée au mount, défauts si offline / nouveau schéma 6 sections)
   const [eventConfig, setEventConfig] = useState({
-    camera: { photoResolution: "max", fps: 30, qualityPrioritization: "quality", enableAutoStabilization: true },
-    mlkit: { minFaceSize: 0.05, performanceMode: "fast", trackingEnabled: true },
-    detection: { zoneType: "vertical", zoneSizePercent: 33, triggerZonePercent: 10, burstCount: 3, interBurstMs: 100 },
+    capture: {
+      burstCount: 8,
+      interBurstMs: 150,
+      cooldownSec: 5,
+      quality: "ultrahd",   // standard / hd / ultrahd / proraw
+      format: "jpeg",       // jpeg / heic / dng
+    },
+    faceDetection: {
+      confidenceThreshold: 0.7,
+      minFaceSizePercent: 5,
+      maxFaceSizePercent: 80,
+      triggerZoneWidthPercent: 33,
+      triggerZonePosition: "center", // left / center / right
+      minFacesToTrigger: 1,
+    },
+    rekognition: { similarityThreshold: 80, maxMatchesPerPhoto: 5, collectionTtlDays: 14 },
+    imageProcessing: { generateThumbnail: true, generatePreview: true, thumbnailWidthPx: 400, previewWidthPx: 1200, previewQuality: 80 },
+    upload: { mode: "immediate", batchSize: 10, maxRetries: 5, compressBeforeUpload: false },
+    debug: { verboseLogs: false, skipRekognition: false, saveUnmatchedFrames: false },
   });
 
   useEffect(() => {
-    fetch(`${API_URL}/global-config`)
+    fetch(`${API_URL}/config`)
       .then(r => r.ok ? r.json() : null)
-      .then(cfg => { if (cfg) setEventConfig(cfg); })
+      .then(cfg => { if (cfg) setEventConfig(prev => ({ ...prev, ...cfg })); })
       .catch(() => {});
   }, []);
-
-  // Parse résolution depuis la config
-  const photoResolution = (() => {
-    const r = eventConfig.camera?.photoResolution || "max";
-    if (r === "max") return undefined; // Vision Camera prend max disponible
-    const [w, h] = r.split("x").map(Number);
-    return { width: w, height: h };
-  })();
 
   // Photo HQ d'abord (résolution capteur max), preview en basse résolution
   // pour garder le frame processor MLKit fluide.
   const format = useCameraFormat(device, [
-    photoResolution ? { photoResolution } : { photoResolution: 'max' },
+    { photoResolution: 'max' },
     { photoAspectRatio: 4 / 3 },
     { videoResolution: { width: 1280, height: 720 } },
-    { fps: eventConfig.camera?.fps || 30 },
+    { fps: 30 },
   ]);
   const cameraRef = useRef(null);
 
@@ -1216,6 +1224,14 @@ function PhotographerScreen({ session, onLogout }) {
     return 'off';
   }, [format]);
   const proRawEnabled = !!device?.supportsRawCapture && !!format?.supportsPhotoHdr;
+
+  // Map capture.quality → photoQualityBalance Vision Camera
+  const photoQualityBalance = (() => {
+    const q = eventConfig.capture?.quality;
+    if (q === 'standard') return 'speed';
+    if (q === 'hd') return 'balanced';
+    return 'quality'; // ultrahd, proraw, défaut
+  })();
 
   const isCapturingRef = useRef(false);
   const lastFaceSeenAtRef = useRef(0);
@@ -1248,19 +1264,23 @@ function PhotographerScreen({ session, onLogout }) {
   const badgeOpacity = useRef(new Animated.Value(1)).current;
   const edgePulse = useRef(new Animated.Value(0.6)).current;
 
+  // MLKit ne supporte pas confidenceThreshold (face *detection*); on garde
+  // minFaceSize comme pré-filtre côté natif et on filtre maxFaceSize côté JS.
+  const minFaceSizeMlkit = (eventConfig.faceDetection?.minFaceSizePercent ?? 5) / 100;
   const faceDetectionOptions = useMemo(() => ({
-    performanceMode: eventConfig.mlkit?.performanceMode || 'fast',
+    performanceMode: 'fast',
     landmarkMode: 'none',
     contourMode: 'none',
     classificationMode: 'none',
-    minFaceSize: eventConfig.mlkit?.minFaceSize ?? 0.05,
-    trackingEnabled: eventConfig.mlkit?.trackingEnabled ?? true,
-  }), [eventConfig.mlkit?.performanceMode, eventConfig.mlkit?.minFaceSize, eventConfig.mlkit?.trackingEnabled]);
+    minFaceSize: minFaceSizeMlkit,
+    trackingEnabled: true,
+  }), [minFaceSizeMlkit]);
 
   const { detectFaces } = useFaceDetector(faceDetectionOptions);
 
-  // IDs des visages actuellement dans la zone (cooldown anti-retrigger)
-  const facesInZoneRef = useRef(new Set());
+  // Cooldown temporel par face id : on ne re-burst pas le même visage
+  // tant que cooldownSec n'est pas écoulé.
+  const lastBurstByFaceRef = useRef(new Map());
 
   const onFacesDetectedJS = useMemo(
     () => Worklets.createRunOnJS((facesData) => {
@@ -1269,24 +1289,40 @@ function PhotographerScreen({ session, onLogout }) {
         setFacesInZoneCount(0);
         return;
       }
-      const currentInZone = new Set();
-      let newEntry = false;
-      for (const f of facesData) {
-        if (f.inZone) {
-          currentInZone.add(f.id);
-          if (!facesInZoneRef.current.has(f.id)) {
-            newEntry = true;
-          }
-        }
+      const cooldownMs = (eventConfig.capture?.cooldownSec ?? 5) * 1000;
+      const minFaces = eventConfig.faceDetection?.minFacesToTrigger ?? 1;
+      const maxSize = (eventConfig.faceDetection?.maxFaceSizePercent ?? 80) / 100;
+      const now = Date.now();
+
+      // Filtre les visages dans la zone, en éliminant ceux trop gros (trop près)
+      const validInZone = facesData.filter(f =>
+        f.inZone && (f.sizeFraction == null || f.sizeFraction <= maxSize)
+      );
+      setFacesInZoneCount(validInZone.length);
+
+      if (validInZone.length < minFaces) return;
+      if (isCapturingRef.current) return;
+
+      // Au moins un visage doit avoir son cooldown écoulé pour déclencher
+      const eligible = validInZone.some(f => {
+        const last = lastBurstByFaceRef.current.get(f.id) || 0;
+        return now - last > cooldownMs;
+      });
+      if (!eligible) return;
+
+      // Stamp tous les visages de la zone (même cooldown qu'un seul nouveau)
+      for (const f of validInZone) lastBurstByFaceRef.current.set(f.id, now);
+      // GC simple: purge des entries vieilles de > 2× cooldown pour ne pas grossir
+      for (const [id, t] of lastBurstByFaceRef.current) {
+        if (now - t > cooldownMs * 2) lastBurstByFaceRef.current.delete(id);
       }
-      facesInZoneRef.current = currentInZone;
-      setFacesInZoneCount(currentInZone.size);
-      // Trigger rafale 3 photos si nouveau visage entre dans la zone
-      if (newEntry && !isCapturingRef.current) {
-        startBurst();
-      }
+      startBurst();
     }),
-    []
+    [
+      eventConfig.capture?.cooldownSec,
+      eventConfig.faceDetection?.minFacesToTrigger,
+      eventConfig.faceDetection?.maxFaceSizePercent,
+    ]
   );
 
   useEffect(() => {
@@ -1316,63 +1352,46 @@ function PhotographerScreen({ session, onLogout }) {
     ]).start();
   }, [facesCount > 0, isShooting, isDetectionEnabled]);
 
-  // Calcul des limites de zone depuis la config (utilisé dans le worklet via closure stable)
-  const zonePct = (eventConfig.detection?.zoneSizePercent ?? 33) / 100;
-  const zoneType = eventConfig.detection?.zoneType || 'vertical';
-  // Zone réelle de déclenchement (plus étroite que la zone visible affichée à l'écran)
-  // Permet de ne déclencher que quand le sujet est proche du centre exact
-  const triggerPct = (eventConfig.detection?.triggerZonePercent ?? 10) / 100;
+  // Zone de déclenchement : bande verticale, position gauche / centre / droite.
+  const zonePct = (eventConfig.faceDetection?.triggerZoneWidthPercent ?? 33) / 100;
+  const zonePosition = eventConfig.faceDetection?.triggerZonePosition || 'center';
 
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
     const faces = detectFaces(frame);
     const fW = frame.width;
     const fH = frame.height;
-    // MLKit retourne les bounds dans le repère du capteur landscape natif (1920x1080).
-    // En orientation portrait avec landscape-right, l'axe Y du frame correspond à
-    // l'axe horizontal de l'écran (gauche écran = grand Y, droite écran = petit Y).
-    // L'axe X du frame correspond à l'axe vertical de l'écran.
-    // On utilise triggerPct (plus étroit) pour le déclenchement réel,
-    // pas zonePct qui est juste l'affichage visuel des lignes.
-    let testMin = 0, testMax = 0, useAxisY = false;
-    if (zoneType === 'vertical') {
-      // Bande verticale à l'écran = bande centrée sur Y du frame
-      const half = (fH * triggerPct) / 2;
-      testMin = fH / 2 - half;
-      testMax = fH / 2 + half;
-      useAxisY = true;
-    } else if (zoneType === 'horizontal') {
-      // Bande horizontale à l'écran = bande centrée sur X du frame
-      const half = (fW * triggerPct) / 2;
-      testMin = fW / 2 - half;
-      testMax = fW / 2 + half;
-      useAxisY = false;
+    // MLKit retourne les bounds dans le repère du capteur landscape natif.
+    // En orientation portrait + landscape-right : axe Y du frame = axe horizontal écran
+    // (gauche écran = grand Y, droite écran = petit Y).
+    const bandWidth = fH * zonePct;
+    let testMin = 0, testMax = 0;
+    if (zonePosition === 'left') {
+      testMin = fH - bandWidth; testMax = fH;
+    } else if (zonePosition === 'right') {
+      testMin = 0; testMax = bandWidth;
+    } else {
+      testMin = fH / 2 - bandWidth / 2;
+      testMax = fH / 2 + bandWidth / 2;
     }
-    // Si fullscreen, tout est inZone
+
     const facesData = faces.map(f => {
       const bounds = f.bounds || f.frame || {};
       const cx = (bounds.x || 0) + (bounds.width || 0) / 2;
       const cy = (bounds.y || 0) + (bounds.height || 0) / 2;
-      let inside = false;
-      if (zoneType === 'fullscreen') {
-        inside = true;
-      } else if (zoneType === 'center') {
-        // Carré centré : doit être dans bande X ET bande Y (utilise triggerPct)
-        const halfW = (fW * triggerPct) / 2;
-        const halfH = (fH * triggerPct) / 2;
-        inside = (cx >= fW / 2 - halfW && cx <= fW / 2 + halfW &&
-                  cy >= fH / 2 - halfH && cy <= fH / 2 + halfH);
-      } else {
-        const v = useAxisY ? cy : cx;
-        inside = (v >= testMin && v <= testMax);
-      }
+      const sizeFraction = Math.max(
+        (bounds.width || 0) / fW,
+        (bounds.height || 0) / fH,
+      );
+      const inside = (cy >= testMin && cy <= testMax);
       return {
         id: f.trackingId != null ? String(f.trackingId) : `${Math.round(cx)}_${Math.round(cy)}`,
         inZone: inside,
+        sizeFraction,
       };
     });
     onFacesDetectedJS(facesData);
-  }, [detectFaces, onFacesDetectedJS, triggerPct, zoneType]);
+  }, [detectFaces, onFacesDetectedJS, zonePct, zonePosition]);
 
   const NO_FACE_TIMEOUT_MS = 500;
   const INTER_PHOTO_MS = 100; // ~5 photos/sec, optimum vitesse/utilité
@@ -1416,16 +1435,31 @@ function PhotographerScreen({ session, onLogout }) {
       if (!cur) { retryRunningRef.current = false; return; }
       const arr = JSON.parse(cur);
       if (!Array.isArray(arr) || arr.length === 0) { retryRunningRef.current = false; return; }
-      console.log(`[upload] retrying ${arr.length} pending uploads`);
+
+      // Mode batch : on attend d'avoir au moins batchSize items en attente
+      // avant de tenter l'upload (sauf si c'est le retry périodique qui tourne).
+      // mode "wifi" non implémenté (NetInfo absent) → traité comme "immediate".
+      const uploadMode = eventConfig.upload?.mode || 'immediate';
+      const batchSize = eventConfig.upload?.batchSize ?? 10;
+      if (uploadMode === 'batch' && arr.length < batchSize) {
+        retryRunningRef.current = false;
+        return;
+      }
+
+      const maxRetries = eventConfig.upload?.maxRetries ?? 5;
+      const verbose = !!eventConfig.debug?.verboseLogs;
+      if (verbose) console.log(`[upload] retrying ${arr.length} pending (mode=${uploadMode})`);
 
       const CONCURRENCY = 4;
       const remaining = [];
+      const dropped = [];
       let i = 0;
 
       async function worker() {
         while (i < arr.length) {
           const myIdx = i++;
           const item = arr[myIdx];
+          const attempts = (item.attempts || 0) + 1;
           try {
             const fileUri = item.path.startsWith('file://') ? item.path : `file://${item.path}`;
             const blob = await (await fetch(fileUri)).blob();
@@ -1437,20 +1471,30 @@ function PhotographerScreen({ session, onLogout }) {
             if (item.km) headers['X-Will-Km'] = String(item.km);
             const res = await fetch(`${API_URL}/${item.key}`, { method: 'PUT', headers, body: blob });
             if (!res.ok) {
-              console.warn(`[upload] failed ${item.key} status=${res.status}`);
-              remaining.push(item);
+              if (verbose) console.warn(`[upload] failed ${item.key} status=${res.status} attempts=${attempts}`);
+              if (attempts >= maxRetries) {
+                console.warn(`[upload] giving up on ${item.key} after ${attempts} attempts`);
+                dropped.push(item);
+              } else {
+                remaining.push({ ...item, attempts });
+              }
             } else {
               if (isMountedRef.current) setPhotoCount(c => c + 1);
             }
           } catch (e) {
-            console.warn(`[upload] error ${item.key}`, e?.message);
-            remaining.push(item);
+            if (verbose) console.warn(`[upload] error ${item.key}`, e?.message);
+            if (attempts >= maxRetries) {
+              console.warn(`[upload] giving up on ${item.key} after ${attempts} attempts (network)`);
+              dropped.push(item);
+            } else {
+              remaining.push({ ...item, attempts });
+            }
           }
         }
       }
 
       await Promise.all(Array.from({ length: CONCURRENCY }).map(() => worker()));
-      console.log(`[upload] done, ${remaining.length} remaining`);
+      if (verbose) console.log(`[upload] done, ${remaining.length} remaining, ${dropped.length} dropped`);
       await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(remaining));
       if (isMountedRef.current) setPendingUploads(remaining.length);
     } catch (e) {
@@ -1481,21 +1525,22 @@ function PhotographerScreen({ session, onLogout }) {
 
     const burstTs = Date.now();
     const queue = [];
-    const BURST_COUNT = eventConfig.detection?.burstCount ?? 3;
-    const INTER_BURST_MS = eventConfig.detection?.interBurstMs ?? 100;
+    const BURST_COUNT = eventConfig.capture?.burstCount ?? 8;
+    const INTER_BURST_MS = eventConfig.capture?.interBurstMs ?? 150;
 
     // Capture HQ découplée du frame processor: chaque takePhoto utilise
     // la pleine résolution du capteur. Pas de throttle iOS-side, on laisse
-    // AVFoundation enchaîner tant qu'il peut. ProRAW si dispo, sinon HEIC HQ
-    // (photoQualityBalance="quality" + photoHdr réglés sur le composant Camera).
+    // AVFoundation enchaîner tant qu'il peut. ProRAW si dispo + demandé,
+    // sinon HEIC HQ (photoQualityBalance + photoHdr réglés sur le composant Camera).
+    const wantsRaw =
+      eventConfig.capture?.format === 'dng' ||
+      eventConfig.capture?.quality === 'proraw';
     const takePhotoOpts = {
-      qualityPrioritization: eventConfig.camera?.qualityPrioritization || 'quality',
       flash: 'off',
       enableShutterSound: false,
-      enableAutoStabilization: eventConfig.camera?.enableAutoStabilization ?? true,
       enableAutoRedEyeReduction: false,
     };
-    if (proRawEnabled) {
+    if (wantsRaw && proRawEnabled) {
       takePhotoOpts.enableRawCapture = true;
     }
 
@@ -1581,7 +1626,7 @@ function PhotographerScreen({ session, onLogout }) {
         pixelFormat="yuv"
         zoom={zoomLevel}
         resizeMode="contain"
-        photoQualityBalance="quality"
+        photoQualityBalance={photoQualityBalance}
         photoHdr={photoHdrEnabled}
         videoStabilizationMode={videoStabilizationMode}
         enableLocation={false}
@@ -1654,23 +1699,27 @@ function PhotographerScreen({ session, onLogout }) {
         </View>
       </View>
 
-      {/* Zone de déclenchement adaptative selon config */}
-      {zoneType !== 'fullscreen' && (
-        <View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center', flexDirection: zoneType === 'horizontal' ? 'column' : 'row' }]}
-        >
-          <View style={{
-            width: zoneType === 'vertical' ? `${zonePct * 100}%` : (zoneType === 'center' ? `${zonePct * 100}%` : '100%'),
-            height: zoneType === 'horizontal' ? `${zonePct * 100}%` : (zoneType === 'center' ? `${zonePct * 100}%` : '100%'),
-            borderLeftWidth: zoneType === 'vertical' || zoneType === 'center' ? 1.5 : 0,
-            borderRightWidth: zoneType === 'vertical' || zoneType === 'center' ? 1.5 : 0,
-            borderTopWidth: zoneType === 'horizontal' || zoneType === 'center' ? 1.5 : 0,
-            borderBottomWidth: zoneType === 'horizontal' || zoneType === 'center' ? 1.5 : 0,
-            borderColor: facesInZoneCount > 0 ? '#10B981' : 'rgba(255,255,255,0.6)',
-          }} />
-        </View>
-      )}
+      {/* Zone de déclenchement : bande verticale, position gauche / centre / droite */}
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFillObject,
+          {
+            flexDirection: 'row',
+            justifyContent:
+              zonePosition === 'left' ? 'flex-start' :
+              zonePosition === 'right' ? 'flex-end' : 'center',
+          },
+        ]}
+      >
+        <View style={{
+          width: `${zonePct * 100}%`,
+          height: '100%',
+          borderLeftWidth: 1.5,
+          borderRightWidth: 1.5,
+          borderColor: facesInZoneCount > 0 ? '#10B981' : 'rgba(255,255,255,0.6)',
+        }} />
+      </View>
 
       {/* Badge "En attente" / "Capture..." minimal en haut */}
       {!isDetectionEnabled && (
