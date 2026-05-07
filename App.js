@@ -2269,6 +2269,12 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const [pendingCoverLocal, setPendingCoverLocal] = useState(null); // URI locale pendant la création (pas encore d'event)
   const [coverBusy, setCoverBusy] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState(1);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [sheetW, setSheetW] = useState(0);
+  const slideX = useRef(new Animated.Value(0)).current;
+  const [userEditedCode, setUserEditedCode] = useState(false);
+  const [showErr, setShowErr] = useState({ 1: false, 2: false, 3: false });
 
   const parseLocation = (loc = '') => {
     // Format attendu: "Louviers (27400)" ou "Louviers (27)"
@@ -2285,6 +2291,11 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
 
   useEffect(() => {
     if (visible) {
+      setStep(1);
+      setAdvancedOpen(false);
+      setShowErr({ 1: false, 2: false, 3: false });
+      slideX.setValue(0);
+      setUserEditedCode(false);
       if (isEdit) {
         setName(editEvent.name || '');
         setCode(editEvent.code || '');
@@ -2309,6 +2320,17 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
       }
     }
   }, [visible, isEdit]);
+
+  // Slug auto-généré depuis le nom (création seulement, tant que l'utilisateur ne l'a pas modifié manuellement)
+  useEffect(() => {
+    if (isEdit || userEditedCode) return;
+    const slug = (name || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60);
+    setCode(slug);
+  }, [name, isEdit, userEditedCode]);
 
   // Suggestions de villes selon code postal
   useEffect(() => {
@@ -2382,9 +2404,34 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((contact || '').trim());
   const locationOk = /^\d{5}$/.test(postalCode) && !!city?.trim();
-  const isValid = isEdit
-    ? !!name?.trim() && locationOk && emailOk && !busy
-    : !!name?.trim() && !!code?.trim() && !!password && locationOk && emailOk && !busy;
+  const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+  const dateOk = !!eventDate && eventDate >= todayMidnight;
+  const distancesOk = distances.length > 0 && distances.every(d => parseFloat(d.km) > 0);
+  const step1Ok = !!name?.trim() && !!eventType && dateOk;
+  const step2Ok = locationOk && distancesOk;
+  const step3Ok = emailOk && (isEdit || (!!code?.trim() && !!password));
+  const canSubmit = step1Ok && step2Ok && step3Ok && !busy;
+
+  const goStep = (n) => {
+    if (n < 1 || n > 3 || !sheetW) { setStep(n); return; }
+    setStep(n);
+    Animated.timing(slideX, {
+      toValue: -(n - 1) * sheetW,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  };
+  const tryNext = () => {
+    if (step === 1) { if (!step1Ok) { setShowErr(e => ({ ...e, 1: true })); return; } goStep(2); return; }
+    if (step === 2) { if (!step2Ok) { setShowErr(e => ({ ...e, 2: true })); return; } goStep(3); return; }
+  };
+  const trySubmit = () => {
+    if (!step1Ok) { setShowErr(e => ({ ...e, 1: true })); goStep(1); return; }
+    if (!step2Ok) { setShowErr(e => ({ ...e, 2: true })); goStep(2); return; }
+    if (!step3Ok) { setShowErr(e => ({ ...e, 3: true })); return; }
+    submit();
+  };
+  const errStyle = { color: '#DC2626', fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 };
 
   const submit = async () => {
     if (!isValid) return;
@@ -2466,219 +2513,271 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
             <TouchableOpacity onPress={onClose} hitSlop={20}>
               <View style={s.modalHandle} />
             </TouchableOpacity>
-            <Text style={s.modalTitle}>{isEdit ? 'Modifier l\'événement' : 'Créer un événement'}</Text>
-            <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
-              {/* SECTION : Image de couverture */}
-              <Text style={formSectionStyle.heading}>Image de couverture</Text>
-              <TouchableOpacity
-                onPress={pickAndUploadCover}
-                disabled={coverBusy}
-                style={{
-                  height: 140,
-                  borderRadius: 12,
-                  backgroundColor: '#faf9ff',
-                  marginBottom: 8,
-                  overflow: 'hidden',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderWidth: (coverImage || pendingCoverLocal) ? 0 : 1,
-                  borderStyle: 'dashed',
-                  borderColor: '#d9d4ec',
-                }}
-              >
-                {coverBusy ? (
-                  <ActivityIndicator color={C.primary} />
-                ) : (coverImage || pendingCoverLocal) ? (
-                  <ExpoImage
-                    source={{ uri: pendingCoverLocal || coverImage }}
-                    style={{ width: '100%', height: '100%' }}
-                    contentFit="cover"
-                  />
-                ) : (
-                  <>
-                    <Text style={{ color: C.textSoft, fontSize: 14, marginBottom: 4 }}>+ Ajouter une image</Text>
-                    <Text style={{ color: C.textSoft, fontSize: 11 }}>Format paysage 16:9 recommandé</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              {(coverImage || pendingCoverLocal) && !coverBusy && (
-                <TouchableOpacity onPress={pickAndUploadCover} style={{ alignSelf: 'flex-end', marginTop: -4, marginBottom: 8 }}>
-                  <Text style={{ color: C.primary, fontSize: 12, fontWeight: '600' }}>Changer l'image</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* SECTION : Infos générales */}
-              <Text style={formSectionStyle.heading}>Informations</Text>
-              <TextInput placeholder="Nom de l'événement *" placeholderTextColor={C.textSoft} value={name} onChangeText={setName} style={formSectionStyle.input} />
-              {!isEdit && (
-                <>
-                  <TextInput placeholder="Code unique (ex: trail-2027) *" placeholderTextColor={C.textSoft} value={code} onChangeText={setCode} autoCapitalize="none" style={formSectionStyle.input} />
-                  <TextInput placeholder="Mot de passe photographe *" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} secureTextEntry style={formSectionStyle.input} />
-                </>
-              )}
-
-              {/* SECTION : Date et lieu */}
-              <Text style={formSectionStyle.heading}>Date & lieu</Text>
-              <TouchableOpacity
-                onPress={() => setShowDatePicker(true)}
-                style={[formSectionStyle.input, { justifyContent: 'center' }]}
-              >
-                <Text style={{ color: eventDate ? C.text : C.textSoft, fontSize: 15 }}>
-                  {eventDate
-                    ? eventDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
-                    : 'Date de l\'événement'}
-                </Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={eventDate || new Date()}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                  onChange={(_e, selected) => {
-                    if (Platform.OS === 'android') setShowDatePicker(false);
-                    if (selected) setEventDate(selected);
-                  }}
-                  locale="fr-FR"
-                />
-              )}
-              {Platform.OS === 'ios' && showDatePicker && (
-                <TouchableOpacity onPress={() => setShowDatePicker(false)} style={{ alignSelf: 'flex-end', paddingHorizontal: 8, paddingVertical: 6 }}>
-                  <Text style={{ color: C.primary, fontWeight: '600' }}>OK</Text>
-                </TouchableOpacity>
-              )}
-              <TextInput
-                placeholder="Code postal *"
-                placeholderTextColor={C.textSoft}
-                value={postalCode}
-                onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
-                keyboardType="number-pad"
-                maxLength={5}
-                style={formSectionStyle.input}
-              />
-              {citySuggestions.length > 0 && !city && (
-                <ScrollView
-                  style={{ maxHeight: 140, marginBottom: 8, borderRadius: 12, backgroundColor: '#f5f3ff' }}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  {citySuggestions.map((c) => (
-                    <TouchableOpacity
-                      key={c}
-                      onPress={() => { setCity(c); setCitySuggestions([]); }}
-                      style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
-                    >
-                      <Text style={{ color: C.text, fontSize: 14 }}>{c}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              )}
-              {city ? (
-                <TouchableOpacity
-                  onPress={() => setCity('')}
-                  style={[formSectionStyle.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
-                >
-                  <Text style={{ color: C.text, fontSize: 15 }}>{city}</Text>
-                  <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
-                </TouchableOpacity>
-              ) : null}
-
-              {/* SECTION : Type d'épreuve */}
-              <Text style={formSectionStyle.heading}>Type d'épreuve</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                {types.map(t => (
-                  <TouchableOpacity key={t} onPress={() => setEventType(t)} style={[s.typePill, eventType === t && s.typePillActive]}>
-                    <Text style={[s.typePillText, eventType === t && { color: '#fff' }]}>{t}</Text>
-                  </TouchableOpacity>
-                ))}
+            {/* Header : titre + étape */}
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.modalTitle}>{isEdit ? 'Modifier l\'événement' : 'Créer un événement'}</Text>
+                <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>Étape {step} sur 3</Text>
               </View>
-
-              {/* SECTION : Courses */}
-              <Text style={formSectionStyle.heading}>Courses</Text>
-              {distances.map((d, idx) => (
-                <View key={idx} style={{ backgroundColor: '#faf9ff', borderRadius: 12, padding: 10, marginBottom: 8 }}>
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DISTANCE</Text>
-                      <TouchableOpacity
-                        onPress={() => setKmPickerIdx(idx)}
-                        style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}
-                      >
-                        <Text style={{ color: d.km ? C.text : C.textSoft, fontSize: 15 }}>
-                          {d.km ? `${d.km} km` : '—'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉPART</Text>
-                      <TouchableOpacity
-                        onPress={() => setTimePickerIdx(idx)}
-                        style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}
-                      >
-                        <Text style={{ color: d.time ? C.text : C.textSoft, fontSize: 15 }}>
-                          {d.time || '—'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    <View style={{ flex: 1.2 }}>
-                      <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉNIVELÉ</Text>
-                      <TouchableOpacity
-                        onPress={() => setElevPickerIdx(idx)}
-                        style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}
-                      >
-                        <Text style={{ color: d.elevation ? C.text : C.textSoft, fontSize: 15 }}>
-                          {d.elevation || '—'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  <TouchableOpacity onPress={() => removeDistance(idx)} style={{ alignSelf: 'flex-end', marginTop: 6 }}>
-                    <Text style={{ color: '#DC2626', fontSize: 12, fontWeight: '600' }}>Supprimer</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-              <TouchableOpacity
-                onPress={addDistance}
-                style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 12, backgroundColor: '#f5f3ff', marginBottom: 8 }}
-              >
-                <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>+ Ajouter une course</Text>
+              <TouchableOpacity onPress={onClose} hitSlop={12} style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
+                <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
               </TouchableOpacity>
+            </View>
 
-              {/* SECTION : Contact */}
-              <Text style={formSectionStyle.heading}>Contact</Text>
-              <TextInput placeholder="Site web" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
-              <TextInput placeholder="Email de contact *" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
-            </ScrollView>
-            {!isValid && !busy && (
-              <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>
-                {!name?.trim() && 'Nom · '}
-                {!isEdit && !code?.trim() && 'Code · '}
-                {!isEdit && !password && 'Mot de passe · '}
-                {!/^\d{5}$/.test(postalCode) && 'Code postal · '}
-                {!city?.trim() && 'Ville · '}
-                {!emailOk && 'Email valide'}
-              </Text>
-            )}
-            <TouchableOpacity
-              onPress={submit}
-              disabled={!isValid}
-              style={{
-                backgroundColor: isValid ? C.pinkPill : '#e9e4f9',
-                paddingVertical: 14,
-                borderRadius: 14,
-                alignItems: 'center',
-                marginTop: 6,
+            {/* Barre de progression */}
+            <View style={{ height: 4, backgroundColor: '#e9e4f9', borderRadius: 2, marginBottom: 14 }}>
+              <View style={{ height: 4, width: `${(step / 3) * 100}%`, backgroundColor: C.primary, borderRadius: 2 }} />
+            </View>
+
+            {/* Wizard slide */}
+            <View
+              style={{ overflow: 'hidden' }}
+              onLayout={(e) => {
+                const w = e.nativeEvent.layout.width;
+                if (w && w !== sheetW) {
+                  setSheetW(w);
+                  slideX.setValue(-(step - 1) * w);
+                }
               }}
             >
-              {busy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={{ color: isValid ? '#fff' : C.textSoft, fontSize: 15, fontWeight: '700' }}>
-                  {isEdit ? 'Enregistrer' : 'Soumettre'}
-                </Text>
+              <Animated.View style={{ flexDirection: 'row', width: sheetW * 3, transform: [{ translateX: slideX }] }}>
+
+                {/* ===== STEP 1 : Identité ===== */}
+                <View style={{ width: sheetW }}>
+                  <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
+                    <Text style={formSectionStyle.heading}>Image de couverture</Text>
+                    <TouchableOpacity
+                      onPress={pickAndUploadCover}
+                      disabled={coverBusy}
+                      style={{
+                        height: 140, borderRadius: 12, backgroundColor: '#faf9ff', marginBottom: 8,
+                        overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
+                        borderWidth: (coverImage || pendingCoverLocal) ? 0 : 1, borderStyle: 'dashed', borderColor: '#d9d4ec',
+                      }}
+                    >
+                      {coverBusy ? (
+                        <ActivityIndicator color={C.primary} />
+                      ) : (coverImage || pendingCoverLocal) ? (
+                        <ExpoImage source={{ uri: pendingCoverLocal || coverImage }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                      ) : (
+                        <>
+                          <Text style={{ color: C.textSoft, fontSize: 14, marginBottom: 4 }}>+ Ajouter une image</Text>
+                          <Text style={{ color: C.textSoft, fontSize: 11 }}>Format paysage 16:9 recommandé</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                    {(coverImage || pendingCoverLocal) && !coverBusy && (
+                      <TouchableOpacity onPress={pickAndUploadCover} style={{ alignSelf: 'flex-end', marginTop: -4, marginBottom: 8 }}>
+                        <Text style={{ color: C.primary, fontSize: 12, fontWeight: '600' }}>Changer l'image</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    <Text style={formSectionStyle.heading}>Nom de l'événement *</Text>
+                    <TextInput placeholder="Ex : Trail des Violettes" placeholderTextColor={C.textSoft} value={name} onChangeText={setName} style={formSectionStyle.input} />
+                    {showErr[1] && !name?.trim() && <Text style={errStyle}>Champ requis</Text>}
+
+                    <Text style={formSectionStyle.heading}>Type d'épreuve *</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                      {types.map(t => (
+                        <TouchableOpacity key={t} onPress={() => setEventType(t)} style={[s.typePill, eventType === t && s.typePillActive]}>
+                          <Text style={[s.typePillText, eventType === t && { color: '#fff' }]}>{t}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {showErr[1] && !eventType && <Text style={errStyle}>Sélectionne un type</Text>}
+
+                    <Text style={formSectionStyle.heading}>Date de l'événement *</Text>
+                    <TouchableOpacity
+                      onPress={() => setShowDatePicker(true)}
+                      style={[formSectionStyle.input, { justifyContent: 'center' }]}
+                    >
+                      <Text style={{ color: eventDate ? C.text : C.textSoft, fontSize: 15 }}>
+                        {eventDate ? eventDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'Date de l\'événement'}
+                      </Text>
+                    </TouchableOpacity>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={eventDate || new Date()}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                        minimumDate={new Date()}
+                        onChange={(_e, selected) => {
+                          if (Platform.OS === 'android') setShowDatePicker(false);
+                          if (selected) setEventDate(selected);
+                        }}
+                        locale="fr-FR"
+                      />
+                    )}
+                    {Platform.OS === 'ios' && showDatePicker && (
+                      <TouchableOpacity onPress={() => setShowDatePicker(false)} style={{ alignSelf: 'flex-end', paddingHorizontal: 8, paddingVertical: 6 }}>
+                        <Text style={{ color: C.primary, fontWeight: '600' }}>OK</Text>
+                      </TouchableOpacity>
+                    )}
+                    {showErr[1] && !dateOk && <Text style={errStyle}>Date requise (pas dans le passé)</Text>}
+                  </ScrollView>
+                </View>
+
+                {/* ===== STEP 2 : Lieu + Courses ===== */}
+                <View style={{ width: sheetW }}>
+                  <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
+                    <Text style={formSectionStyle.heading}>Lieu</Text>
+                    <TextInput
+                      placeholder="Code postal *"
+                      placeholderTextColor={C.textSoft}
+                      value={postalCode}
+                      onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
+                      keyboardType="number-pad"
+                      maxLength={5}
+                      style={formSectionStyle.input}
+                    />
+                    {showErr[2] && !/^\d{5}$/.test(postalCode) && <Text style={errStyle}>5 chiffres requis</Text>}
+                    {citySuggestions.length > 0 && !city && (
+                      <ScrollView
+                        style={{ maxHeight: 140, marginBottom: 8, borderRadius: 12, backgroundColor: '#f5f3ff' }}
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {citySuggestions.map((c) => (
+                          <TouchableOpacity
+                            key={c}
+                            onPress={() => { setCity(c); setCitySuggestions([]); }}
+                            style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
+                          >
+                            <Text style={{ color: C.text, fontSize: 14 }}>{c}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
+                    {city ? (
+                      <TouchableOpacity
+                        onPress={() => setCity('')}
+                        style={[formSectionStyle.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                      >
+                        <Text style={{ color: C.text, fontSize: 15 }}>{city}</Text>
+                        <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {showErr[2] && !city?.trim() && <Text style={errStyle}>Ville requise</Text>}
+
+                    <Text style={formSectionStyle.heading}>Courses *</Text>
+                    {distances.map((d, idx) => (
+                      <View key={idx} style={{ backgroundColor: '#faf9ff', borderRadius: 12, padding: 10, marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DISTANCE</Text>
+                            <TouchableOpacity onPress={() => setKmPickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
+                              <Text style={{ color: d.km ? C.text : C.textSoft, fontSize: 15 }}>{d.km ? `${d.km} km` : '—'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉPART</Text>
+                            <TouchableOpacity onPress={() => setTimePickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
+                              <Text style={{ color: d.time ? C.text : C.textSoft, fontSize: 15 }}>{d.time || '—'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <View style={{ flex: 1.2 }}>
+                            <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉNIVELÉ</Text>
+                            <TouchableOpacity onPress={() => setElevPickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
+                              <Text style={{ color: d.elevation ? C.text : C.textSoft, fontSize: 15 }}>{d.elevation || '—'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        <TouchableOpacity onPress={() => removeDistance(idx)} style={{ alignSelf: 'flex-end', marginTop: 6 }}>
+                          <Text style={{ color: '#DC2626', fontSize: 12, fontWeight: '600' }}>Supprimer</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                    <TouchableOpacity
+                      onPress={addDistance}
+                      style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 12, backgroundColor: '#f5f3ff', marginBottom: 8 }}
+                    >
+                      <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>+ Ajouter une course</Text>
+                    </TouchableOpacity>
+                    {showErr[2] && distances.length === 0 && <Text style={errStyle}>Au moins 1 course requise</Text>}
+                    {showErr[2] && distances.length > 0 && !distances.every(d => parseFloat(d.km) > 0) && (
+                      <Text style={errStyle}>Distance &gt; 0 requise pour chaque course</Text>
+                    )}
+                  </ScrollView>
+                </View>
+
+                {/* ===== STEP 3 : Contact + Avancé ===== */}
+                <View style={{ width: sheetW }}>
+                  <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
+                    <Text style={formSectionStyle.heading}>Contact</Text>
+                    <TextInput placeholder="Site web (optionnel)" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
+                    <TextInput placeholder="Email de contact *" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
+                    {showErr[3] && !emailOk && <Text style={errStyle}>Email invalide</Text>}
+
+                    {!isEdit && (
+                      <>
+                        <TouchableOpacity onPress={() => setAdvancedOpen(o => !o)} style={{ marginTop: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={{ color: C.primary, fontWeight: '700', fontSize: 13 }}>{advancedOpen ? '−' : '+'} Avancé</Text>
+                          <Text style={{ color: C.textSoft, fontSize: 11, marginLeft: 8 }}>Code et mot de passe photographe</Text>
+                        </TouchableOpacity>
+                        {advancedOpen && (
+                          <View>
+                            <TextInput
+                              placeholder="Code unique (ex : trail-2027) *"
+                              placeholderTextColor={C.textSoft}
+                              value={code}
+                              onChangeText={(v) => { setCode(v); setUserEditedCode(true); }}
+                              autoCapitalize="none"
+                              style={formSectionStyle.input}
+                            />
+                            <Text style={{ color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
+                              Auto-généré depuis le nom · modifiable
+                            </Text>
+                            {showErr[3] && !code?.trim() && <Text style={errStyle}>Code requis</Text>}
+                            <TextInput
+                              placeholder="Mot de passe photographe *"
+                              placeholderTextColor={C.textSoft}
+                              value={password}
+                              onChangeText={setPassword}
+                              secureTextEntry
+                              style={formSectionStyle.input}
+                            />
+                            {showErr[3] && !password && <Text style={errStyle}>Mot de passe requis</Text>}
+                          </View>
+                        )}
+                        {!advancedOpen && showErr[3] && (!code?.trim() || !password) && (
+                          <Text style={errStyle}>Ouvre la section Avancé pour compléter code + mot de passe</Text>
+                        )}
+                      </>
+                    )}
+                  </ScrollView>
+                </View>
+
+              </Animated.View>
+            </View>
+
+            {/* Bottom nav : Précédent / Suivant ou Enregistrer */}
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              {step > 1 && (
+                <TouchableOpacity
+                  onPress={() => goStep(step - 1)}
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: '#f5f3ff' }}
+                >
+                  <Text style={{ color: C.primary, fontSize: 15, fontWeight: '700' }}>Précédent</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-            <TouchableOpacity style={s.modalCancel} onPress={onClose}>
-              <Text style={s.modalCancelText}>Annuler</Text>
-            </TouchableOpacity>
+              {step < 3 ? (
+                <TouchableOpacity
+                  onPress={tryNext}
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.pinkPill }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Suivant</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={trySubmit}
+                  disabled={busy}
+                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.pinkPill, opacity: busy ? 0.6 : 1 }}
+                >
+                  {busy ? <ActivityIndicator color="#fff" /> : (
+                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{isEdit ? 'Enregistrer' : 'Soumettre'}</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           </TouchableOpacity>
         </TouchableOpacity>
       </KeyboardAvoidingView>
@@ -4698,7 +4797,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   );
 }
 
-function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos }) {
+function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos, refreshKey = 0 }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(null); // slug en cours de paiement
@@ -4714,7 +4813,7 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
     } catch {} finally { setLoading(false); }
   };
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { reload(); }, [refreshKey]);
 
   const pay = async (slug) => {
     setPaying(slug);
@@ -4836,17 +4935,21 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
                 )}
 
                 <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {(e.status === 'pending' || e.status === 'validated' || e.status === 'paid') && (
-                    <TouchableOpacity
-                      onPress={() => onEditEvent?.(e)}
-                      style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#f5f3ff' }}
-                    >
-                      <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600' }}>Modifier</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    onPress={() => onEditEvent?.(e)}
+                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: C.primary, borderWidth: 1, borderColor: C.primary }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Modifier</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => onOpenEventPhotos?.(e)}
+                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: C.primary }}
+                  >
+                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600' }}>Photos</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => deleteEvent(e)}
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#FEE2E2' }}
+                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#DC2626' }}
                   >
                     <Text style={{ color: '#DC2626', fontSize: 13, fontWeight: '600' }}>Supprimer</Text>
                   </TouchableOpacity>
@@ -4871,6 +4974,7 @@ export default function App() {
   const [searchModal, setSearchModal] = useState(false);
   const [createEventModal, setCreateEventModal] = useState(false);
   const [editEventTarget, setEditEventTarget] = useState(null);
+  const [orgRefreshKey, setOrgRefreshKey] = useState(0);
   const [loginRole, setLoginRole] = useState(null);
   const [selfieUri, setSelfieUri] = useState(null);
   const [session, setSession] = useState(null);
@@ -5207,6 +5311,7 @@ export default function App() {
                     onEditEvent={(e) => setEditEventTarget(e)}
                     onOpenProfile={() => setOrganizerProfileMenu(true)}
                     onOpenEventPhotos={(e) => setOrganizerEventPhotosTarget(e)}
+                    refreshKey={orgRefreshKey}
                   />
                 </View>
               )}
@@ -5300,6 +5405,7 @@ export default function App() {
         visible={createEventModal}
         onClose={() => setCreateEventModal(false)}
         organizerSession={organizerSession}
+        onCreated={() => setOrgRefreshKey(k => k + 1)}
       />
 
       <CreateEventModal
@@ -5307,6 +5413,7 @@ export default function App() {
         onClose={() => setEditEventTarget(null)}
         organizerSession={organizerSession}
         editEvent={editEventTarget}
+        onCreated={() => setOrgRefreshKey(k => k + 1)}
       />
 
       <ProfileMenuModal
