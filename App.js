@@ -2376,7 +2376,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const errStyle = { color: '#DC2626', fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 };
 
   const submit = async () => {
-    if (!isValid) return;
+    if (!canSubmit) return;
     setBusy(true);
     try {
       const url = isEdit ? `/organizer/event/${editEvent.code}` : `/auth/submit-event`;
