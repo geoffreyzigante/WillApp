@@ -618,20 +618,18 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
 
   return (
     <View style={s.eventCard}>
-      {/* Image moitié droite */}
+      {/* Image en couverture pleine largeur */}
       {event.cover_image ? (
-        <View style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '55%' }}>
-          <ExpoImage
-            source={{ uri: event.cover_image }}
-            style={StyleSheet.absoluteFillObject}
-            contentFit="cover"
-          />
-        </View>
+        <ExpoImage
+          source={{ uri: event.cover_image }}
+          style={StyleSheet.absoluteFillObject}
+          contentFit="cover"
+        />
       ) : null}
-      {/* Fond couleur moitié gauche + dégradé qui mange un peu la droite */}
+      {/* Dégradé horizontal : tint solide à gauche (texte) → transparent à droite (image visible) */}
       <LinearGradient
-        colors={[tint, `${tint}99`, `${tint}00`]}
-        locations={[0, 0.5, 1]}
+        colors={[tint, tint, 'transparent']}
+        locations={[0, 0.45, 1]}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={StyleSheet.absoluteFillObject}
@@ -977,17 +975,14 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
         </TouchableOpacity>
       </View>
 
-      {/* Cover format accueil avec overlays */}
       <View style={{ position: 'relative', marginTop: 12, marginBottom: 8 }}>
         <View style={s.eventCard}>
           {event.cover_image ? (
-            <View style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '55%' }}>
-              <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-            </View>
+            <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
           ) : null}
           <LinearGradient
-            colors={[tint, `${tint}99`, `${tint}00`]}
-            locations={[0, 0.5, 1]}
+            colors={[tint, tint, 'transparent']}
+            locations={[0, 0.45, 1]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={StyleSheet.absoluteFillObject}
