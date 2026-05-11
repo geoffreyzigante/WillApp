@@ -712,7 +712,7 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
   );
 }
 
-function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites, userId, onOpenPhoto, runnerToken }) {
+function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites, userId, onOpenPhoto, runnerToken, photoFavoritesSet, onTogglePhotoFavorite }) {
   const hasFavorites = favorites && favorites.length > 0;
   const [photos, setPhotos] = useState([]);
   const [visibleCount, setVisibleCount] = useState(20);
@@ -829,13 +829,18 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
           </Text>
         </View>
       ) : (
-        <PhotoGrid photos={photos.slice(0, visibleCount)} onPress={(p) => onOpenPhoto?.(p, photos)} />
+        <PhotoGrid
+          photos={photos.slice(0, visibleCount)}
+          onPress={(p) => onOpenPhoto?.(p, photos)}
+          photoFavoritesSet={photoFavoritesSet}
+          onToggleFavorite={onTogglePhotoFavorite}
+        />
       )}
     </RefreshableScrollView>
   );
 }
 
-function PhotoGrid({ photos = [], onPress }) {
+function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite }) {
   // Si pas de photos : grille de placeholders
   if (photos.length === 0) {
     return (
@@ -849,26 +854,50 @@ function PhotoGrid({ photos = [], onPress }) {
     );
   }
 
+  const showHearts = !!onToggleFavorite && !!photoFavoritesSet;
+
   return (
     <View style={s.grid}>
-      {photos.map((p, i) => (
-        <TouchableOpacity
-          key={p.id || `p-${i}`}
-          style={s.gridItem}
-          activeOpacity={0.85}
-          onPress={() => onPress?.(p, i, photos)}
-        >
-          <ExpoImage
-            source={{ uri: p.uri }}
-            style={s.gridImg}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            priority="low"
-            transition={100}
-            recyclingKey={p.id}
-          />
-        </TouchableOpacity>
-      ))}
+      {photos.map((p, i) => {
+        const fav = showHearts && photoFavoritesSet.has(p.id);
+        return (
+          <TouchableOpacity
+            key={p.id || `p-${i}`}
+            style={s.gridItem}
+            activeOpacity={0.85}
+            onPress={() => onPress?.(p, i, photos)}
+          >
+            <ExpoImage
+              source={{ uri: p.uri }}
+              style={s.gridImg}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              priority="low"
+              transition={100}
+              recyclingKey={p.id}
+            />
+            {showHearts && (
+              <TouchableOpacity
+                onPress={(e) => { e.stopPropagation?.(); onToggleFavorite(p.id); }}
+                hitSlop={6}
+                style={{
+                  position: 'absolute', top: 6, right: 6,
+                  width: 28, height: 28, borderRadius: 999,
+                  backgroundColor: 'rgba(0,0,0,0.4)',
+                  alignItems: 'center', justifyContent: 'center',
+                  padding: 4,
+                }}
+              >
+                <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61"
+                  fill={fav ? '#E673FF' : 'none'}
+                  stroke="#fff" strokeWidth={2}>
+                  <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+                </Svg>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
@@ -4256,7 +4285,7 @@ function SelfieViewerModal({ visible, uri, onClose }) {
   );
 }
 
-function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDelete }) {
+function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDelete, photoFavoritesSet, onTogglePhotoFavorite }) {
   const [busy, setBusy] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const winWidth = Dimensions.get('window').width;
@@ -4270,6 +4299,8 @@ function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDele
   const savedTranslateY = useSharedValue(0);
   const zoomTranslateX = useSharedValue(0); // pour pan en mode zoom uniquement
   const savedZoomTranslateX = useSharedValue(0);
+  const heartScale = useSharedValue(1);
+  const heartStyle = useAnimatedStyle(() => ({ transform: [{ scale: heartScale.value }] }));
 
   const resetTransforms = () => {
     translateX.value = 0;
@@ -4502,6 +4533,34 @@ function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDele
               <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
             </Svg>
           </TouchableOpacity>
+
+          {onTogglePhotoFavorite && currentPhoto?.id && (() => {
+            const fav = photoFavoritesSet?.has(currentPhoto.id);
+            return (
+              <ReAnimated.View style={[{ position: 'absolute', top: 60, right: 80, zIndex: 10 }, heartStyle]}>
+                <TouchableOpacity
+                  onPress={() => {
+                    heartScale.value = withTiming(0.85, { duration: 90 }, () => {
+                      heartScale.value = withTiming(1, { duration: 140 });
+                    });
+                    onTogglePhotoFavorite(currentPhoto.id);
+                  }}
+                  hitSlop={10}
+                  style={{
+                    width: 44, height: 44, borderRadius: 22,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61"
+                    fill={fav ? '#E673FF' : 'none'}
+                    stroke="#fff" strokeWidth={1.8}>
+                    <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+                  </Svg>
+                </TouchableOpacity>
+              </ReAnimated.View>
+            );
+          })()}
 
           {photos && photos.length > 1 && (
             <View style={{ position: 'absolute', top: 60, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
@@ -5460,6 +5519,7 @@ export default function App() {
   const [selfieViewer, setSelfieViewer] = useState(false);
   const [openedPhoto, setOpenedPhoto] = useState(null); // { photo, photos, allowDelete, onDelete }
   const [favorites, setFavorites] = useState([]);
+  const [photoFavorites, setPhotoFavorites] = useState([]); // array d'IDs photo (keys R2)
   const [userId, setUserId] = useState(null);
   const [runnerSession, setRunnerSession] = useState(null); // { token, profile }
   const [organizerSession, setOrganizerSession] = useState(null); // { token, profile }
@@ -5524,6 +5584,19 @@ export default function App() {
       AsyncStorage.setItem('@will_user_id', runnerSession.profile.userId).catch(() => {});
     }
   }, [runnerSession?.profile?.userId]);
+
+  // Favoris photos perso (locaux par device, scopés par userId).
+  // Rechargés quand userId change (ex: login runner → userId aligne sur runner.userId).
+  useEffect(() => {
+    if (!userId) return;
+    AsyncStorage.getItem(`@will_photo_favorites_${userId}`).then(v => {
+      if (v) {
+        try { setPhotoFavorites(JSON.parse(v)); } catch { setPhotoFavorites([]); }
+      } else {
+        setPhotoFavorites([]);
+      }
+    });
+  }, [userId]);
 
   const handleAuthSuccess = useCallback((session) => {
     setRunnerSession(session);
@@ -5692,6 +5765,18 @@ export default function App() {
     });
   }, []);
 
+  const photoFavoritesSet = useMemo(() => new Set(photoFavorites), [photoFavorites]);
+  const togglePhotoFavorite = useCallback((photoId) => {
+    if (!photoId || !userId) return;
+    setPhotoFavorites(prev => {
+      const next = prev.includes(photoId)
+        ? prev.filter(k => k !== photoId)
+        : [...prev, photoId];
+      AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, [userId]);
+
   const deleteSelfie = useCallback(() => {
     Alert.alert('Supprimer le selfie ?', 'Tu pourras en reprendre un nouveau.', [
       { text: 'Annuler', style: 'cancel' },
@@ -5848,6 +5933,8 @@ export default function App() {
                   userId={userId}
                   runnerToken={runnerSession?.token}
                   onOpenPhoto={(photo, list) => setOpenedPhoto({ photo, photos: list })}
+                  photoFavoritesSet={photoFavoritesSet}
+                  onTogglePhotoFavorite={togglePhotoFavorite}
                 />
               </View>
               {organizerSession && (
@@ -5992,6 +6079,8 @@ export default function App() {
         allowDelete={openedPhoto?.allowDelete}
         onDelete={openedPhoto?.onDelete}
         onClose={() => setOpenedPhoto(null)}
+        photoFavoritesSet={photoFavoritesSet}
+        onTogglePhotoFavorite={togglePhotoFavorite}
       />
 
       <AuthRunnerModal
