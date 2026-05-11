@@ -2209,6 +2209,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const [eventType, setEventType] = useState('');
   const [website, setWebsite] = useState('');
   const [contact, setContact] = useState('');
+  const [phone, setPhone] = useState('');
   const [distances, setDistances] = useState([]); // [{km, time, elevation}]
   const [timePickerIdx, setTimePickerIdx] = useState(null);
   const [elevPickerIdx, setElevPickerIdx] = useState(null);
@@ -2254,6 +2255,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         setEventType(editEvent.event_type || '');
         setWebsite(editEvent.website || '');
         setContact(editEvent.contact || editEvent.org_name || '');
+        setPhone(editEvent.phone || '');
         setDistances(Array.isArray(editEvent.distances) ? editEvent.distances.map(d => ({
           km: String(d.km || ''), time: d.time || '', elevation: d.elevation || '',
         })) : []);
@@ -2263,7 +2265,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         setName(''); setCode(''); setPassword('');
         setEventDate(null); setPostalCode(''); setCity(''); setCitySuggestions([]);
         setEventType('');
-        setWebsite(''); setContact(''); setDistances([]);
+        setWebsite(''); setContact(''); setPhone(''); setDistances([]);
         setCoverImage(null); setPendingCoverLocal(null);
       }
     }
@@ -2390,6 +2392,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
       const payload = {
         name,
         contact,
+        phone: phone.trim(),
         event_date: eventDate ? eventDate.toISOString().slice(0, 10) : '',
         location: city ? `${city} (${postalCode})` : '',
         event_type: eventType,
@@ -2654,6 +2657,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                     <TextInput placeholder="Site web (optionnel)" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
                     <TextInput placeholder="Email de contact *" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
                     {showErr[3] && !emailOk && <Text style={errStyle}>Email invalide</Text>}
+                    <TextInput placeholder="Téléphone de contact (optionnel)" placeholderTextColor={C.textSoft} value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
+
 
                     {!isEdit && (
                       <>
@@ -3420,8 +3425,37 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
   const [city, setCity] = useState('');
   const [citySuggestions, setCitySuggestions] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [changingPwd, setChangingPwd] = useState(false);
+  const [currentPwd, setCurrentPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [pwdConfirm, setPwdConfirm] = useState('');
+  const [pwdBusy, setPwdBusy] = useState(false);
+  const [pwdError, setPwdError] = useState('');
 
   const profile = runnerSession?.profile;
+
+  const submitPwd = async () => {
+    setPwdError('');
+    if (newPwd !== pwdConfirm) { setPwdError('Les deux mots de passe ne correspondent pas.'); return; }
+    if (newPwd.length < 10) { setPwdError('Mot de passe : 10 caractères minimum.'); return; }
+    setPwdBusy(true);
+    try {
+      const r = await fetch(`${API_URL}/runner/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${runnerSession.token}` },
+        body: JSON.stringify({ current_password: currentPwd, new_password: newPwd }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { setPwdError(data.error || 'Erreur'); return; }
+      setCurrentPwd(''); setNewPwd(''); setPwdConfirm('');
+      setChangingPwd(false);
+      Alert.alert('Mot de passe modifié', 'Ton nouveau mot de passe est actif.');
+    } catch (e) {
+      setPwdError('Erreur réseau');
+    } finally {
+      setPwdBusy(false);
+    }
+  };
 
   // Parse "27400 Louviers" → postalCode "27400", city "Louviers"
   const parseDept = (str = '') => {
@@ -3608,6 +3642,50 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
               </View>
             )}
 
+            {profile && !editing && !changingPwd && (
+              <TouchableOpacity onPress={() => setChangingPwd(true)} style={{ alignItems: 'center', marginTop: 6, paddingVertical: 10 }}>
+                <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Modifier mon mot de passe</Text>
+              </TouchableOpacity>
+            )}
+
+            {profile && changingPwd && (
+              <View style={profileCardStyles.card}>
+                <Text style={{ color: C.text, fontSize: 14, fontWeight: '700', marginBottom: 10 }}>
+                  Changer mon mot de passe
+                </Text>
+                <TextInput
+                  placeholder="Mot de passe actuel" placeholderTextColor={C.textSoft}
+                  value={currentPwd} onChangeText={setCurrentPwd} secureTextEntry
+                  style={authStyles.input}
+                />
+                <TextInput
+                  placeholder="Nouveau mot de passe (10 car. min)" placeholderTextColor={C.textSoft}
+                  value={newPwd} onChangeText={setNewPwd} secureTextEntry
+                  style={authStyles.input}
+                />
+                <TextInput
+                  placeholder="Confirmer le nouveau" placeholderTextColor={C.textSoft}
+                  value={pwdConfirm} onChangeText={setPwdConfirm} secureTextEntry
+                  style={authStyles.input}
+                />
+                {pwdError ? <Text style={{ color: '#ff6b6b', fontSize: 12, marginTop: 4 }}>{pwdError}</Text> : null}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => { setChangingPwd(false); setCurrentPwd(''); setNewPwd(''); setPwdConfirm(''); setPwdError(''); }}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: '#f5f3ff' }}
+                  >
+                    <Text style={{ color: C.text, fontWeight: '600' }}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={submitPwd} disabled={pwdBusy}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.primary, opacity: pwdBusy ? 0.6 : 1 }}
+                  >
+                    {pwdBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Modifier</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             {profile && (
               <TouchableOpacity onPress={() => { onClose(); onLogout?.(); }} style={{ alignItems: 'center', marginTop: 12, paddingVertical: 12 }}>
                 <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
@@ -3658,7 +3736,7 @@ function OrganizerProfileMenuModal({ visible, onClose, organizerSession, onLogou
   const submitPwd = async () => {
     setPwdError('');
     if (newPwd !== pwdConfirm) { setPwdError('Les deux mots de passe ne correspondent pas.'); return; }
-    if (newPwd.length < 6) { setPwdError('Mot de passe : 6 caractères minimum.'); return; }
+    if (newPwd.length < 10) { setPwdError('Mot de passe : 10 caractères minimum.'); return; }
     setPwdBusy(true);
     try {
       const r = await fetch(`${API_URL}/organizer/change-password`, {
@@ -3768,7 +3846,7 @@ function OrganizerProfileMenuModal({ visible, onClose, organizerSession, onLogou
                     style={authStyles.input}
                   />
                   <TextInput
-                    placeholder="Nouveau mot de passe" placeholderTextColor={C.textSoft}
+                    placeholder="Nouveau mot de passe (10 car. min)" placeholderTextColor={C.textSoft}
                     value={newPwd} onChangeText={setNewPwd} secureTextEntry
                     style={authStyles.input}
                   />
