@@ -28,7 +28,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path, Circle, Defs, Mask, Rect } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import NetInfo from '@react-native-community/netinfo';
 import { Paths, File, Directory } from 'expo-file-system';
@@ -481,11 +481,11 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
   if (selfieUri) {
     return (
       <View style={s.selfieDoneBanner}>
-        <View style={s.selfieCheckCircle}>
-          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-            <Path d="m5 12 5 5L20 7" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-          </Svg>
-        </View>
+        <ExpoImage
+          source={{ uri: selfieUri }}
+          style={{ width: 44, height: 44, borderRadius: 999 }}
+          contentFit="cover"
+        />
         <View style={{ flex: 1 }}>
           <Text style={s.selfieDoneTitle}>Selfie enregistré</Text>
           <Text style={s.selfieDoneSub}>Will t'envoie tes photos automatiquement</Text>
@@ -1294,12 +1294,13 @@ function PhotographerScreen({ session, onLogout }) {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showSessionModal, setShowSessionModal] = useState(false);
 
-  // Bande noire haut/bas issue du letterbox 4:3 sur écran portrait.
-  // Permet d'ancrer les éléments soit DANS le bandeau, soit DANS la preview.
+  // Caméra ancrée juste sous le header (au lieu de absoluteFill + letterbox 4:3
+  // qui laissait un grand vide noir entre le header et l'image visible sur les
+  // grands écrans). La preview est dimensionnée explicitement en 4:3.
   const winW = Dimensions.get('window').width;
   const winH = Dimensions.get('window').height;
   const previewH = Math.min(winH, winW * (4 / 3));
-  const bandH = Math.max(0, (winH - previewH) / 2);
+  const CAMERA_TOP = 148;
 
   // Course + km posté
   const [selectedRace, setSelectedRace] = useState(null); // null = "Toutes les courses"
@@ -1852,7 +1853,12 @@ function PhotographerScreen({ session, onLogout }) {
           La détection (frame processor) reste en coordonnées sensor : performance Rekognition inchangée. */}
       <VisionCamera
         ref={cameraRef}
-        style={StyleSheet.absoluteFill}
+        style={{
+          position: 'absolute',
+          top: CAMERA_TOP,
+          left: 0, right: 0,
+          height: previewH,
+        }}
         device={device}
         format={format}
         isActive={true}
@@ -1872,7 +1878,9 @@ function PhotographerScreen({ session, onLogout }) {
         pointerEvents="none"
         style={{
           position: 'absolute',
-          top: bandH, bottom: bandH, left: 0, right: 0,
+          top: CAMERA_TOP,
+          left: 0, right: 0,
+          height: previewH,
           flexDirection: 'row',
           justifyContent:
             zonePosition === 'left' ? 'flex-start' :
@@ -1889,11 +1897,11 @@ function PhotographerScreen({ session, onLogout }) {
                 {/* Lignes verticales subtiles */}
                 <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 1, backgroundColor: lineColor }} />
                 <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 1, backgroundColor: lineColor }} />
-                {/* 4 coins en L (24px, border 2.5px) */}
-                <View style={{ position: 'absolute', top: 0, left: 0, width: 24, height: 24, borderTopWidth: 2.5, borderLeftWidth: 2.5, borderColor: cornerColor, borderTopLeftRadius: 4 }} />
-                <View style={{ position: 'absolute', top: 0, right: 0, width: 24, height: 24, borderTopWidth: 2.5, borderRightWidth: 2.5, borderColor: cornerColor, borderTopRightRadius: 4 }} />
-                <View style={{ position: 'absolute', bottom: 0, left: 0, width: 24, height: 24, borderBottomWidth: 2.5, borderLeftWidth: 2.5, borderColor: cornerColor, borderBottomLeftRadius: 4 }} />
-                <View style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderBottomWidth: 2.5, borderRightWidth: 2.5, borderColor: cornerColor, borderBottomRightRadius: 4 }} />
+                {/* 4 coins en L (24px, border 3px) */}
+                <View style={{ position: 'absolute', top: 0, left: 0, width: 24, height: 24, borderTopWidth: 3, borderLeftWidth: 3, borderColor: cornerColor, borderTopLeftRadius: 4 }} />
+                <View style={{ position: 'absolute', top: 0, right: 0, width: 24, height: 24, borderTopWidth: 3, borderRightWidth: 3, borderColor: cornerColor, borderTopRightRadius: 4 }} />
+                <View style={{ position: 'absolute', bottom: 0, left: 0, width: 24, height: 24, borderBottomWidth: 3, borderLeftWidth: 3, borderColor: cornerColor, borderBottomLeftRadius: 4 }} />
+                <View style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderBottomWidth: 3, borderRightWidth: 3, borderColor: cornerColor, borderBottomRightRadius: 4 }} />
               </>
             );
           })()}
@@ -1915,7 +1923,7 @@ function PhotographerScreen({ session, onLogout }) {
         pointerEvents="box-none"
         style={{
           position: 'absolute', top: 0, left: 0, right: 0,
-          paddingTop: 56, paddingBottom: 28, paddingHorizontal: 20,
+          paddingTop: 56, paddingBottom: 8, paddingHorizontal: 20,
           transform: [{ translateY: headerSlideY }],
           zIndex: 10,
         }}
@@ -1925,18 +1933,19 @@ function PhotographerScreen({ session, onLogout }) {
           style={StyleSheet.absoluteFillObject}
           pointerEvents="none"
         />
+        {/* Row 1 : retour | titre+date centré | spacer */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity
             onPress={onLogout}
             hitSlop={10}
             style={{
-              width: 38, height: 38, borderRadius: 19,
-              backgroundColor: 'rgba(0,0,0,0.45)',
+              paddingHorizontal: 14, height: 36, borderRadius: 18,
+              backgroundColor: 'rgba(255,255,255,0.15)',
               alignItems: 'center', justifyContent: 'center',
             }}
           >
             <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-              <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+              <Path d="M19 12H5M12 19l-7-7 7-7" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
           </TouchableOpacity>
 
@@ -1963,30 +1972,58 @@ function PhotographerScreen({ session, onLogout }) {
             ) : null}
           </View>
 
+          {/* Spacer pour équilibrer la pill retour à gauche */}
+          <View style={{ width: 46, height: 36 }} />
+        </View>
+
+        {/* Row 2 : pill statut + pill compteur photo, centrés sous le titre */}
+        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 8 }}>
           <Animated.View
             style={{
-              flexDirection: 'row', alignItems: 'center', gap: 5,
-              paddingHorizontal: 9, height: 26, borderRadius: 13,
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+              paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
               backgroundColor: statusInfo.label === 'Prêt'
-                ? 'rgba(34,197,94,0.28)'
+                ? 'rgba(34,197,94,0.2)'
                 : statusInfo.label === 'Capture'
-                  ? 'rgba(239,68,68,0.32)'
-                  : 'rgba(245,158,11,0.28)',
-              borderWidth: 1,
-              borderColor: statusInfo.label === 'Prêt'
-                ? 'rgba(34,197,94,0.5)'
-                : statusInfo.label === 'Capture'
-                  ? 'rgba(239,68,68,0.5)'
-                  : 'rgba(245,158,11,0.5)',
+                  ? 'rgba(239,68,68,0.2)'
+                  : 'rgba(245,158,11,0.2)',
               transform: [{ scale: badgePulse }],
             }}
           >
             <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusInfo.dot }} />
             <Text style={{
-              color: '#fff',
-              fontSize: 11, fontWeight: '700', letterSpacing: 0.4,
+              color: statusInfo.label === 'Prêt'
+                ? '#22C55E'
+                : statusInfo.label === 'Capture'
+                  ? '#EF4444'
+                  : '#F59E0B',
+              fontSize: 11, fontWeight: '800', letterSpacing: 0.4,
             }}>{statusInfo.label.toUpperCase()}</Text>
           </Animated.View>
+
+          <TouchableOpacity
+            onPress={() => setShowSessionModal(true)}
+            activeOpacity={0.7}
+            style={{
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+              paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+              backgroundColor: 'rgba(255,255,255,0.1)',
+            }}
+          >
+            {!isOnline ? (
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                <Path d="M3 3l18 18M7 8a5 5 0 0 1 9-1.5M19 14a4 4 0 0 0-2-7.5M9 17h7a3 3 0 0 0 .5-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+              </Svg>
+            ) : (
+              <Icon.PhotoCam size={14} color="#fff" />
+            )}
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
+              {(photoCount + queueStats.total) > 0 ? (photoCount + queueStats.total) : '—'}
+            </Text>
+            {queueStats.failed > 0 && (
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444', marginLeft: 2 }} />
+            )}
+          </TouchableOpacity>
         </View>
       </Animated.View>
 
@@ -2006,45 +2043,12 @@ function PhotographerScreen({ session, onLogout }) {
           pointerEvents="none"
         />
 
-        {/* 1. Zoom pill (style iOS : cercles dans container translucide, actif blanc) */}
-        <View style={{ alignItems: 'center', marginBottom: 18 }}>
-          <View style={{
-            flexDirection: 'row',
-            backgroundColor: 'rgba(0,0,0,0.4)',
-            borderRadius: 26, padding: 4,
-            gap: 4,
-          }}>
-            {[1, 1.5].map(z => {
-              const active = zoomLevel === z;
-              return (
-                <TouchableOpacity
-                  key={z}
-                  onPress={() => setZoomLevel(z)}
-                  style={{
-                    width: active ? 44 : 36, height: active ? 44 : 36, borderRadius: 999,
-                    alignItems: 'center', justifyContent: 'center',
-                    backgroundColor: active ? 'rgba(255,255,255,0.18)' : 'transparent',
-                  }}
-                >
-                  <Text style={{
-                    color: active ? C.pinkPillActive : 'rgba(255,255,255,0.85)',
-                    fontWeight: '800',
-                    fontSize: active ? 13 : 11,
-                  }}>
-                    {z === 1 ? '1×' : '1,5×'}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* 2. Mode chips (style iOS mode selector : UPPERCASE, pas de container, actif rose/plus gros) */}
+        {/* 1. Chips course (pleine largeur, transparent sur fond noir du footer) */}
         {hasDistances && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 22, paddingHorizontal: 28, minWidth: '100%', justifyContent: 'center', alignItems: 'center' }}
+            contentContainerStyle={{ gap: 22, paddingHorizontal: 8, minWidth: '100%', justifyContent: 'center', alignItems: 'center' }}
             style={{ marginBottom: 22, maxHeight: 28 }}
           >
             {[null, ...distances].map((d, i) => {
@@ -2061,7 +2065,7 @@ function PhotographerScreen({ session, onLogout }) {
                   hitSlop={8}
                 >
                   <Text style={{
-                    color: active ? C.pinkPillActive : 'rgba(255,255,255,0.75)',
+                    color: active ? C.pinkPillActive : 'rgba(255,255,255,0.55)',
                     fontSize: active ? 14 : 12,
                     fontWeight: '800',
                     letterSpacing: 0.8,
@@ -2073,95 +2077,87 @@ function PhotographerScreen({ session, onLogout }) {
           </ScrollView>
         )}
 
-        {/* 3. Shutter row (style iOS : thumbnail | shutter centré | km button) */}
+        {/* 2. Shutter row : [zoom] [Go!] [km] */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Photo button — équivalent du thumbnail iOS, rounded-square */}
-          <TouchableOpacity
-            onPress={() => setShowSessionModal(true)}
-            activeOpacity={0.7}
-            style={{
-              width: 48, height: 48, borderRadius: 10,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-              borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)',
-              alignItems: 'center', justifyContent: 'center',
-              position: 'relative',
-            }}
-          >
-            {!isOnline ? (
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                <Path d="M3 3l18 18M7 8a5 5 0 0 1 9-1.5M19 14a4 4 0 0 0-2-7.5M9 17h7a3 3 0 0 0 .5-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
-              </Svg>
-            ) : (
-              <Icon.PhotoCam size={18} color="#fff" />
-            )}
-            {(photoCount + queueStats.total) > 0 && (
-              <Animated.View
-                style={{
-                  position: 'absolute', top: -5, right: -5,
-                  minWidth: 20, height: 20, paddingHorizontal: 4, borderRadius: 10,
-                  backgroundColor: C.pinkPillActive,
-                  alignItems: 'center', justifyContent: 'center',
-                  transform: [{ scale: photoCountScale }],
-                }}
-              >
-                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
-                  {photoCount + queueStats.total}
-                </Text>
-              </Animated.View>
-            )}
-            {queueStats.failed > 0 && (
-              <View style={{
-                position: 'absolute', bottom: -3, right: -3,
-                minWidth: 14, height: 14, paddingHorizontal: 3, borderRadius: 7,
-                backgroundColor: 'rgba(239,68,68,0.95)', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>!</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          {/* Zoom pill — container unique, options côte à côte */}
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center', justifyContent: 'center',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            borderRadius: 999, padding: 4,
+            height: 40, width: 90,
+          }}>
+            {[1, 1.5].map(z => {
+              const active = zoomLevel === z;
+              return (
+                <TouchableOpacity
+                  key={z}
+                  onPress={() => setZoomLevel(z)}
+                  style={{
+                    flex: 1, height: '100%',
+                    alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: active ? C.pinkPillActive : 'transparent',
+                    borderRadius: 999,
+                  }}
+                >
+                  <Text style={{
+                    color: '#fff',
+                    fontWeight: '800',
+                    fontSize: 12,
+                  }}>
+                    {z === 1 ? '1×' : '1,5×'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-          {/* Shutter — bouton GO! pill centré (style hybride iOS shutter mais avec texte) */}
+          {/* Shutter — bouton Go! pill centré */}
           <Animated.View style={{ transform: [{ scale: captureScale }] }}>
             <TouchableOpacity
               onPress={onCapturePress}
               activeOpacity={0.9}
               disabled={isShooting}
               style={{
-                paddingHorizontal: 44, height: 72, borderRadius: 999,
+                width: 140, height: 60, borderRadius: 999,
                 backgroundColor: C.pinkPillActive,
-                borderWidth: 3, borderColor: 'rgba(255,255,255,0.95)',
                 alignItems: 'center', justifyContent: 'center',
                 opacity: isShooting ? 0.6 : 1,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 6,
               }}
             >
               <Text style={{
                 color: '#fff',
-                fontSize: 28,
+                fontSize: 22,
+                fontStyle: 'italic',
+                fontWeight: '800',
                 fontFamily: 'AVEstiana',
                 letterSpacing: 1,
               }}>Go !</Text>
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Km button — équivalent du flip-camera iOS, rounded-square symétrique */}
+          {/* Km pill — à droite du bouton Go */}
           <TouchableOpacity
             onPress={() => { setKmPickerOpen(true); setRacePickerOpen(false); }}
             activeOpacity={0.7}
             style={{
-              width: 48, height: 48, borderRadius: 10,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-              borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)',
-              alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+              paddingHorizontal: 12, height: 30, borderRadius: 999,
+              backgroundColor: 'rgba(255,255,255,0.1)',
             }}
           >
             <Text style={{
-              color: 'rgba(255,255,255,0.6)', fontSize: 8, fontWeight: '700',
-              letterSpacing: 0.5, marginBottom: -1,
+              color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '800',
+              letterSpacing: 0.5,
             }}>KM</Text>
             <Text style={{
               color: selectedKm > 0 ? '#fff' : 'rgba(255,255,255,0.45)',
-              fontSize: selectedKm > 9 ? 14 : 16,
-              fontWeight: '800',
+              fontSize: 14, fontWeight: '800',
             }}>
               {selectedKm > 0 ? selectedKm : '—'}
             </Text>
@@ -3160,9 +3156,142 @@ function OrganizationModal({ visible, onClose, onPickRole }) {
 
 const BIOMETRIC_CONSENT_KEY = '@will_biometric_consent_v1';
 
+// Sous-modal : viewport caméra custom avec masque rond. Remplace
+// ImagePicker.launchCameraAsync pour le selfie afin d'afficher un guide
+// circulaire pendant la prise (l'image uploadée reste au ratio natif).
+function SelfieCameraModal({ visible, onClose, onCaptured }) {
+  const cameraRef = useRef(null);
+  const [perm, requestPerm] = useCameraPermissions();
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (visible && perm && !perm.granted && perm.canAskAgain) {
+      requestPerm();
+    }
+  }, [visible, perm?.granted]);
+
+  const winW = Dimensions.get('window').width;
+  const winH = Dimensions.get('window').height;
+  const CIRCLE_SIZE = 280;
+  const cx = winW / 2;
+  const cy = winH / 2 - 40;
+
+  const shoot = async () => {
+    if (!cameraRef.current || busy) return;
+    setBusy(true);
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.8, skipProcessing: false });
+      onCaptured?.(photo.uri);
+    } catch (e) {
+      Alert.alert('Erreur', e.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        {perm?.granted ? (
+          <CameraView
+            ref={cameraRef}
+            style={StyleSheet.absoluteFill}
+            facing="front"
+          />
+        ) : (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <Text style={{ color: '#fff', fontSize: 15, textAlign: 'center', marginBottom: 16 }}>
+              {perm?.canAskAgain === false
+                ? "Caméra refusée. Active la permission dans les réglages du téléphone."
+                : "Will a besoin d'accéder à la caméra pour prendre ton selfie."}
+            </Text>
+            {perm?.canAskAgain !== false && (
+              <TouchableOpacity onPress={requestPerm} style={s.btnPrimary}>
+                <Text style={s.btnPrimaryText}>Autoriser</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Overlay noir 75% avec trou rond au centre */}
+        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Defs>
+            <Mask id="selfieMask">
+              <Rect width="100%" height="100%" fill="white" />
+              <Circle cx={cx} cy={cy} r={CIRCLE_SIZE / 2} fill="black" />
+            </Mask>
+          </Defs>
+          <Rect width="100%" height="100%" fill="rgba(0,0,0,0.75)" mask="url(#selfieMask)" />
+        </Svg>
+
+        {/* Bordure blanche + glow rose autour du cercle */}
+        <View pointerEvents="none" style={{
+          position: 'absolute',
+          left: cx - CIRCLE_SIZE / 2,
+          top: cy - CIRCLE_SIZE / 2,
+          width: CIRCLE_SIZE, height: CIRCLE_SIZE,
+          borderRadius: 999,
+          borderWidth: 3, borderColor: '#fff',
+          shadowColor: '#E673FF',
+          shadowOpacity: 0.7,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 0 },
+          elevation: 10,
+        }} />
+
+        <TouchableOpacity
+          onPress={onClose}
+          hitSlop={10}
+          style={{
+            position: 'absolute', top: 56, right: 20,
+            width: 40, height: 40, borderRadius: 20,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+          </Svg>
+        </TouchableOpacity>
+
+        <Text style={{
+          position: 'absolute',
+          top: cy + CIRCLE_SIZE / 2 + 24,
+          left: 0, right: 0, textAlign: 'center',
+          color: '#fff', fontSize: 14, fontWeight: '600',
+          textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4,
+        }}>
+          Place ton visage dans le cercle
+        </Text>
+
+        <View style={{ position: 'absolute', bottom: 56, left: 0, right: 0, alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={shoot}
+            disabled={busy || !perm?.granted}
+            activeOpacity={0.85}
+            style={{
+              width: 78, height: 78, borderRadius: 999,
+              backgroundColor: 'rgba(255,255,255,0.25)',
+              borderWidth: 4, borderColor: '#fff',
+              alignItems: 'center', justifyContent: 'center',
+              opacity: busy || !perm?.granted ? 0.4 : 1,
+            }}
+          >
+            <View style={{
+              width: 60, height: 60, borderRadius: 999,
+              backgroundColor: C.pinkPillActive,
+            }} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
   const [uri, setUri] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   // Consentement biométrique RGPD art. 9 : on demande explicitement la 1ère fois
   // et on persiste la date d'acceptation (révocable via suppression du selfie).
   const [consentChecked, setConsentChecked] = useState(false);
@@ -3182,16 +3311,8 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
     setConsentGiven(true);
   };
 
-  const take = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) return Alert.alert('Permission refusée');
-    const r = await ImagePicker.launchCameraAsync({
-      cameraType: ImagePicker.CameraType.front,
-      quality: 0.7,
-      allowsEditing: true,
-      aspect: [1, 1],
-    });
-    if (!r.canceled && r.assets?.[0]?.uri) setUri(r.assets[0].uri);
+  const take = () => {
+    setCameraOpen(true);
   };
 
   const pick = async () => {
@@ -3329,6 +3450,15 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
           )}
         </TouchableOpacity>
       </TouchableOpacity>
+
+      <SelfieCameraModal
+        visible={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCaptured={(capturedUri) => {
+          setUri(capturedUri);
+          setCameraOpen(false);
+        }}
+      />
     </Modal>
   );
 }
@@ -4119,7 +4249,7 @@ function SelfieViewerModal({ visible, uri, onClose }) {
           </Svg>
         </TouchableOpacity>
         {uri ? (
-          <ExpoImage source={{ uri }} style={{ width: '85%', aspectRatio: 1, borderRadius: 24 }} contentFit="cover" />
+          <ExpoImage source={{ uri }} style={{ width: '85%', aspectRatio: 1, borderRadius: 999 }} contentFit="cover" />
         ) : null}
       </View>
     </Modal>
