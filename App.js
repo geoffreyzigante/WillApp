@@ -27,6 +27,7 @@ import ReAnimated, {
   runOnJS,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import NetInfo from '@react-native-community/netinfo';
@@ -35,6 +36,40 @@ import { Paths, File, Directory } from 'expo-file-system';
 const API_URL = 'https://will-api.geoffreyzigante.workers.dev';
 const R2_PUBLIC = 'https://pub-f9a5894e66a44f8cbb34582302930449.r2.dev';
 const { width: SCREEN_W } = Dimensions.get('window');
+
+// ─── SecureStore : stockage chiffre des sessions/consentement (M-S08) ─────
+// Cles a migrer d AsyncStorage → SecureStore : sessions runner/organizer/
+// photographer + consentement biometrique. SecureStore n accepte que
+// [A-Za-z0-9._-] : on normalise les cles "@will_*" en "will_*".
+const SECURE_KEYS = [
+  '@will_runner',
+  '@will_organizer',
+  '@will_photographer_session',
+  '@will_biometric_consent_v1',
+];
+const toSecureKey = (k) => k.replace(/^@/, 'will_');
+const Secure = {
+  getItem: (k) => SecureStore.getItemAsync(toSecureKey(k)),
+  setItem: (k, v) => SecureStore.setItemAsync(toSecureKey(k), v),
+  removeItem: (k) => SecureStore.deleteItemAsync(toSecureKey(k)),
+};
+
+// Migration one-shot au demarrage : pour chaque cle sensible, si elle existe
+// dans AsyncStorage, on la copie vers SecureStore puis on l efface. Idempotent
+// (skip si AsyncStorage vide ou SecureStore deja peuple).
+async function migrateSensitiveKeysToSecureStore() {
+  for (const k of SECURE_KEYS) {
+    try {
+      const v = await AsyncStorage.getItem(k);
+      if (v === null) continue;
+      const existing = await SecureStore.getItemAsync(toSecureKey(k));
+      if (existing === null) await SecureStore.setItemAsync(toSecureKey(k), v);
+      await AsyncStorage.removeItem(k);
+    } catch (e) {
+      console.warn('[migrate-secure]', k, e?.message || e);
+    }
+  }
+}
 
 // Mode photographe offline-first : queue persistante d'uploads
 // + photos stockées hors-cache pour survivre au kill / nettoyage iOS.
@@ -2952,7 +2987,7 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
 
   useEffect(() => {
     if (!visible) return;
-    AsyncStorage.getItem(BIOMETRIC_CONSENT_KEY).then(v => {
+    Secure.getItem(BIOMETRIC_CONSENT_KEY).then(v => {
       setConsentGiven(!!v);
       setConsentChecked(false);
     });
@@ -2960,7 +2995,7 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
 
   const acceptConsent = async () => {
     if (!consentChecked) return;
-    await AsyncStorage.setItem(BIOMETRIC_CONSENT_KEY, new Date().toISOString());
+    await Secure.setItem(BIOMETRIC_CONSENT_KEY, new Date().toISOString());
     setConsentGiven(true);
   };
 
@@ -5058,24 +5093,19 @@ export default function App() {
         setUserId(id);
       }
     });
-    // Session runner (compte coureur)
-    AsyncStorage.getItem('@will_runner').then(v => {
-      if (v) {
-        try { setRunnerSession(JSON.parse(v)); } catch {}
-      }
-    });
-    // Session organizer (compte organisateur)
-    AsyncStorage.getItem('@will_organizer').then(v => {
-      if (v) {
-        try { setOrganizerSession(JSON.parse(v)); } catch {}
-      }
-    });
-    // Session photographe (pour accès hors ligne)
-    AsyncStorage.getItem('@will_photographer_session').then(v => {
-      if (v) {
-        try { setSession(JSON.parse(v)); } catch {}
-      }
-    });
+    // Sessions sensibles : migration AsyncStorage → SecureStore puis lecture.
+    (async () => {
+      await migrateSensitiveKeysToSecureStore();
+      Secure.getItem('@will_runner').then(v => {
+        if (v) try { setRunnerSession(JSON.parse(v)); } catch {}
+      });
+      Secure.getItem('@will_organizer').then(v => {
+        if (v) try { setOrganizerSession(JSON.parse(v)); } catch {}
+      });
+      Secure.getItem('@will_photographer_session').then(v => {
+        if (v) try { setSession(JSON.parse(v)); } catch {}
+      });
+    })();
   }, []);
 
   // Quand un compte runner est connecté, on aligne userId sur runner.userId
@@ -5089,7 +5119,7 @@ export default function App() {
 
   const handleAuthSuccess = useCallback((session) => {
     setRunnerSession(session);
-    AsyncStorage.setItem('@will_runner', JSON.stringify(session)).catch(() => {});
+    Secure.setItem('@will_runner', JSON.stringify(session)).catch(() => {});
     setAuthModalVisible(false);
     // Exécute l'action en attente (ex: ouvrir selfie modal après login)
     if (pendingActionRef.current) {
@@ -5110,19 +5140,19 @@ export default function App() {
 
   const logoutRunner = useCallback(() => {
     setRunnerSession(null);
-    AsyncStorage.removeItem('@will_runner').catch(() => {});
+    Secure.removeItem('@will_runner').catch(() => {});
   }, []);
 
   const handleOrganizerAuthSuccess = useCallback((session) => {
     setOrganizerSession(session);
-    AsyncStorage.setItem('@will_organizer', JSON.stringify(session)).catch(() => {});
+    Secure.setItem('@will_organizer', JSON.stringify(session)).catch(() => {});
     setOrganizerAuthVisible(false);
     setBottomTab('events');
   }, []);
 
   const logoutOrganizer = useCallback(() => {
     setOrganizerSession(null);
-    AsyncStorage.removeItem('@will_organizer').catch(() => {});
+    Secure.removeItem('@will_organizer').catch(() => {});
     setBottomTab('home');
   }, []);
 
@@ -5145,7 +5175,11 @@ export default function App() {
               Alert.alert('Erreur', data.error || 'Impossible de supprimer le compte. Réessaie plus tard.');
               return;
             }
-            await AsyncStorage.multiRemove(['@will_runner', '@will_selfie', BIOMETRIC_CONSENT_KEY]);
+            await Promise.all([
+              Secure.removeItem('@will_runner'),
+              Secure.removeItem(BIOMETRIC_CONSENT_KEY),
+              AsyncStorage.removeItem('@will_selfie'),
+            ]);
             setRunnerSession(null);
             setSelfieUri(null);
             Alert.alert('Compte supprimé', 'Toutes tes données ont été supprimées.');
@@ -5176,7 +5210,7 @@ export default function App() {
               Alert.alert('Erreur', data.error || 'Impossible de supprimer le compte. Réessaie plus tard.');
               return;
             }
-            await AsyncStorage.removeItem('@will_organizer');
+            await Secure.removeItem('@will_organizer');
             setOrganizerSession(null);
             setBottomTab('home');
             Alert.alert('Compte supprimé', 'Toutes tes données et événements ont été supprimés.');
@@ -5203,7 +5237,7 @@ export default function App() {
       if (r.ok && data.profile) {
         const next = { ...runnerSession, profile: data.profile };
         setRunnerSession(next);
-        AsyncStorage.setItem('@will_runner', JSON.stringify(next)).catch(() => {});
+        Secure.setItem('@will_runner', JSON.stringify(next)).catch(() => {});
       } else {
         Alert.alert('Erreur', data.error || 'Impossible de modifier les infos');
       }
@@ -5227,7 +5261,7 @@ export default function App() {
       if (r.ok && data.profile) {
         const next = { ...organizerSession, profile: data.profile };
         setOrganizerSession(next);
-        AsyncStorage.setItem('@will_organizer', JSON.stringify(next)).catch(() => {});
+        Secure.setItem('@will_organizer', JSON.stringify(next)).catch(() => {});
       } else {
         Alert.alert('Erreur', data.error || 'Impossible de modifier les infos');
       }
@@ -5251,7 +5285,10 @@ export default function App() {
       { text: 'Annuler', style: 'cancel' },
       { text: 'Supprimer', style: 'destructive', onPress: async () => {
         // RGPD : supprimer le selfie révoque aussi le consentement biométrique
-        await AsyncStorage.multiRemove(['@will_selfie', BIOMETRIC_CONSENT_KEY]);
+        await Promise.all([
+          AsyncStorage.removeItem('@will_selfie'),
+          Secure.removeItem(BIOMETRIC_CONSENT_KEY),
+        ]);
         setSelfieUri(null);
       }},
     ]);
@@ -5348,7 +5385,7 @@ export default function App() {
           <StatusBar barStyle="light-content" backgroundColor="#000" translucent />
           <PhotographerScreen session={session} onLogout={() => {
             setSession(null);
-            AsyncStorage.removeItem('@will_photographer_session').catch(() => {});
+            Secure.removeItem('@will_photographer_session').catch(() => {});
           }} />
         </View>
       </GestureHandlerRootView>
@@ -5497,7 +5534,7 @@ export default function App() {
           const next = { ...r, role: loginRole };
           setSession(next);
           // Persistance pour accès hors ligne (sessions photographe / organizer event)
-          AsyncStorage.setItem('@will_photographer_session', JSON.stringify(next)).catch(() => {});
+          Secure.setItem('@will_photographer_session', JSON.stringify(next)).catch(() => {});
         }}
       />
 
