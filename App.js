@@ -1322,7 +1322,6 @@ function PhotographerScreen({ session, onLogout }) {
   // Flash blanc full-screen au début d'une rafale + animations de l'UI.
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const captureScale = useRef(new Animated.Value(1)).current;
-  const captureInnerSize = useRef(new Animated.Value(64)).current;
   const photoCountScale = useRef(new Animated.Value(1)).current;
   const headerSlideY = useRef(new Animated.Value(-120)).current;
   const footerSlideY = useRef(new Animated.Value(300)).current;
@@ -1727,17 +1726,11 @@ function PhotographerScreen({ session, onLogout }) {
     ]).start();
   }
 
-  // Capture manuelle déclenchée par le bouton rond.
+  // Capture manuelle déclenchée par le bouton GO.
   function onCapturePress() {
-    // Anneau extérieur : scale 0.88 → 1
     Animated.sequence([
-      Animated.timing(captureScale, { toValue: 0.88, duration: 80, useNativeDriver: true }),
+      Animated.timing(captureScale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
       Animated.spring(captureScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
-    ]).start();
-    // Cercle intérieur : shrink 64 → 50 → 64 (layout anim, useNativeDriver: false)
-    Animated.sequence([
-      Animated.timing(captureInnerSize, { toValue: 50, duration: 80, useNativeDriver: false }),
-      Animated.spring(captureInnerSize, { toValue: 64, tension: 180, friction: 7, useNativeDriver: false }),
     ]).start();
     startBurst();
   }
@@ -2064,30 +2057,22 @@ function PhotographerScreen({ session, onLogout }) {
           </View>
         ) : null}
 
-        {/* b) Bouton capture (anneau + cercle intérieur shrink) */}
-        <View style={{ alignItems: 'center', marginBottom: 12 }}>
-          <Animated.View style={{ transform: [{ scale: captureScale }] }}>
-            <TouchableOpacity
-              onPress={onCapturePress}
-              activeOpacity={0.85}
-              disabled={isShooting}
-              style={{
-                width: 88, height: 88, borderRadius: 44,
-                borderWidth: 4, borderColor: '#fff',
-                backgroundColor: 'transparent',
-                alignItems: 'center', justifyContent: 'center',
-                opacity: isShooting ? 0.6 : 1,
-              }}
-            >
-              <Animated.View style={{
-                width: captureInnerSize,
-                height: captureInnerSize,
-                borderRadius: 999,
-                backgroundColor: C.pinkPillActive,
-              }} />
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
+        {/* b) Bouton GO — pill pleine largeur, icône caméra */}
+        <Animated.View style={{ transform: [{ scale: captureScale }], marginBottom: 12 }}>
+          <TouchableOpacity
+            onPress={onCapturePress}
+            activeOpacity={0.9}
+            disabled={isShooting}
+            style={{
+              width: '100%', height: 80, borderRadius: 999,
+              backgroundColor: C.pinkPillActive,
+              alignItems: 'center', justifyContent: 'center',
+              opacity: isShooting ? 0.6 : 1,
+            }}
+          >
+            <Icon.PhotoCam size={32} color="#fff" />
+          </TouchableOpacity>
+        </Animated.View>
 
         {/* c) Stat unifiée — texte centré tappable */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
