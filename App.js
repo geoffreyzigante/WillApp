@@ -1311,6 +1311,9 @@ function PhotographerScreen({ session, onLogout }) {
   // Flag d'arrêt : un tap sur Go pendant la rafale le passe à true ; la boucle
   // dans startBurst le lit à chaque itération et break.
   const abortBurstRef = useRef(false);
+  // Mirror du facesInZoneCount lu via ref (pas via state) au moment du tap Go.
+  // Évite tout problème de closure stale entre le worklet runOnJS et onPress.
+  const facesInZoneCountRef = useRef(0);
 
   const [facesCount, setFacesCount] = useState(0);
   const [facesInZoneCount, setFacesInZoneCount] = useState(0);
@@ -1376,6 +1379,7 @@ function PhotographerScreen({ session, onLogout }) {
       setFacesCount(facesData.length);
       if (!isDetectionEnabledRef.current) {
         setFacesInZoneCount(0);
+        facesInZoneCountRef.current = 0;
         return;
       }
       const cooldownMs = (eventConfig.capture?.cooldownSec ?? 5) * 1000;
@@ -1388,6 +1392,7 @@ function PhotographerScreen({ session, onLogout }) {
         f.inZone && (f.sizeFraction == null || f.sizeFraction <= maxSize)
       );
       setFacesInZoneCount(validInZone.length);
+      facesInZoneCountRef.current = validInZone.length;
 
       if (validInZone.length < minFaces) return;
       if (isCapturingRef.current) return;
@@ -1752,8 +1757,11 @@ function PhotographerScreen({ session, onLogout }) {
   }
 
   // Capture manuelle déclenchée par le bouton GO.
-  // Pendant la rafale, le même bouton sert de Stop : on lève abortBurstRef et
-  // la boucle de startBurst break à la prochaine itération.
+  // - Pendant la rafale : tap = Stop (lève abortBurstRef).
+  // - Sinon : ne déclenche que si un visage est dans la zone (lecture via ref
+  //   pour éviter le closure stale du useState entre worklet runOnJS et onPress).
+  //   Si pas de visage : scale "tap registered" silencieux, pas de rafale.
+  //   L'indicateur "AUCUN VISAGE" dans le header dit pourquoi.
   function onCapturePress() {
     if (isCapturingRef.current) {
       abortBurstRef.current = true;
@@ -1763,6 +1771,7 @@ function PhotographerScreen({ session, onLogout }) {
       Animated.timing(captureScale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
       Animated.spring(captureScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
     ]).start();
+    if (facesInZoneCountRef.current === 0) return;
     startBurst();
   }
 
