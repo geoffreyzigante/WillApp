@@ -2152,7 +2152,7 @@ function PhotographerScreen({ session, onLogout }) {
               activeOpacity={0.9}
               style={{
                 width: 140, height: 60, borderRadius: 999,
-                backgroundColor: C.pinkPillActive,
+                backgroundColor: isShooting ? C.primary : C.pinkPillActive,
                 alignItems: 'center', justifyContent: 'center',
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 4 },
