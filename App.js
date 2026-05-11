@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
-  Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions,
+  Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -404,6 +404,41 @@ const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, chi
     </View>
   );
 });
+
+// ErrorBoundary générique pour les écrans à liste (galerie photos perso /
+// orga / event). Évite qu'une URL malformée ou un render thrown dans une
+// cellule fasse planter tout l'écran. Affiche un fallback avec retry.
+class GridErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.warn('GridErrorBoundary caught:', error?.message || error, info?.componentStack);
+  }
+  reset = () => this.setState({ hasError: false, error: null });
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+          <Text style={{ color: '#1a1a1a', fontSize: 16, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>
+            Impossible d'afficher cette page
+          </Text>
+          <Text style={{ color: '#888', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+            {this.state.error?.message || 'Erreur de rendu inattendue.'}
+          </Text>
+          <TouchableOpacity onPress={this.reset} style={{ backgroundColor: '#7B2FFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10 }}>
+            <Text style={{ color: '#fff', fontWeight: '600' }}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ---------- HELPERS ----------
 const formatDateLong = (iso) => {
@@ -5028,6 +5063,7 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
 function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [raceFilter, setRaceFilter] = useState('all');
   const [visibleCount, setVisibleCount] = useState(20);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -5043,21 +5079,33 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
         headers: { Authorization: `Bearer ${session.token}` },
       });
       const data = r.ok ? await r.json() : { photos: [] };
-      const list = (data.photos || []).map(p => ({
-        uri: p.url,
-        id: p.key,
-        tint,
-        race: p.race,
-        km: p.km,
-      }));
+      // Filtre défensif : on jette les entrées qui n'ont pas une url+key string
+      // valides. Une seule entrée bancale peut faire crasher ExpoImage au render
+      // et entraîner tout l'écran (la map ci-dessous propage l'objet tel quel).
+      const list = (data.photos || [])
+        .filter(p => p && typeof p.url === 'string' && p.url.length > 0
+                       && typeof p.key === 'string' && p.key.length > 0)
+        .map(p => ({
+          uri: p.url,
+          id: p.key,
+          tint,
+          race: p.race,
+          km: p.km,
+        }));
       list.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
       setPhotos(list.slice(0, 500));
-    } catch {
+    } catch (e) {
+      console.warn('loadPhotos failed:', e?.message || e);
       setPhotos([]);
     } finally {
       setLoading(false);
     }
   }, [event.code, session.token, tint]);
+
+  const onPullRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadPhotos(); } finally { setRefreshing(false); }
+  }, [loadPhotos]);
 
   useEffect(() => {
     let mounted = true;
@@ -5160,8 +5208,8 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
     } catch {}
   };
 
-  return (
-    <RefreshableScrollView onRefresh={loadPhotos} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+  const ListHeader = (
+    <>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
           <Text style={[s.welcome, { color: C.primary, fontSize: 18 }]}>
@@ -5186,7 +5234,6 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
         </View>
       </View>
 
-      {/* Carte event */}
       <View style={[s.eventCard, { marginTop: 12, marginBottom: 14 }]}>
         {event.cover_image ? (
           <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
@@ -5205,7 +5252,6 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
         </View>
       </View>
 
-      {/* Bandeau info preview */}
       <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'center' }}>
         <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ marginRight: 10 }}>
           <Circle cx="12" cy="12" r="9" stroke="#92400E" strokeWidth={1.8} />
@@ -5216,7 +5262,6 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
         </Text>
       </View>
 
-      {/* Filtres par course */}
       {distances.length > 0 && (
         <ScrollView
           horizontal showsHorizontalScrollIndicator={false}
@@ -5253,94 +5298,122 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
       <Text style={[s.sectionTitle, { marginVertical: 10 }]}>
         Photos {photos.length > 0 ? `(${filteredPhotos.length})` : ''}
       </Text>
+    </>
+  );
 
-      {loading ? (
-        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-          <ActivityIndicator color={C.primary} />
-        </View>
-      ) : filteredPhotos.length === 0 ? (
-        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-          <Text style={{ color: C.textSoft }}>Aucune photo pour le moment</Text>
-        </View>
-      ) : (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -2 }}>
-          {filteredPhotos.slice(0, visibleCount).map((photo, idx) => {
-            const isSelected = selectedKeys.has(photo.id);
-            return (
-              <TouchableOpacity
-                key={photo.id || idx}
-                onPress={() => handlePhotoPress(photo)}
-                onLongPress={() => {
-                  if (!selectionMode) setSelectionMode(true);
-                  toggleSelect(photo.id);
-                }}
-                activeOpacity={0.85}
-                style={{ width: '33.333%', aspectRatio: 1, padding: 2, position: 'relative' }}
-              >
-                <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#eee', position: 'relative' }}>
-                  <ExpoImage source={{ uri: photo.uri }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-                  {selectionMode && (
-                    <View style={{
-                      position: 'absolute', top: 6, right: 6,
-                      width: 22, height: 22, borderRadius: 11,
-                      backgroundColor: isSelected ? C.primary : 'rgba(0,0,0,0.4)',
-                      borderWidth: 2, borderColor: '#fff',
-                      alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      {isSelected && (
-                        <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-                          <Path d="m4 12 6 6L20 6" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-                        </Svg>
-                      )}
-                    </View>
-                  )}
-                  {isSelected && (
-                    <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(124, 58, 237, 0.25)' }]} />
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
+  const ListEmpty = (
+    <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+      {loading
+        ? <ActivityIndicator color={C.primary} />
+        : <Text style={{ color: C.textSoft }}>Aucune photo pour le moment</Text>}
+    </View>
+  );
 
-      {/* Bouton Supprimer flottant en bas */}
-      {selectionMode && selectedKeys.size > 0 && (
-        <View style={{ position: 'absolute', bottom: 20, left: 20, right: 20 }}>
-          <TouchableOpacity
-            onPress={deleteSelected}
-            disabled={deleting}
-            style={{
-              backgroundColor: '#DC2626',
-              paddingVertical: 16,
-              borderRadius: 14,
-              alignItems: 'center',
-              flexDirection: 'row',
-              justifyContent: 'center',
-              gap: 8,
-              opacity: deleting ? 0.6 : 1,
-              shadowColor: '#000',
-              shadowOpacity: 0.3,
-              shadowRadius: 12,
-              shadowOffset: { width: 0, height: 6 },
-            }}
-          >
-            {deleting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                  <Path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+  // Cellule grille — extraite en fonction pour clarté et keyExtractor stable.
+  const renderItem = ({ item: photo, index }) => {
+    const isSelected = selectedKeys.has(photo.id);
+    return (
+      <TouchableOpacity
+        onPress={() => handlePhotoPress(photo)}
+        onLongPress={() => {
+          if (!selectionMode) setSelectionMode(true);
+          toggleSelect(photo.id);
+        }}
+        activeOpacity={0.85}
+        style={{ width: '33.333%', aspectRatio: 1, padding: 2 }}
+      >
+        <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#eee' }}>
+          <ExpoImage
+            source={{ uri: photo.uri }}
+            style={StyleSheet.absoluteFillObject}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            priority="low"
+            transition={100}
+            recyclingKey={photo.id}
+          />
+          {selectionMode && (
+            <View style={{
+              position: 'absolute', top: 6, right: 6,
+              width: 22, height: 22, borderRadius: 11,
+              backgroundColor: isSelected ? C.primary : 'rgba(0,0,0,0.4)',
+              borderWidth: 2, borderColor: '#fff',
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              {isSelected && (
+                <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                  <Path d="m4 12 6 6L20 6" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
                 </Svg>
-                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
-                  Supprimer ({selectedKeys.size})
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+              )}
+            </View>
+          )}
+          {isSelected && (
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(124, 58, 237, 0.25)' }]} />
+          )}
         </View>
-      )}
-    </RefreshableScrollView>
+      </TouchableOpacity>
+    );
+  };
+
+  // FlatList virtualisée comme root scroller (au lieu de RefreshableScrollView
+  // qui mountait tout en arbre). Réduit drastiquement le pic mémoire sur
+  // les events à 100+ photos.
+  return (
+    <GridErrorBoundary>
+      <View style={{ flex: 1, backgroundColor: C.bg }}>
+        <FlatList
+          data={loading ? [] : filteredPhotos.slice(0, visibleCount)}
+          numColumns={3}
+          keyExtractor={(item, index) => item.id || `p-${index}`}
+          renderItem={renderItem}
+          ListHeaderComponent={ListHeader}
+          ListEmptyComponent={ListEmpty}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={C.primary} />}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
+          removeClippedSubviews
+          initialNumToRender={12}
+          maxToRenderPerBatch={9}
+          windowSize={5}
+        />
+
+        {selectionMode && selectedKeys.size > 0 && (
+          <View style={{ position: 'absolute', bottom: 20, left: 20, right: 20 }}>
+            <TouchableOpacity
+              onPress={deleteSelected}
+              disabled={deleting}
+              style={{
+                backgroundColor: '#DC2626',
+                paddingVertical: 16,
+                borderRadius: 14,
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 8,
+                opacity: deleting ? 0.6 : 1,
+                shadowColor: '#000',
+                shadowOpacity: 0.3,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 6 },
+              }}
+            >
+              {deleting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                    <Path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  </Svg>
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                    Supprimer ({selectedKeys.size})
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </GridErrorBoundary>
   );
 }
 
