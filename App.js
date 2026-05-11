@@ -28,7 +28,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import Svg, { Path, Circle } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import NetInfo from '@react-native-community/netinfo';
 import { Paths, File, Directory } from 'expo-file-system';
@@ -156,11 +156,6 @@ const displayEventType = (t) => (t === 'Velo' ? 'Vélo' : t);
 
 // ---------- ICONS (custom SVG) ----------
 const Icon = {
-  Bell: ({ size = 22, color = '#0A0A0A' }) => (
-    <Svg width={size * (16.93/17.61)} height={size} viewBox="0 0 16.93 17.61" fill={color}>
-      <Path d="M14.14,8.93l.02-1.68c.02-1.39-.31-2.76-1.09-3.91-.74-1.09-1.92-1.7-3.21-1.95C9.81.58,9.2,0,8.44,0c-.76,0-1.36.59-1.4,1.38-1.28.27-2.43.87-3.16,1.94-.76,1.11-1.11,2.44-1.1,3.78l.02,2.01c0,.75-.11,1.49-.44,2.15-.51,1.01-1.65,1.33-2.16,2.08-.21.31-.24.69-.09,1.05.1.24.41.56.78.57h4.93c.03,1.56,1.26,2.67,2.69,2.64,1.42-.03,2.56-1.16,2.59-2.63h5.02c.37-.01.66-.38.75-.62.13-.33.08-.76-.14-1.04-.9-1.16-2.63-1.08-2.59-4.38Z" />
-    </Svg>
-  ),
   User: ({ size = 22, color = '#FFFFFF' }) => (
     <Svg width={size * (18.96/17.61)} height={size} viewBox="0 0 18.96 17.61" fill={color}>
       <Path d="M10.16,0h-1.35C3.94,0,0,3.94,0,8.8s3.94,8.8,8.8,8.8h1.35c4.86,0,8.8-3.94,8.8-8.8S15.02,0,10.16,0ZM9.48,2.77c1.28,0,2.32,1.14,2.32,2.55s-1.04,2.55-2.32,2.55-2.32-1.14-2.32-2.55,1.04-2.55,2.32-2.55ZM9.48,14.33c-2.58,0-4.67-1.23-4.67-2.75s2.09-2.75,4.67-2.75,4.67,1.23,4.67,2.75-2.09,2.75-4.67,2.75Z" />
@@ -198,30 +193,6 @@ const Icon = {
       <Path d="M17.11,2.19h-2.91v-1.15c0-.57-.47-1.04-1.04-1.04h0c-.57,0-1.04.47-1.04,1.04v1.15h-5.98v-1.15c0-.57-.47-1.04-1.04-1.04s-1.04.47-1.04,1.04v1.15H1.47c-.81,0-1.47.66-1.47,1.47v12.48c0,.81.66,1.47,1.47,1.47h15.64c.81,0,1.47-.66,1.47-1.47V3.66c0-.81-.66-1.47-1.47-1.47ZM16.52,13.77c0,.8-.65,1.44-1.44,1.44H3.5c-.8,0-1.44-.65-1.44-1.44v-6.07c0-.8.65-1.44,1.44-1.44h11.57c.8,0,1.44.65,1.44,1.44v6.07Z" />
       <Path d="M14.2,8.47H4.38c-.37,0-.68.3-.68.68s.3.68.68.68h9.81c.37,0,.68-.3.68-.68s-.3-.68-.68-.68Z" />
       <Path d="M14.2,11.74H4.38c-.37,0-.68.3-.68.68s.3.68.68.68h9.81c.37,0,.68-.3.68-.68s-.3-.68-.68-.68Z" />
-    </Svg>
-  ),
-  Heart: ({ size = 22, color = '#FFFFFF' }) => (
-    <Svg width={size} height={size * (17.61/20.78)} viewBox="0 0 20.78 17.61" fill={color}>
-      <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-    </Svg>
-  ),
-  Direct: ({ size = 22, color = '#7B2FFF' }) => (
-    <Svg width={size} height={size} viewBox="0 0 17.61 17.61" fill={color}>
-      <Path d="M8.8,0C3.94,0,0,3.94,0,8.8s3.94,8.8,8.8,8.8,8.8-3.94,8.8-8.8S13.67,0,8.8,0ZM8.8,15.98c-3.96,0-7.18-3.21-7.18-7.18S4.84,1.63,8.8,1.63s7.18,3.21,7.18,7.18-3.21,7.18-7.18,7.18Z" />
-      <Path d="M8.8,3.07c-3.17,0-5.73,2.57-5.73,5.73s2.57,5.73,5.73,5.73,5.73-2.57,5.73-5.73-2.57-5.73-5.73-5.73Z" />
-    </Svg>
-  ),
-  Close: ({ size = 22, color = '#FFFFFF' }) => (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx="12" cy="12" r="11" stroke={color} strokeWidth={1.5} />
-      <Path d="m8 8 8 8M16 8l-8 8" stroke={color} strokeWidth={2} strokeLinecap="round" />
-    </Svg>
-  ),
-  Camera: ({ size = 60, color = '#FFFFFF' }) => (
-    <Svg width={size} height={size} viewBox="0 0 64 64" fill="none">
-      <Rect x="8" y="18" width="48" height="36" rx="6" stroke={color} strokeWidth={2} fill="none" />
-      <Circle cx="32" cy="36" r="10" stroke={color} strokeWidth={2} fill="none" />
-      <Rect x="24" y="12" width="16" height="8" rx="2" stroke={color} strokeWidth={2} fill="none" />
     </Svg>
   ),
   Logo: ({ width = 80, color = '#5313B7' }) => (
@@ -458,12 +429,6 @@ const api = {
       body: JSON.stringify({ code, password, role, photographer_name }),
     });
     return r.ok ? r.json() : null;
-  },
-  async listPhotos(prefix, token) {
-    const r = await fetch(`${API_URL}/list-photos/${prefix}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return r.ok ? r.json() : { photos: [] };
   },
 };
 
@@ -5626,10 +5591,6 @@ const s = StyleSheet.create({
 
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, paddingBottom: 4 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  iconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' },
-  avatarBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center' },
-  orgPill: { backgroundColor: C.pinkPill, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 22 },
-  orgPillText: { color: C.pinkPillText, fontWeight: '600', fontSize: 14 },
   orgToggle: {
     flexDirection: 'row',
     backgroundColor: C.pinkPillBg,
@@ -5648,7 +5609,6 @@ const s = StyleSheet.create({
 
   welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 18, color: C.text, fontWeight: '700' },
   welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 18, marginBottom: 18 },
-  welcomeAccent: { color: C.primary },
 
   selfieDoneBanner: { backgroundColor: C.white, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16, borderWidth: 1, borderColor: C.primaryLight },
   selfieCheckCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F4A6FF', alignItems: 'center', justifyContent: 'center' },
@@ -5661,17 +5621,11 @@ const s = StyleSheet.create({
   selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
   selfieAvatar: { width: 68, height: 68, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 
-  searchBtn: { backgroundColor: C.primary, borderRadius: 16, height: 54, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 12, marginBottom: 16 },
-  searchInputBtn: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '500' },
-
   eventPick: { backgroundColor: C.white, borderRadius: 14, padding: 14, marginTop: 8 },
-  eventPickActive: { backgroundColor: C.primary },
   eventPickName: { fontWeight: '700', fontSize: 15, color: C.text },
   eventPickDate: { fontSize: 12, color: C.textSoft, marginTop: 2 },
 
-  tabsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   sectionTitle: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 22, fontWeight: '700', color: C.text },
-  pillRow: { flexDirection: 'row', backgroundColor: C.pillBg, borderRadius: 22, padding: 4, gap: 4 },
   pill: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: 18 },
   pillActive: { backgroundColor: C.primary },
   pillText: { color: C.primary, fontWeight: '600', fontSize: 13 },
@@ -5680,46 +5634,31 @@ const s = StyleSheet.create({
   empty: { textAlign: 'center', color: C.textSoft, marginTop: 24, fontSize: 14 },
 
   eventCard: { height: 90, borderRadius: 16, overflow: 'hidden', marginBottom: 10, backgroundColor: '#222', justifyContent: 'center' },
-  heartBtn: { position: 'absolute', top: 12, right: 12, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center', zIndex: 5 },
-  eventCardBottom: { position: 'absolute', left: 14, right: 14, bottom: 12 },
   eventCardCenter: { paddingHorizontal: 16, zIndex: 2 },
   eventDate: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 1, opacity: 0.9, marginBottom: 2 },
   eventName: { color: '#fff', fontSize: 18, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal' },
   eventLocation: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 1 },
 
   pageTitleCenter: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 26, fontWeight: '700', color: C.primary, textAlign: 'center', marginVertical: 16 },
-  galleryTitle: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 22, fontWeight: '700', color: C.primary, textAlign: 'center', marginTop: 18, marginBottom: 14 },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   gridItem: { width: (SCREEN_W - 40 - 24) / 4, height: (SCREEN_W - 40 - 24) / 4, marginBottom: 8 },
   gridPlaceholder: { flex: 1, backgroundColor: C.primaryLight, borderRadius: 12 },
   gridImg: { flex: 1, borderRadius: 12 },
 
-  coverCard: { height: 200, borderRadius: 22, overflow: 'hidden', marginTop: 4, marginBottom: 16, backgroundColor: '#222' },
-  closeBtn: { position: 'absolute', top: 14, right: 14, zIndex: 5 },
-  coverBottom: { position: 'absolute', left: 18, right: 18, bottom: 16 },
-  coverTitle: { color: '#fff', fontSize: 26, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal' },
-
-  empRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 14 },
-
   bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: C.white, flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 28, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingHorizontal: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: -4 } },
   navBtn: { alignItems: 'center', justifyContent: 'flex-start', gap: 4, minWidth: 80 },
   navIconWrap: { height: 26, alignItems: 'center', justifyContent: 'center' },
   navLabel: { fontSize: 12, color: C.text, marginTop: 2 },
-  badge: { position: 'absolute', top: -4, right: -8, backgroundColor: '#FF3B7F', borderRadius: 10, minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
-  badgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: C.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 40 },
   modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#D0CCE3', alignSelf: 'center', marginBottom: 18 },
   modalTitle: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 22, fontWeight: '700', color: C.text, textAlign: 'center', marginBottom: 6 },
   modalSub: { color: C.textSoft, textAlign: 'center', marginBottom: 18, fontSize: 13 },
-  modalOption: { backgroundColor: C.white, padding: 18, borderRadius: 16, marginTop: 10 },
-  modalOptionText: { fontWeight: '600', fontSize: 15, color: C.text },
   modalCancel: { padding: 14, alignItems: 'center', marginTop: 12 },
   modalCancelText: { color: C.textSoft, fontWeight: '600' },
 
-  input: { backgroundColor: C.white, borderRadius: 14, padding: 16, marginTop: 10, fontSize: 15, color: C.text },
   btnPrimary: { backgroundColor: C.primary, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 16 },
   btnPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   btnSecondary: { backgroundColor: C.white, padding: 14, borderRadius: 14, alignItems: 'center', marginTop: 10 },
@@ -5727,15 +5666,6 @@ const s = StyleSheet.create({
 
   selfiePreviewWrap: { alignItems: 'center', marginVertical: 16 },
   selfiePreview: { width: 160, height: 160, borderRadius: 80 },
-
-  camTopBar: { position: 'absolute', top: 50, left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  camTitle: { color: '#fff', fontSize: 16, fontWeight: '700', flex: 1, marginRight: 16 },
-  camLogout: { color: '#fff', fontSize: 14, opacity: 0.8 },
-  camBottomBar: { position: 'absolute', bottom: 40, left: 0, right: 0, alignItems: 'center', gap: 8 },
-  camCount: { color: '#fff', fontSize: 14, marginBottom: 4 },
-  camShutter: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.25)', borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  camShutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#fff' },
-  camHint: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
 
   typePill: { backgroundColor: C.white, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 6 },
   typePillActive: { backgroundColor: C.primary },
