@@ -1449,6 +1449,10 @@ function PhotographerScreen({ session, onLogout }) {
   // Zone de déclenchement : bande verticale, position gauche / centre / droite.
   const zonePct = (eventConfig.faceDetection?.triggerZoneWidthPercent ?? 33) / 100;
   const zonePosition = eventConfig.faceDetection?.triggerZonePosition || 'center';
+  // Fraction VERTICALE de la preview où la détection est valide. Doit rester
+  // synchro avec la hauteur du cadre de visée visuel ci-dessous (qui utilise
+  // height: previewH * TRIGGER_VPCT, top: CAMERA_TOP + previewH * (1 - TRIGGER_VPCT) / 2).
+  const TRIGGER_VPCT = 0.8;
 
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
@@ -1457,7 +1461,7 @@ function PhotographerScreen({ session, onLogout }) {
     const fH = frame.height;
     // MLKit retourne les bounds dans le repère du capteur landscape natif.
     // En orientation portrait + landscape-right : axe Y du frame = axe horizontal écran
-    // (gauche écran = grand Y, droite écran = petit Y).
+    // (gauche écran = grand Y, droite écran = petit Y) ; axe X du frame = axe vertical écran.
     const bandWidth = fH * zonePct;
     let testMin = 0, testMax = 0;
     if (zonePosition === 'left') {
@@ -1468,6 +1472,11 @@ function PhotographerScreen({ session, onLogout }) {
       testMin = fH / 2 - bandWidth / 2;
       testMax = fH / 2 + bandWidth / 2;
     }
+    // Bande VERTICALE écran = axe X du frame. On exige que le visage soit dans
+    // les TRIGGER_VPCT centrés (= dans le cadre de visée visuel).
+    const vMargin = fW * (1 - TRIGGER_VPCT) / 2;
+    const vMin = vMargin;
+    const vMax = fW - vMargin;
 
     const facesData = faces.map(f => {
       const bounds = f.bounds || f.frame || {};
@@ -1477,7 +1486,7 @@ function PhotographerScreen({ session, onLogout }) {
         (bounds.width || 0) / fW,
         (bounds.height || 0) / fH,
       );
-      const inside = (cy >= testMin && cy <= testMax);
+      const inside = (cy >= testMin && cy <= testMax) && (cx >= vMin && cx <= vMax);
       return {
         id: f.trackingId != null ? String(f.trackingId) : `${Math.round(cx)}_${Math.round(cy)}`,
         inZone: inside,
@@ -1485,7 +1494,7 @@ function PhotographerScreen({ session, onLogout }) {
       };
     });
     onFacesDetectedJS(facesData);
-  }, [detectFaces, onFacesDetectedJS, zonePct, zonePosition]);
+  }, [detectFaces, onFacesDetectedJS, zonePct, zonePosition, TRIGGER_VPCT]);
 
   const NO_FACE_TIMEOUT_MS = 500;
   const INTER_PHOTO_MS = 100; // ~5 photos/sec, optimum vitesse/utilité
@@ -1917,16 +1926,16 @@ function PhotographerScreen({ session, onLogout }) {
       />
 
       {/* ─── CADRAGE DÉTECTION : lignes verticales subtiles (0.35) + 4 coins en L.
-          Hauteur du cadre = 80% de la preview (réduit -20%), recentré
-          verticalement. La détection MLKit reste sur la frame entière
-          (cadre = repère visuel pour le photographe, pas la zone réelle). ─── */}
+          Bande verticale = TRIGGER_VPCT de la preview centrée. Le worklet
+          MLKit applique strictement la même contrainte (cf. vMin/vMax dans
+          le frame processor), donc visuel et logique sont alignés. ─── */}
       <View
         pointerEvents="none"
         style={{
           position: 'absolute',
-          top: CAMERA_TOP + previewH * 0.1,
+          top: CAMERA_TOP + previewH * (1 - TRIGGER_VPCT) / 2,
           left: 0, right: 0,
-          height: previewH * 0.8,
+          height: previewH * TRIGGER_VPCT,
           flexDirection: 'row',
           justifyContent:
             zonePosition === 'left' ? 'flex-start' :
