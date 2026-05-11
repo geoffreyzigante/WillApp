@@ -667,7 +667,7 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
   );
 }
 
-function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites, userId, onOpenPhoto }) {
+function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites, userId, onOpenPhoto, runnerToken }) {
   const hasFavorites = favorites && favorites.length > 0;
   const [photos, setPhotos] = useState([]);
   const [visibleCount, setVisibleCount] = useState(20);
@@ -680,7 +680,8 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
   }
 
   const loadPhotos = useCallback(async () => {
-    if (!hasFavorites || !selfieUri || !userId) {
+    // user_id deduit du Bearer cote worker → besoin du runnerToken
+    if (!hasFavorites || !selfieUri || !userId || !runnerToken) {
       setPhotos([]);
       return;
     }
@@ -690,7 +691,9 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
     for (const code of favorites) {
       const tint = eventTintMap[code] || TYPE_COLORS.Autre;
       try {
-        const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}?user_id=${encodeURIComponent(userId)}`);
+        const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}`, {
+          headers: { Authorization: `Bearer ${runnerToken}` },
+        });
         if (r.ok) {
           const data = await r.json();
           for (const p of (data.photos || [])) {
@@ -702,7 +705,7 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
     all.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
     setPhotos(all);
     setLoading(false);
-  }, [favorites, selfieUri, userId]);
+  }, [favorites, selfieUri, userId, runnerToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -5394,6 +5397,7 @@ export default function App() {
                   onOpenProfile={() => setProfileMenu(true)}
                   favorites={favorites}
                   userId={userId}
+                  runnerToken={runnerSession?.token}
                   onOpenPhoto={(photo, list) => setOpenedPhoto({ photo, photos: list })}
                 />
               </View>
