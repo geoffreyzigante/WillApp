@@ -1,3 +1,14 @@
+# DESACTIVE TEMPORAIREMENT — Cat G securite auth (M-S08 SecureStore).
+#
+# Raison : M-S08 ajoute expo-secure-store (module natif). Un eas update OTA
+# pousserait le JS qui reference SecureStore.* alors que le binding natif
+# n est pas encore dans le binaire installe → crash au premier appel.
+#
+# A reactiver (renommer en deploy.yml) UNIQUEMENT apres :
+#   1. eas build --profile preview/production --platform ios (puis android)
+#   2. Test du nouveau binaire sur device (login, selfie, galerie perso)
+#   3. Soumission App Store / install TestFlight OK
+#
 name: EAS Update
 
 on:
