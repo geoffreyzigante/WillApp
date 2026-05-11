@@ -4934,9 +4934,18 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
     );
   };
 
+  // Valeurs alignées avec le worker (status renvoyé par /organizer/my-events) :
+  //   pending           → soumission en cours de validation admin
+  //   validated         → admin a validé, en attente de décision billing (transitoire)
+  //   pending_payment   → admin a fixé un montant, en attente du règlement orga
+  //   free              → activé en mode gratuit, en ligne
+  //   paid              → réglé, en ligne
+  //   rejected          → refusé par admin
   const statusInfo = (st) => {
     if (st === 'pending') return { label: 'En cours de validation', color: '#F59E0B', bg: '#FEF3C7' };
-    if (st === 'validated') return { label: 'À régler', color: '#EC4899', bg: '#FCE7F3' };
+    if (st === 'validated') return { label: 'En cours d\'activation', color: '#8B5CF6', bg: '#EDE9FE' };
+    if (st === 'pending_payment') return { label: 'À régler', color: '#EC4899', bg: '#FCE7F3' };
+    if (st === 'free') return { label: 'En ligne · gratuit', color: '#10B981', bg: '#D1FAE5' };
     if (st === 'paid') return { label: 'En ligne', color: '#10B981', bg: '#D1FAE5' };
     if (st === 'rejected') return { label: 'Refusé', color: '#DC2626', bg: '#FEE2E2' };
     return { label: st, color: C.textSoft, bg: '#f5f3ff' };
@@ -4993,7 +5002,7 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
 
               {/* Bloc actions sous la carte */}
               <View style={{ backgroundColor: '#faf9ff', borderBottomLeftRadius: 16, borderBottomRightRadius: 16, marginTop: -10, paddingTop: 16, paddingHorizontal: 14, paddingBottom: 12 }}>
-                {e.status === 'validated' && (
+                {e.status === 'pending_payment' && (
                   <TouchableOpacity
                     onPress={() => pay(e.code)}
                     disabled={paying === e.code}
