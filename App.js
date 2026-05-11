@@ -2937,9 +2937,29 @@ function OrganizationModal({ visible, onClose, onPickRole }) {
   );
 }
 
+const BIOMETRIC_CONSENT_KEY = '@will_biometric_consent_v1';
+
 function SelfieModal({ visible, onClose, onSaved, userId }) {
   const [uri, setUri] = useState(null);
   const [busy, setBusy] = useState(false);
+  // Consentement biométrique RGPD art. 9 : on demande explicitement la 1ère fois
+  // et on persiste la date d'acceptation (révocable via suppression du selfie).
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [consentGiven, setConsentGiven] = useState(null); // null = en cours de chargement, true/false sinon
+
+  useEffect(() => {
+    if (!visible) return;
+    AsyncStorage.getItem(BIOMETRIC_CONSENT_KEY).then(v => {
+      setConsentGiven(!!v);
+      setConsentChecked(false);
+    });
+  }, [visible]);
+
+  const acceptConsent = async () => {
+    if (!consentChecked) return;
+    await AsyncStorage.setItem(BIOMETRIC_CONSENT_KEY, new Date().toISOString());
+    setConsentGiven(true);
+  };
 
   const take = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -3003,8 +3023,56 @@ function SelfieModal({ visible, onClose, onSaved, userId }) {
           <TouchableOpacity onPress={onClose} hitSlop={20}>
             <View style={s.modalHandle} />
           </TouchableOpacity>
+
+          {consentGiven === false ? (
+            <>
+              <Text style={s.modalTitle}>Reconnaissance faciale</Text>
+              <Text style={[s.modalSub, { textAlign: 'left', lineHeight: 20 }]}>
+                Pour t'envoyer automatiquement tes photos d'événement, Will utilise ton selfie comme référence biométrique. L'image et l'empreinte faciale générée par AWS Rekognition sont chiffrées, stockées sur des serveurs européens, et supprimées 30 jours après ton dernier événement.{'\n\n'}
+                Tu peux retirer ton consentement à tout moment en supprimant ton selfie depuis l'app.
+              </Text>
+              <TouchableOpacity
+                onPress={() => Linking.openURL('https://will-app.com/privacy').catch(() => {})}
+                style={{ marginBottom: 16, alignSelf: 'flex-start' }}
+                hitSlop={10}
+              >
+                <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' }}>
+                  Lire la Politique de confidentialité
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setConsentChecked(c => !c)}
+                style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 18 }}
+                activeOpacity={0.7}
+              >
+                <View style={{
+                  width: 22, height: 22, borderRadius: 6, borderWidth: 2,
+                  borderColor: consentChecked ? C.primary : '#bbb',
+                  backgroundColor: consentChecked ? C.primary : 'transparent',
+                  marginRight: 10, marginTop: 2, alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {consentChecked ? (
+                    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                      <Path d="m5 12 5 5L20 7" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
+                  ) : null}
+                </View>
+                <Text style={{ flex: 1, color: C.text, fontSize: 14, lineHeight: 19 }}>
+                  J'accepte le traitement biométrique de mon image (RGPD art. 9).
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.btnPrimary, !consentChecked && { opacity: 0.4 }]}
+                onPress={acceptConsent}
+                disabled={!consentChecked}
+              >
+                <Text style={s.btnPrimaryText}>Continuer</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
           <Text style={s.modalTitle}>Mon selfie</Text>
-          <Text style={s.modalSub}>Une seule photo de toi suffit. On la garde sur ton téléphone uniquement.</Text>
+          <Text style={s.modalSub}>Ton selfie est utilisé pour la reconnaissance faciale. Il est chiffré, stocké sur des serveurs européens, et supprimé automatiquement 30 jours après ton dernier événement.</Text>
 
           <View style={s.selfiePreviewWrap}>
             {uri ? (
@@ -3032,6 +3100,8 @@ function SelfieModal({ visible, onClose, onSaved, userId }) {
           <TouchableOpacity style={s.modalCancel} onPress={onClose}>
             <Text style={s.modalCancelText}>Fermer</Text>
           </TouchableOpacity>
+            </>
+          )}
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -3332,7 +3402,7 @@ function SearchModal({ visible, events, onClose, onPick }) {
 }
 
 // ---------- ROOT ----------
-function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, onLogout, onLogin, onUpdateProfile }) {
+function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, onLogout, onLogin, onUpdateProfile, onDeleteAccount }) {
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -3533,6 +3603,14 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                 <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
               </TouchableOpacity>
             )}
+
+            {profile && onDeleteAccount && (
+              <TouchableOpacity onPress={onDeleteAccount} style={{ alignItems: 'center', marginTop: 4, paddingVertical: 10 }}>
+                <Text style={{ color: C.textSoft, fontSize: 12, textDecorationLine: 'underline' }}>
+                  Supprimer mon compte
+                </Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -3554,7 +3632,7 @@ function InfoRow({ label, value, last }) {
   );
 }
 
-function OrganizerProfileMenuModal({ visible, onClose, organizerSession, onLogout, onUpdate }) {
+function OrganizerProfileMenuModal({ visible, onClose, organizerSession, onLogout, onUpdate, onDeleteAccount }) {
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -3710,6 +3788,14 @@ function OrganizerProfileMenuModal({ visible, onClose, organizerSession, onLogou
               {profile && (
                 <TouchableOpacity onPress={() => { onClose(); onLogout?.(); }} style={{ alignItems: 'center', marginTop: 12, paddingVertical: 12 }}>
                   <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
+                </TouchableOpacity>
+              )}
+
+              {profile && onDeleteAccount && (
+                <TouchableOpacity onPress={onDeleteAccount} style={{ alignItems: 'center', marginTop: 4, paddingVertical: 10 }}>
+                  <Text style={{ color: C.textSoft, fontSize: 12, textDecorationLine: 'underline' }}>
+                    Supprimer mon compte
+                  </Text>
                 </TouchableOpacity>
               )}
             </ScrollView>
@@ -5033,6 +5119,68 @@ export default function App() {
     setBottomTab('home');
   }, []);
 
+  // RGPD : suppression définitive du compte coureur (App Store Guideline 5.1.1(v))
+  const deleteRunnerAccount = useCallback(() => {
+    if (!runnerSession?.token) return;
+    Alert.alert(
+      'Supprimer mon compte ?',
+      'Cette action est définitive. Ton selfie, ton profil coureur et toutes tes données associées seront supprimés. Tes photos d\'événements ne te seront plus envoyées.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', style: 'destructive', onPress: async () => {
+          try {
+            const r = await fetch(`${API_URL}/runner/account`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${runnerSession.token}` },
+            });
+            if (!r.ok) {
+              const data = await r.json().catch(() => ({}));
+              Alert.alert('Erreur', data.error || 'Impossible de supprimer le compte. Réessaie plus tard.');
+              return;
+            }
+            await AsyncStorage.multiRemove(['@will_runner', '@will_selfie', BIOMETRIC_CONSENT_KEY]);
+            setRunnerSession(null);
+            setSelfieUri(null);
+            Alert.alert('Compte supprimé', 'Toutes tes données ont été supprimées.');
+          } catch (e) {
+            Alert.alert('Erreur réseau', 'Vérifie ta connexion et réessaie.');
+          }
+        }},
+      ]
+    );
+  }, [runnerSession]);
+
+  // RGPD : suppression définitive du compte organisateur + tous ses events
+  const deleteOrganizerAccount = useCallback(() => {
+    if (!organizerSession?.token) return;
+    Alert.alert(
+      'Supprimer mon compte organisateur ?',
+      'Cette action est définitive. Ton profil organisateur et TOUS tes événements (photos, métadonnées, données biométriques associées) seront supprimés. Aucun retour en arrière possible.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', style: 'destructive', onPress: async () => {
+          try {
+            const r = await fetch(`${API_URL}/organizer/account`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${organizerSession.token}` },
+            });
+            if (!r.ok) {
+              const data = await r.json().catch(() => ({}));
+              Alert.alert('Erreur', data.error || 'Impossible de supprimer le compte. Réessaie plus tard.');
+              return;
+            }
+            await AsyncStorage.removeItem('@will_organizer');
+            setOrganizerSession(null);
+            setBottomTab('home');
+            Alert.alert('Compte supprimé', 'Toutes tes données et événements ont été supprimés.');
+          } catch (e) {
+            Alert.alert('Erreur réseau', 'Vérifie ta connexion et réessaie.');
+          }
+        }},
+      ]
+    );
+  }, [organizerSession]);
+
   const updateRunnerProfile = useCallback(async (changes) => {
     if (!runnerSession?.token) return;
     try {
@@ -5095,7 +5243,8 @@ export default function App() {
     Alert.alert('Supprimer le selfie ?', 'Tu pourras en reprendre un nouveau.', [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Supprimer', style: 'destructive', onPress: async () => {
-        await AsyncStorage.removeItem('@will_selfie');
+        // RGPD : supprimer le selfie révoque aussi le consentement biométrique
+        await AsyncStorage.multiRemove(['@will_selfie', BIOMETRIC_CONSENT_KEY]);
         setSelfieUri(null);
       }},
     ]);
@@ -5369,6 +5518,7 @@ export default function App() {
         onLogout={logoutRunner}
         onLogin={() => setAuthModalVisible(true)}
         onUpdateProfile={updateRunnerProfile}
+        onDeleteAccount={() => { setProfileMenu(false); deleteRunnerAccount(); }}
       />
 
       <SelfieViewerModal
@@ -5404,6 +5554,7 @@ export default function App() {
         organizerSession={organizerSession}
         onLogout={logoutOrganizer}
         onUpdate={updateOrganizerProfile}
+        onDeleteAccount={() => { setOrganizerProfileMenu(false); deleteOrganizerAccount(); }}
       />
     </SafeAreaView>
     </GestureHandlerRootView>
