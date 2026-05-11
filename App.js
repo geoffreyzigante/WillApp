@@ -225,7 +225,50 @@ const Icon = {
       <Path d="M14.2,10.19H4.38c-.37,0-.68.3-.68.68s.3.68.68.68h9.81c.37,0,.68-.3.68-.68s-.3-.68-.68-.68Z" />
     </Svg>
   ),
+  // Œil ouvert : affiche le mot de passe
+  Eye: ({ size = 20, color = '#9CA3AF' }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={1.8} />
+    </Svg>
+  ),
+  // Œil barré : masque le mot de passe
+  EyeOff: ({ size = 20, color = '#9CA3AF' }) => (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M10.73 5.08A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M2 2l20 20" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  ),
 };
+
+// Champ mot de passe avec icône œil pour afficher/masquer
+function PasswordInput({ value, onChangeText, placeholder, style, autoFocus, autoCapitalize = 'none', placeholderTextColor }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <View style={{ position: 'relative', justifyContent: 'center' }}>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={placeholderTextColor}
+        secureTextEntry={!visible}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={false}
+        autoFocus={autoFocus}
+        style={[style, { paddingRight: 44 }]}
+      />
+      <TouchableOpacity
+        onPress={() => setVisible(v => !v)}
+        hitSlop={10}
+        style={{ position: 'absolute', right: 12, top: 0, bottom: 0, justifyContent: 'center' }}
+      >
+        {visible ? <Icon.EyeOff size={20} color="#9CA3AF" /> : <Icon.Eye size={20} color="#9CA3AF" />}
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 // ---------- LOADING / PULL-TO-REFRESH ----------
 const LoadingIcon = ({ size = 26, color = '#c9beed' }) => (
@@ -494,10 +537,10 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
 
   return (
     <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-      {/* Header */}
+      {/* Header : avatar + "Bienvenue sur Will" + pills orga/photographe */}
       <View style={s.headerRow}>
-        <View style={s.headerLeft}>
-<TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
+        <View style={[s.headerLeft, { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }]}>
+          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
             <Icon.User size={30} color="#c9beed" />
             {selfieUri && (
               <View style={{
@@ -513,6 +556,10 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
               }} />
             )}
           </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+            <Text style={[s.welcome, { color: '#c9beed', fontSize: 17 }]} numberOfLines={1}>Bienvenue sur </Text>
+            <Icon.Logo width={36} color="#c9beed" />
+          </View>
         </View>
         <View style={s.orgToggle}>
           <TouchableOpacity
@@ -532,11 +579,6 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             <Icon.CamOrg size={24} color={C.pinkPillActive} />
           </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={s.welcomeRow}>
-        <Text style={[s.welcome, { color: '#c9beed' }]}>Bienvenue sur </Text>
-        <Icon.Logo width={50} color="#c9beed" />
       </View>
 
       {/* Carte selfie : uniquement si pas encore pris */}
@@ -3653,19 +3695,19 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                 <Text style={{ color: C.text, fontSize: 14, fontWeight: '700', marginBottom: 10 }}>
                   Changer mon mot de passe
                 </Text>
-                <TextInput
+                <PasswordInput
                   placeholder="Mot de passe actuel" placeholderTextColor={C.textSoft}
-                  value={currentPwd} onChangeText={setCurrentPwd} secureTextEntry
+                  value={currentPwd} onChangeText={setCurrentPwd}
                   style={authStyles.input}
                 />
-                <TextInput
+                <PasswordInput
                   placeholder="Nouveau mot de passe (10 car. min)" placeholderTextColor={C.textSoft}
-                  value={newPwd} onChangeText={setNewPwd} secureTextEntry
+                  value={newPwd} onChangeText={setNewPwd}
                   style={authStyles.input}
                 />
-                <TextInput
+                <PasswordInput
                   placeholder="Confirmer le nouveau" placeholderTextColor={C.textSoft}
-                  value={pwdConfirm} onChangeText={setPwdConfirm} secureTextEntry
+                  value={pwdConfirm} onChangeText={setPwdConfirm}
                   style={authStyles.input}
                 />
                 {pwdError ? <Text style={{ color: '#ff6b6b', fontSize: 12, marginTop: 4 }}>{pwdError}</Text> : null}
@@ -3840,19 +3882,19 @@ function OrganizerProfileMenuModal({ visible, onClose, organizerSession, onLogou
                   <Text style={{ color: C.text, fontSize: 14, fontWeight: '700', marginBottom: 10 }}>
                     Changer mon mot de passe
                   </Text>
-                  <TextInput
+                  <PasswordInput
                     placeholder="Ancien mot de passe" placeholderTextColor={C.textSoft}
-                    value={oldPwd} onChangeText={setOldPwd} secureTextEntry
+                    value={oldPwd} onChangeText={setOldPwd}
                     style={authStyles.input}
                   />
-                  <TextInput
+                  <PasswordInput
                     placeholder="Nouveau mot de passe (10 car. min)" placeholderTextColor={C.textSoft}
-                    value={newPwd} onChangeText={setNewPwd} secureTextEntry
+                    value={newPwd} onChangeText={setNewPwd}
                     style={authStyles.input}
                   />
-                  <TextInput
+                  <PasswordInput
                     placeholder="Confirmer le nouveau" placeholderTextColor={C.textSoft}
-                    value={pwdConfirm} onChangeText={setPwdConfirm} secureTextEntry
+                    value={pwdConfirm} onChangeText={setPwdConfirm}
                     style={authStyles.input}
                   />
                   {pwdError ? <Text style={{ color: '#ff6b6b', fontSize: 12, marginTop: 4 }}>{pwdError}</Text> : null}
@@ -4274,6 +4316,14 @@ function AuthRunnerModal({ visible, onClose, onSuccess }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // Pré-remplit l'email avec la dernière valeur connue à chaque ouverture.
+  useEffect(() => {
+    if (!visible) return;
+    AsyncStorage.getItem('@will_last_email_runner').then(v => {
+      if (v) setEmail(prev => prev || v);
+    }).catch(() => {});
+  }, [visible]);
+
   const reset = () => {
     setEmail(''); setPassword(''); setFirstName(''); setLastName('');
     setPostalCode(''); setCity(''); setCitySuggestions([]);
@@ -4416,12 +4466,11 @@ function AuthRunnerModal({ visible, onClose, onSuccess }) {
             autoCorrect={false}
             style={authStyles.input}
           />
-          <TextInput
+          <PasswordInput
             placeholder="Mot de passe"
             placeholderTextColor={C.textSoft}
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
             style={authStyles.input}
           />
           {mode === 'register' && password ? (
@@ -4506,6 +4555,14 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // Pré-remplit l'email avec la dernière valeur connue à chaque ouverture.
+  useEffect(() => {
+    if (!visible) return;
+    AsyncStorage.getItem('@will_last_email_organizer').then(v => {
+      if (v) setEmail(prev => prev || v);
+    }).catch(() => {});
+  }, [visible]);
+
   const reset = () => {
     setEmail(''); setPassword(''); setFirstName(''); setLastName('');
     setError(''); setBusy(false);
@@ -4561,7 +4618,7 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
               </>
             )}
             <TextInput placeholder="Email" placeholderTextColor={C.textSoft} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={authStyles.input} />
-            <TextInput placeholder="Mot de passe" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} secureTextEntry style={authStyles.input} />
+            <PasswordInput placeholder="Mot de passe" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} style={authStyles.input} />
 
             {mode === 'register' && password ? (
               <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
@@ -4756,13 +4813,11 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
       {/* Carte event */}
       <View style={[s.eventCard, { marginTop: 12, marginBottom: 14 }]}>
         {event.cover_image ? (
-          <View style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '55%' }}>
-            <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-          </View>
+          <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
         ) : null}
         <LinearGradient
-          colors={[tint, `${tint}99`, `${tint}00`]}
-          locations={[0, 0.5, 1]}
+          colors={[tint, tint, 'transparent']}
+          locations={[0, 0.45, 1]}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
           style={StyleSheet.absoluteFillObject}
@@ -5194,9 +5249,11 @@ export default function App() {
   }, [runnerSession]);
 
   const logoutRunner = useCallback(() => {
+    const lastEmail = runnerSession?.profile?.email;
+    if (lastEmail) AsyncStorage.setItem('@will_last_email_runner', lastEmail).catch(() => {});
     setRunnerSession(null);
     Secure.removeItem('@will_runner').catch(() => {});
-  }, []);
+  }, [runnerSession]);
 
   const handleOrganizerAuthSuccess = useCallback((session) => {
     setOrganizerSession(session);
@@ -5206,10 +5263,12 @@ export default function App() {
   }, []);
 
   const logoutOrganizer = useCallback(() => {
+    const lastEmail = organizerSession?.profile?.email;
+    if (lastEmail) AsyncStorage.setItem('@will_last_email_organizer', lastEmail).catch(() => {});
     setOrganizerSession(null);
     Secure.removeItem('@will_organizer').catch(() => {});
     setBottomTab('home');
-  }, []);
+  }, [organizerSession]);
 
   // RGPD : suppression définitive du compte coureur (App Store Guideline 5.1.1(v))
   const deleteRunnerAccount = useCallback(() => {
@@ -5536,13 +5595,13 @@ export default function App() {
 
       {/* Bottom Nav */}
       <View style={s.bottomNav}>
-        <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('home'); setOpenedEvent(null); }}>
+        <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('home'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
           <View style={s.navIconWrap}>
             <Icon.Home size={22} filled={bottomTab === 'home'} color={bottomTab === 'home' ? C.primary : C.text} />
           </View>
           <Text style={[s.navLabel, bottomTab === 'home' && { color: C.primary, fontWeight: '700' }]}>Accueil</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.navBtn} onPress={() => requireAuth(() => { setBottomTab('photos'); setOpenedEvent(null); })}>
+        <TouchableOpacity style={s.navBtn} onPress={() => requireAuth(() => { setBottomTab('photos'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); })}>
           <View style={s.navIconWrap}>
             <Icon.Photos size={22} filled={bottomTab === 'photos'} color={bottomTab === 'photos' ? C.primary : C.text} />
           </View>
