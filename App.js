@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions,
-  StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
+  StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking, Vibration,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -1319,6 +1319,13 @@ function PhotographerScreen({ session, onLogout }) {
   const badgeOpacity = useRef(new Animated.Value(1)).current;
   const edgePulse = useRef(new Animated.Value(0.6)).current;
 
+  // Flash blanc full-screen au début d'une rafale + badge "+N" qui pop sur le compteur.
+  const flashOpacity = useRef(new Animated.Value(0)).current;
+  const burstBadgeScale = useRef(new Animated.Value(0)).current;
+  const burstBadgeOpacity = useRef(new Animated.Value(0)).current;
+  const captureScale = useRef(new Animated.Value(1)).current;
+  const [lastBurstCount, setLastBurstCount] = useState(0);
+
   // MLKit ne supporte pas confidenceThreshold (face *detection*); on garde
   // minFaceSize comme pré-filtre côté natif et on filtre maxFaceSize côté JS.
   const minFaceSizeMlkit = (eventConfig.faceDetection?.minFaceSizePercent ?? 5) / 100;
@@ -1689,6 +1696,47 @@ function PhotographerScreen({ session, onLogout }) {
     lastFaceSeenAtRef.current = 0;
   }
 
+  // Détection activée par défaut dès l'ouverture de l'écran photographe — la
+  // capture button et le frame processor déclenchent tous les deux startBurst().
+  useEffect(() => {
+    startSession();
+    return () => stopSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Feedback visuel/haptique au lancement d'une rafale.
+  function triggerBurstFeedback(burstCount) {
+    // 1. Vibration légère (fallback expo-haptics — pas en deps natives donc OTA-only avec Vibration)
+    try { Vibration.vibrate(10); } catch {}
+    // 2. Flash blanc 100ms
+    flashOpacity.setValue(0);
+    Animated.sequence([
+      Animated.timing(flashOpacity, { toValue: 0.55, duration: 40, useNativeDriver: true }),
+      Animated.timing(flashOpacity, { toValue: 0, duration: 100, useNativeDriver: true }),
+    ]).start();
+    // 3. Badge +N qui pop
+    setLastBurstCount(burstCount);
+    burstBadgeScale.setValue(0.4);
+    burstBadgeOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(burstBadgeScale, { toValue: 1, tension: 110, friction: 7, useNativeDriver: true }),
+      Animated.sequence([
+        Animated.timing(burstBadgeOpacity, { toValue: 1, duration: 120, useNativeDriver: true }),
+        Animated.delay(700),
+        Animated.timing(burstBadgeOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }
+
+  // Capture manuelle déclenchée par le bouton rond.
+  function onCapturePress() {
+    Animated.sequence([
+      Animated.timing(captureScale, { toValue: 0.92, duration: 80, useNativeDriver: true }),
+      Animated.spring(captureScale, { toValue: 1, tension: 200, friction: 8, useNativeDriver: true }),
+    ]).start();
+    startBurst();
+  }
+
   async function startBurst() {
     if (isCapturingRef.current) return;
     if (!cameraRef.current || !isMountedRef.current) return;
@@ -1701,6 +1749,9 @@ function PhotographerScreen({ session, onLogout }) {
     const queue = [];
     const BURST_COUNT = eventConfig.capture?.burstCount ?? 8;
     const INTER_BURST_MS = eventConfig.capture?.interBurstMs ?? 150;
+
+    // Feedback dès le départ — flash + vibration + badge +N
+    triggerBurstFeedback(BURST_COUNT);
 
     // Capture HQ découplée du frame processor: chaque takePhoto utilise
     // la pleine résolution du capteur. Pas de throttle iOS-side, on laisse
@@ -1788,8 +1839,22 @@ function PhotographerScreen({ session, onLogout }) {
         ? `${facesCount} visage${facesCount > 1 ? 's' : ''} détecté${facesCount > 1 ? 's' : ''}`
         : 'Prêt';
 
+  // Couleur primaire mode photographe (rose ORGA, distinct du violet coureur).
+  const PHOTO_TINT = C.pinkPill;
+
+  // Label statut affiché dans le header flottant.
+  const statusInfo = isShooting
+    ? { label: 'Capture', dot: '#EF4444' }
+    : !isOnline
+      ? { label: 'Hors ligne', dot: '#F59E0B' }
+      : facesCount > 0
+        ? { label: 'Détection', dot: '#F59E0B' }
+        : { label: 'Prêt', dot: '#22C55E' };
+
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
+      {/* Caméra plein écran — resizeMode 'cover' supprime le letterbox (bandes noires).
+          La détection (frame processor) reste en coordonnées sensor : performance Rekognition inchangée. */}
       <VisionCamera
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
@@ -1800,64 +1865,14 @@ function PhotographerScreen({ session, onLogout }) {
         frameProcessor={frameProcessor}
         pixelFormat="yuv"
         zoom={zoomLevel}
-        resizeMode="contain"
+        resizeMode="cover"
         photoQualityBalance={photoQualityBalance}
         photoHdr={photoHdrEnabled}
         videoStabilizationMode={videoStabilizationMode}
         enableLocation={false}
       />
 
-      {/* ─── BANDEAU TOP ─── event + pill état + close */}
-      <View style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: bandH,
-        flexDirection: 'row', alignItems: 'center',
-        paddingTop: 44, paddingHorizontal: 14, gap: 10,
-        zIndex: 5,
-      }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
-            {session?.event?.name || 'Événement'}
-          </Text>
-          {session?.event?.event_date ? (
-            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginTop: 1 }} numberOfLines={1}>
-              {formatDateLong(session.event.event_date)}
-            </Text>
-          ) : null}
-        </View>
-
-        {(() => {
-          const label = isShooting ? 'Capture' : (facesCount > 0 ? 'Détection' : 'Prêt');
-          const bg = isShooting
-            ? 'rgba(239, 68, 68, 0.92)'
-            : (facesCount > 0 ? 'rgba(245, 158, 11, 0.92)' : 'rgba(34, 197, 94, 0.92)');
-          return (
-            <View style={{
-              paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
-              backgroundColor: bg, flexDirection: 'row', alignItems: 'center', gap: 6,
-            }}>
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#fff' }} />
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{label}</Text>
-            </View>
-          );
-        })()}
-
-        <TouchableOpacity
-          onPress={onLogout}
-          hitSlop={10}
-          style={{
-            width: 36, height: 36, borderRadius: 18,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-          </Svg>
-        </TouchableOpacity>
-      </View>
-
-      {/* ─── PREVIEW OVERLAYS ─── */}
-      {/* Lignes verticales zone déclenchement, dégradé d'opacité 0/1/0 sur l'axe Y */}
+      {/* ─── LIGNES DE CADRAGE DE DÉTECTION (positions screen INCHANGÉES : top/bottom = bandH) ─── */}
       <View
         pointerEvents="none"
         style={{
@@ -1893,112 +1908,199 @@ function PhotographerScreen({ session, onLogout }) {
         </View>
       </View>
 
-      {/* Compteur 📷 cliquable, ancré bas-droite de la preview (au-dessus du bandeau bas) */}
-      <TouchableOpacity
-        onPress={() => setShowSessionModal(true)}
-        activeOpacity={0.85}
-        hitSlop={8}
+      {/* ─── FLASH RAFALE (full-screen, blanc, 100ms) ─── */}
+      <Animated.View
+        pointerEvents="none"
         style={{
-          position: 'absolute',
-          bottom: bandH + 12,
-          right: 16,
-          height: 34, borderRadius: 17,
-          backgroundColor: photoCount > 0 ? C.primary : 'rgba(0,0,0,0.55)',
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-          paddingHorizontal: 12, gap: 6,
-          zIndex: 5,
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: '#fff',
+          opacity: flashOpacity,
         }}
-      >
-        {!isOnline ? (
-          <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
-            <Path d="M3 3l18 18M7 8a5 5 0 0 1 9-1.5M19 14a4 4 0 0 0-2-7.5M9 17h7a3 3 0 0 0 .5-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+      />
+
+      {/* ─── HEADER FLOTTANT ─── */}
+      <View style={{
+        position: 'absolute', top: 56, left: 16, right: 16,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        borderRadius: 18,
+        paddingVertical: 10, paddingHorizontal: 12,
+        flexDirection: 'row', alignItems: 'center', gap: 10,
+        zIndex: 10,
+      }}>
+        <TouchableOpacity
+          onPress={onLogout}
+          hitSlop={10}
+          style={{
+            width: 32, height: 32, borderRadius: 16,
+            backgroundColor: 'rgba(255,255,255,0.18)',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" />
           </Svg>
-        ) : (
-          <Icon.PhotoCam size={14} color="#fff" />
-        )}
-        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
-          {photoCount + queueStats.total}
-        </Text>
-        {queueStats.failed > 0 && (
+        </TouchableOpacity>
+
+        <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 4 }}>
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
+            {session?.event?.name || 'Événement'}
+          </Text>
+          {session?.event?.event_date ? (
+            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, marginTop: 1 }} numberOfLines={1}>
+              {formatDateLong(session.event.event_date)}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 6,
+          paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+          backgroundColor: 'rgba(255,255,255,0.12)',
+        }}>
+          <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusInfo.dot }} />
+          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{statusInfo.label}</Text>
+        </View>
+      </View>
+
+      {/* ─── TOGGLE ZOOM (top-right, sous le header) ─── */}
+      <View style={{
+        position: 'absolute', top: 120, right: 16,
+        flexDirection: 'row',
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        borderRadius: 999, padding: 4,
+        zIndex: 10,
+      }}>
+        {[1, 1.5, 2].map(z => (
+          <TouchableOpacity
+            key={z}
+            onPress={() => setZoomLevel(z)}
+            style={{
+              paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999,
+              backgroundColor: zoomLevel === z ? 'rgba(255,255,255,0.95)' : 'transparent',
+            }}
+          >
+            <Text style={{ color: zoomLevel === z ? '#000' : '#fff', fontWeight: '700', fontSize: 12 }}>
+              {z}×
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* ─── FOOTER FLOTTANT ─── */}
+      <View style={{
+        position: 'absolute', bottom: 40, left: 0, right: 0,
+        alignItems: 'center', gap: 14,
+        zIndex: 10,
+      }}>
+        {/* a) Sélecteur de course (chips horizontales scrollables) */}
+        {hasDistances && (
           <View style={{
-            minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: 8,
-            backgroundColor: 'rgba(239,68,68,0.95)', alignItems: 'center', justifyContent: 'center',
+            maxWidth: '92%',
+            backgroundColor: 'rgba(0,0,0,0.45)',
+            borderRadius: 999, paddingVertical: 4, paddingHorizontal: 4,
           }}>
-            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>!</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
+              {[null, ...distances].map((d, i) => {
+                const active = (d === null && !selectedRace) ||
+                  (d && selectedRace && parseFloat(selectedRace.km) === parseFloat(d.km));
+                const label = d === null ? 'Toutes' : `${d.km} km`;
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    onPress={() => {
+                      setSelectedRace(d);
+                      if (d && selectedKm > Math.ceil(parseFloat(d.km) || 0)) setSelectedKm(0);
+                    }}
+                    style={{
+                      paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999,
+                      backgroundColor: active ? PHOTO_TINT : 'rgba(255,255,255,0.15)',
+                    }}
+                  >
+                    <Text style={{
+                      color: active ? '#fff' : 'rgba(255,255,255,0.75)',
+                      fontSize: 12, fontWeight: '700',
+                    }}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         )}
-      </TouchableOpacity>
 
-      {/* ─── BANDEAU BAS ─── zoom + GO + course/km */}
-      <View style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        paddingBottom: 24, paddingHorizontal: 24, paddingTop: 8,
-        zIndex: 5,
-      }}>
-        {/* Sélecteur zoom 1× / 1.5× */}
-        <View style={{
-          alignSelf: 'center', flexDirection: 'row',
-          backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 999,
-          padding: 4, marginBottom: 10,
-        }}>
-          {[1, 1.5].map(z => (
-            <TouchableOpacity
-              key={z}
-              onPress={() => setZoomLevel(z)}
+        {/* b) Stats compactes */}
+        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={() => setShowSessionModal(true)}
+            activeOpacity={0.85}
+            style={{
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+              paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999,
+              backgroundColor: 'rgba(0,0,0,0.45)',
+            }}
+          >
+            {!isOnline ? (
+              <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+                <Path d="M3 3l18 18M7 8a5 5 0 0 1 9-1.5M19 14a4 4 0 0 0-2-7.5M9 17h7a3 3 0 0 0 .5-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+              </Svg>
+            ) : (
+              <Icon.PhotoCam size={13} color="#fff" />
+            )}
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+              {photoCount + queueStats.total} photo{(photoCount + queueStats.total) > 1 ? 's' : ''}
+            </Text>
+            {queueStats.failed > 0 && (
+              <View style={{
+                minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: 8,
+                backgroundColor: 'rgba(239,68,68,0.95)', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>!</Text>
+              </View>
+            )}
+            {/* Badge +N pop sur le pill photos */}
+            <Animated.View
+              pointerEvents="none"
               style={{
-                paddingHorizontal: 14, paddingVertical: 5, borderRadius: 999,
-                backgroundColor: zoomLevel === z ? 'rgba(255,255,255,0.95)' : 'transparent',
+                position: 'absolute', top: -10, right: -8,
+                paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999,
+                backgroundColor: PHOTO_TINT,
+                opacity: burstBadgeOpacity,
+                transform: [{ scale: burstBadgeScale }],
               }}
             >
-              <Text style={{ color: zoomLevel === z ? '#000' : '#fff', fontWeight: '700', fontSize: 12 }}>
-                {z}×
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>+{lastBurstCount}</Text>
+            </Animated.View>
+          </TouchableOpacity>
 
-        {!isDetectionEnabled ? (
-          <TouchableOpacity
-            onPress={startSession}
-            style={{
-              backgroundColor: C.primary, paddingVertical: 16, borderRadius: 16,
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{ color: '#fff', fontSize: 24, fontFamily: 'AVEstiana' }}>GO !</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            onPress={stopSession}
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.95)', paddingVertical: 16, borderRadius: 16,
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{ color: '#000', fontSize: 16, fontWeight: '700' }}>Arrêter</Text>
-          </TouchableOpacity>
-        )}
-
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-          <TouchableOpacity
-            onPress={() => { setRacePickerOpen(true); setKmPickerOpen(false); }}
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 10, borderRadius: 12, alignItems: 'center' }}
-          >
-            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10, marginBottom: 2 }}>COURSE</Text>
-            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }} numberOfLines={1}>
-              {selectedRace ? `${selectedRace.km} km` : 'Toutes'}
-            </Text>
-          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => { setKmPickerOpen(true); setRacePickerOpen(false); }}
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 10, borderRadius: 12, alignItems: 'center' }}
+            activeOpacity={0.85}
+            style={{
+              paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999,
+              backgroundColor: 'rgba(0,0,0,0.45)',
+            }}
           >
-            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10, marginBottom: 2 }}>KM POSTÉ</Text>
-            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
-              km {selectedKm}
-            </Text>
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>km {selectedKm}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* c) Bouton de capture rond */}
+        <Animated.View style={{ transform: [{ scale: captureScale }] }}>
+          <TouchableOpacity
+            onPress={onCapturePress}
+            activeOpacity={0.85}
+            disabled={isShooting}
+            style={{
+              width: 84, height: 84, borderRadius: 42,
+              backgroundColor: PHOTO_TINT,
+              borderWidth: 5, borderColor: '#fff',
+              alignItems: 'center', justifyContent: 'center',
+              shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
+              opacity: isShooting ? 0.6 : 1,
+            }}
+          >
+            <Icon.PhotoCam size={32} color="#fff" />
+          </TouchableOpacity>
+        </Animated.View>
       </View>
 
       {/* Sélecteur de course (modal bottom sheet) */}
