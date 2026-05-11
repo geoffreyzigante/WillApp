@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions,
-  StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking, Vibration,
+  StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -1308,6 +1308,9 @@ function PhotographerScreen({ session, onLogout }) {
   const lastFaceSeenAtRef = useRef(0);
   const isMountedRef = useRef(true);
   const isDetectionEnabledRef = useRef(false);
+  // Flag d'arrêt : un tap sur Go pendant la rafale le passe à true ; la boucle
+  // dans startBurst le lit à chaque itération et break.
+  const abortBurstRef = useRef(false);
 
   const [facesCount, setFacesCount] = useState(0);
   const [facesInZoneCount, setFacesInZoneCount] = useState(0);
@@ -1733,11 +1736,9 @@ function PhotographerScreen({ session, onLogout }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Feedback visuel/haptique au lancement d'une rafale.
+  // Feedback visuel au lancement d'une rafale.
   function triggerBurstFeedback() {
-    // 1. Vibration légère (fallback expo-haptics — pas en deps natives donc OTA-only avec Vibration)
-    try { Vibration.vibrate(10); } catch {}
-    // 2. Flash blanc 120ms
+    // Flash blanc 120ms
     flashOpacity.setValue(0);
     Animated.sequence([
       Animated.timing(flashOpacity, { toValue: 0.55, duration: 40, useNativeDriver: true }),
@@ -1751,11 +1752,13 @@ function PhotographerScreen({ session, onLogout }) {
   }
 
   // Capture manuelle déclenchée par le bouton GO.
-  // Pas de gating sur facesInZoneCount : le bouton doit toujours fonctionner
-  // (le pivot de statusInfo plus bas garde l'indicateur visuel "Prêt"/"Aucun
-  // visage", purement informatif). L'auto-capture côté frame processor garde
-  // son propre filtrage validInZone.
+  // Pendant la rafale, le même bouton sert de Stop : on lève abortBurstRef et
+  // la boucle de startBurst break à la prochaine itération.
   function onCapturePress() {
+    if (isCapturingRef.current) {
+      abortBurstRef.current = true;
+      return;
+    }
     Animated.sequence([
       Animated.timing(captureScale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
       Animated.spring(captureScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
@@ -1769,6 +1772,7 @@ function PhotographerScreen({ session, onLogout }) {
     if (!isDetectionEnabledRef.current) return;
 
     isCapturingRef.current = true;
+    abortBurstRef.current = false;
     setIsShooting(true);
 
     const burstTs = Date.now();
@@ -1797,6 +1801,7 @@ function PhotographerScreen({ session, onLogout }) {
 
     for (let i = 0; i < BURST_COUNT; i++) {
       if (!isMountedRef.current || !isDetectionEnabledRef.current) break;
+      if (abortBurstRef.current) break;
       try {
         const photo = await cameraRef.current.takePhoto(takePhotoOpts);
         queue.push({ photo, index: i, burstTs });
@@ -1902,14 +1907,17 @@ function PhotographerScreen({ session, onLogout }) {
         enableLocation={false}
       />
 
-      {/* ─── CADRAGE DÉTECTION : lignes verticales subtiles (0.35) + 4 coins en L ─── */}
+      {/* ─── CADRAGE DÉTECTION : lignes verticales subtiles (0.35) + 4 coins en L.
+          Hauteur du cadre = 80% de la preview (réduit -20%), recentré
+          verticalement. La détection MLKit reste sur la frame entière
+          (cadre = repère visuel pour le photographe, pas la zone réelle). ─── */}
       <View
         pointerEvents="none"
         style={{
           position: 'absolute',
-          top: CAMERA_TOP,
+          top: CAMERA_TOP + previewH * 0.1,
           left: 0, right: 0,
-          height: previewH,
+          height: previewH * 0.8,
           flexDirection: 'row',
           justifyContent:
             zonePosition === 'left' ? 'flex-start' :
@@ -2064,13 +2072,13 @@ function PhotographerScreen({ session, onLogout }) {
           pointerEvents="none"
         />
 
-        {/* 1. Chips course (pleine largeur, transparent sur fond noir du footer) */}
+        {/* 1. Chips course en pills (bg sombre / actif rose, cohérent avec le zoom) */}
         {hasDistances && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 22, paddingHorizontal: 8, minWidth: '100%', justifyContent: 'center', alignItems: 'center' }}
-            style={{ marginBottom: 22, maxHeight: 28 }}
+            contentContainerStyle={{ gap: 8, paddingHorizontal: 8, minWidth: '100%', justifyContent: 'center', alignItems: 'center' }}
+            style={{ marginBottom: 18, maxHeight: 36 }}
           >
             {[null, ...distances].map((d, i) => {
               const active = (d === null && !selectedRace) ||
@@ -2083,14 +2091,18 @@ function PhotographerScreen({ session, onLogout }) {
                     setSelectedRace(d);
                     if (d && selectedKm > Math.ceil(parseFloat(d.km) || 0)) setSelectedKm(0);
                   }}
-                  hitSlop={8}
+                  hitSlop={4}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 7,
+                    borderRadius: 999,
+                    backgroundColor: active ? C.pinkPillActive : 'rgba(0,0,0,0.5)',
+                  }}
                 >
                   <Text style={{
-                    color: active ? C.pinkPillActive : 'rgba(255,255,255,0.55)',
-                    fontSize: active ? 14 : 12,
+                    color: '#fff',
+                    fontSize: 12,
                     fontWeight: '800',
                     letterSpacing: 0.8,
-                    textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
                   }}>{label}</Text>
                 </TouchableOpacity>
               );
@@ -2133,17 +2145,15 @@ function PhotographerScreen({ session, onLogout }) {
             })}
           </View>
 
-          {/* Shutter — bouton Go! pill centré. Toujours actif. */}
+          {/* Shutter — bouton Go!/Stop pill centré. Tap pendant rafale = Stop. */}
           <Animated.View style={{ transform: [{ scale: captureScale }] }}>
             <TouchableOpacity
               onPress={onCapturePress}
               activeOpacity={0.9}
-              disabled={isShooting}
               style={{
                 width: 140, height: 60, borderRadius: 999,
                 backgroundColor: C.pinkPillActive,
                 alignItems: 'center', justifyContent: 'center',
-                opacity: isShooting ? 0.6 : 1,
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.3,
@@ -2158,7 +2168,7 @@ function PhotographerScreen({ session, onLogout }) {
                 fontWeight: '800',
                 fontFamily: 'AVEstiana',
                 letterSpacing: 1,
-              }}>Go !</Text>
+              }}>{isShooting ? 'Stop' : 'Go!'}</Text>
             </TouchableOpacity>
           </Animated.View>
 
