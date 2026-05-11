@@ -2939,7 +2939,7 @@ function OrganizationModal({ visible, onClose, onPickRole }) {
 
 const BIOMETRIC_CONSENT_KEY = '@will_biometric_consent_v1';
 
-function SelfieModal({ visible, onClose, onSaved, userId }) {
+function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
   const [uri, setUri] = useState(null);
   const [busy, setBusy] = useState(false);
   // Consentement biométrique RGPD art. 9 : on demande explicitement la 1ère fois
@@ -2993,13 +2993,17 @@ function SelfieModal({ visible, onClose, onSaved, userId }) {
       onSaved?.(uri);
 
       // 2. Upload sur R2 pour la reconnaissance faciale (en background, non bloquant)
-      if (userId) {
+      // Auth runner obligatoire : le worker exige Bearer + match userId === token.userId
+      if (userId && runnerToken) {
         (async () => {
           try {
             const blob = await (await fetch(uri)).blob();
             await fetch(`${API_URL}/selfie/${userId}`, {
               method: 'PUT',
-              headers: { 'Content-Type': 'image/jpeg' },
+              headers: {
+                'Content-Type': 'image/jpeg',
+                Authorization: `Bearer ${runnerToken}`,
+              },
               body: blob,
             });
           } catch (e) {
@@ -5476,6 +5480,7 @@ export default function App() {
         onClose={() => setSelfieModal(false)}
         onSaved={setSelfieUri}
         userId={userId}
+        runnerToken={runnerSession?.token}
       />
 
       <LoginModal
