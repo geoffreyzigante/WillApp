@@ -1910,193 +1910,208 @@ function PhotographerScreen({ session, onLogout }) {
         }}
       />
 
-      {/* ─── HEADER FLOTTANT (slide-in depuis le haut au mount) ─── */}
+      {/* ─── TOP AREA (style iOS Camera : dark gradient + floating row, pas de boîte) ─── */}
       <Animated.View
+        pointerEvents="box-none"
         style={{
-          position: 'absolute', top: 60, left: 16, right: 16,
-          height: 56, borderRadius: 28,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          paddingHorizontal: 16,
-          flexDirection: 'row', alignItems: 'center', gap: 10,
+          position: 'absolute', top: 0, left: 0, right: 0,
+          paddingTop: 56, paddingBottom: 28, paddingHorizontal: 20,
           transform: [{ translateY: headerSlideY }],
           zIndex: 10,
         }}
       >
-        <TouchableOpacity
-          onPress={onLogout}
-          hitSlop={10}
-          style={{
-            width: 36, height: 36, borderRadius: 18,
-            backgroundColor: 'rgba(255,255,255,0.15)',
-            alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-          </Svg>
-        </TouchableOpacity>
+        <LinearGradient
+          colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0)']}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity
+            onPress={onLogout}
+            hitSlop={10}
+            style={{
+              width: 38, height: 38, borderRadius: 19,
+              backgroundColor: 'rgba(0,0,0,0.45)',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+            </Svg>
+          </TouchableOpacity>
 
-        <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
-          <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }} numberOfLines={1}>
-            {session?.event?.name || 'Événement'}
-          </Text>
-          {session?.event?.event_date ? (
-            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, marginTop: 0 }} numberOfLines={1}>
-              {formatDateLong(session.event.event_date)}
+          <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
+            <Text
+              style={{
+                color: '#fff', fontSize: 16, fontWeight: '700',
+                textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
+              }}
+              numberOfLines={1}
+            >
+              {session?.event?.name || 'Événement'}
             </Text>
-          ) : null}
-        </View>
+            {session?.event?.event_date ? (
+              <Text
+                style={{
+                  color: 'rgba(255,255,255,0.75)', fontSize: 11, marginTop: 1,
+                  textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
+                }}
+                numberOfLines={1}
+              >
+                {formatDateLong(session.event.event_date)}
+              </Text>
+            ) : null}
+          </View>
 
-        <Animated.View
-          style={{
-            flexDirection: 'row', alignItems: 'center', gap: 6,
-            paddingHorizontal: 10, height: 28, borderRadius: 14,
-            backgroundColor: statusInfo.label === 'Prêt'
-              ? 'rgba(34,197,94,0.22)'
-              : statusInfo.label === 'Capture'
-                ? 'rgba(239,68,68,0.22)'
-                : 'rgba(245,158,11,0.22)',
-            transform: [{ scale: badgePulse }],
-          }}
-        >
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusInfo.dot }} />
-          <Text style={{
-            color: statusInfo.label === 'Prêt' ? '#A7F3D0' : '#FED7AA',
-            fontSize: 13, fontWeight: '700',
-          }}>{statusInfo.label}</Text>
-        </Animated.View>
+          <Animated.View
+            style={{
+              flexDirection: 'row', alignItems: 'center', gap: 5,
+              paddingHorizontal: 9, height: 26, borderRadius: 13,
+              backgroundColor: statusInfo.label === 'Prêt'
+                ? 'rgba(34,197,94,0.28)'
+                : statusInfo.label === 'Capture'
+                  ? 'rgba(239,68,68,0.32)'
+                  : 'rgba(245,158,11,0.28)',
+              borderWidth: 1,
+              borderColor: statusInfo.label === 'Prêt'
+                ? 'rgba(34,197,94,0.5)'
+                : statusInfo.label === 'Capture'
+                  ? 'rgba(239,68,68,0.5)'
+                  : 'rgba(245,158,11,0.5)',
+              transform: [{ scale: badgePulse }],
+            }}
+          >
+            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusInfo.dot }} />
+            <Text style={{
+              color: '#fff',
+              fontSize: 11, fontWeight: '700', letterSpacing: 0.4,
+            }}>{statusInfo.label.toUpperCase()}</Text>
+          </Animated.View>
+        </View>
       </Animated.View>
 
-      {/* ─── TOGGLE ZOOM (sous le header, centré) ─── */}
-      <View style={{
-        position: 'absolute', top: 132, left: 0, right: 0,
-        alignItems: 'center',
-        zIndex: 10,
-      }} pointerEvents="box-none">
-        <Animated.View
-          style={{
-            flexDirection: 'row',
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            borderRadius: 20, padding: 4,
-            transform: [{ translateY: headerSlideY }],
-          }}
-        >
-          {[1, 1.5].map(z => {
-            const active = zoomLevel === z;
-            return (
-              <TouchableOpacity
-                key={z}
-                onPress={() => setZoomLevel(z)}
-                style={{
-                  paddingHorizontal: 14, paddingVertical: 5, borderRadius: 16,
-                  backgroundColor: active ? '#fff' : 'transparent',
-                }}
-              >
-                <Text style={{
-                  color: active ? '#000' : '#fff',
-                  fontWeight: active ? '800' : '600',
-                  fontSize: active ? 14 : 13,
-                }}>
-                  {z}×
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </Animated.View>
-      </View>
-
-      {/* ─── FOOTER FLOTTANT (slide-in depuis le bas) ─── */}
+      {/* ─── BOTTOM AREA (style iOS Camera : dark gradient + zoom + chips uppercase + shutter row) ─── */}
       <Animated.View
+        pointerEvents="box-none"
         style={{
-          position: 'absolute', bottom: 58, left: 16, right: 16,
-          backgroundColor: 'rgba(0,0,0,0.55)',
-          borderRadius: 32, padding: 20,
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          paddingTop: 60, paddingBottom: 36, paddingHorizontal: 20,
           transform: [{ translateY: footerSlideY }],
           zIndex: 10,
         }}
       >
-        {/* a) Row unifiée : chips courses (flex 1, primaire) + bouton photo (icône secondaire) + km (lien tertiaire) */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          {/* Chips course — primaire, flex 1, scrollable */}
-          {hasDistances ? (
-            <View style={{
-              flex: 1, minWidth: 0,
-              backgroundColor: 'rgba(255,255,255,0.08)',
-              borderRadius: 14,
-              padding: 3,
-            }}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 3 }}
-              >
-                {[null, ...distances].map((d, i) => {
-                  const active = (d === null && !selectedRace) ||
-                    (d && selectedRace && parseFloat(selectedRace.km) === parseFloat(d.km));
-                  const label = d === null ? 'Toutes' : `${d.km} km`;
-                  return (
-                    <TouchableOpacity
-                      key={i}
-                      onPress={() => {
-                        setSelectedRace(d);
-                        if (d && selectedKm > Math.ceil(parseFloat(d.km) || 0)) setSelectedKm(0);
-                      }}
-                      style={{
-                        paddingHorizontal: 12, paddingVertical: 7,
-                        borderRadius: 11,
-                        backgroundColor: active ? C.pinkPillActive : 'transparent',
-                      }}
-                    >
-                      <Text style={{
-                        color: active ? '#fff' : 'rgba(255,255,255,0.7)',
-                        fontSize: 13,
-                        fontWeight: active ? '700' : '600',
-                      }}>{label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          ) : (
-            <View style={{ flex: 1 }} />
-          )}
+        <LinearGradient
+          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.7)']}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
 
-          {/* Bouton photo — secondaire, icône-only compact */}
+        {/* 1. Zoom pill (style iOS : cercles dans container translucide, actif blanc) */}
+        <View style={{ alignItems: 'center', marginBottom: 18 }}>
+          <View style={{
+            flexDirection: 'row',
+            backgroundColor: 'rgba(0,0,0,0.4)',
+            borderRadius: 26, padding: 4,
+            gap: 4,
+          }}>
+            {[1, 1.5].map(z => {
+              const active = zoomLevel === z;
+              return (
+                <TouchableOpacity
+                  key={z}
+                  onPress={() => setZoomLevel(z)}
+                  style={{
+                    width: active ? 44 : 36, height: active ? 44 : 36, borderRadius: 999,
+                    alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: active ? 'rgba(255,255,255,0.18)' : 'transparent',
+                  }}
+                >
+                  <Text style={{
+                    color: active ? C.pinkPillActive : 'rgba(255,255,255,0.85)',
+                    fontWeight: '800',
+                    fontSize: active ? 13 : 11,
+                  }}>
+                    {z === 1 ? '1×' : '1,5×'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* 2. Mode chips (style iOS mode selector : UPPERCASE, pas de container, actif rose/plus gros) */}
+        {hasDistances && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 22, paddingHorizontal: 28, minWidth: '100%', justifyContent: 'center', alignItems: 'center' }}
+            style={{ marginBottom: 22, maxHeight: 28 }}
+          >
+            {[null, ...distances].map((d, i) => {
+              const active = (d === null && !selectedRace) ||
+                (d && selectedRace && parseFloat(selectedRace.km) === parseFloat(d.km));
+              const label = d === null ? 'TOUTES' : `${d.km} KM`;
+              return (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => {
+                    setSelectedRace(d);
+                    if (d && selectedKm > Math.ceil(parseFloat(d.km) || 0)) setSelectedKm(0);
+                  }}
+                  hitSlop={8}
+                >
+                  <Text style={{
+                    color: active ? C.pinkPillActive : 'rgba(255,255,255,0.75)',
+                    fontSize: active ? 14 : 12,
+                    fontWeight: '800',
+                    letterSpacing: 0.8,
+                    textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
+                  }}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {/* 3. Shutter row (style iOS : thumbnail | shutter centré | km button) */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Photo button — équivalent du thumbnail iOS, rounded-square */}
           <TouchableOpacity
             onPress={() => setShowSessionModal(true)}
             activeOpacity={0.7}
             style={{
-              width: 44, height: 44, borderRadius: 22,
-              backgroundColor: 'rgba(255,255,255,0.12)',
+              width: 48, height: 48, borderRadius: 10,
+              backgroundColor: 'rgba(255,255,255,0.18)',
+              borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)',
               alignItems: 'center', justifyContent: 'center',
               position: 'relative',
             }}
           >
             {!isOnline ? (
-              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
                 <Path d="M3 3l18 18M7 8a5 5 0 0 1 9-1.5M19 14a4 4 0 0 0-2-7.5M9 17h7a3 3 0 0 0 .5-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
               </Svg>
             ) : (
-              <Icon.PhotoCam size={16} color="#fff" />
+              <Icon.PhotoCam size={18} color="#fff" />
             )}
             {(photoCount + queueStats.total) > 0 && (
               <Animated.View
                 style={{
-                  position: 'absolute', top: -4, right: -4,
-                  minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9,
+                  position: 'absolute', top: -5, right: -5,
+                  minWidth: 20, height: 20, paddingHorizontal: 4, borderRadius: 10,
                   backgroundColor: C.pinkPillActive,
                   alignItems: 'center', justifyContent: 'center',
                   transform: [{ scale: photoCountScale }],
                 }}
               >
-                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800' }}>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
                   {photoCount + queueStats.total}
                 </Text>
               </Animated.View>
             )}
             {queueStats.failed > 0 && (
               <View style={{
-                position: 'absolute', bottom: -2, right: -2,
+                position: 'absolute', bottom: -3, right: -3,
                 minWidth: 14, height: 14, paddingHorizontal: 3, borderRadius: 7,
                 backgroundColor: 'rgba(239,68,68,0.95)', alignItems: 'center', justifyContent: 'center',
               }}>
@@ -2105,45 +2120,53 @@ function PhotographerScreen({ session, onLogout }) {
             )}
           </TouchableOpacity>
 
-          {/* Km — tertiaire, text link compact */}
+          {/* Shutter — bouton GO! pill centré (style hybride iOS shutter mais avec texte) */}
+          <Animated.View style={{ transform: [{ scale: captureScale }] }}>
+            <TouchableOpacity
+              onPress={onCapturePress}
+              activeOpacity={0.9}
+              disabled={isShooting}
+              style={{
+                paddingHorizontal: 44, height: 72, borderRadius: 999,
+                backgroundColor: C.pinkPillActive,
+                borderWidth: 3, borderColor: 'rgba(255,255,255,0.95)',
+                alignItems: 'center', justifyContent: 'center',
+                opacity: isShooting ? 0.6 : 1,
+              }}
+            >
+              <Text style={{
+                color: '#fff',
+                fontSize: 28,
+                fontFamily: 'AVEstiana',
+                letterSpacing: 1,
+              }}>Go !</Text>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Km button — équivalent du flip-camera iOS, rounded-square symétrique */}
           <TouchableOpacity
             onPress={() => { setKmPickerOpen(true); setRacePickerOpen(false); }}
             activeOpacity={0.7}
-            hitSlop={8}
-            style={{ paddingHorizontal: 4 }}
-          >
-            <Text style={{
-              color: selectedKm > 0 ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.45)',
-              fontSize: 12,
-              fontWeight: selectedKm > 0 ? '700' : '500',
-              textDecorationLine: selectedKm > 0 ? 'none' : 'underline',
-            }}>
-              {selectedKm > 0 ? `km ${selectedKm}` : 'définir km'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* b) Bouton GO — pill pleine largeur, texte "Go !" */}
-        <Animated.View style={{ transform: [{ scale: captureScale }] }}>
-          <TouchableOpacity
-            onPress={onCapturePress}
-            activeOpacity={0.9}
-            disabled={isShooting}
             style={{
-              width: '100%', height: 80, borderRadius: 999,
-              backgroundColor: C.pinkPillActive,
+              width: 48, height: 48, borderRadius: 10,
+              backgroundColor: 'rgba(255,255,255,0.18)',
+              borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)',
               alignItems: 'center', justifyContent: 'center',
-              opacity: isShooting ? 0.6 : 1,
             }}
           >
             <Text style={{
-              color: '#fff',
-              fontSize: 32,
-              fontFamily: 'AVEstiana',
-              letterSpacing: 1,
-            }}>Go !</Text>
+              color: 'rgba(255,255,255,0.6)', fontSize: 8, fontWeight: '700',
+              letterSpacing: 0.5, marginBottom: -1,
+            }}>KM</Text>
+            <Text style={{
+              color: selectedKm > 0 ? '#fff' : 'rgba(255,255,255,0.45)',
+              fontSize: selectedKm > 9 ? 14 : 16,
+              fontWeight: '800',
+            }}>
+              {selectedKm > 0 ? selectedKm : '—'}
+            </Text>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       </Animated.View>
 
       {/* Sélecteur de course (modal bottom sheet) */}
