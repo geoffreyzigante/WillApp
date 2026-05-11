@@ -151,6 +151,9 @@ const TYPE_COLORS = {
   Autre: '#6A6A6A',
 };
 
+// Label affiché pour event_type ; la valeur stockée reste sans accent ("Velo").
+const displayEventType = (t) => (t === 'Velo' ? 'Vélo' : t);
+
 // ---------- ICONS (custom SVG) ----------
 const Icon = {
   Bell: ({ size = 22, color = '#0A0A0A' }) => (
@@ -1034,7 +1037,7 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
                   backgroundColor: 'rgba(255,255,255,0.25)',
                   paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999,
                 }}>
-                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{event.event_type}</Text>
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{displayEventType(event.event_type)}</Text>
                 </View>
               ) : null}
             </View>
@@ -2560,7 +2563,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                       {types.map(t => (
                         <TouchableOpacity key={t} onPress={() => setEventType(t)} style={[s.typePill, eventType === t && s.typePillActive]}>
-                          <Text style={[s.typePillText, eventType === t && { color: '#fff' }]}>{t}</Text>
+                          <Text style={[s.typePillText, eventType === t && { color: '#fff' }]}>{displayEventType(t)}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
