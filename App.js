@@ -1349,11 +1349,6 @@ function PhotographerScreen({ session, onLogout }) {
   const photoCountScale = useRef(new Animated.Value(1)).current;
   const headerSlideY = useRef(new Animated.Value(-120)).current;
   const footerSlideY = useRef(new Animated.Value(300)).current;
-  // Opacity Go! : plein quand visage en zone, atténué sinon (transition 200ms).
-  const goReadyOpacity = useRef(new Animated.Value(0.5)).current;
-  // Flash rouge bref du bouton Go quand tap rejeté (aucun visage en zone).
-  const [rejectFlash, setRejectFlash] = useState(false);
-  const rejectFlashTimerRef = useRef(null);
 
   // MLKit ne supporte pas confidenceThreshold (face *detection*); on garde
   // minFaceSize comme pré-filtre côté natif et on filtre maxFaceSize côté JS.
@@ -1442,16 +1437,6 @@ function PhotographerScreen({ session, onLogout }) {
       Animated.timing(badgeOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
     ]).start();
   }, [facesCount > 0, isShooting, isDetectionEnabled]);
-
-  // Bouton Go : plein opacity quand un visage est en zone, atténué sinon.
-  // Permet au photographe de voir au premier coup d'œil si le tap va passer.
-  useEffect(() => {
-    Animated.timing(goReadyOpacity, {
-      toValue: isShooting ? 0.6 : (facesInZoneCount > 0 ? 1 : 0.5),
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  }, [facesInZoneCount > 0, isShooting]);
 
   // Zone de déclenchement : bande verticale, position gauche / centre / droite.
   const zonePct = (eventConfig.faceDetection?.triggerZoneWidthPercent ?? 33) / 100;
@@ -1766,19 +1751,11 @@ function PhotographerScreen({ session, onLogout }) {
   }
 
   // Capture manuelle déclenchée par le bouton GO.
-  // Gating : si aucun visage en zone, on rejette pour ne pas remplir R2 de
-  // photos vides (Rekognition tournerait à vide). Feedback : flash rouge 200ms
-  // + vibration courte. L'auto-capture (frame processor → startBurst) a sa
-  // propre logique de gating en amont, donc inchangée ici.
+  // Pas de gating sur facesInZoneCount : le bouton doit toujours fonctionner
+  // (le pivot de statusInfo plus bas garde l'indicateur visuel "Prêt"/"Aucun
+  // visage", purement informatif). L'auto-capture côté frame processor garde
+  // son propre filtrage validInZone.
   function onCapturePress() {
-    if (isShooting) return;
-    if (facesInZoneCount === 0) {
-      try { Vibration.vibrate(50); } catch {}
-      setRejectFlash(true);
-      if (rejectFlashTimerRef.current) clearTimeout(rejectFlashTimerRef.current);
-      rejectFlashTimerRef.current = setTimeout(() => setRejectFlash(false), 200);
-      return;
-    }
     Animated.sequence([
       Animated.timing(captureScale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
       Animated.spring(captureScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
@@ -2156,18 +2133,17 @@ function PhotographerScreen({ session, onLogout }) {
             })}
           </View>
 
-          {/* Shutter — bouton Go! pill centré. Opacity pilotée par goReadyOpacity
-              (anim 200ms vers 1 si visage en zone, 0.5 sinon). Flash rouge 200ms
-              en cas de tap rejeté (aucun visage). */}
-          <Animated.View style={{ transform: [{ scale: captureScale }], opacity: goReadyOpacity }}>
+          {/* Shutter — bouton Go! pill centré. Toujours actif. */}
+          <Animated.View style={{ transform: [{ scale: captureScale }] }}>
             <TouchableOpacity
               onPress={onCapturePress}
               activeOpacity={0.9}
               disabled={isShooting}
               style={{
                 width: 140, height: 60, borderRadius: 999,
-                backgroundColor: rejectFlash ? '#EF4444' : C.pinkPillActive,
+                backgroundColor: C.pinkPillActive,
                 alignItems: 'center', justifyContent: 'center',
+                opacity: isShooting ? 0.6 : 1,
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.3,
