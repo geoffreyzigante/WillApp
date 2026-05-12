@@ -2620,7 +2620,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
         allowsEditing: true,
-        aspect: [16, 9],
+        aspect: [4, 1],
       });
       if (r.canceled || !r.assets?.[0]?.uri) return;
       const localUri = r.assets[0].uri;
