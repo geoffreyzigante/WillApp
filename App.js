@@ -1488,6 +1488,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const lastFaceSeenAtRef = useRef(0);
   const isMountedRef = useRef(true);
   const isDetectionEnabledRef = useRef(false);
+  // Mode auto-capture arme par le bouton Go/Stop. Quand true, une detection
+  // dans la zone declenche startBurst. Quand false, rien ne se passe meme
+  // si MLKit detecte des visages. Lu via ref dans le worklet/runOnJS pour
+  // eviter tout closure stale ; mirroe en state pour le rendu du bouton.
+  const isAutoArmedRef = useRef(false);
   // Flag d'arrêt : un tap sur Go pendant la rafale le passe à true ; la boucle
   // dans startBurst le lit à chaque itération et break.
   const abortBurstRef = useRef(false);
@@ -1506,6 +1511,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const [facesCount, setFacesCount] = useState(0);
   const [facesInZoneCount, setFacesInZoneCount] = useState(0);
   const [isShooting, setIsShooting] = useState(false);
+  // Mode auto-capture pour le rendu du bouton. true => label "Stop", bg rouge.
+  // Mirror state du isAutoArmedRef pour declencher les re-render.
+  const [isAutoArmed, setIsAutoArmed] = useState(false);
   const [photoCount, setPhotoCount] = useState(0);
   const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -1592,6 +1600,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       facesInZoneCountRef.current = validInZone.length;
 
       if (validInZone.length < minFaces) return;
+      // Auto-capture doit etre arme (bouton Go presse) pour declencher.
+      // Sinon, on suit les visages mais on ne tire pas.
+      if (!isAutoArmedRef.current) return;
       if (isCapturingRef.current) return;
 
       // Au moins un visage doit avoir son cooldown écoulé pour déclencher
@@ -2053,21 +2064,23 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     ]).start();
   }
 
-  // Capture manuelle déclenchée par le bouton GO.
-  // - Pendant la rafale : tap = Stop (lève abortBurstRef pour interrompre la boucle).
-  // - Sinon : ne déclenche que si un visage est dans la zone (lecture via ref
-  //   pour éviter le closure stale du useState entre worklet runOnJS et onPress).
+  // Bouton Go/Stop : toggle de l'auto-capture.
+  // - Go (off) → tap arme : isAutoArmedRef=true, state isAutoArmed=true, label "Stop", bg rouge.
+  // - Stop (on) → tap desarme : isAutoArmedRef=false, isAutoArmed=false, label "Go", bg rose.
+  //   Si une rafale est en cours au moment du desarmage, on l'abort.
+  // Ref + state mis a jour synchroniquement (ref pour le worklet, state pour le rendu).
   function onCapturePress() {
-    if (isCapturingRef.current) {
-      abortBurstRef.current = true;
-      return;
-    }
+    const next = !isAutoArmedRef.current;
+    isAutoArmedRef.current = next;
+    setIsAutoArmed(next);
+    console.log(`[auto] tap → armed=${next}`);
     Animated.sequence([
       Animated.timing(captureScale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
       Animated.spring(captureScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
     ]).start();
-    if (facesInZoneCountRef.current === 0) return;
-    startBurst();
+    if (!next && isCapturingRef.current) {
+      abortBurstRef.current = true;
+    }
   }
 
   async function startBurst() {
@@ -2489,7 +2502,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               height: 60,
               marginHorizontal: -16,
               marginTop: 0,
-              backgroundColor: isShooting ? C.primary : C.pinkPillActive,
+              backgroundColor: isAutoArmed ? '#FF3B30' : C.pinkPillActive,
               alignItems: 'center', justifyContent: 'center',
             }}
           >
@@ -2500,7 +2513,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               fontWeight: '800',
               fontFamily: 'AVEstiana',
               letterSpacing: 1,
-            }}>{isShooting ? 'Stop' : 'Go!'}</Text>
+            }}>{isAutoArmed ? 'Stop' : 'Go!'}</Text>
           </TouchableOpacity>
 
           {/* Row 2 : bandeau 2 sections (COURSE / KM) collé au Go!, edge-to-edge.
