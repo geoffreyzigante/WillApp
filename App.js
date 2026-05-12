@@ -2445,109 +2445,109 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             }}>{isShooting ? 'Stop' : 'Go!'}</Text>
           </TouchableOpacity>
 
-          {/* Row 2 : bandeau 2 sections (COURSE / KM) collé au Go!, edge-to-edge */}
+          {/* Row 2 : bandeau 2 sections (COURSE / KM) collé au Go!, edge-to-edge.
+              Quand une section est active, la roulette REMPLACE le texte de cette cellule. */}
           <View style={{
             flexDirection: 'row',
             marginTop: 0,
             marginHorizontal: -16,
             backgroundColor: '#000',
+            alignItems: 'stretch',
           }}>
-            {/* Section COURSE (gauche, 50%) — ouvre la roulette en modal, contenu centré */}
-            <TouchableOpacity
-              onPress={() => setExpandedSection(s => s === 'course' ? null : 'course')}
-              activeOpacity={0.7}
-              style={{
-                flex: 1,
-                paddingVertical: 18,
-                paddingHorizontal: 16,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{
-                color: '#fff',
-                fontSize: 16,
-                fontWeight: '800',
-                letterSpacing: 0.5,
-                textAlign: 'center',
-              }}>COURSE</Text>
-              <Text style={{
-                color: 'rgba(255,255,255,0.65)',
-                fontSize: 11,
-                fontWeight: '700',
-                letterSpacing: 0.3,
-                marginTop: 8,
-                textAlign: 'center',
-              }}>
-                {selectedRace ? `${selectedRace.km} KM` : 'JE SÉLECTIONNE QUELLE COURSE JE PHOTOGRAPHIE'}
-              </Text>
-            </TouchableOpacity>
+            {/* Section COURSE (gauche, 50%) */}
+            <View style={{ flex: 1, justifyContent: 'center' }}>
+              {expandedSection === 'course' ? (() => {
+                const items = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: `${d.km} km`, value: d }))];
+                const selectedIdx = Math.max(0, items.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null)));
+                return (
+                  <WheelPicker
+                    items={items}
+                    selectedIndex={selectedIdx}
+                    onChange={(idx) => {
+                      const v = items[idx].value;
+                      setSelectedRace(v);
+                      if (v && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(0);
+                    }}
+                  />
+                );
+              })() : (
+                <TouchableOpacity
+                  onPress={() => setExpandedSection('course')}
+                  activeOpacity={0.7}
+                  style={{
+                    paddingVertical: 18,
+                    paddingHorizontal: 16,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{
+                    color: '#fff',
+                    fontSize: 16,
+                    fontWeight: '800',
+                    letterSpacing: 0.5,
+                    textAlign: 'center',
+                  }}>COURSE</Text>
+                  <Text style={{
+                    color: 'rgba(255,255,255,0.65)',
+                    fontSize: 11,
+                    fontWeight: '700',
+                    letterSpacing: 0.3,
+                    marginTop: 8,
+                    textAlign: 'center',
+                  }}>
+                    {selectedRace ? `${selectedRace.km} KM` : 'JE SÉLECTIONNE QUELLE COURSE JE PHOTOGRAPHIE'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* Separator vertical entre les 2 sections */}
             <View style={{ width: 0.5, backgroundColor: 'rgba(255,255,255,0.15)' }} />
 
-            {/* Section KM (droite, 50%) — ouvre la roulette en modal, contenu centré */}
-            <TouchableOpacity
-              onPress={() => setExpandedSection(s => s === 'km' ? null : 'km')}
-              activeOpacity={0.7}
-              style={{
-                flex: 1,
-                paddingVertical: 18,
-                paddingHorizontal: 16,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{
-                color: '#fff',
-                fontSize: 16,
-                fontWeight: '800',
-                letterSpacing: 0.5,
-                textAlign: 'center',
-              }}>KM</Text>
-              <Text style={{
-                color: 'rgba(255,255,255,0.65)',
-                fontSize: 11,
-                fontWeight: '700',
-                letterSpacing: 0.3,
-                marginTop: 8,
-                textAlign: 'center',
-              }}>
-                {selectedKm > 0 ? `KM ${selectedKm}` : 'JE SÉLECTIONNE À QUEL KILOMÈTRE JE SUIS'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Roulette inline — apparaît dans l'espace noir sous le bandeau, sans rien décaler */}
-          {expandedSection === 'course' && (() => {
-            const items = [{ label: 'Toutes les courses', value: null }, ...distances.map(d => ({ label: `${d.km} km`, value: d }))];
-            const selectedIdx = Math.max(0, items.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null)));
-            return (
-              <View style={{ marginHorizontal: -16, marginTop: 8, paddingVertical: 4, backgroundColor: '#000' }}>
-                <WheelPicker
-                  items={items}
-                  selectedIndex={selectedIdx}
-                  onChange={(idx) => {
-                    const v = items[idx].value;
-                    setSelectedRace(v);
-                    if (v && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(0);
+            {/* Section KM (droite, 50%) */}
+            <View style={{ flex: 1, justifyContent: 'center' }}>
+              {expandedSection === 'km' ? (() => {
+                const items = Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k }));
+                return (
+                  <WheelPicker
+                    items={items}
+                    selectedIndex={selectedKm}
+                    onChange={(idx) => setSelectedKm(idx)}
+                  />
+                );
+              })() : (
+                <TouchableOpacity
+                  onPress={() => setExpandedSection('km')}
+                  activeOpacity={0.7}
+                  style={{
+                    paddingVertical: 18,
+                    paddingHorizontal: 16,
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
-                />
-              </View>
-            );
-          })()}
-          {expandedSection === 'km' && (() => {
-            const items = Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k }));
-            return (
-              <View style={{ marginHorizontal: -16, marginTop: 8, paddingVertical: 4, backgroundColor: '#000' }}>
-                <WheelPicker
-                  items={items}
-                  selectedIndex={selectedKm}
-                  onChange={(idx) => setSelectedKm(idx)}
-                />
-              </View>
-            );
-          })()}
+                >
+                  <Text style={{
+                    color: '#fff',
+                    fontSize: 16,
+                    fontWeight: '800',
+                    letterSpacing: 0.5,
+                    textAlign: 'center',
+                  }}>KM</Text>
+                  <Text style={{
+                    color: 'rgba(255,255,255,0.65)',
+                    fontSize: 11,
+                    fontWeight: '700',
+                    letterSpacing: 0.3,
+                    marginTop: 8,
+                    textAlign: 'center',
+                  }}>
+                    {selectedKm > 0 ? `KM ${selectedKm}` : 'JE SÉLECTIONNE À QUEL KILOMÈTRE JE SUIS'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
 
         </View>
       </Animated.View>
