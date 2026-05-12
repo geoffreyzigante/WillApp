@@ -2086,8 +2086,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         : 'Prêt';
 
   // Label statut affiché dans le header flottant.
-  // PRÊT = visage présent DANS la zone (entre les 2 lignes) — tap Go va déclencher.
-  // AUCUN VISAGE = rien à capturer — tap Go sera rejeté.
+  // État neutre / par défaut : PRÊT vert dès que la caméra est ouverte et online.
+  // Capture rouge pendant rafale ; Hors ligne orange si offline.
   const statusInfo = isShooting
     ? { label: 'Capture', dot: '#EF4444', bg: 'rgba(239,68,68,0.2)', text: '#EF4444' }
     : !isOnline
@@ -2095,9 +2095,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           label: queueStats.total > 0 ? `Hors ligne · ${queueStats.total}` : 'Hors ligne',
           dot: '#F59E0B', bg: 'rgba(245,158,11,0.2)', text: '#F59E0B',
         }
-      : facesInZoneCount > 0
-        ? { label: 'Prêt', dot: '#22C55E', bg: 'rgba(34,197,94,0.2)', text: '#22C55E' }
-        : { label: 'Aucun visage', dot: '#F59E0B', bg: 'rgba(245,158,11,0.2)', text: '#F59E0B' };
+      : { label: 'Prêt', dot: '#22C55E', bg: 'rgba(34,197,94,0.2)', text: '#22C55E' };
 
   // Progression du drain courant : affichée sous le header pendant l'upload
   // si le batch initial dépassait 5 photos.
@@ -2132,7 +2130,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         enableLocation={false}
       />
 
-      {/* ─── CADRAGE DÉTECTION : lignes verticales subtiles (0.35) + 4 coins en L.
+      {/* ─── CADRAGE DÉTECTION : 2 lignes verticales subtiles uniquement.
           Bande verticale = TRIGGER_VPCT de la preview centrée. Le worklet
           MLKit applique strictement la même contrainte (cf. vMin/vMax dans
           le frame processor), donc visuel et logique sont alignés. ─── */}
@@ -2153,17 +2151,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           {(() => {
             const inZone = facesInZoneCount > 0;
             const lineColor = inZone ? 'rgba(16, 185, 129, 0.85)' : 'rgba(255, 255, 255, 0.35)';
-            const cornerColor = inZone ? '#10B981' : '#FFFFFF';
             return (
               <>
-                {/* Lignes verticales subtiles */}
                 <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 1, backgroundColor: lineColor }} />
                 <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 1, backgroundColor: lineColor }} />
-                {/* 4 coins en L (24px, border 3px) */}
-                <View style={{ position: 'absolute', top: 0, left: 0, width: 24, height: 24, borderTopWidth: 3, borderLeftWidth: 3, borderColor: cornerColor, borderTopLeftRadius: 4 }} />
-                <View style={{ position: 'absolute', top: 0, right: 0, width: 24, height: 24, borderTopWidth: 3, borderRightWidth: 3, borderColor: cornerColor, borderTopRightRadius: 4 }} />
-                <View style={{ position: 'absolute', bottom: 0, left: 0, width: 24, height: 24, borderBottomWidth: 3, borderLeftWidth: 3, borderColor: cornerColor, borderBottomLeftRadius: 4 }} />
-                <View style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderBottomWidth: 3, borderRightWidth: 3, borderColor: cornerColor, borderBottomRightRadius: 4 }} />
               </>
             );
           })()}
@@ -2234,31 +2225,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             ) : null}
           </View>
 
-          {/* Bouton "se déconnecter" : purge la session pour choisir un autre
-              event. Distinct de la flèche retour qui sort sans purger. */}
-          <TouchableOpacity
-            onPress={() => {
-              Alert.alert(
-                'Se déconnecter ?',
-                'Tu pourras choisir un autre événement. Tes photos en attente d\'upload restent en queue.',
-                [
-                  { text: 'Annuler', style: 'cancel' },
-                  { text: 'Se déconnecter', style: 'destructive', onPress: onLogout },
-                ],
-              );
-            }}
-            hitSlop={10}
-            style={{
-              paddingHorizontal: 12, height: 36, borderRadius: 18,
-              backgroundColor: 'rgba(239,68,68,0.22)',
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-              <Path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-              <Path d="M10 17l5-5-5-5M15 12H3" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
+          {/* Spacer droit pour équilibrer la flèche retour à gauche et garder le titre centré. */}
+          <View style={{ width: 46 }} />
         </View>
 
         {/* Row 2 : pill statut + pill compteur photo, centrés sous le titre */}
@@ -2367,11 +2335,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                   style={{
                     paddingHorizontal: 14, paddingVertical: 7,
                     borderRadius: 999,
-                    backgroundColor: active ? C.pinkPillActive : 'rgba(0,0,0,0.5)',
+                    backgroundColor: active ? C.pinkPillActive : 'transparent',
                   }}
                 >
                   <Text style={{
-                    color: '#fff',
+                    color: active ? '#fff' : 'rgba(255,255,255,0.7)',
                     fontSize: 12,
                     fontWeight: '800',
                     letterSpacing: 0.8,
@@ -2384,13 +2352,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
         {/* 2. Shutter row : [zoom] [Go!] [km] */}
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Zoom pill — container unique, options côte à côte */}
+          {/* Zoom pill — container unique, options côte à côte (cercle rose plein sur l'option active) */}
           <View style={{
             flexDirection: 'row',
             alignItems: 'center', justifyContent: 'center',
             backgroundColor: 'rgba(0,0,0,0.5)',
             borderRadius: 999, padding: 4,
-            height: 40, width: 90,
+            height: 44, width: 96,
           }}>
             {[1, 1.5].map(z => {
               const active = zoomLevel === z;
@@ -2444,26 +2412,34 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Km pill — à droite du bouton Go */}
+          {/* Km pill — à droite du bouton Go (même style que la pill zoom) */}
           <TouchableOpacity
             onPress={() => { setKmPickerOpen(true); setRacePickerOpen(false); }}
             activeOpacity={0.7}
             style={{
-              flexDirection: 'row', alignItems: 'center', gap: 6,
-              paddingHorizontal: 12, height: 30, borderRadius: 999,
-              backgroundColor: 'rgba(255,255,255,0.1)',
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              borderRadius: 999, padding: 4,
+              height: 44, width: 96,
+              gap: 4,
             }}
           >
             <Text style={{
-              color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '800',
-              letterSpacing: 0.5,
+              color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '800',
+              letterSpacing: 0.6,
             }}>KM</Text>
-            <Text style={{
-              color: selectedKm > 0 ? '#fff' : 'rgba(255,255,255,0.45)',
-              fontSize: 14, fontWeight: '800',
+            <View style={{
+              minWidth: 36, height: 36, paddingHorizontal: 8,
+              alignItems: 'center', justifyContent: 'center',
+              backgroundColor: selectedKm > 0 ? C.pinkPillActive : 'transparent',
+              borderRadius: 999,
             }}>
-              {selectedKm > 0 ? selectedKm : '—'}
-            </Text>
+              <Text style={{
+                color: '#fff', fontSize: 13, fontWeight: '800',
+              }}>
+                {selectedKm > 0 ? selectedKm : '—'}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
       </Animated.View>
