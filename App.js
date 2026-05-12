@@ -2368,11 +2368,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
           {/* Row 2 : shutter row — zoom 90 · Go! 140×60 · km 90 */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            {/* Pill Zoom */}
+            {/* Pill Zoom — container transparent à contour blanc fin, option active à contour rose */}
             <View style={{
               flexDirection: 'row',
               alignItems: 'center', justifyContent: 'center',
-              backgroundColor: 'rgba(0,0,0,0.5)',
+              backgroundColor: 'transparent',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.3)',
               borderRadius: 999, padding: 4,
               height: 44, width: 90,
             }}>
@@ -2385,7 +2387,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                     style={{
                       flex: 1, height: '100%',
                       alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: active ? C.violetAccent : 'transparent',
+                      backgroundColor: 'transparent',
+                      borderWidth: 1,
+                      borderColor: active ? C.pinkPillActive : 'transparent',
                       borderRadius: 999,
                     }}
                   >
