@@ -2618,7 +2618,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
       }
       const r = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.8,
+        quality: 0.85,
         allowsEditing: true,
         aspect: [4, 1],
       });
