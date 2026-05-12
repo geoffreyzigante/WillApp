@@ -3400,6 +3400,14 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
   const [consentChecked, setConsentChecked] = useState(false);
   const [consentGiven, setConsentGiven] = useState(null); // null = en cours de chargement, true/false sinon
 
+  const previewScale = useRef(new Animated.Value(1)).current;
+  const onPreviewPressIn = () => {
+    Animated.spring(previewScale, { toValue: 0.96, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+  };
+  const onPreviewPressOut = () => {
+    Animated.spring(previewScale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 6 }).start();
+  };
+
   useEffect(() => {
     if (!visible) return;
     Secure.getItem(BIOMETRIC_CONSENT_KEY).then(v => {
@@ -3524,13 +3532,22 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
           <Text style={s.modalSub}>Ton selfie est utilisé pour la reconnaissance faciale. Il est chiffré, stocké sur des serveurs européens, et supprimé automatiquement 30 jours après ton dernier événement.</Text>
 
           <View style={s.selfiePreviewWrap}>
-            {uri ? (
-              <ExpoImage source={{ uri }} style={s.selfiePreview} contentFit="cover" />
-            ) : (
-              <View style={[s.selfiePreview, { backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center' }]}>
-                <Icon.User size={80} color={C.primary} />
-              </View>
-            )}
+            <Animated.View style={{ transform: [{ scale: previewScale }] }}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={take}
+                onPressIn={onPreviewPressIn}
+                onPressOut={onPreviewPressOut}
+              >
+                {uri ? (
+                  <ExpoImage source={{ uri }} style={s.selfiePreview} contentFit="cover" />
+                ) : (
+                  <View style={[s.selfiePreview, { backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center' }]}>
+                    <Icon.User size={80} color={C.primary} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
           </View>
 
           <View style={{ flexDirection: 'row', gap: 12 }}>
