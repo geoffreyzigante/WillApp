@@ -534,7 +534,17 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
   }
   return (
     <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
-      <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
+      <LinearGradient
+        colors={['#8B5CF6', '#7B2FFF', '#5A1FCC']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={s.selfieCard}
+      >
+        {/* Mesh : cercles flous pour effet de profondeur subtile (pointerEvents none
+            pour laisser passer les taps au TouchableOpacity parent). */}
+        <View pointerEvents="none" style={{ position: 'absolute', top: -60, left: -60, width: 240, height: 240, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' }} />
+        <View pointerEvents="none" style={{ position: 'absolute', bottom: -50, right: -50, width: 200, height: 200, borderRadius: 999, backgroundColor: 'rgba(248,113,255,0.12)' }} />
+        <View pointerEvents="none" style={{ position: 'absolute', top: -20, right: 70, width: 160, height: 160, borderRadius: 999, backgroundColor: 'rgba(124,58,237,0.15)' }} />
         <View style={{ flex: 1 }}>
           <Text style={s.selfieTitle}>Un selfie suffit</Text>
           <Text style={s.selfieSub}>Pour recevoir tes photos{'\n'}de tous les événements Will</Text>
@@ -721,7 +731,9 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
         <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
         <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
       </View>
-      {/* Bouton favori (sa propre zone tactile, au-dessus de tout) */}
+      {/* Bouton favori (sa propre zone tactile, au-dessus de tout). Wrapper
+          glassmorphique semi-transparent pour la lisibilité sur les photos
+          claires/sombres. */}
       {onToggleFavorite && (
         <TouchableOpacity
           onPress={onToggleFavorite}
@@ -737,9 +749,17 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
             zIndex: 10,
           }}
         >
-          <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61" fill={isFavorite ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}>
-            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-          </Svg>
+          <View style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.25)',
+            borderRadius: 999,
+            padding: 8,
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.15)',
+          }}>
+            <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61" fill={isFavorite ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}>
+              <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+            </Svg>
+          </View>
         </TouchableOpacity>
       )}
     </View>
@@ -6268,7 +6288,9 @@ const s = StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   orgToggle: {
     flexDirection: 'row',
-    backgroundColor: C.pinkPillBg,
+    backgroundColor: 'rgba(244, 166, 255, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 999,
     padding: 4,
     alignItems: 'center',
@@ -6291,7 +6313,7 @@ const s = StyleSheet.create({
   selfieDoneSub: { fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
   selfieDelete: { padding: 6 },
 
-  selfieCard: { borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 14 },
+  selfieCard: { borderRadius: 24, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 14, overflow: 'hidden' },
   selfieTitle: { color: '#fff', fontSize: 24, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 28 },
   selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
   selfieAvatar: { width: 68, height: 68, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
