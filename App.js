@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import * as Font from 'expo-font';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as MediaLibrary from 'expo-media-library';
 import {
   Camera as VisionCamera,
@@ -2608,7 +2609,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   };
   const removeDistance = (idx) => setDistances(d => d.filter((_, i) => i !== idx));
 
-  // Sélection + upload de l'image de couverture
+  // Sélection + upload de l'image de couverture.
+  // iOS ignore aspect:[4,1] dans son cropper natif (il ne respecte que les ratios
+  // standards), donc on désactive allowsEditing et on crop nous-mêmes en 4:1
+  // centré via expo-image-manipulator.
   const pickAndUploadCover = async () => {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -2618,12 +2622,13 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
       }
       const r = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 0.85,
-        allowsEditing: true,
-        aspect: [4, 1],
+        allowsEditing: false,
+        quality: 0.9,
       });
       if (r.canceled || !r.assets?.[0]?.uri) return;
-      const localUri = r.assets[0].uri;
+      const picked = r.assets[0];
+      const cropped = await cropTo4to1(picked);
+      const localUri = cropped.uri;
       // Si on est en édition, on uploade tout de suite (l'event existe)
       if (isEdit && editEvent?.code) {
         setCoverBusy(true);
@@ -2649,6 +2654,26 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
     } catch (e) {
       Alert.alert('Erreur', e.message || 'Impossible de sélectionner l\'image');
     }
+  };
+
+  // Crop centré au ratio 4:1 via expo-image-manipulator.
+  const cropTo4to1 = async (asset) => {
+    const { uri, width, height } = asset;
+    const target = 4 / 1;
+    const current = width / height;
+    let crop;
+    if (current > target) {
+      const newWidth = height * target;
+      crop = { originX: (width - newWidth) / 2, originY: 0, width: newWidth, height };
+    } else {
+      const newHeight = width / target;
+      crop = { originX: 0, originY: (height - newHeight) / 2, width, height: newHeight };
+    }
+    return ImageManipulator.manipulateAsync(
+      uri,
+      [{ crop }],
+      { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
+    );
   };
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((contact || '').trim());
