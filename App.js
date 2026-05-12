@@ -1402,17 +1402,19 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
           );
         })}
       </ScrollView>
-      {/* Top-fade : item au-dessus du selectionne fond dans le panneau noir
-          (effet "passer sous le titre"). Hauteur etendue pour fade plus long. */}
+      {/* Top-fade : opaque sur toute la hauteur de l'item du dessus pour
+          masquer completement son texte sous le titre, puis degrade vers
+          transparent sur 14px (mord legerement sur l'item selectionne). */}
       <LinearGradient
         pointerEvents="none"
-        colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0)']}
+        colors={['rgba(0,0,0,1)', 'rgba(0,0,0,1)', 'rgba(0,0,0,0)']}
+        locations={[0, PAD_V / (PAD_V + 14), 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={{
           position: 'absolute',
           top: 0, left: 0, right: 0,
-          height: PAD_V + 12,
+          height: PAD_V + 14,
         }}
       />
     </View>
@@ -2470,12 +2472,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               };
               return (
                 <View style={{ flex: 1, paddingTop: 6, paddingBottom: 8, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <Text style={{
-                    color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
-                    fontFamily: 'AVEstiana', fontStyle: 'normal',
-                    marginBottom: -16,
-                    zIndex: 2,
-                  }}>Course</Text>
+                  <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: -16 }}>
+                    <Text style={{
+                      color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
+                      fontFamily: 'AVEstiana', fontStyle: 'normal',
+                    }}>Course</Text>
+                  </TouchableOpacity>
                   <OverlayWheel
                     items={courseItems}
                     selectedIndex={courseIdx}
@@ -2493,12 +2495,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               const kmItems = Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k }));
               return (
                 <View style={{ flex: 1, paddingTop: 6, paddingBottom: 8, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <Text style={{
-                    color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
-                    fontFamily: 'AVEstiana', fontStyle: 'normal',
-                    marginBottom: -16,
-                    zIndex: 2,
-                  }}>Km</Text>
+                  <TouchableOpacity onPress={() => setSelectedKm(0)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: -16 }}>
+                    <Text style={{
+                      color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
+                      fontFamily: 'AVEstiana', fontStyle: 'normal',
+                    }}>Km</Text>
+                  </TouchableOpacity>
                   <OverlayWheel
                     items={kmItems}
                     selectedIndex={selectedKm}
