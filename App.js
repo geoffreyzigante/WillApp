@@ -534,17 +534,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
   }
   return (
     <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
-      <LinearGradient
-        colors={['#8B5CF6', '#7B2FFF', '#5A1FCC']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={s.selfieCard}
-      >
-        {/* Mesh : cercles flous pour effet de profondeur subtile (pointerEvents none
-            pour laisser passer les taps au TouchableOpacity parent). */}
-        <View pointerEvents="none" style={{ position: 'absolute', top: -60, left: -60, width: 240, height: 240, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' }} />
-        <View pointerEvents="none" style={{ position: 'absolute', bottom: -50, right: -50, width: 200, height: 200, borderRadius: 999, backgroundColor: 'rgba(248,113,255,0.12)' }} />
-        <View pointerEvents="none" style={{ position: 'absolute', top: -20, right: 70, width: 160, height: 160, borderRadius: 999, backgroundColor: 'rgba(124,58,237,0.15)' }} />
+      <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
         <View style={{ flex: 1 }}>
           <Text style={s.selfieTitle}>Un selfie suffit</Text>
           <Text style={s.selfieSub}>Pour recevoir tes photos{'\n'}de tous les événements Will</Text>
@@ -6313,7 +6303,7 @@ const s = StyleSheet.create({
   selfieDoneSub: { fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
   selfieDelete: { padding: 6 },
 
-  selfieCard: { borderRadius: 24, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 14, overflow: 'hidden' },
+  selfieCard: { borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 14 },
   selfieTitle: { color: '#fff', fontSize: 24, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 28 },
   selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
   selfieAvatar: { width: 68, height: 68, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
