@@ -1353,67 +1353,6 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
   );
 }
 
-// Roulette de sélection style iOS 14+ picker : ScrollView avec snap, 3 items visibles.
-// Sélection visualisée par une "pastille" arrondie au centre (au lieu de 2 traits).
-// Le texte central est lui-même rose pour l'accent, les autres en blanc atténué.
-function WheelPicker({ items, selectedIndex, onChange }) {
-  const ITEM_HEIGHT = 36;
-  const VISIBLE = 3;
-  const containerHeight = VISIBLE * ITEM_HEIGHT;
-  const paddingV = ((VISIBLE - 1) / 2) * ITEM_HEIGHT;
-  return (
-    <View style={{ height: containerHeight, position: 'relative' }}>
-      {/* Pastille de sélection : rect arrondi au centre, bg blanc 8% + bordure rose subtile */}
-      <View pointerEvents="none" style={{
-        position: 'absolute',
-        top: paddingV + 2,
-        left: 16, right: 16,
-        height: ITEM_HEIGHT - 4,
-        borderRadius: 10,
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderWidth: 0.5,
-        borderColor: 'rgba(230,115,255,0.5)',
-        overflow: 'hidden',
-      }}>
-        <LinearGradient
-          colors={['rgba(230,115,255,0.18)', 'rgba(230,115,255,0)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFillObject}
-        />
-      </View>
-      <ScrollView
-        snapToInterval={ITEM_HEIGHT}
-        decelerationRate="fast"
-        showsVerticalScrollIndicator={false}
-        contentOffset={{ x: 0, y: Math.max(0, selectedIndex) * ITEM_HEIGHT }}
-        contentContainerStyle={{ paddingVertical: paddingV }}
-        onMomentumScrollEnd={e => {
-          const idx = Math.max(0, Math.min(items.length - 1, Math.round(e.nativeEvent.contentOffset.y / ITEM_HEIGHT)));
-          if (idx !== selectedIndex) onChange(idx);
-        }}
-      >
-        {items.map((item, i) => {
-          const isSelected = i === selectedIndex;
-          return (
-            <View key={i} style={{
-              height: ITEM_HEIGHT,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-              <Text style={{
-                color: isSelected ? '#fff' : 'rgba(255,255,255,0.45)',
-                fontSize: 17,
-                fontWeight: isSelected ? '800' : '500',
-              }}>{item.label}</Text>
-            </View>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
 function PhotographerScreen({ session, onLogout, onExit }) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
@@ -1506,8 +1445,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // Course + km posté
   const [selectedRace, setSelectedRace] = useState(null); // null = "Toutes les courses"
   const [selectedKm, setSelectedKm] = useState(0);
-  // Section dépliée dans le bandeau : null | 'course' | 'km' (mutuellement exclusif)
-  const [expandedSection, setExpandedSection] = useState(null);
   const distances = Array.isArray(session?.event?.distances) ? session.event.distances : [];
   const hasDistances = distances.length > 0;
   const maxKm = hasDistances
@@ -2454,115 +2391,56 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             backgroundColor: '#000',
             alignItems: 'stretch',
           }}>
-            {/* Section COURSE (gauche, 50%) — label fige en haut, roulette OU description en dessous */}
-            <View style={{
-              flex: 1,
-              paddingVertical: 14,
-              paddingHorizontal: 16,
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-            }}>
-              <TouchableOpacity
-                onPress={() => setExpandedSection(s => s === 'course' ? null : 'course')}
-                activeOpacity={0.7}
-                hitSlop={8}
-              >
-                <Text style={{
-                  color: '#fff',
-                  fontSize: 16,
-                  fontWeight: '800',
-                  letterSpacing: 0.5,
-                  textAlign: 'center',
-                }}>COURSE</Text>
-              </TouchableOpacity>
-              {expandedSection === 'course' ? (() => {
-                const items = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: `${d.km} km`, value: d }))];
-                const selectedIdx = Math.max(0, items.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null)));
-                return (
-                  <View style={{ alignSelf: 'stretch', marginTop: 8 }}>
-                    <WheelPicker
-                      items={items}
-                      selectedIndex={selectedIdx}
-                      onChange={(idx) => {
-                        const v = items[idx].value;
-                        setSelectedRace(v);
-                        if (v && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(0);
-                      }}
-                    />
-                  </View>
-                );
-              })() : (
-                <TouchableOpacity
-                  onPress={() => setExpandedSection('course')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{
-                    color: 'rgba(255,255,255,0.65)',
-                    fontSize: 11,
-                    fontWeight: '700',
-                    letterSpacing: 0.3,
-                    marginTop: 8,
-                    textAlign: 'center',
-                  }}>
-                    {selectedRace ? `${selectedRace.km} KM` : 'JE SÉLECTIONNE QUELLE COURSE JE PHOTOGRAPHIE'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            {/* Section COURSE (gauche, 50%) — stepper compact ▲ valeur ▼ */}
+            {(() => {
+              const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: `${d.km} km`, value: d }))];
+              const rawIdx = courseItems.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null));
+              const courseIdx = rawIdx >= 0 ? rawIdx : 0;
+              const setCourseIdx = (idx) => {
+                const v = courseItems[idx].value;
+                setSelectedRace(v);
+                if (v && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(0);
+              };
+              const canUp = courseIdx > 0;
+              const canDown = courseIdx < courseItems.length - 1;
+              return (
+                <View style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center' }}>
+                  <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7}>
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: 0.5 }}>COURSE</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => canUp && setCourseIdx(courseIdx - 1)} hitSlop={10} disabled={!canUp} style={{ paddingVertical: 2 }}>
+                    <Text style={{ color: canUp ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▲</Text>
+                  </TouchableOpacity>
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{courseItems[courseIdx].label}</Text>
+                  <TouchableOpacity onPress={() => canDown && setCourseIdx(courseIdx + 1)} hitSlop={10} disabled={!canDown} style={{ paddingVertical: 2 }}>
+                    <Text style={{ color: canDown ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▼</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
 
             {/* Separator vertical entre les 2 sections */}
             <View style={{ width: 0.5, backgroundColor: 'rgba(255,255,255,0.15)' }} />
 
-            {/* Section KM (droite, 50%) */}
-            <View style={{
-              flex: 1,
-              paddingVertical: 14,
-              paddingHorizontal: 16,
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-            }}>
-              <TouchableOpacity
-                onPress={() => setExpandedSection(s => s === 'km' ? null : 'km')}
-                activeOpacity={0.7}
-                hitSlop={8}
-              >
-                <Text style={{
-                  color: '#fff',
-                  fontSize: 16,
-                  fontWeight: '800',
-                  letterSpacing: 0.5,
-                  textAlign: 'center',
-                }}>KM</Text>
-              </TouchableOpacity>
-              {expandedSection === 'km' ? (() => {
-                const items = Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k }));
-                return (
-                  <View style={{ alignSelf: 'stretch', marginTop: 8 }}>
-                    <WheelPicker
-                      items={items}
-                      selectedIndex={selectedKm}
-                      onChange={(idx) => setSelectedKm(idx)}
-                    />
-                  </View>
-                );
-              })() : (
-                <TouchableOpacity
-                  onPress={() => setExpandedSection('km')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{
-                    color: 'rgba(255,255,255,0.65)',
-                    fontSize: 11,
-                    fontWeight: '700',
-                    letterSpacing: 0.3,
-                    marginTop: 8,
-                    textAlign: 'center',
-                  }}>
-                    {selectedKm > 0 ? `KM ${selectedKm}` : 'JE SÉLECTIONNE À QUEL KILOMÈTRE JE SUIS'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            {/* Section KM (droite, 50%) — stepper compact ▲ valeur ▼ */}
+            {(() => {
+              const canUp = selectedKm > 0;
+              const canDown = selectedKm < kmCeiling;
+              return (
+                <View style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center' }}>
+                  <TouchableOpacity onPress={() => setSelectedKm(0)} hitSlop={6} activeOpacity={0.7}>
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: 0.5 }}>KM</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => canUp && setSelectedKm(k => Math.max(0, k - 1))} hitSlop={10} disabled={!canUp} style={{ paddingVertical: 2 }}>
+                    <Text style={{ color: canUp ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▲</Text>
+                  </TouchableOpacity>
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{selectedKm} km</Text>
+                  <TouchableOpacity onPress={() => canDown && setSelectedKm(k => Math.min(kmCeiling, k + 1))} hitSlop={10} disabled={!canDown} style={{ paddingVertical: 2 }}>
+                    <Text style={{ color: canDown ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▼</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
           </View>
 
         </View>
