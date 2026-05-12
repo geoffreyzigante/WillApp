@@ -1353,6 +1353,67 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
   );
 }
 
+// Roulette de sélection style iOS 14+ picker : ScrollView avec snap, 3 items visibles.
+// Sélection visualisée par une "pastille" arrondie au centre (au lieu de 2 traits).
+// Le texte central est lui-même rose pour l'accent, les autres en blanc atténué.
+function WheelPicker({ items, selectedIndex, onChange }) {
+  const ITEM_HEIGHT = 36;
+  const VISIBLE = 3;
+  const containerHeight = VISIBLE * ITEM_HEIGHT;
+  const paddingV = ((VISIBLE - 1) / 2) * ITEM_HEIGHT;
+  return (
+    <View style={{ height: containerHeight, position: 'relative' }}>
+      {/* Pastille de sélection : rect arrondi au centre, bg blanc 8% + bordure rose subtile */}
+      <View pointerEvents="none" style={{
+        position: 'absolute',
+        top: paddingV + 2,
+        left: 16, right: 16,
+        height: ITEM_HEIGHT - 4,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        borderWidth: 0.5,
+        borderColor: 'rgba(230,115,255,0.5)',
+        overflow: 'hidden',
+      }}>
+        <LinearGradient
+          colors={['rgba(230,115,255,0.18)', 'rgba(230,115,255,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </View>
+      <ScrollView
+        snapToInterval={ITEM_HEIGHT}
+        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        contentOffset={{ x: 0, y: Math.max(0, selectedIndex) * ITEM_HEIGHT }}
+        contentContainerStyle={{ paddingVertical: paddingV }}
+        onMomentumScrollEnd={e => {
+          const idx = Math.max(0, Math.min(items.length - 1, Math.round(e.nativeEvent.contentOffset.y / ITEM_HEIGHT)));
+          if (idx !== selectedIndex) onChange(idx);
+        }}
+      >
+        {items.map((item, i) => {
+          const isSelected = i === selectedIndex;
+          return (
+            <View key={i} style={{
+              height: ITEM_HEIGHT,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+              <Text style={{
+                color: isSelected ? '#fff' : 'rgba(255,255,255,0.45)',
+                fontSize: 17,
+                fontWeight: isSelected ? '800' : '500',
+              }}>{item.label}</Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 function PhotographerScreen({ session, onLogout, onExit }) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
@@ -1445,8 +1506,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // Course + km posté
   const [selectedRace, setSelectedRace] = useState(null); // null = "Toutes les courses"
   const [selectedKm, setSelectedKm] = useState(0);
-  const [racePickerOpen, setRacePickerOpen] = useState(false);
-  const [kmPickerOpen, setKmPickerOpen] = useState(false);
+  // Section dépliée dans le bandeau : null | 'course' | 'km' (mutuellement exclusif)
+  const [expandedSection, setExpandedSection] = useState(null);
   const distances = Array.isArray(session?.event?.distances) ? session.event.distances : [];
   const hasDistances = distances.length > 0;
   const maxKm = hasDistances
@@ -1970,16 +2031,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   //   Si pas de visage : scale "tap registered" silencieux, pas de rafale.
   //   L'indicateur "AUCUN VISAGE" dans le header dit pourquoi.
   function onCapturePress() {
-    if (isCapturingRef.current) {
-      abortBurstRef.current = true;
-      return;
-    }
-    Animated.sequence([
-      Animated.timing(captureScale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
-      Animated.spring(captureScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
-    ]).start();
-    if (facesInZoneCountRef.current === 0) return;
-    startBurst();
+    setIsShooting(s => !s);
   }
 
   async function startBurst() {
@@ -2312,244 +2364,193 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           zIndex: 10,
         }}
       >
+        {/* Pill Zoom flottante sur la vue photographe (au-dessus du bandeau noir, avec un gap) */}
         <View style={{
-          paddingHorizontal: 16,
-          paddingTop: 12,
-          paddingBottom: 36,
-          gap: 14,
-          backgroundColor: '#000',
+          alignSelf: 'center',
+          flexDirection: 'row',
+          alignItems: 'center', justifyContent: 'center',
+          backgroundColor: 'transparent',
+          borderWidth: 0.5,
+          borderColor: 'rgba(255,255,255,0.25)',
+          borderRadius: 999, padding: 1,
+          height: 44, width: 90,
+          marginBottom: 12,
         }}>
-          {/* Row 1 : container chips course, largeur auto, contour blanc fin */}
-          {hasDistances && (
-            <View style={{
-              alignSelf: 'center',
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-around',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.3)',
-              borderRadius: 999,
-              paddingHorizontal: 6,
-              paddingVertical: 4,
-              backgroundColor: 'transparent',
-              gap: 4,
-            }}>
-              {[null, ...distances].map((d, i) => {
-                const active = (d === null && !selectedRace) ||
-                  (d && selectedRace && parseFloat(selectedRace.km) === parseFloat(d.km));
-                const label = d === null ? 'TOUTES' : `${d.km} KM`;
-                return (
-                  <TouchableOpacity
-                    key={i}
-                    onPress={() => {
-                      setSelectedRace(d);
-                      if (d && selectedKm > Math.ceil(parseFloat(d.km) || 0)) setSelectedKm(0);
-                    }}
-                    hitSlop={4}
-                    style={{
-                      paddingHorizontal: 14, paddingVertical: 7,
-                      borderRadius: 999,
-                      backgroundColor: 'transparent',
-                      borderWidth: 1,
-                      borderColor: active ? C.pinkPillActive : 'transparent',
-                    }}
-                  >
-                    <Text style={{
-                      color: active ? '#fff' : 'rgba(255,255,255,0.7)',
-                      fontSize: 12,
-                      fontWeight: '800',
-                      letterSpacing: 0.8,
-                    }}>{label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-
-          {/* Row 2 : shutter row — zoom 90 · Go! 140×60 · km 90 */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            {/* Pill Zoom — container transparent à contour blanc fin, option active à contour rose */}
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center', justifyContent: 'center',
-              backgroundColor: 'transparent',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.3)',
-              borderRadius: 999, padding: 4,
-              height: 44, width: 90,
-            }}>
-              {[1, 1.5].map(z => {
-                const active = zoomLevel === z;
-                return (
-                  <TouchableOpacity
-                    key={z}
-                    onPress={() => setZoomLevel(z)}
-                    style={{
-                      flex: 1, height: '100%',
-                      alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: 'transparent',
-                      borderWidth: 1,
-                      borderColor: active ? C.pinkPillActive : 'transparent',
-                      borderRadius: 999,
-                    }}
-                  >
-                    <Text style={{
-                      color: active ? '#fff' : 'rgba(255,255,255,0.6)',
-                      fontWeight: '800',
-                      fontSize: 12,
-                    }}>
-                      {z === 1 ? '1×' : '1,5×'}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Bouton Go!/Stop, 140×60, rose plein (seul accent fort) */}
-            <Animated.View style={{ transform: [{ scale: captureScale }] }}>
+          {[1, 1.5].map(z => {
+            const active = zoomLevel === z;
+            return (
               <TouchableOpacity
-                onPress={onCapturePress}
-                activeOpacity={0.9}
+                key={z}
+                onPress={() => setZoomLevel(z)}
                 style={{
-                  width: 140, height: 60, borderRadius: 999,
-                  backgroundColor: isShooting ? C.primary : C.pinkPillActive,
+                  flex: 1, height: '100%',
                   alignItems: 'center', justifyContent: 'center',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 6,
+                  backgroundColor: 'transparent',
+                  borderWidth: 0.5,
+                  borderColor: active ? C.pinkPillActive : 'transparent',
+                  borderRadius: 999,
+                  overflow: 'hidden',
                 }}
               >
+                {active && (
+                  <LinearGradient
+                    colors={['rgba(230,115,255,0.7)', 'rgba(230,115,255,0)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFillObject}
+                    pointerEvents="none"
+                  />
+                )}
                 <Text style={{
-                  color: '#fff',
-                  fontSize: 22,
-                  fontStyle: 'italic',
+                  color: active ? '#fff' : 'rgba(255,255,255,0.6)',
                   fontWeight: '800',
-                  fontFamily: 'AVEstiana',
-                  letterSpacing: 1,
-                }}>{isShooting ? 'Stop' : 'Go!'}</Text>
+                  fontSize: 12,
+                }}>
+                  {z === 1 ? '1×' : '1,5×'}
+                </Text>
               </TouchableOpacity>
-            </Animated.View>
+            );
+          })}
+        </View>
 
-            {/* Pill KM — container transparent à contour blanc fin, valeur active à contour rose */}
+        <View style={{
+          paddingHorizontal: 16,
+          paddingTop: 0,
+          paddingBottom: 36,
+          backgroundColor: '#000',
+          // Étend le panneau vers le haut jusqu'au bas de la caméra : sans ça,
+          // l'espace entre camera_bottom et inner_top est aussi noir (parent bg)
+          // mais Go! reste en bas de cette zone — visuellement il semble décalé.
+          minHeight: Math.max(0, winH - (CAMERA_TOP + previewH)),
+        }}>
+          {/* Row 1 : bandeau Go!/Stop — top aligné strictement avec le haut du panneau noir */}
+          <TouchableOpacity
+            onPress={onCapturePress}
+            activeOpacity={0.9}
+            style={{
+              height: 60,
+              marginHorizontal: -16,
+              marginTop: 0,
+              backgroundColor: isShooting ? C.primary : C.pinkPillActive,
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Text style={{
+              color: '#fff',
+              fontSize: 22,
+              fontStyle: 'italic',
+              fontWeight: '800',
+              fontFamily: 'AVEstiana',
+              letterSpacing: 1,
+            }}>{isShooting ? 'Stop' : 'Go!'}</Text>
+          </TouchableOpacity>
+
+          {/* Row 2 : bandeau 2 sections (COURSE / KM) collé au Go!, edge-to-edge */}
+          <View style={{
+            flexDirection: 'row',
+            marginTop: 0,
+            marginHorizontal: -16,
+            backgroundColor: '#000',
+          }}>
+            {/* Section COURSE (gauche, 50%) — ouvre la roulette en modal, contenu centré */}
             <TouchableOpacity
-              onPress={() => { setKmPickerOpen(true); setRacePickerOpen(false); }}
+              onPress={() => setExpandedSection(s => s === 'course' ? null : 'course')}
               activeOpacity={0.7}
               style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                backgroundColor: 'transparent',
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.3)',
-                borderRadius: 999, padding: 4,
-                height: 44, width: 90,
-                gap: 4,
+                flex: 1,
+                paddingVertical: 18,
+                paddingHorizontal: 16,
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               <Text style={{
-                color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '800',
-                letterSpacing: 0.6,
-              }}>KM</Text>
-              <View style={{
-                minWidth: 32, height: 34, paddingHorizontal: 6,
-                alignItems: 'center', justifyContent: 'center',
-                backgroundColor: 'transparent',
-                borderWidth: 1,
-                borderColor: selectedKm > 0 ? C.pinkPillActive : 'transparent',
-                borderRadius: 999,
+                color: '#fff',
+                fontSize: 16,
+                fontWeight: '800',
+                letterSpacing: 0.5,
+                textAlign: 'center',
+              }}>COURSE</Text>
+              <Text style={{
+                color: 'rgba(255,255,255,0.65)',
+                fontSize: 11,
+                fontWeight: '700',
+                letterSpacing: 0.3,
+                marginTop: 8,
+                textAlign: 'center',
               }}>
-                <Text style={{
-                  color: selectedKm > 0 ? '#fff' : 'rgba(255,255,255,0.6)',
-                  fontSize: 13, fontWeight: '800',
-                }}>
-                  {selectedKm > 0 ? selectedKm : '—'}
-                </Text>
-              </View>
+                {selectedRace ? `${selectedRace.km} KM` : 'JE SÉLECTIONNE QUELLE COURSE JE PHOTOGRAPHIE'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Separator vertical entre les 2 sections */}
+            <View style={{ width: 0.5, backgroundColor: 'rgba(255,255,255,0.15)' }} />
+
+            {/* Section KM (droite, 50%) — ouvre la roulette en modal, contenu centré */}
+            <TouchableOpacity
+              onPress={() => setExpandedSection(s => s === 'km' ? null : 'km')}
+              activeOpacity={0.7}
+              style={{
+                flex: 1,
+                paddingVertical: 18,
+                paddingHorizontal: 16,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{
+                color: '#fff',
+                fontSize: 16,
+                fontWeight: '800',
+                letterSpacing: 0.5,
+                textAlign: 'center',
+              }}>KM</Text>
+              <Text style={{
+                color: 'rgba(255,255,255,0.65)',
+                fontSize: 11,
+                fontWeight: '700',
+                letterSpacing: 0.3,
+                marginTop: 8,
+                textAlign: 'center',
+              }}>
+                {selectedKm > 0 ? `KM ${selectedKm}` : 'JE SÉLECTIONNE À QUEL KILOMÈTRE JE SUIS'}
+              </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Roulette inline — apparaît dans l'espace noir sous le bandeau, sans rien décaler */}
+          {expandedSection === 'course' && (() => {
+            const items = [{ label: 'Toutes les courses', value: null }, ...distances.map(d => ({ label: `${d.km} km`, value: d }))];
+            const selectedIdx = Math.max(0, items.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null)));
+            return (
+              <View style={{ marginHorizontal: -16, marginTop: 8, paddingVertical: 4, backgroundColor: '#000' }}>
+                <WheelPicker
+                  items={items}
+                  selectedIndex={selectedIdx}
+                  onChange={(idx) => {
+                    const v = items[idx].value;
+                    setSelectedRace(v);
+                    if (v && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(0);
+                  }}
+                />
+              </View>
+            );
+          })()}
+          {expandedSection === 'km' && (() => {
+            const items = Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k }));
+            return (
+              <View style={{ marginHorizontal: -16, marginTop: 8, paddingVertical: 4, backgroundColor: '#000' }}>
+                <WheelPicker
+                  items={items}
+                  selectedIndex={selectedKm}
+                  onChange={(idx) => setSelectedKm(idx)}
+                />
+              </View>
+            );
+          })()}
+
         </View>
       </Animated.View>
-
-      {/* Sélecteur de course (modal bottom sheet) */}
-      <Modal visible={racePickerOpen} transparent animationType="slide" onRequestClose={() => setRacePickerOpen(false)}>
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => setRacePickerOpen(false)}
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
-        >
-          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 }}>
-            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', marginBottom: 12, textAlign: 'center' }}>Course couverte</Text>
-            <TouchableOpacity
-              onPress={() => { setSelectedRace(null); setRacePickerOpen(false); }}
-              style={{ paddingVertical: 14, borderRadius: 12, backgroundColor: !selectedRace ? C.primary : '#f5f3ff', marginBottom: 8, alignItems: 'center' }}
-            >
-              <Text style={{ color: !selectedRace ? '#fff' : C.text, fontSize: 15, fontWeight: '600' }}>Toutes les courses</Text>
-            </TouchableOpacity>
-            {distances.map((d, i) => {
-              const active = selectedRace && parseFloat(selectedRace.km) === parseFloat(d.km);
-              return (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => {
-                    setSelectedRace(d);
-                    if (selectedKm > Math.ceil(parseFloat(d.km) || 0)) setSelectedKm(0);
-                    setRacePickerOpen(false);
-                  }}
-                  style={{ paddingVertical: 14, borderRadius: 12, backgroundColor: active ? C.primary : '#f5f3ff', marginBottom: 8, alignItems: 'center' }}
-                >
-                  <Text style={{ color: active ? '#fff' : C.text, fontSize: 15, fontWeight: '600' }}>{d.km} km</Text>
-                </TouchableOpacity>
-              );
-            })}
-            {!hasDistances && (
-              <Text style={{ color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 8 }}>
-                L'organisateur n'a pas encore défini de distances pour cet événement.
-              </Text>
-            )}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Sélecteur de km (roulette simple) */}
-      <Modal visible={kmPickerOpen} transparent animationType="slide" onRequestClose={() => setKmPickerOpen(false)}>
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => setKmPickerOpen(false)}
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
-        >
-          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingBottom: 36 }}>
-            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', marginBottom: 4, textAlign: 'center' }}>Km où tu es posté</Text>
-            <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>
-              0 à {kmCeiling} km
-            </Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
-              style={{ maxHeight: 60 }}
-            >
-              {Array.from({ length: kmCeiling + 1 }).map((_, k) => {
-                const active = selectedKm === k;
-                return (
-                  <TouchableOpacity
-                    key={k}
-                    onPress={() => { setSelectedKm(k); setKmPickerOpen(false); }}
-                    style={{
-                      paddingHorizontal: 16, paddingVertical: 10,
-                      borderRadius: 12,
-                      backgroundColor: active ? C.primary : '#f5f3ff',
-                      minWidth: 56,
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Text style={{ color: active ? '#fff' : C.text, fontWeight: '700', fontSize: 15 }}>{k}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
       <SessionPhotosModal
         visible={showSessionModal}
