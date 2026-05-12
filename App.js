@@ -1403,18 +1403,18 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
         })}
       </ScrollView>
       {/* Top-fade : opaque sur toute la hauteur de l'item du dessus pour
-          masquer completement son texte sous le titre, puis degrade vers
-          transparent sur 14px (mord legerement sur l'item selectionne). */}
+          masquer son texte sous le titre, puis fade court (6px) pour ne
+          PAS empieter sur l'item selectionne. */}
       <LinearGradient
         pointerEvents="none"
         colors={['rgba(0,0,0,1)', 'rgba(0,0,0,1)', 'rgba(0,0,0,0)']}
-        locations={[0, PAD_V / (PAD_V + 14), 1]}
+        locations={[0, PAD_V / (PAD_V + 6), 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={{
           position: 'absolute',
           top: 0, left: 0, right: 0,
-          height: PAD_V + 14,
+          height: PAD_V + 6,
         }}
       />
     </View>
