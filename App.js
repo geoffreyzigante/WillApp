@@ -2496,6 +2496,162 @@ const formSectionStyle = StyleSheet.create({
   input: { backgroundColor: '#faf9ff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: C.text, marginBottom: 8 },
 });
 
+// Modal de cadrage 4:1 custom. iOS ignore aspect:[4,1] dans son cropper natif,
+// donc on affiche l'image complète avec un cadre 4:1 superposé que l'utilisateur
+// positionne via pan + pinch gestures, puis on crop via expo-image-manipulator.
+function CropImageModal({ visible, asset, onCancel, onConfirm }) {
+  const screenW = Dimensions.get('window').width;
+  const FRAME_W = screenW - 32;
+  const FRAME_H = FRAME_W / 4;
+
+  const srcAspect = asset && asset.height ? asset.width / asset.height : 1;
+  const FRAME_ASPECT = 4;
+  let baseW, baseH;
+  if (srcAspect >= FRAME_ASPECT) {
+    baseH = FRAME_H;
+    baseW = FRAME_H * srcAspect;
+  } else {
+    baseW = FRAME_W;
+    baseH = FRAME_W / srcAspect;
+  }
+
+  const tx = useSharedValue(0);
+  const ty = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const savedTx = useSharedValue(0);
+  const savedTy = useSharedValue(0);
+  const savedScale = useSharedValue(1);
+  const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (visible && asset) {
+      tx.value = 0; savedTx.value = 0;
+      ty.value = 0; savedTy.value = 0;
+      scale.value = 1; savedScale.value = 1;
+    }
+  }, [visible, asset?.uri]);
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      tx.value = savedTx.value + e.translationX;
+      ty.value = savedTy.value + e.translationY;
+    })
+    .onEnd(() => {
+      const txMax = Math.max(0, (baseW * scale.value - FRAME_W) / 2);
+      const tyMax = Math.max(0, (baseH * scale.value - FRAME_H) / 2);
+      const clampedTx = Math.max(-txMax, Math.min(txMax, tx.value));
+      const clampedTy = Math.max(-tyMax, Math.min(tyMax, ty.value));
+      if (tx.value !== clampedTx) tx.value = withTiming(clampedTx, { duration: 180 });
+      if (ty.value !== clampedTy) ty.value = withTiming(clampedTy, { duration: 180 });
+      savedTx.value = clampedTx;
+      savedTy.value = clampedTy;
+    });
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      const next = savedScale.value * e.scale;
+      scale.value = Math.min(4, Math.max(1, next));
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      const txMax = Math.max(0, (baseW * scale.value - FRAME_W) / 2);
+      const tyMax = Math.max(0, (baseH * scale.value - FRAME_H) / 2);
+      const clampedTx = Math.max(-txMax, Math.min(txMax, tx.value));
+      const clampedTy = Math.max(-tyMax, Math.min(tyMax, ty.value));
+      if (tx.value !== clampedTx) tx.value = withTiming(clampedTx, { duration: 180 });
+      if (ty.value !== clampedTy) ty.value = withTiming(clampedTy, { duration: 180 });
+      savedTx.value = clampedTx;
+      savedTy.value = clampedTy;
+    });
+
+  const composed = Gesture.Simultaneous(panGesture, pinchGesture);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: tx.value },
+      { translateY: ty.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  const doConfirm = async () => {
+    if (!asset || busy) return;
+    setBusy(true);
+    try {
+      const ratio = asset.width / baseW;
+      const widthInSrc = (FRAME_W * ratio) / scale.value;
+      const heightInSrc = (FRAME_H * ratio) / scale.value;
+      const centerX = asset.width / 2 - (tx.value * ratio) / scale.value;
+      const centerY = asset.height / 2 - (ty.value * ratio) / scale.value;
+      const originX = Math.max(0, Math.round(centerX - widthInSrc / 2));
+      const originY = Math.max(0, Math.round(centerY - heightInSrc / 2));
+      const width = Math.max(1, Math.min(asset.width - originX, Math.round(widthInSrc)));
+      const height = Math.max(1, Math.min(asset.height - originY, Math.round(heightInSrc)));
+      const out = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ crop: { originX, originY, width, height } }],
+        { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      onConfirm(out);
+    } catch (e) {
+      Alert.alert('Erreur', e.message || 'Impossible de cadrer l\'image');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!asset) return null;
+
+  const overlayBg = 'rgba(0,0,0,0.6)';
+  const vMargin = stageSize.h > 0 ? (stageSize.h - FRAME_H) / 2 : 0;
+  const hMargin = stageSize.w > 0 ? (stageSize.w - FRAME_W) / 2 : 0;
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={onCancel}>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+          <View style={{ paddingHorizontal: 20, paddingVertical: 12, alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Cadrer l'image (4:1)</Text>
+            <Text style={{ color: '#bbb', fontSize: 12, marginTop: 4 }}>Glisse pour déplacer · pince pour zoomer</Text>
+          </View>
+
+          <GestureDetector gesture={composed}>
+            <View
+              style={{ flex: 1, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}
+              onLayout={(e) => setStageSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+            >
+              <ReAnimated.Image
+                source={{ uri: asset.uri }}
+                style={[{ width: baseW, height: baseH }, animStyle]}
+                resizeMode="cover"
+              />
+              {stageSize.w > 0 ? (
+                <>
+                  <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, height: vMargin, backgroundColor: overlayBg }} />
+                  <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: vMargin, backgroundColor: overlayBg }} />
+                  <View pointerEvents="none" style={{ position: 'absolute', top: vMargin, left: 0, width: hMargin, height: FRAME_H, backgroundColor: overlayBg }} />
+                  <View pointerEvents="none" style={{ position: 'absolute', top: vMargin, right: 0, width: hMargin, height: FRAME_H, backgroundColor: overlayBg }} />
+                  <View pointerEvents="none" style={{ position: 'absolute', top: vMargin, left: hMargin, width: FRAME_W, height: FRAME_H, borderWidth: 1, borderColor: 'rgba(255,255,255,0.85)' }} />
+                </>
+              ) : null}
+            </View>
+          </GestureDetector>
+
+          <View style={{ flexDirection: 'row', padding: 20, gap: 12 }}>
+            <TouchableOpacity onPress={onCancel} disabled={busy} style={{ flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#555', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={doConfirm} disabled={busy} style={{ flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center', opacity: busy ? 0.6 : 1 }}>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{busy ? 'Traitement…' : 'Valider le cadrage'}</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </GestureHandlerRootView>
+    </Modal>
+  );
+}
+
 function CreateEventModal({ visible, onClose, onCreated, organizerSession, editEvent }) {
   const isEdit = !!editEvent;
   const [name, setName] = useState('');
@@ -2517,6 +2673,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const [coverImage, setCoverImage] = useState(null); // URL distante après upload
   const [pendingCoverLocal, setPendingCoverLocal] = useState(null); // URI locale pendant la création (pas encore d'event)
   const [coverBusy, setCoverBusy] = useState(false);
+  const [cropAsset, setCropAsset] = useState(null); // asset {uri,width,height} → ouvre CropImageModal
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(1);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -2609,10 +2766,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   };
   const removeDistance = (idx) => setDistances(d => d.filter((_, i) => i !== idx));
 
-  // Sélection + upload de l'image de couverture.
-  // iOS ignore aspect:[4,1] dans son cropper natif (il ne respecte que les ratios
-  // standards), donc on désactive allowsEditing et on crop nous-mêmes en 4:1
-  // centré via expo-image-manipulator.
+  // Sélection de l'image. iOS ignore aspect:[4,1] dans son cropper natif, donc
+  // on ouvre notre CropImageModal pour que l'utilisateur cadre lui-même en 4:1.
   const pickAndUploadCover = async () => {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -2626,54 +2781,38 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         quality: 0.9,
       });
       if (r.canceled || !r.assets?.[0]?.uri) return;
-      const picked = r.assets[0];
-      const cropped = await cropTo4to1(picked);
-      const localUri = cropped.uri;
-      // Si on est en édition, on uploade tout de suite (l'event existe)
-      if (isEdit && editEvent?.code) {
-        setCoverBusy(true);
-        try {
-          const res = await fetch(localUri);
-          const blob = await res.blob();
-          const up = await fetch(`${API_URL}/organizer/cover/${editEvent.code}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'image/jpeg',
-              Authorization: `Bearer ${organizerSession.token}`,
-            },
-            body: blob,
-          });
-          const data = await up.json();
-          if (up.ok) setCoverImage(data.cover_image);
-          else Alert.alert('Erreur', data.error || 'Échec de l\'upload');
-        } finally { setCoverBusy(false); }
-      } else {
-        // En création, on garde l'URI locale jusqu'à la soumission
-        setPendingCoverLocal(localUri);
-      }
+      setCropAsset(r.assets[0]);
     } catch (e) {
       Alert.alert('Erreur', e.message || 'Impossible de sélectionner l\'image');
     }
   };
 
-  // Crop centré au ratio 4:1 via expo-image-manipulator.
-  const cropTo4to1 = async (asset) => {
-    const { uri, width, height } = asset;
-    const target = 4 / 1;
-    const current = width / height;
-    let crop;
-    if (current > target) {
-      const newWidth = height * target;
-      crop = { originX: (width - newWidth) / 2, originY: 0, width: newWidth, height };
+  // Validé depuis la CropImageModal → upload (édition) ou stockage local (création).
+  const handleCropConfirm = async (cropped) => {
+    setCropAsset(null);
+    const localUri = cropped.uri;
+    if (isEdit && editEvent?.code) {
+      setCoverBusy(true);
+      try {
+        const res = await fetch(localUri);
+        const blob = await res.blob();
+        const up = await fetch(`${API_URL}/organizer/cover/${editEvent.code}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'image/jpeg',
+            Authorization: `Bearer ${organizerSession.token}`,
+          },
+          body: blob,
+        });
+        const data = await up.json();
+        if (up.ok) setCoverImage(data.cover_image);
+        else Alert.alert('Erreur', data.error || 'Échec de l\'upload');
+      } catch (e) {
+        Alert.alert('Erreur', e.message || 'Échec de l\'upload');
+      } finally { setCoverBusy(false); }
     } else {
-      const newHeight = width / target;
-      crop = { originX: 0, originY: (height - newHeight) / 2, width, height: newHeight };
+      setPendingCoverLocal(localUri);
     }
-    return ImageManipulator.manipulateAsync(
-      uri,
-      [{ crop }],
-      { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
-    );
   };
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((contact || '').trim());
@@ -3187,6 +3326,13 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <CropImageModal
+        visible={!!cropAsset}
+        asset={cropAsset}
+        onCancel={() => setCropAsset(null)}
+        onConfirm={handleCropConfirm}
+      />
     </Modal>
   );
 }
