@@ -3328,9 +3328,9 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
           </View>
         )}
 
-        {/* Overlay noir plein écran avec trou ovale au centre — style FaceID :
-            tout est masqué noir sauf l'ovale 260×340. Pas de bordure : la forme
-            est définie par le contraste entre la zone visible et le voile. */}
+        {/* Voile semi-transparent plein écran avec trou ovale au centre.
+            Pas de bordure : la forme est définie par le contraste entre la
+            zone visible et le voile. */}
         <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
           <Defs>
             <Mask id="selfieMask">
@@ -3338,7 +3338,7 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
               <Ellipse cx={cx} cy={cy} rx={OVAL_W / 2} ry={OVAL_H / 2} fill="black" />
             </Mask>
           </Defs>
-          <Rect width="100%" height="100%" fill="#000" mask="url(#selfieMask)" />
+          <Rect width="100%" height="100%" fill="rgba(0,0,0,0.5)" mask="url(#selfieMask)" />
         </Svg>
 
         <Text style={{
@@ -3346,6 +3346,7 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
           top: cy + OVAL_H / 2 + 24,
           left: 0, right: 0, textAlign: 'center',
           color: '#fff', fontSize: 14, fontWeight: '600',
+          textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4,
         }}>
           Place ton visage dans l'ovale
         </Text>
@@ -3532,7 +3533,7 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
               <ExpoImage source={{ uri }} style={s.selfiePreview} contentFit="cover" />
             ) : (
               <View style={[s.selfiePreview, { backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center' }]}>
-                <Icon.User size={64} color={C.primary} />
+                <Icon.User size={80} color={C.primary} />
               </View>
             )}
           </View>
@@ -4012,20 +4013,6 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                         <Icon.User size={28} color={C.primary} />
                       </View>
                     )}
-                    <View style={{
-                      position: 'absolute',
-                      right: -2, bottom: -2,
-                      width: 24, height: 24, borderRadius: 12,
-                      backgroundColor: '#fff',
-                      alignItems: 'center', justifyContent: 'center',
-                      shadowColor: '#000',
-                      shadowOpacity: 0.15,
-                      shadowRadius: 4,
-                      shadowOffset: { width: 0, height: 1 },
-                      elevation: 2,
-                    }}>
-                      <Icon.PhotoCam size={14} color={C.text} />
-                    </View>
                   </TouchableOpacity>
                   <Text style={profileCardStyles.label}>Selfie</Text>
                   <View style={{ flex: 1 }} />
