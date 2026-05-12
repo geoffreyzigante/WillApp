@@ -2234,8 +2234,31 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             ) : null}
           </View>
 
-          {/* Spacer pour équilibrer la pill retour à gauche */}
-          <View style={{ width: 46, height: 36 }} />
+          {/* Bouton "se déconnecter" : purge la session pour choisir un autre
+              event. Distinct de la flèche retour qui sort sans purger. */}
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Se déconnecter ?',
+                'Tu pourras choisir un autre événement. Tes photos en attente d\'upload restent en queue.',
+                [
+                  { text: 'Annuler', style: 'cancel' },
+                  { text: 'Se déconnecter', style: 'destructive', onPress: onLogout },
+                ],
+              );
+            }}
+            hitSlop={10}
+            style={{
+              paddingHorizontal: 12, height: 36, borderRadius: 18,
+              backgroundColor: 'rgba(239,68,68,0.22)',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+              <Path d="M10 17l5-5-5-5M15 12H3" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </TouchableOpacity>
         </View>
 
         {/* Row 2 : pill statut + pill compteur photo, centrés sous le titre */}
@@ -6192,11 +6215,11 @@ export default function App() {
       Secure.getItem('@will_organizer').then(v => {
         if (v) try { setOrganizerSession(JSON.parse(v)); } catch {}
       });
+      // Boot : on lit la session pour permettre un retour rapide en mode
+      // photographe (sans re-saisir le mdp), mais on ouvre par défaut sur
+      // l'accueil. L'utilisateur tap "Photographe" pour entrer dans le mode.
       Secure.getItem('@will_photographer_session').then(v => {
-        if (v) try {
-          setSession(JSON.parse(v));
-          setInPhotographerMode(true); // boot direct en mode photographe
-        } catch {}
+        if (v) try { setSession(JSON.parse(v)); } catch {}
       });
     })();
   }, []);
