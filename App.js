@@ -193,6 +193,7 @@ const C = {
   pinkPillText: '#FFFFFF',
   pinkPillBg: '#FDECFF',
   pinkPillActive: '#E673FF',
+  violetAccent: '#7C3AED',
   card: '#FFFFFF',
   shadow: 'rgba(123, 47, 255, 0.08)',
 };
@@ -2312,42 +2313,51 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           pointerEvents="none"
         />
 
-        {/* 1. Chips course en pills (bg sombre / actif rose, cohérent avec le zoom) */}
+        {/* 1. Chips course dans un container arrondi commun (segmented style),
+            accent violet pour la chip active. */}
         {hasDistances && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, paddingHorizontal: 8, minWidth: '100%', justifyContent: 'center', alignItems: 'center' }}
-            style={{ marginBottom: 18, maxHeight: 36 }}
-          >
-            {[null, ...distances].map((d, i) => {
-              const active = (d === null && !selectedRace) ||
-                (d && selectedRace && parseFloat(selectedRace.km) === parseFloat(d.km));
-              const label = d === null ? 'TOUTES' : `${d.km} KM`;
-              return (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => {
-                    setSelectedRace(d);
-                    if (d && selectedKm > Math.ceil(parseFloat(d.km) || 0)) setSelectedKm(0);
-                  }}
-                  hitSlop={4}
-                  style={{
-                    paddingHorizontal: 14, paddingVertical: 7,
-                    borderRadius: 999,
-                    backgroundColor: active ? C.pinkPillActive : 'transparent',
-                  }}
-                >
-                  <Text style={{
-                    color: active ? '#fff' : 'rgba(255,255,255,0.7)',
-                    fontSize: 12,
-                    fontWeight: '800',
-                    letterSpacing: 0.8,
-                  }}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          <View style={{
+            alignSelf: 'center',
+            marginBottom: 18,
+            backgroundColor: 'rgba(0,0,0,0.4)',
+            borderRadius: 999,
+            padding: 4,
+            maxWidth: '100%',
+          }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 4, alignItems: 'center' }}
+            >
+              {[null, ...distances].map((d, i) => {
+                const active = (d === null && !selectedRace) ||
+                  (d && selectedRace && parseFloat(selectedRace.km) === parseFloat(d.km));
+                const label = d === null ? 'TOUTES' : `${d.km} KM`;
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    onPress={() => {
+                      setSelectedRace(d);
+                      if (d && selectedKm > Math.ceil(parseFloat(d.km) || 0)) setSelectedKm(0);
+                    }}
+                    hitSlop={4}
+                    style={{
+                      paddingHorizontal: 14, paddingVertical: 7,
+                      borderRadius: 999,
+                      backgroundColor: active ? C.violetAccent : 'transparent',
+                    }}
+                  >
+                    <Text style={{
+                      color: active ? '#fff' : 'rgba(255,255,255,0.7)',
+                      fontSize: 12,
+                      fontWeight: '800',
+                      letterSpacing: 0.8,
+                    }}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
         )}
 
         {/* 2. Shutter row : [zoom] [Go!] [km] */}
@@ -2369,12 +2379,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                   style={{
                     flex: 1, height: '100%',
                     alignItems: 'center', justifyContent: 'center',
-                    backgroundColor: active ? C.pinkPillActive : 'transparent',
+                    backgroundColor: active ? C.violetAccent : 'transparent',
                     borderRadius: 999,
                   }}
                 >
                   <Text style={{
-                    color: '#fff',
+                    color: active ? '#fff' : 'rgba(255,255,255,0.6)',
                     fontWeight: '800',
                     fontSize: 12,
                   }}>
@@ -2412,7 +2422,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Km pill — à droite du bouton Go (même style que la pill zoom) */}
+          {/* Km pill — à droite du bouton Go (même style que la pill zoom, accent violet) */}
           <TouchableOpacity
             onPress={() => { setKmPickerOpen(true); setRacePickerOpen(false); }}
             activeOpacity={0.7}
@@ -2425,17 +2435,18 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             }}
           >
             <Text style={{
-              color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '800',
+              color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '800',
               letterSpacing: 0.6,
             }}>KM</Text>
             <View style={{
               minWidth: 36, height: 36, paddingHorizontal: 8,
               alignItems: 'center', justifyContent: 'center',
-              backgroundColor: selectedKm > 0 ? C.pinkPillActive : 'transparent',
+              backgroundColor: selectedKm > 0 ? C.violetAccent : 'transparent',
               borderRadius: 999,
             }}>
               <Text style={{
-                color: '#fff', fontSize: 13, fontWeight: '800',
+                color: selectedKm > 0 ? '#fff' : 'rgba(255,255,255,0.6)',
+                fontSize: 13, fontWeight: '800',
               }}>
                 {selectedKm > 0 ? selectedKm : '—'}
               </Text>
