@@ -6098,14 +6098,19 @@ export default function App() {
   const reloadEvents = useCallback(async () => {
     try {
       const data = await api.getEvents();
-      if (Array.isArray(data) && data.length > 0) {
-        setEvents(data);
-        AsyncStorage.setItem('@will_events_cache', JSON.stringify(data)).catch(() => {});
-      }
+      if (Array.isArray(data) && data.length > 0) setEvents(data);
     } catch {
       // offline : on garde la liste cachée (préchargée au boot)
     }
   }, []);
+
+  // Auto-cache : à chaque fois qu'on a une liste non vide, on la persiste
+  // pour que le prochain boot offline ait une liste à afficher.
+  useEffect(() => {
+    if (events.length > 0) {
+      AsyncStorage.setItem('@will_events_cache', JSON.stringify(events)).catch(() => {});
+    }
+  }, [events]);
 
   useEffect(() => {
     Font.loadAsync({
@@ -6115,12 +6120,15 @@ export default function App() {
 
   useEffect(() => {
     // Précharge la liste events depuis le cache pour que le LoginModal soit
-    // utilisable en offline (sélection d'event possible sans réseau).
+    // utilisable en offline (sélection d'event possible sans réseau). Guard :
+    // si reloadEvents a déjà set une liste fraîche, on ne l'écrase pas.
     AsyncStorage.getItem('@will_events_cache').then(v => {
       if (!v) return;
       try {
         const cached = JSON.parse(v);
-        if (Array.isArray(cached) && cached.length > 0) setEvents(cached);
+        if (Array.isArray(cached) && cached.length > 0) {
+          setEvents(prev => (prev.length === 0 ? cached : prev));
+        }
       } catch {}
     });
     reloadEvents();
