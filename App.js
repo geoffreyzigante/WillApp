@@ -9,7 +9,6 @@ import { Image as ExpoImage } from 'expo-image';
 import * as Font from 'expo-font';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import {
   Camera as VisionCamera,
   useCameraDevice,
@@ -28,7 +27,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import Svg, { Path, Circle, Defs, Mask, Rect } from 'react-native-svg';
+import Svg, { Path, Circle, Ellipse, Defs, Mask, Rect } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import NetInfo from '@react-native-community/netinfo';
 import { Paths, File, Directory } from 'expo-file-system';
@@ -3240,32 +3239,45 @@ function OrganizationModal({ visible, onClose, onPickRole }) {
 
 const BIOMETRIC_CONSENT_KEY = '@will_biometric_consent_v1';
 
-// Sous-modal : viewport caméra custom avec masque rond. Remplace
-// ImagePicker.launchCameraAsync pour le selfie afin d'afficher un guide
-// circulaire pendant la prise (l'image uploadée reste au ratio natif).
+// Sous-modal : viewport caméra custom avec masque rond circulaire.
+// Caméra avant en Vision Camera : grand angle natif explicite + viewport
+// dimensionné au ratio 4:3 du capteur pour éviter le crop/zoom apparent
+// causé par le cover-fill sur écran 9:19.5. Le cercle est purement visuel
+// (overlay SVG), il ne crope pas la preview ; l'image sauvée est l'image
+// native non rognée (le crop carré final reste à faire au save côté upload).
 function SelfieCameraModal({ visible, onClose, onCaptured }) {
   const cameraRef = useRef(null);
-  const [perm, requestPerm] = useCameraPermissions();
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice('front', {
+    physicalDevices: ['wide-angle-camera'],
+  });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (visible && perm && !perm.granted && perm.canAskAgain) {
-      requestPerm();
+    if (visible && !hasPermission) {
+      requestPermission();
     }
-  }, [visible, perm?.granted]);
+  }, [visible, hasPermission]);
 
   const winW = Dimensions.get('window').width;
   const winH = Dimensions.get('window').height;
-  const CIRCLE_SIZE = 280;
+  const previewH = winW * (4 / 3);
+  const previewTop = Math.max(0, (winH - previewH) / 2 - 40);
+  const OVAL_W = 260;
+  const OVAL_H = 340;
   const cx = winW / 2;
-  const cy = winH / 2 - 40;
+  const cy = previewTop + previewH / 2;
 
   const shoot = async () => {
     if (!cameraRef.current || busy) return;
     setBusy(true);
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.8, skipProcessing: false });
-      onCaptured?.(photo.uri);
+      const photo = await cameraRef.current.takePhoto({
+        flash: 'off',
+        enableShutterSound: true,
+      });
+      const path = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
+      onCaptured?.(path);
     } catch (e) {
       Alert.alert('Erreur', e.message || String(e));
     } finally {
@@ -3276,52 +3288,47 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
-        {perm?.granted ? (
-          <CameraView
+        {hasPermission && device ? (
+          <VisionCamera
             ref={cameraRef}
-            style={StyleSheet.absoluteFill}
-            facing="front"
+            style={{
+              position: 'absolute',
+              top: previewTop,
+              left: 0, right: 0,
+              height: previewH,
+            }}
+            device={device}
+            isActive={visible}
+            photo={true}
+            zoom={device.minZoom}
+            resizeMode="cover"
           />
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
             <Text style={{ color: '#fff', fontSize: 15, textAlign: 'center', marginBottom: 16 }}>
-              {perm?.canAskAgain === false
-                ? "Caméra refusée. Active la permission dans les réglages du téléphone."
+              {!device
+                ? "Aucune caméra avant disponible sur cet appareil."
                 : "Will a besoin d'accéder à la caméra pour prendre ton selfie."}
             </Text>
-            {perm?.canAskAgain !== false && (
-              <TouchableOpacity onPress={requestPerm} style={s.btnPrimary}>
+            {!hasPermission && (
+              <TouchableOpacity onPress={requestPermission} style={s.btnPrimary}>
                 <Text style={s.btnPrimaryText}>Autoriser</Text>
               </TouchableOpacity>
             )}
           </View>
         )}
 
-        {/* Overlay noir 75% avec trou rond au centre */}
+        {/* Overlay noir 75% avec trou ovale au centre — pas de bordure : la
+            forme est définie par le contraste entre la zone visible et le voile. */}
         <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
           <Defs>
             <Mask id="selfieMask">
               <Rect width="100%" height="100%" fill="white" />
-              <Circle cx={cx} cy={cy} r={CIRCLE_SIZE / 2} fill="black" />
+              <Ellipse cx={cx} cy={cy} rx={OVAL_W / 2} ry={OVAL_H / 2} fill="black" />
             </Mask>
           </Defs>
           <Rect width="100%" height="100%" fill="rgba(0,0,0,0.75)" mask="url(#selfieMask)" />
         </Svg>
-
-        {/* Bordure blanche + glow rose autour du cercle */}
-        <View pointerEvents="none" style={{
-          position: 'absolute',
-          left: cx - CIRCLE_SIZE / 2,
-          top: cy - CIRCLE_SIZE / 2,
-          width: CIRCLE_SIZE, height: CIRCLE_SIZE,
-          borderRadius: 999,
-          borderWidth: 3, borderColor: '#fff',
-          shadowColor: '#E673FF',
-          shadowOpacity: 0.7,
-          shadowRadius: 14,
-          shadowOffset: { width: 0, height: 0 },
-          elevation: 10,
-        }} />
 
         <TouchableOpacity
           onPress={onClose}
@@ -3340,25 +3347,25 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
 
         <Text style={{
           position: 'absolute',
-          top: cy + CIRCLE_SIZE / 2 + 24,
+          top: cy + OVAL_H / 2 + 24,
           left: 0, right: 0, textAlign: 'center',
           color: '#fff', fontSize: 14, fontWeight: '600',
           textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4,
         }}>
-          Place ton visage dans le cercle
+          Place ton visage dans l'ovale
         </Text>
 
         <View style={{ position: 'absolute', bottom: 56, left: 0, right: 0, alignItems: 'center' }}>
           <TouchableOpacity
             onPress={shoot}
-            disabled={busy || !perm?.granted}
+            disabled={busy || !hasPermission || !device}
             activeOpacity={0.85}
             style={{
               width: 78, height: 78, borderRadius: 999,
               backgroundColor: 'rgba(255,255,255,0.25)',
               borderWidth: 4, borderColor: '#fff',
               alignItems: 'center', justifyContent: 'center',
-              opacity: busy || !perm?.granted ? 0.4 : 1,
+              opacity: busy || !hasPermission || !device ? 0.4 : 1,
             }}
           >
             <View style={{
