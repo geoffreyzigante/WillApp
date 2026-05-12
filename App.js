@@ -2432,13 +2432,15 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               </TouchableOpacity>
             </Animated.View>
 
-            {/* Pill KM */}
+            {/* Pill KM — container transparent à contour blanc fin, valeur active à contour rose */}
             <TouchableOpacity
               onPress={() => { setKmPickerOpen(true); setRacePickerOpen(false); }}
               activeOpacity={0.7}
               style={{
                 flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                backgroundColor: 'rgba(0,0,0,0.5)',
+                backgroundColor: 'transparent',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.3)',
                 borderRadius: 999, padding: 4,
                 height: 44, width: 90,
                 gap: 4,
@@ -2451,7 +2453,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               <View style={{
                 minWidth: 32, height: 34, paddingHorizontal: 6,
                 alignItems: 'center', justifyContent: 'center',
-                backgroundColor: selectedKm > 0 ? C.violetAccent : 'transparent',
+                backgroundColor: 'transparent',
+                borderWidth: 1,
+                borderColor: selectedKm > 0 ? C.pinkPillActive : 'transparent',
                 borderRadius: 999,
               }}>
                 <Text style={{
