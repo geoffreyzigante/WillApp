@@ -1353,6 +1353,37 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
   );
 }
 
+// Roulette compacte 1-item-visible : ScrollView vertical avec snap.
+// Pilotee aussi par les fleches ▲/▼ via scrollTo imperatif.
+function CompactWheel({ items, selectedIndex, onChange }) {
+  const ITEM_H = 24;
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: selectedIndex * ITEM_H, animated: true });
+  }, [selectedIndex]);
+  return (
+    <View style={{ height: ITEM_H, alignSelf: 'stretch', overflow: 'hidden' }}>
+      <ScrollView
+        ref={scrollRef}
+        snapToInterval={ITEM_H}
+        decelerationRate="fast"
+        showsVerticalScrollIndicator={false}
+        contentOffset={{ x: 0, y: selectedIndex * ITEM_H }}
+        onMomentumScrollEnd={e => {
+          const idx = Math.max(0, Math.min(items.length - 1, Math.round(e.nativeEvent.contentOffset.y / ITEM_H)));
+          if (idx !== selectedIndex) onChange(idx);
+        }}
+      >
+        {items.map((it, i) => (
+          <View key={i} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{it.label}</Text>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 function PhotographerScreen({ session, onLogout, onExit }) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
@@ -2195,7 +2226,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
             <Text
               style={{
-                color: '#fff', fontSize: 16, fontWeight: '700',
+                color: '#fff', fontSize: 18, fontWeight: '700',
+                fontFamily: 'AVEstiana', fontStyle: 'normal',
                 textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
               }}
               numberOfLines={1}
@@ -2391,7 +2423,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             backgroundColor: '#000',
             alignItems: 'stretch',
           }}>
-            {/* Section COURSE (gauche, 50%) — stepper compact ▲ valeur ▼ */}
+            {/* Section COURSE (gauche, 50%) — label + ▲ + roulette compacte + ▼ */}
             {(() => {
               const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: `${d.km} km`, value: d }))];
               const rawIdx = courseItems.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null));
@@ -2406,12 +2438,19 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               return (
                 <View style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7}>
-                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: 0.5 }}>COURSE</Text>
+                    <Text style={{
+                      color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
+                      fontFamily: 'AVEstiana', fontStyle: 'normal',
+                    }}>Course</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => canUp && setCourseIdx(courseIdx - 1)} hitSlop={10} disabled={!canUp} style={{ paddingVertical: 2 }}>
                     <Text style={{ color: canUp ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▲</Text>
                   </TouchableOpacity>
-                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{courseItems[courseIdx].label}</Text>
+                  <CompactWheel
+                    items={courseItems}
+                    selectedIndex={courseIdx}
+                    onChange={setCourseIdx}
+                  />
                   <TouchableOpacity onPress={() => canDown && setCourseIdx(courseIdx + 1)} hitSlop={10} disabled={!canDown} style={{ paddingVertical: 2 }}>
                     <Text style={{ color: canDown ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▼</Text>
                   </TouchableOpacity>
@@ -2422,19 +2461,27 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             {/* Separator vertical entre les 2 sections */}
             <View style={{ width: 0.5, backgroundColor: 'rgba(255,255,255,0.15)' }} />
 
-            {/* Section KM (droite, 50%) — stepper compact ▲ valeur ▼ */}
+            {/* Section KM (droite, 50%) — label + ▲ + roulette compacte + ▼ */}
             {(() => {
+              const kmItems = Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k }));
               const canUp = selectedKm > 0;
               const canDown = selectedKm < kmCeiling;
               return (
                 <View style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedKm(0)} hitSlop={6} activeOpacity={0.7}>
-                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: 0.5 }}>KM</Text>
+                    <Text style={{
+                      color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
+                      fontFamily: 'AVEstiana', fontStyle: 'normal',
+                    }}>Km</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => canUp && setSelectedKm(k => Math.max(0, k - 1))} hitSlop={10} disabled={!canUp} style={{ paddingVertical: 2 }}>
                     <Text style={{ color: canUp ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▲</Text>
                   </TouchableOpacity>
-                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{selectedKm} km</Text>
+                  <CompactWheel
+                    items={kmItems}
+                    selectedIndex={selectedKm}
+                    onChange={setSelectedKm}
+                  />
                   <TouchableOpacity onPress={() => canDown && setSelectedKm(k => Math.min(kmCeiling, k + 1))} hitSlop={10} disabled={!canDown} style={{ paddingVertical: 2 }}>
                     <Text style={{ color: canDown ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▼</Text>
                   </TouchableOpacity>
