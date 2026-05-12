@@ -1353,32 +1353,53 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
   );
 }
 
-// Roulette compacte 1-item-visible : ScrollView vertical avec snap.
-// Pilotee aussi par les fleches ▲/▼ via scrollTo imperatif.
-function CompactWheel({ items, selectedIndex, onChange }) {
-  const ITEM_H = 24;
+// Roulette 3 items visibles, style "overlay" : pastille centrale rose, items
+// au-dessus/en-dessous attenues. Toujours visible (pas de toggle).
+function OverlayWheel({ items, selectedIndex, onChange }) {
+  const ITEM_H = 26;
+  const VISIBLE = 3;
+  const HEIGHT = VISIBLE * ITEM_H;
+  const PAD_V = ((VISIBLE - 1) / 2) * ITEM_H;
   const scrollRef = useRef(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: selectedIndex * ITEM_H, animated: true });
   }, [selectedIndex]);
   return (
-    <View style={{ height: ITEM_H, alignSelf: 'stretch', overflow: 'hidden' }}>
+    <View style={{ height: HEIGHT, alignSelf: 'stretch', position: 'relative' }}>
+      {/* Pastille de selection au centre, contour rose + bg blanc subtil */}
+      <View pointerEvents="none" style={{
+        position: 'absolute',
+        top: PAD_V, left: 8, right: 8,
+        height: ITEM_H,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        borderWidth: 0.5,
+        borderColor: 'rgba(230,115,255,0.45)',
+      }} />
       <ScrollView
         ref={scrollRef}
         snapToInterval={ITEM_H}
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
         contentOffset={{ x: 0, y: selectedIndex * ITEM_H }}
+        contentContainerStyle={{ paddingVertical: PAD_V }}
         onMomentumScrollEnd={e => {
           const idx = Math.max(0, Math.min(items.length - 1, Math.round(e.nativeEvent.contentOffset.y / ITEM_H)));
           if (idx !== selectedIndex) onChange(idx);
         }}
       >
-        {items.map((it, i) => (
-          <View key={i} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{it.label}</Text>
-          </View>
-        ))}
+        {items.map((it, i) => {
+          const isSel = i === selectedIndex;
+          return (
+            <View key={i} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{
+                color: isSel ? '#fff' : 'rgba(255,255,255,0.4)',
+                fontSize: isSel ? 15 : 13,
+                fontWeight: isSel ? '800' : '500',
+              }}>{it.label}</Text>
+            </View>
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -2423,7 +2444,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             backgroundColor: '#000',
             alignItems: 'stretch',
           }}>
-            {/* Section COURSE (gauche, 50%) — label + ▲ + roulette compacte + ▼ */}
+            {/* Section COURSE (gauche, 50%) — label + roulette 3-items toujours visible */}
             {(() => {
               const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: `${d.km} km`, value: d }))];
               const rawIdx = courseItems.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null));
@@ -2433,27 +2454,18 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 setSelectedRace(v);
                 if (v && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(0);
               };
-              const canUp = courseIdx > 0;
-              const canDown = courseIdx < courseItems.length - 1;
               return (
-                <View style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7}>
-                    <Text style={{
-                      color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
-                      fontFamily: 'AVEstiana', fontStyle: 'normal',
-                    }}>Course</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => canUp && setCourseIdx(courseIdx - 1)} hitSlop={10} disabled={!canUp} style={{ paddingVertical: 2 }}>
-                    <Text style={{ color: canUp ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▲</Text>
-                  </TouchableOpacity>
-                  <CompactWheel
+                <View style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 10, alignItems: 'center' }}>
+                  <Text style={{
+                    color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
+                    fontFamily: 'AVEstiana', fontStyle: 'normal',
+                    marginBottom: 4,
+                  }}>Course</Text>
+                  <OverlayWheel
                     items={courseItems}
                     selectedIndex={courseIdx}
                     onChange={setCourseIdx}
                   />
-                  <TouchableOpacity onPress={() => canDown && setCourseIdx(courseIdx + 1)} hitSlop={10} disabled={!canDown} style={{ paddingVertical: 2 }}>
-                    <Text style={{ color: canDown ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▼</Text>
-                  </TouchableOpacity>
                 </View>
               );
             })()}
@@ -2461,30 +2473,21 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             {/* Separator vertical entre les 2 sections */}
             <View style={{ width: 0.5, backgroundColor: 'rgba(255,255,255,0.15)' }} />
 
-            {/* Section KM (droite, 50%) — label + ▲ + roulette compacte + ▼ */}
+            {/* Section KM (droite, 50%) — label + roulette 3-items toujours visible */}
             {(() => {
               const kmItems = Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k }));
-              const canUp = selectedKm > 0;
-              const canDown = selectedKm < kmCeiling;
               return (
-                <View style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 12, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedKm(0)} hitSlop={6} activeOpacity={0.7}>
-                    <Text style={{
-                      color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
-                      fontFamily: 'AVEstiana', fontStyle: 'normal',
-                    }}>Km</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => canUp && setSelectedKm(k => Math.max(0, k - 1))} hitSlop={10} disabled={!canUp} style={{ paddingVertical: 2 }}>
-                    <Text style={{ color: canUp ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▲</Text>
-                  </TouchableOpacity>
-                  <CompactWheel
+                <View style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 10, alignItems: 'center' }}>
+                  <Text style={{
+                    color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
+                    fontFamily: 'AVEstiana', fontStyle: 'normal',
+                    marginBottom: 4,
+                  }}>Km</Text>
+                  <OverlayWheel
                     items={kmItems}
                     selectedIndex={selectedKm}
                     onChange={setSelectedKm}
                   />
-                  <TouchableOpacity onPress={() => canDown && setSelectedKm(k => Math.min(kmCeiling, k + 1))} hitSlop={10} disabled={!canDown} style={{ paddingVertical: 2 }}>
-                    <Text style={{ color: canDown ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)', fontSize: 14 }}>▼</Text>
-                  </TouchableOpacity>
                 </View>
               );
             })()}
