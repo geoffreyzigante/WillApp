@@ -1403,7 +1403,7 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
         })}
       </ScrollView>
       {/* Top-fade : item au-dessus du selectionne fond dans le panneau noir
-          (effet "passer sous le titre"). Hauteur = item complet du haut. */}
+          (effet "passer sous le titre"). Hauteur etendue pour fade plus long. */}
       <LinearGradient
         pointerEvents="none"
         colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0)']}
@@ -1412,7 +1412,7 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
         style={{
           position: 'absolute',
           top: 0, left: 0, right: 0,
-          height: PAD_V,
+          height: PAD_V + 12,
         }}
       />
     </View>
