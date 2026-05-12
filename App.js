@@ -2349,7 +2349,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                     style={{
                       paddingHorizontal: 14, paddingVertical: 7,
                       borderRadius: 999,
-                      backgroundColor: active ? C.violetAccent : 'transparent',
+                      backgroundColor: 'transparent',
+                      borderWidth: 1,
+                      borderColor: active ? C.pinkPillActive : 'transparent',
                     }}
                   >
                     <Text style={{
