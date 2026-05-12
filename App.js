@@ -1494,6 +1494,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // Mirror du facesInZoneCount lu via ref (pas via state) au moment du tap Go.
   // Évite tout problème de closure stale entre le worklet runOnJS et onPress.
   const facesInZoneCountRef = useRef(0);
+  // Mirrors pour eviter spam setState a chaque frame : on ne push dans React
+  // que si la valeur a vraiment change. 30 setState/s sinon, qui inondent la
+  // queue de re-render et ralentissent startBurst.
+  const lastFacesCountSeenRef = useRef(0);
+  const lastInZoneCountSeenRef = useRef(0);
+  // Timestamp de la derniere detection dans la zone (pour mesurer la latence
+  // detection -> 1ere photo). En ms (Date.now()).
+  const lastFaceInZoneAtRef = useRef(0);
 
   const [facesCount, setFacesCount] = useState(0);
   const [facesInZoneCount, setFacesInZoneCount] = useState(0);
@@ -1554,9 +1562,17 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
   const onFacesDetectedJS = useMemo(
     () => Worklets.createRunOnJS((facesData) => {
-      setFacesCount(facesData.length);
+      // Push setState UNIQUEMENT si la valeur change. Avant : 30 setState/s
+      // saturaient la queue React et retardaient startBurst.
+      if (facesData.length !== lastFacesCountSeenRef.current) {
+        lastFacesCountSeenRef.current = facesData.length;
+        setFacesCount(facesData.length);
+      }
       if (!isDetectionEnabledRef.current) {
-        setFacesInZoneCount(0);
+        if (lastInZoneCountSeenRef.current !== 0) {
+          lastInZoneCountSeenRef.current = 0;
+          setFacesInZoneCount(0);
+        }
         facesInZoneCountRef.current = 0;
         return;
       }
@@ -1569,7 +1585,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       const validInZone = facesData.filter(f =>
         f.inZone && (f.sizeFraction == null || f.sizeFraction <= maxSize)
       );
-      setFacesInZoneCount(validInZone.length);
+      if (validInZone.length !== lastInZoneCountSeenRef.current) {
+        lastInZoneCountSeenRef.current = validInZone.length;
+        setFacesInZoneCount(validInZone.length);
+      }
       facesInZoneCountRef.current = validInZone.length;
 
       if (validInZone.length < minFaces) return;
@@ -1588,6 +1607,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       for (const [id, t] of lastBurstByFaceRef.current) {
         if (now - t > cooldownMs * 2) lastBurstByFaceRef.current.delete(id);
       }
+      // Latency probe : timestamp au moment ou le JS thread valide la
+      // detection. startBurst lira ce ref pour mesurer le delta detection->1ere photo.
+      lastFaceInZoneAtRef.current = now;
+      console.log(`[latence] face-in-zone @ ${now} → startBurst()`);
       startBurst();
     }),
     [
@@ -2031,16 +2054,24 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   }
 
   // Capture manuelle déclenchée par le bouton GO.
-  // - Pendant la rafale : tap = Stop (lève abortBurstRef).
+  // - Pendant la rafale : tap = Stop (lève abortBurstRef pour interrompre la boucle).
   // - Sinon : ne déclenche que si un visage est dans la zone (lecture via ref
   //   pour éviter le closure stale du useState entre worklet runOnJS et onPress).
-  //   Si pas de visage : scale "tap registered" silencieux, pas de rafale.
-  //   L'indicateur "AUCUN VISAGE" dans le header dit pourquoi.
   function onCapturePress() {
-    setIsShooting(s => !s);
+    if (isCapturingRef.current) {
+      abortBurstRef.current = true;
+      return;
+    }
+    Animated.sequence([
+      Animated.timing(captureScale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
+      Animated.spring(captureScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
+    ]).start();
+    if (facesInZoneCountRef.current === 0) return;
+    startBurst();
   }
 
   async function startBurst() {
+    const t0 = Date.now();
     if (isCapturingRef.current) return;
     if (!cameraRef.current || !isMountedRef.current) return;
     if (!isDetectionEnabledRef.current) return;
@@ -2049,12 +2080,15 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     abortBurstRef.current = false;
     setIsShooting(true);
 
-    const burstTs = Date.now();
+    const burstTs = t0;
     const queue = [];
-    const BURST_COUNT = eventConfig.capture?.burstCount ?? 8;
-    const INTER_BURST_MS = eventConfig.capture?.interBurstMs ?? 150;
+    // Defauts rafale rapide (ex-defauts: 8 / 150ms = 1.2s mini, trop lent pour un
+    // coureur). 5 photos / 60ms = ~0.3s + latence native takePhoto. Reglable
+    // via eventConfig.capture.burstCount / interBurstMs depuis le dashboard.
+    const BURST_COUNT = eventConfig.capture?.burstCount ?? 5;
+    const INTER_BURST_MS = eventConfig.capture?.interBurstMs ?? 60;
 
-    // Feedback dès le départ — flash + vibration + pop sur le compteur
+    // Feedback dès le départ — flash + vibration + pop sur le compteur (non-bloquant)
     triggerBurstFeedback();
 
     // Capture HQ découplée du frame processor: chaque takePhoto utilise
@@ -2073,11 +2107,24 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       takePhotoOpts.enableRawCapture = true;
     }
 
+    // Mesure latence detection-in-zone -> debut startBurst
+    const detectAt = lastFaceInZoneAtRef.current;
+    if (detectAt > 0) {
+      console.log(`[latence] startBurst entry +${t0 - detectAt}ms apres detection`);
+    }
+
     for (let i = 0; i < BURST_COUNT; i++) {
       if (!isMountedRef.current || !isDetectionEnabledRef.current) break;
       if (abortBurstRef.current) break;
+      const photoStart = Date.now();
       try {
         const photo = await cameraRef.current.takePhoto(takePhotoOpts);
+        const photoEnd = Date.now();
+        if (i === 0 && detectAt > 0) {
+          console.log(`[latence] 1ere photo capturee @ +${photoEnd - detectAt}ms apres detection (takePhoto: ${photoEnd - photoStart}ms)`);
+        } else {
+          console.log(`[latence] photo ${i + 1}/${BURST_COUNT} takePhoto: ${photoEnd - photoStart}ms`);
+        }
         queue.push({ photo, index: i, burstTs });
       } catch (e) { console.warn('takePhoto', e); }
       if (i < BURST_COUNT - 1) {
@@ -2087,6 +2134,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
     isCapturingRef.current = false;
     setIsShooting(false);
+    if (detectAt > 0) {
+      console.log(`[latence] rafale complete en ${Date.now() - detectAt}ms (${queue.length} photos)`);
+      lastFaceInZoneAtRef.current = 0;
+    }
 
     if (queue.length > 0) {
       const d = new Date();
