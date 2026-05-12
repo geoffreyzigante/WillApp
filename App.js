@@ -3261,12 +3261,12 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
 
   const winW = Dimensions.get('window').width;
   const winH = Dimensions.get('window').height;
-  const previewH = winW * (4 / 3);
-  const previewTop = Math.max(0, (winH - previewH) / 2 - 40);
   const OVAL_W = 260;
   const OVAL_H = 340;
   const cx = winW / 2;
-  const cy = previewTop + previewH / 2;
+  // Ovale décalé légèrement vers le haut pour laisser respirer la zone
+  // capture/croix en bas (qui occupe ~bottomInset + 80 + 16 ≈ 154px).
+  const cy = winH / 2 - 40;
   // Approximation safe-area bas : home indicator iOS ~34, +24 demandés.
   const bottomInset = Platform.OS === 'ios' ? 58 : 32;
 
@@ -3301,12 +3301,7 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
         {hasPermission && device ? (
           <VisionCamera
             ref={cameraRef}
-            style={{
-              position: 'absolute',
-              top: previewTop,
-              left: 0, right: 0,
-              height: previewH,
-            }}
+            style={StyleSheet.absoluteFill}
             device={device}
             isActive={visible}
             photo={true}
