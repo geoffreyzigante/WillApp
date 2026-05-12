@@ -1402,19 +1402,20 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
           );
         })}
       </ScrollView>
-      {/* Top-fade : opaque sur toute la hauteur de l'item du dessus pour
-          masquer son texte sous le titre, puis fade court (6px) pour ne
-          PAS empieter sur l'item selectionne. */}
+      {/* Top-fade : confine STRICTEMENT a la zone au-dessus de la selection
+          (height = PAD_V exactement). Opaque sur 75% (couvre le texte du
+          haut centre a 50%), puis fade-out vers transparent juste avant
+          le top de la pastille selectionnee. Pas de chevauchement. */}
       <LinearGradient
         pointerEvents="none"
         colors={['rgba(0,0,0,1)', 'rgba(0,0,0,1)', 'rgba(0,0,0,0)']}
-        locations={[0, PAD_V / (PAD_V + 6), 1]}
+        locations={[0, 0.75, 1]}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={{
           position: 'absolute',
           top: 0, left: 0, right: 0,
-          height: PAD_V + 6,
+          height: PAD_V,
         }}
       />
     </View>
