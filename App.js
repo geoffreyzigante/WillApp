@@ -1393,9 +1393,9 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
           return (
             <View key={i} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center' }}>
               <Text style={{
-                color: isSel ? '#fff' : 'rgba(255,255,255,0.4)',
+                color: isSel ? '#E673FF' : 'rgba(255,255,255,0.4)',
                 fontSize: isSel ? 15 : 13,
-                fontWeight: isSel ? '800' : '500',
+                fontWeight: '500',
               }}>{it.label}</Text>
             </View>
           );
@@ -2455,11 +2455,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 if (v && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(0);
               };
               return (
-                <View style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 10, alignItems: 'center' }}>
+                <View style={{ flex: 1, paddingTop: 8, paddingBottom: 10, paddingHorizontal: 10, alignItems: 'center' }}>
                   <Text style={{
                     color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
                     fontFamily: 'AVEstiana', fontStyle: 'normal',
-                    marginBottom: 4,
+                    marginBottom: -8,
                   }}>Course</Text>
                   <OverlayWheel
                     items={courseItems}
@@ -2477,11 +2477,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             {(() => {
               const kmItems = Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k }));
               return (
-                <View style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 10, alignItems: 'center' }}>
+                <View style={{ flex: 1, paddingTop: 8, paddingBottom: 10, paddingHorizontal: 10, alignItems: 'center' }}>
                   <Text style={{
                     color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
                     fontFamily: 'AVEstiana', fontStyle: 'normal',
-                    marginBottom: 4,
+                    marginBottom: -8,
                   }}>Km</Text>
                   <OverlayWheel
                     items={kmItems}
