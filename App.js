@@ -1089,6 +1089,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Pagination cote client : on n'affiche que les N premieres photos pour
+  // limiter le DOM rendu (au-dela de la virtualisation FlatList).
+  // onEndReached -> +30 jusqu'a couvrir filteredPhotos.length.
+  const PAGE_SIZE = 30;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | composite key
   const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
   const upcoming = isUpcoming(event.event_date);
@@ -1142,9 +1147,15 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
   const onPullRefresh = useCallback(async () => {
     setRefreshing(true);
+    setVisibleCount(PAGE_SIZE);
     await loadPhotos();
     setRefreshing(false);
   }, [loadPhotos]);
+
+  // Reset la pagination quand on change de filtre (sinon "30 / 25 photos" possible).
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [activeFilter]);
 
   // Liste des courses et photographes uniques (depuis les photos reçues)
   const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)));
@@ -1213,12 +1224,17 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     Linking.openURL(url).catch(() => {});
   };
 
-  // numColumns=3 pour une galerie premium (thumbnails plus grandes que 4 cols).
-  // size = largeur cellule. Padding outer 20 chaque cote + 2 gaps de 8 entre cols.
+  // 3 colonnes, gap horizontal 6, gap vertical 6, padding container 8.
+  // Colonne du milieu decalee de 20px (transform translateY pour ne pas
+  // affecter le layout : la virtualisation FlatList reste correcte).
   const NUM_COLS = 3;
-  const GRID_PADDING_H = 20;
-  const GRID_GAP = 8;
+  const GRID_PADDING_H = 8;
+  const GRID_GAP = 6;
+  const COL_OFFSET = 20; // decalage vertical colonne du milieu
   const cellSize = (SCREEN_W - GRID_PADDING_H * 2 - GRID_GAP * (NUM_COLS - 1)) / NUM_COLS;
+
+  const visiblePhotos = filteredPhotos.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredPhotos.length;
 
   // Header de la FlatList : tout ce qui s'affiche au-dessus de la grille.
   // Renvoie une seule View ; FlatList le rend une fois en haut, sans virtualisation.
@@ -1429,7 +1445,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             <Text style={s.sectionTitle}>Photos</Text>
             {filteredPhotos.length > 0 && (
               <Text style={{ color: C.textSoft, fontSize: 13, opacity: 0.7 }}>
-                {filteredPhotos.length} photo{filteredPhotos.length > 1 ? 's' : ''}
+                {hasMore
+                  ? `${Math.min(visibleCount, filteredPhotos.length)} / ${filteredPhotos.length} photos`
+                  : `${filteredPhotos.length} photo${filteredPhotos.length > 1 ? 's' : ''}`}
               </Text>
             )}
           </View>
@@ -1445,11 +1463,14 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const renderListEmpty = () => {
     if (showEmptyMessage) return null;
     if (loading) {
-      // Affiche 9 skeletons (3 lignes) pour signaler le chargement
+      // 9 skeletons (3 lignes virtuelles), avec le meme decalage staggered
+      // que les vraies cellules pour preparer l'oeil.
       return (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: GRID_PADDING_H, gap: GRID_GAP }}>
           {Array.from({ length: 9 }).map((_, i) => (
-            <SkeletonCell key={`sk-${i}`} size={cellSize} />
+            <View key={`sk-${i}`} style={{ transform: [{ translateY: (i % 3 === 1) ? COL_OFFSET : 0 }] }}>
+              <SkeletonCell size={cellSize} />
+            </View>
           ))}
         </View>
       );
@@ -1462,20 +1483,37 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   };
 
   // Rendu d'une cellule : memoize via PhotoCell pour eviter les re-render
-  // quand seul activeFilter change (les autres cellules ne re-render pas).
-  const renderItem = ({ item }) => (
-    <PhotoCell
-      photo={item}
-      size={cellSize}
-      onPress={() => onOpenPhoto?.(item, filteredPhotos)}
-    />
+  // quand seul activeFilter change. La colonne du milieu (index % 3 === 1)
+  // est decalee de 20px via transform translateY -> effet staggered sans
+  // affecter le layout (la virtualisation FlatList reste correcte).
+  const renderItem = ({ item, index }) => (
+    <View style={{ transform: [{ translateY: (index % 3 === 1) ? COL_OFFSET : 0 }] }}>
+      <PhotoCell
+        photo={item}
+        size={cellSize}
+        onPress={() => onOpenPhoto?.(item, filteredPhotos)}
+      />
+    </View>
   );
+
+  const renderFooter = () => {
+    if (!hasMore || showEmptyMessage) {
+      // Padding bas supplementaire pour absorber le translateY de la
+      // colonne du milieu sur la derniere rangee (sinon overflow visible).
+      return <View style={{ height: COL_OFFSET }} />;
+    }
+    return (
+      <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+        <ActivityIndicator size="small" color={C.primary} />
+      </View>
+    );
+  };
 
   return (
     <FlatList
       style={s.scroll}
       contentContainerStyle={{ paddingBottom: 120 }}
-      data={showEmptyMessage ? [] : filteredPhotos}
+      data={showEmptyMessage ? [] : visiblePhotos}
       keyExtractor={(item) => item.id || item.uri}
       renderItem={renderItem}
       numColumns={NUM_COLS}
@@ -1485,11 +1523,16 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         marginBottom: GRID_GAP,
       } : undefined}
       initialNumToRender={12}
-      maxToRenderPerBatch={6}
+      maxToRenderPerBatch={9}
       windowSize={5}
       removeClippedSubviews={true}
+      onEndReached={() => {
+        if (hasMore) setVisibleCount(c => Math.min(c + PAGE_SIZE, filteredPhotos.length));
+      }}
+      onEndReachedThreshold={0.5}
       ListHeaderComponent={renderHeader}
       ListEmptyComponent={renderListEmpty}
+      ListFooterComponent={renderFooter}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
