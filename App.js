@@ -947,6 +947,80 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
   );
 }
 
+// Cellule d'une thumbnail : memo + onError fallback. La taille est passee
+// pour pouvoir s'adapter au numColumns du parent.
+const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav }) {
+  const [errored, setErrored] = React.useState(false);
+  return (
+    <TouchableOpacity
+      style={{ width: size, height: size, marginBottom: 8 }}
+      activeOpacity={0.85}
+      onPress={onPress}
+    >
+      {/* Bg gris affiche pendant le chargement et en cas d'erreur (fallback) */}
+      <View style={{ flex: 1, borderRadius: 12, backgroundColor: C.primaryLight, overflow: 'hidden' }}>
+        {!errored && (
+          <ExpoImage
+            source={{ uri: photo.uri }}
+            style={{ flex: 1 }}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            priority="low"
+            transition={150}
+            recyclingKey={photo.id}
+            onError={(e) => {
+              console.warn('[gallery] image load failed:', photo.uri, e?.error || e);
+              setErrored(true);
+            }}
+          />
+        )}
+        {errored && (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+              <Path d="M3 16l5-5 4 4 3-3 6 6M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" stroke="#9ca3af" strokeWidth={1.5} />
+            </Svg>
+          </View>
+        )}
+      </View>
+      {showHeart && (
+        <TouchableOpacity
+          onPress={(e) => { e.stopPropagation?.(); onToggleFav?.(); }}
+          hitSlop={12}
+          style={{ position: 'absolute', top: 6, right: 6 }}
+        >
+          <Svg width={20} height={18} viewBox="-1 -1.5 22.78 20.61"
+            fill={isFav ? '#fff' : 'none'}
+            stroke="#fff" strokeWidth={1.6}>
+            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+          </Svg>
+        </TouchableOpacity>
+      )}
+    </TouchableOpacity>
+  );
+});
+
+// Cellule skeleton (pulse gris) affichee pendant le chargement initial.
+function SkeletonCell({ size }) {
+  const op = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(op, { toValue: 0.5, duration: 750, useNativeDriver: true }),
+        Animated.timing(op, { toValue: 1, duration: 750, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [op]);
+  return (
+    <Animated.View style={{
+      width: size, height: size, marginBottom: 8,
+      borderRadius: 12, backgroundColor: '#E5E7EB',
+      opacity: op,
+    }} />
+  );
+}
+
 function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite }) {
   // Si pas de photos : grille de placeholders
   if (photos.length === 0) {
@@ -1003,10 +1077,18 @@ function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite }
   );
 }
 
-function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFavorite, onToggleFavorite }) {
+function EventDetailScreen(props) {
+  return (
+    <GridErrorBoundary>
+      <EventDetailScreenInner {...props} />
+    </GridErrorBoundary>
+  );
+}
+
+function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFavorite, onToggleFavorite }) {
   const [photos, setPhotos] = useState([]);
-  const [visibleCount, setVisibleCount] = useState(20);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | composite key
   const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
   const upcoming = isUpcoming(event.event_date);
@@ -1023,7 +1105,6 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
 
   const loadPhotos = useCallback(async () => {
     setLoading(true);
-    setVisibleCount(20);
     try {
       const r = await fetch(`${API_URL}/list-public/${event.code}`);
       const data = r.ok ? await r.json() : { photos: [] };
@@ -1040,7 +1121,9 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
         };
       });
       list.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
-      setPhotos(list.slice(0, 200));
+      // Limite removed: la virtualisation FlatList tient les milliers de
+      // photos sans probleme (~15-30 cellules montees a la fois).
+      setPhotos(list);
     } catch {
       setPhotos([]);
     } finally {
@@ -1057,13 +1140,11 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
     return () => { mounted = false; };
   }, [loadPhotos]);
 
-  useEffect(() => {
-    if (visibleCount >= photos.length) return;
-    const timer = setTimeout(() => {
-      setVisibleCount(v => Math.min(v + 20, photos.length));
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [visibleCount, photos.length]);
+  const onPullRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadPhotos();
+    setRefreshing(false);
+  }, [loadPhotos]);
 
   // Liste des courses et photographes uniques (depuis les photos reçues)
   const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)));
@@ -1132,8 +1213,17 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
     Linking.openURL(url).catch(() => {});
   };
 
-  return (
-    <RefreshableScrollView onRefresh={loadPhotos} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+  // numColumns=3 pour une galerie premium (thumbnails plus grandes que 4 cols).
+  // size = largeur cellule. Padding outer 20 chaque cote + 2 gaps de 8 entre cols.
+  const NUM_COLS = 3;
+  const GRID_PADDING_H = 20;
+  const GRID_GAP = 8;
+  const cellSize = (SCREEN_W - GRID_PADDING_H * 2 - GRID_GAP * (NUM_COLS - 1)) / NUM_COLS;
+
+  // Header de la FlatList : tout ce qui s'affiche au-dessus de la grille.
+  // Renvoie une seule View ; FlatList le rend une fois en haut, sans virtualisation.
+  const renderHeader = () => (
+    <View>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
           <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
@@ -1335,21 +1425,81 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
             </ScrollView>
           )}
 
-          <Text style={[s.sectionTitle, { marginVertical: 14 }]}>Photos</Text>
-          {loading ? (
-            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <ActivityIndicator color={C.primary} />
-            </View>
-          ) : filteredPhotos.length === 0 ? (
-            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-              <Text style={{ color: C.textSoft }}>Aucune photo pour le moment</Text>
-            </View>
-          ) : (
-            <PhotoGrid photos={filteredPhotos.slice(0, visibleCount)} onPress={(p) => onOpenPhoto?.(p, filteredPhotos)} />
-          )}
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', marginVertical: 14, gap: 8 }}>
+            <Text style={s.sectionTitle}>Photos</Text>
+            {filteredPhotos.length > 0 && (
+              <Text style={{ color: C.textSoft, fontSize: 13, opacity: 0.7 }}>
+                {filteredPhotos.length} photo{filteredPhotos.length > 1 ? 's' : ''}
+              </Text>
+            )}
+          </View>
         </>
       )}
-    </RefreshableScrollView>
+    </View>
+  );
+
+  // Mode "a venir, 0 photo" : on n'affiche pas de grille, juste le header.
+  const showEmptyMessage = upcoming && photos.length === 0;
+
+  // Empty state de la FlatList : skeletons pendant le chargement, ou message.
+  const renderListEmpty = () => {
+    if (showEmptyMessage) return null;
+    if (loading) {
+      // Affiche 9 skeletons (3 lignes) pour signaler le chargement
+      return (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: GRID_PADDING_H, gap: GRID_GAP }}>
+          {Array.from({ length: 9 }).map((_, i) => (
+            <SkeletonCell key={`sk-${i}`} size={cellSize} />
+          ))}
+        </View>
+      );
+    }
+    return (
+      <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+        <Text style={{ color: C.textSoft }}>Aucune photo pour le moment</Text>
+      </View>
+    );
+  };
+
+  // Rendu d'une cellule : memoize via PhotoCell pour eviter les re-render
+  // quand seul activeFilter change (les autres cellules ne re-render pas).
+  const renderItem = ({ item }) => (
+    <PhotoCell
+      photo={item}
+      size={cellSize}
+      onPress={() => onOpenPhoto?.(item, filteredPhotos)}
+    />
+  );
+
+  return (
+    <FlatList
+      style={s.scroll}
+      contentContainerStyle={{ paddingBottom: 120 }}
+      data={showEmptyMessage ? [] : filteredPhotos}
+      keyExtractor={(item) => item.id || item.uri}
+      renderItem={renderItem}
+      numColumns={NUM_COLS}
+      columnWrapperStyle={NUM_COLS > 1 ? {
+        paddingHorizontal: GRID_PADDING_H,
+        gap: GRID_GAP,
+        marginBottom: GRID_GAP,
+      } : undefined}
+      initialNumToRender={12}
+      maxToRenderPerBatch={6}
+      windowSize={5}
+      removeClippedSubviews={true}
+      ListHeaderComponent={renderHeader}
+      ListEmptyComponent={renderListEmpty}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onPullRefresh}
+          tintColor={C.primary}
+          colors={[C.primary]}
+        />
+      }
+      showsVerticalScrollIndicator={false}
+    />
   );
 }
 
