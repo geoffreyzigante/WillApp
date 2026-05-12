@@ -698,22 +698,27 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
 
   return (
     <View style={s.eventCard}>
-      {/* Image en couverture pleine largeur */}
+      {/* Tint plein-fond derrière toute la card */}
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
+      {/* Image confinée à la moitié droite (ratio 2:1 dans une card 4:1) */}
       {event.cover_image ? (
-        <ExpoImage
-          source={{ uri: event.cover_image }}
-          style={StyleSheet.absoluteFillObject}
-          contentFit="cover"
-        />
+        <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '50%', overflow: 'hidden' }}>
+          <ExpoImage
+            source={{ uri: event.cover_image }}
+            style={StyleSheet.absoluteFillObject}
+            contentFit="cover"
+          />
+          {/* Fondu tint → transparent sur les premiers 30 % de la zone image, pour un raccord doux */}
+          <LinearGradient
+            colors={[tint, 'transparent']}
+            locations={[0, 1]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 0.3, y: 0.5 }}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+        </View>
       ) : null}
-      {/* Dégradé horizontal : tint solide à gauche (texte) → transparent à droite (image visible) */}
-      <LinearGradient
-        colors={[tint, tint, 'transparent']}
-        locations={[0, 0.45, 1]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        style={StyleSheet.absoluteFillObject}
-      />
       {/* Zone tactile principale (ouvre l'événement) */}
       <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={StyleSheet.absoluteFillObject} />
       {/* Texte par-dessus la zone tactile (pointerEvents none pour que le tap passe au TouchableOpacity en dessous) */}
@@ -1093,16 +1098,20 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
 
       <View style={{ position: 'relative', marginTop: 12, marginBottom: 8 }}>
         <View style={s.eventCard}>
+          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
           {event.cover_image ? (
-            <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+            <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '50%', overflow: 'hidden' }}>
+              <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+              <LinearGradient
+                colors={[tint, 'transparent']}
+                locations={[0, 1]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 0.3, y: 0.5 }}
+                style={StyleSheet.absoluteFillObject}
+                pointerEvents="none"
+              />
+            </View>
           ) : null}
-          <LinearGradient
-            colors={[tint, tint, 'transparent']}
-            locations={[0, 0.45, 1]}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFillObject}
-          />
           <View style={s.eventCardCenter}>
             <Text style={s.eventDate}>{formatDateLong(event.event_date)}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
@@ -2496,16 +2505,18 @@ const formSectionStyle = StyleSheet.create({
   input: { backgroundColor: '#faf9ff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: C.text, marginBottom: 8 },
 });
 
-// Modal de cadrage 4:1 custom. iOS ignore aspect:[4,1] dans son cropper natif,
-// donc on affiche l'image complète avec un cadre 4:1 superposé que l'utilisateur
-// positionne via pan + pinch gestures, puis on crop via expo-image-manipulator.
+// Modal de cadrage 2:1 custom (la card mobile est 4:1 mais l'image occupe la
+// moitié droite seulement, soit 2:1). iOS ignore aspect:[2,1] dans son cropper
+// natif, donc on affiche l'image complète avec un cadre 2:1 superposé que
+// l'utilisateur positionne via pan + pinch gestures, puis on crop via
+// expo-image-manipulator.
 function CropImageModal({ visible, asset, onCancel, onConfirm }) {
   const screenW = Dimensions.get('window').width;
   const FRAME_W = screenW - 32;
-  const FRAME_H = FRAME_W / 4;
+  const FRAME_H = FRAME_W / 2;
 
   const srcAspect = asset && asset.height ? asset.width / asset.height : 1;
-  const FRAME_ASPECT = 4;
+  const FRAME_ASPECT = 2;
   let baseW, baseH;
   if (srcAspect >= FRAME_ASPECT) {
     baseH = FRAME_H;
@@ -2612,7 +2623,7 @@ function CropImageModal({ visible, asset, onCancel, onConfirm }) {
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000' }}>
         <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
           <View style={{ paddingHorizontal: 20, paddingVertical: 12, alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Cadrer l'image (4:1)</Text>
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Cadrer l'image (2:1)</Text>
             <Text style={{ color: '#bbb', fontSize: 12, marginTop: 4 }}>Glisse pour déplacer · pince pour zoomer</Text>
           </View>
 
@@ -2766,8 +2777,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   };
   const removeDistance = (idx) => setDistances(d => d.filter((_, i) => i !== idx));
 
-  // Sélection de l'image. iOS ignore aspect:[4,1] dans son cropper natif, donc
-  // on ouvre notre CropImageModal pour que l'utilisateur cadre lui-même en 4:1.
+  // Sélection de l'image. iOS ignore aspect dans son cropper natif sur les
+  // ratios non-standards, donc on ouvre notre CropImageModal pour que
+  // l'utilisateur cadre lui-même en 2:1 (image moitié droite des cards 4:1).
   const pickAndUploadCover = async () => {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -5475,16 +5487,20 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
       </View>
 
       <View style={[s.eventCard, { marginTop: 12, marginBottom: 14 }]}>
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
         {event.cover_image ? (
-          <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+          <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '50%', overflow: 'hidden' }}>
+            <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+            <LinearGradient
+              colors={[tint, 'transparent']}
+              locations={[0, 1]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 0.3, y: 0.5 }}
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
+            />
+          </View>
         ) : null}
-        <LinearGradient
-          colors={[tint, tint, 'transparent']}
-          locations={[0, 0.45, 1]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFillObject}
-        />
         <View style={s.eventCardCenter}>
           <Text style={s.eventDate}>{formatDateLong(event.event_date)}</Text>
           <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
