@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
+  AppState,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -74,12 +75,20 @@ async function migrateSensitiveKeysToSecureStore() {
 // Mode photographe offline-first : queue persistante d'uploads
 // + photos stockées hors-cache pour survivre au kill / nettoyage iOS.
 const UPLOAD_QUEUE_KEY = '@will_upload_queue';
+const LAST_CAPTURE_KEY = '@will_last_capture_at';
 const PENDING_DIR_NAME = 'will_pending';
+const COVERS_DIR_NAME = 'will_event_covers';
 const MAX_RETRIES_DEFAULT = 5;
-const STORAGE_WARN_BYTES = 5 * 1024 * 1024 * 1024; // 5 Go
+const STORAGE_WARN_BYTES = 5 * 1024 * 1024 * 1024; // 5 Go pendingDir
+const DISK_LOW_BYTES = 1 * 1024 * 1024 * 1024;     // 1 Go iPhone restant
+const QUEUE_WARN_THRESHOLD = 100;
 
 function pendingDir() {
   return new Directory(Paths.document, PENDING_DIR_NAME);
+}
+
+function coversDir() {
+  return new Directory(Paths.document, COVERS_DIR_NAME);
 }
 
 function ensurePendingDir() {
@@ -91,6 +100,53 @@ function ensurePendingDir() {
     console.warn('ensurePendingDir', e?.message);
     return null;
   }
+}
+
+function ensureCoversDir() {
+  try {
+    const d = coversDir();
+    if (!d.exists) d.create({ intermediates: true, idempotent: true });
+    return d;
+  } catch { return null; }
+}
+
+// Télécharge le cover de l'event vers le dossier persistant pour affichage
+// offline. Retourne l'URI local ou null. Idempotent : si le fichier existe
+// déjà, on renvoie l'URI sans re-télécharger.
+async function cacheEventCover(eventCode, remoteUrl) {
+  if (!eventCode || !remoteUrl) return null;
+  try {
+    ensureCoversDir();
+    const cleanPath = remoteUrl.split('?')[0];
+    const rawExt = (cleanPath.split('.').pop() || 'jpg').toLowerCase();
+    const ext = ['jpg', 'jpeg', 'png', 'webp'].includes(rawExt) ? rawExt : 'jpg';
+    const safeCode = String(eventCode).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const dest = new File(coversDir(), `${safeCode}.${ext}`);
+    if (dest.exists && (dest.size || 0) > 0) return dest.uri;
+    const d = await File.downloadFileAsync(remoteUrl, dest, { idempotent: true });
+    return d?.uri || dest.uri;
+  } catch (e) {
+    console.warn('cacheEventCover', e?.message);
+    return null;
+  }
+}
+
+// "Il y a 3 min", "Il y a 2 h", "Hier", "Le 11 mai" — pour alerte de reprise.
+function formatTimeAgo(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return 'il y a quelques secondes';
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `il y a ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `il y a ${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'hier';
+  if (days < 7) return `il y a ${days} jours`;
+  try {
+    const d = new Date(ts);
+    return `le ${d.getDate()}/${d.getMonth() + 1}`;
+  } catch { return ''; }
 }
 
 async function loadUploadQueue() {
@@ -1562,6 +1618,13 @@ function PhotographerScreen({ session, onLogout }) {
   const [isOnline, setIsOnline] = useState(true);
   const queueRef = useRef([]);
   const drainingRef = useRef(false);
+  // Anti-spam de l'alerte "queue > 100" et seuil "espace disque faible".
+  const lastQueueWarnAtRef = useRef(0);
+  const lastDiskWarnAtRef = useRef(0);
+  // Progress bar : nombre de fichiers à uploader au démarrage du drain courant.
+  // Reset à 0 quand le drain finit. Affichée si > 5.
+  const drainStartTotalRef = useRef(0);
+  const [drainStartTotal, setDrainStartTotal] = useState(0);
 
   function recomputeStats(arr) {
     const stats = { total: arr.length, pending: 0, uploading: 0, failed: 0 };
@@ -1582,7 +1645,8 @@ function PhotographerScreen({ session, onLogout }) {
   }
 
   // Charge la queue au démarrage du screen + reconcile fichiers manquants
-  // + reset des items 'uploading' (interrompus par crash/kill)
+  // + reset des items 'uploading' (interrompus par crash/kill).
+  // Si queue non vide, propose à l'utilisateur de reprendre l'upload.
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -1601,7 +1665,25 @@ function PhotographerScreen({ session, onLogout }) {
       }
       if (!alive) return;
       await commitQueue(cleaned);
-      drainQueue();
+      if (cleaned.length === 0) return;
+      // Drain immédiat si online — l'alerte sert juste à informer l'utilisateur,
+      // l'upload démarre en parallèle sans attendre son tap.
+      const state = await NetInfo.fetch().catch(() => null);
+      const online = state ? (!!state.isConnected && state.isInternetReachable !== false) : true;
+      if (online) drainQueue();
+      // Alerte de reprise : "X photos en attente depuis [date]. Reprendre ?"
+      const lastTsRaw = await AsyncStorage.getItem(LAST_CAPTURE_KEY).catch(() => null);
+      const lastTs = lastTsRaw ? parseInt(lastTsRaw, 10) : 0;
+      const whenLabel = lastTs ? formatTimeAgo(lastTs) : 'de ta session précédente';
+      const n = cleaned.length;
+      Alert.alert(
+        'Photos en attente',
+        `Tu as ${n} photo${n > 1 ? 's' : ''} en attente d'upload (${whenLabel}). Reprendre maintenant ?`,
+        [
+          { text: 'Plus tard', style: 'cancel' },
+          { text: 'Reprendre', onPress: () => drainQueue() },
+        ],
+      );
     })();
     return () => { alive = false; };
   }, []);
@@ -1620,6 +1702,15 @@ function PhotographerScreen({ session, onLogout }) {
   useEffect(() => {
     const t = setInterval(() => drainQueue(), 30000);
     return () => clearInterval(t);
+  }, []);
+
+  // AppState : retour foreground → drain silencieux (au cas où la connexion
+  // soit revenue pendant que l'app était en background).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') drainQueue();
+    });
+    return () => sub.remove();
   }, []);
 
   // Enqueue: copie le fichier capturé vers le dossier persistant et ajoute à la queue
@@ -1660,7 +1751,10 @@ function PhotographerScreen({ session, onLogout }) {
     const next = [...queueRef.current, ...newQueueItems];
     await commitQueue(next);
 
-    // Alerte de stockage
+    // Timestamp de dernière capture — utilisé par l'alerte de reprise au démarrage.
+    AsyncStorage.setItem(LAST_CAPTURE_KEY, String(Date.now())).catch(() => {});
+
+    // Alerte de stockage local (pendingDir) — déjà en place
     const sizeBytes = pendingDirSizeBytes();
     if (sizeBytes > STORAGE_WARN_BYTES) {
       Alert.alert(
@@ -1668,6 +1762,29 @@ function PhotographerScreen({ session, onLogout }) {
         `Plus de 5 Go de photos en attente d'upload (${(sizeBytes / 1024 / 1024 / 1024).toFixed(1)} Go). Connecte-toi à un wifi pour libérer de l'espace.`,
       );
     }
+
+    // Warning si beaucoup de photos en attente (throttle 5 min)
+    const now = Date.now();
+    if (next.length >= QUEUE_WARN_THRESHOLD && now - lastQueueWarnAtRef.current > 5 * 60 * 1000) {
+      lastQueueWarnAtRef.current = now;
+      Alert.alert(
+        'Beaucoup de photos en attente',
+        `${next.length} photos en attente d'upload. Pense à retrouver du réseau pour les envoyer.`,
+      );
+    }
+
+    // Espace disque iPhone (best effort — l'API n'est pas garantie sur toutes les versions)
+    try {
+      const free = Paths.document?.availableSpace ?? Paths.cache?.availableSpace;
+      if (typeof free === 'number' && free > 0 && free < DISK_LOW_BYTES
+          && now - lastDiskWarnAtRef.current > 10 * 60 * 1000) {
+        lastDiskWarnAtRef.current = now;
+        Alert.alert(
+          'Espace faible',
+          `Moins de 1 Go disponible sur ton iPhone. Pense à uploader tes photos.`,
+        );
+      }
+    } catch {}
 
     drainQueue();
   }
@@ -1707,6 +1824,10 @@ function PhotographerScreen({ session, onLogout }) {
       }
 
       if (verbose) console.log(`[upload] drain ${uploadable.length} items (online=${online})`);
+
+      // Mémorise le total initial pour la progress bar du header.
+      drainStartTotalRef.current = uploadable.length;
+      if (isMountedRef.current) setDrainStartTotal(uploadable.length);
 
       const CONCURRENCY = 4;
       let cursor = 0;
@@ -1769,12 +1890,34 @@ function PhotographerScreen({ session, onLogout }) {
       console.warn('drainQueue', e?.message);
     } finally {
       drainingRef.current = false;
+      drainStartTotalRef.current = 0;
+      if (isMountedRef.current) setDrainStartTotal(0);
     }
   }
 
   async function retryAllFailed() {
     const next = queueRef.current.map(it =>
       it.status === 'failed' ? { ...it, retries: 0, status: 'pending' } : it,
+    );
+    await commitQueue(next);
+    drainQueue();
+  }
+
+  // Supprime un item de la queue + son fichier local. Pour les items 'failed'
+  // que l'utilisateur veut éliminer définitivement.
+  async function deleteQueueItem(id) {
+    const target = queueRef.current.find(it => it.id === id);
+    if (target) {
+      try { new File(target.localUri).delete(); } catch {}
+    }
+    const next = queueRef.current.filter(it => it.id !== id);
+    await commitQueue(next);
+  }
+
+  // Force l'upload d'un item : reset retries + status pending + trigger drain.
+  async function forceUploadItem(id) {
+    const next = queueRef.current.map(it =>
+      it.id === id ? { ...it, retries: 0, status: 'pending' } : it,
     );
     await commitQueue(next);
     drainQueue();
@@ -1948,10 +2091,20 @@ function PhotographerScreen({ session, onLogout }) {
   const statusInfo = isShooting
     ? { label: 'Capture', dot: '#EF4444', bg: 'rgba(239,68,68,0.2)', text: '#EF4444' }
     : !isOnline
-      ? { label: 'Hors ligne', dot: '#F59E0B', bg: 'rgba(245,158,11,0.2)', text: '#F59E0B' }
+      ? {
+          label: queueStats.total > 0 ? `Hors ligne · ${queueStats.total}` : 'Hors ligne',
+          dot: '#F59E0B', bg: 'rgba(245,158,11,0.2)', text: '#F59E0B',
+        }
       : facesInZoneCount > 0
         ? { label: 'Prêt', dot: '#22C55E', bg: 'rgba(34,197,94,0.2)', text: '#22C55E' }
         : { label: 'Aucun visage', dot: '#F59E0B', bg: 'rgba(245,158,11,0.2)', text: '#F59E0B' };
+
+  // Progression du drain courant : affichée sous le header pendant l'upload
+  // si le batch initial dépassait 5 photos.
+  const drainShowBar = drainStartTotal > 5 && queueStats.uploading > 0;
+  const drainProgress = drainStartTotal > 0
+    ? Math.max(0, Math.min(1, 1 - (queueStats.pending + queueStats.uploading) / drainStartTotal))
+    : 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -2126,6 +2279,30 @@ function PhotographerScreen({ session, onLogout }) {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Progress bar : visible quand un drain en cours porte sur > 5 photos. */}
+        {drainShowBar && (
+          <View style={{ marginTop: 8, paddingHorizontal: 40 }}>
+            <View style={{
+              height: 3, borderRadius: 2,
+              backgroundColor: 'rgba(255,255,255,0.18)',
+              overflow: 'hidden',
+            }}>
+              <View style={{
+                width: `${Math.round(drainProgress * 100)}%`,
+                height: '100%',
+                backgroundColor: '#22C55E',
+                borderRadius: 2,
+              }} />
+            </View>
+            <Text style={{
+              color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '600',
+              textAlign: 'center', marginTop: 4, letterSpacing: 0.3,
+            }}>
+              {Math.round(drainProgress * drainStartTotal)} / {drainStartTotal} envoyées
+            </Text>
+          </View>
+        )}
       </Animated.View>
 
       {/* ─── BOTTOM AREA (style iOS Camera : dark gradient + zoom + chips uppercase + shutter row) ─── */}
@@ -2356,16 +2533,43 @@ function PhotographerScreen({ session, onLogout }) {
         uploadedCount={photoCount}
         stats={queueStats}
         onRetryAll={retryAllFailed}
+        onDeleteItem={deleteQueueItem}
+        onForceItem={forceUploadItem}
       />
     </View>
   );
 }
 
-function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats, onRetryAll }) {
+function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats, onRetryAll, onDeleteItem, onForceItem }) {
   // Réfresh à chaque ouverture : queueRef.current peut muter sans déclencher de re-render
   const items = visible ? (queueItems || []) : [];
   // Tri : plus récents en premier
   const sorted = [...items].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  // Tick local pour forcer un re-render après une action sur un item, car
+  // queueItems vient d'un ref muté hors React (pas de prop diff fiable).
+  const [, tick] = useState(0);
+  const refresh = () => tick(x => x + 1);
+
+  function openItemActions(item) {
+    Alert.alert(
+      'Photo en attente',
+      item.status === 'failed'
+        ? 'Cette photo a échoué après plusieurs tentatives.'
+        : 'Que veux-tu faire avec cette photo ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Forcer l\'upload',
+          onPress: async () => { await onForceItem?.(item.id); refresh(); },
+        },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => { await onDeleteItem?.(item.id); refresh(); },
+        },
+      ],
+    );
+  }
   const COLS = 3;
   const GUTTER = 4;
   const screenW = Dimensions.get('window').width;
@@ -2390,6 +2594,7 @@ function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats
             </Text>
             <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 }}>
               {totalSession} prise{totalSession > 1 ? 's' : ''} depuis ta connexion
+              {sorted.length > 0 ? ' · appui long pour actions' : ''}
             </Text>
           </View>
           <TouchableOpacity
@@ -2428,7 +2633,12 @@ function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats
               const failedItem = item.status === 'failed';
               const uploading = item.status === 'uploading';
               return (
-                <View style={{ width: cell, height: cell, borderRadius: 8, overflow: 'hidden', backgroundColor: '#222' }}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onLongPress={() => openItemActions(item)}
+                  delayLongPress={350}
+                  style={{ width: cell, height: cell, borderRadius: 8, overflow: 'hidden', backgroundColor: '#222' }}
+                >
                   <Image
                     source={{ uri: item.localUri }}
                     style={{ width: '100%', height: '100%' }}
@@ -2454,7 +2664,7 @@ function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats
                       <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700' }}>RAW</Text>
                     </View>
                   )}
-                </View>
+                </TouchableOpacity>
               );
             }}
           />
@@ -3799,10 +4009,18 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
     if (!code) return Alert.alert('Événement requis', role === 'photographer' ? 'Choisis un événement.' : 'Entre le code.');
     if (!password) return Alert.alert('Mot de passe requis');
     setBusy(true);
-    const r = await api.login(code.trim(), password.trim(), role, 'photographer');
-    setBusy(false);
-    if (!r?.token) return Alert.alert('Échec', 'Identifiants invalides.');
-    onSuccess(r);
+    try {
+      const r = await api.login(code.trim(), password.trim(), role, 'photographer');
+      setBusy(false);
+      if (!r?.token) return Alert.alert('Échec', 'Identifiants invalides.');
+      onSuccess(r);
+    } catch {
+      setBusy(false);
+      Alert.alert(
+        'Hors ligne',
+        'Première connexion impossible sans réseau. Connecte-toi en wifi pour activer ton événement — ensuite l\'app fonctionnera offline.',
+      );
+    }
   };
 
   const requestReset = async () => {
@@ -5878,8 +6096,15 @@ export default function App() {
   const pendingActionRef = useRef(null); // action à exécuter après login
 
   const reloadEvents = useCallback(async () => {
-    const data = await api.getEvents();
-    setEvents(Array.isArray(data) ? data : []);
+    try {
+      const data = await api.getEvents();
+      if (Array.isArray(data) && data.length > 0) {
+        setEvents(data);
+        AsyncStorage.setItem('@will_events_cache', JSON.stringify(data)).catch(() => {});
+      }
+    } catch {
+      // offline : on garde la liste cachée (préchargée au boot)
+    }
   }, []);
 
   useEffect(() => {
@@ -5889,6 +6114,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Précharge la liste events depuis le cache pour que le LoginModal soit
+    // utilisable en offline (sélection d'event possible sans réseau).
+    AsyncStorage.getItem('@will_events_cache').then(v => {
+      if (!v) return;
+      try {
+        const cached = JSON.parse(v);
+        if (Array.isArray(cached) && cached.length > 0) setEvents(cached);
+      } catch {}
+    });
     reloadEvents();
     AsyncStorage.getItem('@will_selfie').then(v => v && setSelfieUri(v));
     AsyncStorage.getItem('@will_favorites').then(v => {
@@ -6378,10 +6612,28 @@ export default function App() {
         onClose={() => setLoginRole(null)}
         onSuccess={(r) => {
           setLoginRole(null);
-          const next = { ...r, role: loginRole };
+          // Merge metadata complets (cover_image, location, distances…) depuis
+          // la liste events — la réponse worker peut ne contenir qu'un sous-ensemble.
+          const code = r?.event?.code;
+          const fullEvent = (code && events.find(e => e.code === code)) || {};
+          const mergedEvent = { ...fullEvent, ...(r?.event || {}) };
+          const next = { ...r, event: mergedEvent, role: loginRole };
           setSession(next);
           // Persistance pour accès hors ligne (sessions photographe / organizer event)
           Secure.setItem('@will_photographer_session', JSON.stringify(next)).catch(() => {});
+          // Téléchargement du cover en local pour affichage offline. On met à
+          // jour la session une fois le fichier disponible (fire and forget).
+          if (loginRole === 'photographer' && mergedEvent.cover_image) {
+            cacheEventCover(mergedEvent.code, mergedEvent.cover_image).then(localUri => {
+              if (!localUri) return;
+              const updated = {
+                ...next,
+                event: { ...mergedEvent, cover_local_uri: localUri },
+              };
+              setSession(updated);
+              Secure.setItem('@will_photographer_session', JSON.stringify(updated)).catch(() => {});
+            });
+          }
         }}
       />
 
