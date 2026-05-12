@@ -1352,7 +1352,7 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
   );
 }
 
-function PhotographerScreen({ session, onLogout }) {
+function PhotographerScreen({ session, onLogout, onExit }) {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice('back');
 
@@ -2198,7 +2198,7 @@ function PhotographerScreen({ session, onLogout }) {
         {/* Row 1 : retour | titre+date centré | spacer */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity
-            onPress={onLogout}
+            onPress={onExit || onLogout}
             hitSlop={10}
             style={{
               paddingHorizontal: 14, height: 36, borderRadius: 18,
@@ -2535,12 +2535,23 @@ function PhotographerScreen({ session, onLogout }) {
         onRetryAll={retryAllFailed}
         onDeleteItem={deleteQueueItem}
         onForceItem={forceUploadItem}
+        onLogout={() => {
+          setShowSessionModal(false);
+          Alert.alert(
+            'Se déconnecter ?',
+            'Tu devras saisir à nouveau le mot de passe pour reprendre ton événement.',
+            [
+              { text: 'Annuler', style: 'cancel' },
+              { text: 'Se déconnecter', style: 'destructive', onPress: onLogout },
+            ],
+          );
+        }}
       />
     </View>
   );
 }
 
-function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats, onRetryAll, onDeleteItem, onForceItem }) {
+function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats, onRetryAll, onDeleteItem, onForceItem, onLogout }) {
   // Réfresh à chaque ouverture : queueRef.current peut muter sans déclencher de re-render
   const items = visible ? (queueItems || []) : [];
   // Tri : plus récents en premier
@@ -2696,6 +2707,24 @@ function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Bouton "Se déconnecter" : vraie purge de la session photographe.
+            Distinct du retour (flèche header) qui sort sans effacer le mdp. */}
+        {onLogout && (
+          <TouchableOpacity
+            onPress={onLogout}
+            style={{
+              position: 'absolute', bottom: 90, alignSelf: 'center',
+              paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999,
+              backgroundColor: 'rgba(239,68,68,0.18)',
+              borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)',
+            }}
+          >
+            <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '700', letterSpacing: 0.3 }}>
+              Se déconnecter
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </Modal>
   );
@@ -6081,6 +6110,9 @@ export default function App() {
   const [loginRole, setLoginRole] = useState(null);
   const [selfieUri, setSelfieUri] = useState(null);
   const [session, setSession] = useState(null);
+  // Distinct de `session` : permet de sortir du mode plein écran sans effacer
+  // la session SecureStore (le photographe revient sans re-saisir son mdp).
+  const [inPhotographerMode, setInPhotographerMode] = useState(false);
   const [profileMenu, setProfileMenu] = useState(false);
   const [selfieViewer, setSelfieViewer] = useState(false);
   const [openedPhoto, setOpenedPhoto] = useState(null); // { photo, photos, allowDelete, onDelete }
@@ -6161,7 +6193,10 @@ export default function App() {
         if (v) try { setOrganizerSession(JSON.parse(v)); } catch {}
       });
       Secure.getItem('@will_photographer_session').then(v => {
-        if (v) try { setSession(JSON.parse(v)); } catch {}
+        if (v) try {
+          setSession(JSON.parse(v));
+          setInPhotographerMode(true); // boot direct en mode photographe
+        } catch {}
       });
     })();
   }, []);
@@ -6395,7 +6430,12 @@ export default function App() {
       setCreateEventModal(true);
       return;
     }
-    // photographer
+    // photographer : si une session existe déjà (déjà loggué + sorti via
+    // bouton retour), on entre direct sans redemander le mdp.
+    if (session?.role === 'photographer') {
+      setInPhotographerMode(true);
+      return;
+    }
     setLoginRole(role);
   };
 
@@ -6465,15 +6505,23 @@ export default function App() {
   }
 
   // Mode photographe (full screen caméra)
-  if (session?.role === 'photographer' || session?.role === 'organizer') {
+  if (inPhotographerMode && (session?.role === 'photographer' || session?.role === 'organizer')) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={{ flex: 1, backgroundColor: '#000' }}>
           <StatusBar barStyle="light-content" backgroundColor="#000" translucent />
-          <PhotographerScreen session={session} onLogout={() => {
-            setSession(null);
-            Secure.removeItem('@will_photographer_session').catch(() => {});
-          }} />
+          <PhotographerScreen
+            session={session}
+            // Bouton retour : sort du mode sans effacer la session — le
+            // photographe peut revenir avec un seul tap (pas de re-saisie mdp).
+            onExit={() => setInPhotographerMode(false)}
+            // Vraie déconnexion : efface la session SecureStore.
+            onLogout={() => {
+              setSession(null);
+              setInPhotographerMode(false);
+              Secure.removeItem('@will_photographer_session').catch(() => {});
+            }}
+          />
         </View>
       </GestureHandlerRootView>
     );
@@ -6627,6 +6675,7 @@ export default function App() {
           const mergedEvent = { ...fullEvent, ...(r?.event || {}) };
           const next = { ...r, event: mergedEvent, role: loginRole };
           setSession(next);
+          setInPhotographerMode(true);
           // Persistance pour accès hors ligne (sessions photographe / organizer event)
           Secure.setItem('@will_photographer_session', JSON.stringify(next)).catch(() => {});
           // Téléchargement du cover en local pour affichage offline. On met à
