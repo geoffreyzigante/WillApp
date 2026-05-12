@@ -1354,7 +1354,8 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
 }
 
 // Roulette 3 items visibles, style "overlay" : pastille centrale rose, items
-// au-dessus/en-dessous attenues. Toujours visible (pas de toggle).
+// au-dessus/en-dessous attenues. Top-fade en degrade vers le panneau noir
+// pour fondre la roulette sous le titre.
 function OverlayWheel({ items, selectedIndex, onChange }) {
   const ITEM_H = 26;
   const VISIBLE = 3;
@@ -1366,12 +1367,12 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
   }, [selectedIndex]);
   return (
     <View style={{ height: HEIGHT, alignSelf: 'stretch', position: 'relative' }}>
-      {/* Pastille de selection au centre, contour rose + bg blanc subtil */}
+      {/* Pastille de selection au centre, contour rose + bg blanc subtil, pill arrondi */}
       <View pointerEvents="none" style={{
         position: 'absolute',
         top: PAD_V, left: 8, right: 8,
         height: ITEM_H,
-        borderRadius: 8,
+        borderRadius: 999,
         backgroundColor: 'rgba(255,255,255,0.06)',
         borderWidth: 0.5,
         borderColor: 'rgba(230,115,255,0.45)',
@@ -1401,6 +1402,19 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
           );
         })}
       </ScrollView>
+      {/* Top-fade : item au-dessus du selectionne fond dans le panneau noir
+          (effet "passer sous le titre"). Hauteur = item complet du haut. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0,
+          height: PAD_V,
+        }}
+      />
     </View>
   );
 }
@@ -2455,11 +2469,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 if (v && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(0);
               };
               return (
-                <View style={{ flex: 1, paddingTop: 8, paddingBottom: 10, paddingHorizontal: 10, alignItems: 'center' }}>
+                <View style={{ flex: 1, paddingTop: 6, paddingBottom: 8, paddingHorizontal: 10, alignItems: 'center' }}>
                   <Text style={{
                     color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
                     fontFamily: 'AVEstiana', fontStyle: 'normal',
-                    marginBottom: -8,
+                    marginBottom: -16,
+                    zIndex: 2,
                   }}>Course</Text>
                   <OverlayWheel
                     items={courseItems}
@@ -2477,11 +2492,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             {(() => {
               const kmItems = Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k }));
               return (
-                <View style={{ flex: 1, paddingTop: 8, paddingBottom: 10, paddingHorizontal: 10, alignItems: 'center' }}>
+                <View style={{ flex: 1, paddingTop: 6, paddingBottom: 8, paddingHorizontal: 10, alignItems: 'center' }}>
                   <Text style={{
                     color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
                     fontFamily: 'AVEstiana', fontStyle: 'normal',
-                    marginBottom: -8,
+                    marginBottom: -16,
+                    zIndex: 2,
                   }}>Km</Text>
                   <OverlayWheel
                     items={kmItems}
