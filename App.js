@@ -708,12 +708,12 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
             style={StyleSheet.absoluteFillObject}
             contentFit="cover"
           />
-          {/* Fondu tint → transparent sur les premiers 30 % de la zone image, pour un raccord doux */}
+          {/* Fondu tint → transparent étiré sur toute la zone image : 100 % tint au milieu de la card, 0 % au bord droit */}
           <LinearGradient
             colors={[tint, 'transparent']}
             locations={[0, 1]}
             start={{ x: 0, y: 0.5 }}
-            end={{ x: 0.3, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
             style={StyleSheet.absoluteFillObject}
             pointerEvents="none"
           />
@@ -1106,7 +1106,7 @@ function EventDetailScreen({ event, onClose, onOpenSelfie, selfieUri, onDeleteSe
                 colors={[tint, 'transparent']}
                 locations={[0, 1]}
                 start={{ x: 0, y: 0.5 }}
-                end={{ x: 0.3, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
                 style={StyleSheet.absoluteFillObject}
                 pointerEvents="none"
               />
@@ -5495,7 +5495,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
               colors={[tint, 'transparent']}
               locations={[0, 1]}
               start={{ x: 0, y: 0.5 }}
-              end={{ x: 0.3, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
               style={StyleSheet.absoluteFillObject}
               pointerEvents="none"
             />
