@@ -3267,6 +3267,16 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
   const OVAL_H = 340;
   const cx = winW / 2;
   const cy = previewTop + previewH / 2;
+  // Approximation safe-area bas : home indicator iOS ~34, +24 demandés.
+  const bottomInset = Platform.OS === 'ios' ? 58 : 32;
+
+  const captureScale = useRef(new Animated.Value(1)).current;
+  const onCapturePressIn = () => {
+    Animated.spring(captureScale, { toValue: 0.92, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+  };
+  const onCapturePressOut = () => {
+    Animated.spring(captureScale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 6 }).start();
+  };
 
   const shoot = async () => {
     if (!cameraRef.current || busy) return;
@@ -3318,8 +3328,9 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
           </View>
         )}
 
-        {/* Overlay noir 75% avec trou ovale au centre — pas de bordure : la
-            forme est définie par le contraste entre la zone visible et le voile. */}
+        {/* Overlay noir plein écran avec trou ovale au centre — style FaceID :
+            tout est masqué noir sauf l'ovale 260×340. Pas de bordure : la forme
+            est définie par le contraste entre la zone visible et le voile. */}
         <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
           <Defs>
             <Mask id="selfieMask">
@@ -3327,53 +3338,58 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
               <Ellipse cx={cx} cy={cy} rx={OVAL_W / 2} ry={OVAL_H / 2} fill="black" />
             </Mask>
           </Defs>
-          <Rect width="100%" height="100%" fill="rgba(0,0,0,0.75)" mask="url(#selfieMask)" />
+          <Rect width="100%" height="100%" fill="#000" mask="url(#selfieMask)" />
         </Svg>
-
-        <TouchableOpacity
-          onPress={onClose}
-          hitSlop={10}
-          style={{
-            position: 'absolute', top: 56, right: 20,
-            width: 40, height: 40, borderRadius: 20,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-          </Svg>
-        </TouchableOpacity>
 
         <Text style={{
           position: 'absolute',
           top: cy + OVAL_H / 2 + 24,
           left: 0, right: 0, textAlign: 'center',
           color: '#fff', fontSize: 14, fontWeight: '600',
-          textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4,
         }}>
           Place ton visage dans l'ovale
         </Text>
 
-        <View style={{ position: 'absolute', bottom: 56, left: 0, right: 0, alignItems: 'center' }}>
-          <TouchableOpacity
-            onPress={shoot}
-            disabled={busy || !hasPermission || !device}
-            activeOpacity={0.85}
-            style={{
-              width: 78, height: 78, borderRadius: 999,
-              backgroundColor: 'rgba(255,255,255,0.25)',
-              borderWidth: 4, borderColor: '#fff',
-              alignItems: 'center', justifyContent: 'center',
-              opacity: busy || !hasPermission || !device ? 0.4 : 1,
-            }}
-          >
-            <View style={{
-              width: 60, height: 60, borderRadius: 999,
-              backgroundColor: C.pinkPillActive,
-            }} />
-          </TouchableOpacity>
+        {/* Bouton capture centré, style iOS Camera : blanc plein, sans bordure. */}
+        <View style={{
+          position: 'absolute',
+          bottom: bottomInset,
+          left: 0, right: 0,
+          alignItems: 'center',
+        }}>
+          <Animated.View style={{ transform: [{ scale: captureScale }] }}>
+            <TouchableOpacity
+              onPress={shoot}
+              onPressIn={onCapturePressIn}
+              onPressOut={onCapturePressOut}
+              disabled={busy || !hasPermission || !device}
+              activeOpacity={1}
+              style={{
+                width: 80, height: 80, borderRadius: 999,
+                backgroundColor: '#fff',
+                opacity: busy || !hasPermission || !device ? 0.4 : 1,
+              }}
+            />
+          </Animated.View>
         </View>
+
+        {/* Croix fermer en bas droite, au même niveau vertical que le bouton capture. */}
+        <TouchableOpacity
+          onPress={onClose}
+          hitSlop={10}
+          style={{
+            position: 'absolute',
+            bottom: bottomInset + 16,
+            right: 24,
+            width: 48, height: 48, borderRadius: 24,
+            backgroundColor: 'rgba(255,255,255,0.15)',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
+          </Svg>
+        </TouchableOpacity>
       </View>
     </Modal>
   );
@@ -3974,8 +3990,45 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
             {/* Bloc Selfie */}
             {profile && (
               <View style={profileCardStyles.card}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => { onClose(); onRetake(); }}
+                    style={{ width: 56, height: 56 }}
+                    hitSlop={6}
+                  >
+                    {selfieUri ? (
+                      <ExpoImage
+                        source={{ uri: selfieUri }}
+                        style={{ width: 56, height: 56, borderRadius: 999 }}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={{
+                        width: 56, height: 56, borderRadius: 999,
+                        backgroundColor: C.primaryLight,
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Icon.User size={28} color={C.primary} />
+                      </View>
+                    )}
+                    <View style={{
+                      position: 'absolute',
+                      right: -2, bottom: -2,
+                      width: 24, height: 24, borderRadius: 12,
+                      backgroundColor: '#fff',
+                      alignItems: 'center', justifyContent: 'center',
+                      shadowColor: '#000',
+                      shadowOpacity: 0.15,
+                      shadowRadius: 4,
+                      shadowOffset: { width: 0, height: 1 },
+                      elevation: 2,
+                    }}>
+                      <Icon.PhotoCam size={14} color={C.text} />
+                    </View>
+                  </TouchableOpacity>
                   <Text style={profileCardStyles.label}>Selfie</Text>
+                  <View style={{ flex: 1 }} />
                   {!selfieUri ? (
                     <TouchableOpacity onPress={() => { onClose(); onRetake(); }}>
                       <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Ajouter</Text>
