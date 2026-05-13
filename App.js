@@ -219,9 +219,9 @@ const Icon = {
     </Svg>
   ),
   Search: ({ size = 18, color = '#FFFFFF' }) => (
-    <Svg width={size} height={size} viewBox="0 0 17.61 17.61" fill={color}>
-      <Path d="M8.8,0C3.94,0,0,3.94,0,8.8s3.94,8.8,8.8,8.8,8.8-3.94,8.8-8.8S13.67,0,8.8,0ZM8.8,15.98c-3.96,0-7.18-3.21-7.18-7.18S4.84,1.63,8.8,1.63s7.18,3.21,7.18,7.18-3.21,7.18-7.18,7.18Z" />
-      <Path d="M8.8,3.07c-3.17,0-5.73,2.57-5.73,5.73s2.57,5.73,5.73,5.73,5.73-2.57,5.73-5.73-2.57-5.73-5.73-5.73Z" />
+    <Svg width={size} height={size} viewBox="0 0 20 20" fill="none">
+      <Circle cx="9" cy="9" r="6" stroke={color} strokeWidth={2} />
+      <Path d="M14 14L18 18" stroke={color} strokeWidth={2} strokeLinecap="round" />
     </Svg>
   ),
   Home: ({ size = 24, color = '#7B2FFF' }) => (
@@ -660,7 +660,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             activeOpacity={0.7}
             hitSlop={6}
           >
-            <Icon.GearOrg size={22} color={C.pinkPillActive} />
+            <Icon.GearOrg size={22} color={C.pinkPill} />
           </TouchableOpacity>
           <TouchableOpacity
             style={s.orgToggleBtn}
@@ -668,7 +668,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             activeOpacity={0.7}
             hitSlop={6}
           >
-            <Icon.CamOrg size={24} color={C.pinkPillActive} />
+            <Icon.CamOrg size={24} color={C.pinkPill} />
           </TouchableOpacity>
         </View>
       </View>
@@ -683,11 +683,12 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#fff',
-        borderRadius: 14,
+        borderRadius: 16,
         borderWidth: 1.5,
         borderColor: '#E5E0FF',
         paddingHorizontal: 16,
         paddingVertical: 4,
+        marginTop: 14,
         marginBottom: 14,
       }}>
         <Icon.Search size={18} color={C.primary} />
@@ -879,15 +880,21 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
 
   return (
     <RefreshableScrollView hideTopRefresh onRefresh={loadPhotos} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+      {/* Avatar wrappe dans une boite 40x40 (meme taille que orgToggleBtn)
+          pour aligner visuellement avec le bloc orga/photo des autres pages. */}
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
-<TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
+          <TouchableOpacity
+            hitSlop={10}
+            onPress={onOpenProfile}
+            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+          >
             <Icon.User size={30} color="#c9beed" />
             {selfieUri && (
               <View style={{
                 position: 'absolute',
-                top: -2,
-                right: -2,
+                top: 4,
+                right: 4,
                 width: 10,
                 height: 10,
                 borderRadius: 5,
@@ -898,9 +905,16 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
             )}
           </TouchableOpacity>
         </View>
+        <Text style={[s.welcome, { color: C.primary, fontSize: 17 }]}>Mes photos</Text>
+        {/* Spacer droit (40x40) pour equilibrer l'avatar gauche */}
+        <View style={{ width: 40, height: 40 }} />
       </View>
 
-      <Text style={s.pageTitleCenter}>Mes photos</Text>
+      {/* Marge verticale entre le header et le contenu (selfie / photos).
+          14px = meme marge que la search bar de HomeScreen (marginTop: 14),
+          pour que les contenus de Mes photos / Mes events / Accueil
+          commencent strictement au meme Y. */}
+      <View style={{ height: 14 }} />
 
       {/* Carte ajout selfie : uniquement si pas encore de selfie */}
       {!selfieUri && (
@@ -951,9 +965,12 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
 // pour pouvoir s'adapter au numColumns du parent.
 const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav }) {
   const [errored, setErrored] = React.useState(false);
+  // size optionnel : si fourni, on fixe la taille (skeletons / autres usages) ;
+  // sinon flex: 1 + aspectRatio: 1 pour remplir la rangee FlatList et garder le carre.
+  const sizeStyle = size ? { width: size, height: size } : { flex: 1, aspectRatio: 1 };
   return (
     <TouchableOpacity
-      style={{ width: size, height: size, marginBottom: 8 }}
+      style={sizeStyle}
       activeOpacity={0.85}
       onPress={onPress}
     >
@@ -1014,7 +1031,7 @@ function SkeletonCell({ size }) {
   }, [op]);
   return (
     <Animated.View style={{
-      width: size, height: size, marginBottom: 8,
+      width: size, height: size,
       borderRadius: 12, backgroundColor: '#E5E7EB',
       opacity: op,
     }} />
@@ -1224,14 +1241,16 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     Linking.openURL(url).catch(() => {});
   };
 
-  // 3 colonnes, gap horizontal 6, gap vertical 6, padding container 8.
-  // Colonne du milieu decalee de 20px (transform translateY pour ne pas
-  // affecter le layout : la virtualisation FlatList reste correcte).
+  // Grille simple 3 colonnes alignees. Padding horizontal symetrique
+  // via columnWrapperStyle. Photos via flex: 1 + aspectRatio: 1 pour
+  // remplir la rangee sans depasser (s.scroll a deja un paddingHorizontal
+  // de 20 que cellSize n'aurait pas pris en compte si on calculait a la main).
+  // cellSize n'est utilise que pour les skeletons et tient compte des 20px de s.scroll.
   const NUM_COLS = 3;
   const GRID_PADDING_H = 8;
   const GRID_GAP = 6;
-  const COL_OFFSET = 20; // decalage vertical colonne du milieu
-  const cellSize = (SCREEN_W - GRID_PADDING_H * 2 - GRID_GAP * (NUM_COLS - 1)) / NUM_COLS;
+  const SCROLL_PADDING_H = 20; // doit matcher s.scroll.paddingHorizontal
+  const cellSize = (SCREEN_W - SCROLL_PADDING_H * 2 - GRID_PADDING_H * 2 - GRID_GAP * (NUM_COLS - 1)) / NUM_COLS;
 
   const visiblePhotos = filteredPhotos.slice(0, visibleCount);
   const hasMore = visibleCount < filteredPhotos.length;
@@ -1445,9 +1464,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             <Text style={s.sectionTitle}>Photos</Text>
             {filteredPhotos.length > 0 && (
               <Text style={{ color: C.textSoft, fontSize: 13, opacity: 0.7 }}>
-                {hasMore
-                  ? `${Math.min(visibleCount, filteredPhotos.length)} / ${filteredPhotos.length} photos`
-                  : `${filteredPhotos.length} photo${filteredPhotos.length > 1 ? 's' : ''}`}
+                {`${filteredPhotos.length} photo${filteredPhotos.length > 1 ? 's' : ''}`}
               </Text>
             )}
           </View>
@@ -1463,14 +1480,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const renderListEmpty = () => {
     if (showEmptyMessage) return null;
     if (loading) {
-      // 9 skeletons (3 lignes virtuelles), avec le meme decalage staggered
-      // que les vraies cellules pour preparer l'oeil.
       return (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: GRID_PADDING_H, gap: GRID_GAP }}>
           {Array.from({ length: 9 }).map((_, i) => (
-            <View key={`sk-${i}`} style={{ transform: [{ translateY: (i % 3 === 1) ? COL_OFFSET : 0 }] }}>
-              <SkeletonCell size={cellSize} />
-            </View>
+            <SkeletonCell key={`sk-${i}`} size={cellSize} />
           ))}
         </View>
       );
@@ -1482,26 +1495,17 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     );
   };
 
-  // Rendu d'une cellule : memoize via PhotoCell pour eviter les re-render
-  // quand seul activeFilter change. La colonne du milieu (index % 3 === 1)
-  // est decalee de 20px via transform translateY -> effet staggered sans
-  // affecter le layout (la virtualisation FlatList reste correcte).
-  const renderItem = ({ item, index }) => (
-    <View style={{ transform: [{ translateY: (index % 3 === 1) ? COL_OFFSET : 0 }] }}>
-      <PhotoCell
-        photo={item}
-        size={cellSize}
-        onPress={() => onOpenPhoto?.(item, filteredPhotos)}
-      />
-    </View>
+  // Rendu d'une cellule : flex: 1 + aspectRatio: 1 (pas de width fixe pour
+  // eviter tout decalage horizontal cause par s.scroll paddingHorizontal: 20).
+  const renderItem = ({ item }) => (
+    <PhotoCell
+      photo={item}
+      onPress={() => onOpenPhoto?.(item, filteredPhotos)}
+    />
   );
 
   const renderFooter = () => {
-    if (!hasMore || showEmptyMessage) {
-      // Padding bas supplementaire pour absorber le translateY de la
-      // colonne du milieu sur la derniere rangee (sinon overflow visible).
-      return <View style={{ height: COL_OFFSET }} />;
-    }
+    if (!hasMore || showEmptyMessage) return null;
     return (
       <View style={{ paddingVertical: 16, alignItems: 'center' }}>
         <ActivityIndicator size="small" color={C.primary} />
@@ -1622,9 +1626,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // Configuration globale (chargée au mount, défauts si offline / nouveau schéma 6 sections)
   const [eventConfig, setEventConfig] = useState({
     capture: {
-      burstCount: 8,
-      interBurstMs: 150,
-      cooldownSec: 5,
+      burstCount: 8,          // legacy (mode rafale, plus utilise)
+      interBurstMs: 150,      // legacy
+      cooldownSec: 5,         // legacy
+      intervalMs: 150,        // cadence min entre 2 photos (takeSnapshot ~100-150ms)
+      toleranceMs: 500,       // fenetre de tolerance perte de visage
       quality: "ultrahd",   // standard / hd / ultrahd / proraw
       format: "jpeg",       // jpeg / heic / dng
       // Reglages photo — sync avec defaultGlobalConfig.capture cote worker.
@@ -1659,17 +1665,17 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       .catch(() => {});
   }, []);
 
-  // Photo HQ d'abord (résolution capteur max), preview en basse résolution
-  // pour garder le frame processor MLKit fluide.
+  // 4:3 prioritaire pour matcher la preview portrait (3:4) sans bandes noires
+  // ni crop -> on voit tout ce que le capteur capture. videoResolution max
+  // pour la meilleure qualite snapshot (takeSnapshot lit le buffer video).
+  // 30fps pour garder MLKit fluide.
   const format = useCameraFormat(device, [
-    { photoResolution: 'max' },
-    { photoAspectRatio: 4 / 3 },
-    { videoResolution: { width: 1280, height: 720 } },
+    { videoAspectRatio: 4 / 3 },
+    { videoResolution: 'max' },
     { fps: 30 },
   ]);
   const cameraRef = useRef(null);
 
-  const photoHdrEnabled = !!format?.supportsPhotoHdr;
   const videoStabilizationMode = useMemo(() => {
     const modes = format?.videoStabilizationModes || [];
     if (modes.includes('cinematic-extended')) return 'cinematic-extended';
@@ -1690,34 +1696,37 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     const maxE = typeof device?.maxExposure === 'number' ? device.maxExposure : 8;
     return Math.max(minE, Math.min(maxE, raw));
   }, [device, eventConfig.capture?.exposureCompensation]);
-  const proRawEnabled = !!device?.supportsRawCapture && !!format?.supportsPhotoHdr;
-
-  // Map capture.quality → photoQualityBalance Vision Camera
-  const photoQualityBalance = (() => {
-    const q = eventConfig.capture?.quality;
-    if (q === 'standard') return 'speed';
-    if (q === 'hd') return 'balanced';
-    return 'quality'; // ultrahd, proraw, défaut
-  })();
 
   const isCapturingRef = useRef(false);
+  // Timestamp de la derniere frame MLKit avec visage dans la zone. Sert a
+  // appliquer une tolerance (TOLERANCE_MS) sur la perte momentanee de
+  // detection (clignement, occlusion bref, faux negatif MLKit) avant d'arreter
+  // la capture continue.
   const lastFaceSeenAtRef = useRef(0);
+  // Timestamp de la derniere photo prise. La capture continue tire une nouvelle
+  // photo des que (now - lastPhotoTime) >= MIN_INTERVAL_MS et qu'un visage est
+  // present (avec tolerance). Permet une cadence stable independante du framerate.
+  const lastPhotoTimeRef = useRef(0);
+  // Une "session" de capture continue regroupe les photos consecutives d'un
+  // meme passage de coureur (visage reste en zone). burstTs = timestamp de la
+  // premiere photo, idx = compteur incremente a chaque photo. Reset a null des
+  // que la tolerance expire. Le worker (personal-gallery) utilise burstTs pour
+  // grouper les photos d'un meme passage lors du match selfie.
+  const currentBurstTsRef = useRef(null);
+  const currentBurstIndexRef = useRef(0);
   const isMountedRef = useRef(true);
   const isDetectionEnabledRef = useRef(false);
   // Mode auto-capture arme par le bouton Go/Stop. Quand true, une detection
-  // dans la zone declenche startBurst. Quand false, rien ne se passe meme
+  // dans la zone declenche captureOne. Quand false, rien ne se passe meme
   // si MLKit detecte des visages. Lu via ref dans le worklet/runOnJS pour
   // eviter tout closure stale ; mirroe en state pour le rendu du bouton.
   const isAutoArmedRef = useRef(false);
-  // Flag d'arrêt : un tap sur Go pendant la rafale le passe à true ; la boucle
-  // dans startBurst le lit à chaque itération et break.
-  const abortBurstRef = useRef(false);
   // Mirror du facesInZoneCount lu via ref (pas via state) au moment du tap Go.
   // Évite tout problème de closure stale entre le worklet runOnJS et onPress.
   const facesInZoneCountRef = useRef(0);
   // Mirrors pour eviter spam setState a chaque frame : on ne push dans React
   // que si la valeur a vraiment change. 30 setState/s sinon, qui inondent la
-  // queue de re-render et ralentissent startBurst.
+  // queue de re-render et ralentissent captureOne.
   const lastFacesCountSeenRef = useRef(0);
   const lastInZoneCountSeenRef = useRef(0);
   // Timestamp de la derniere detection dans la zone (pour mesurer la latence
@@ -1727,6 +1736,19 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const [facesCount, setFacesCount] = useState(0);
   const [facesInZoneCount, setFacesInZoneCount] = useState(0);
   const [isShooting, setIsShooting] = useState(false);
+  // Debug overlay temporaire pour diagnostic latence sur device (sans Metro).
+  // Affiche les 10 derniers messages [capture]. A retirer une fois fixe.
+  const [debugLogs, setDebugLogs] = useState([]);
+  const [showDebug, setShowDebug] = useState(false);
+  const addDebugLog = useCallback((msg) => {
+    const d = new Date();
+    const t =
+      `${String(d.getHours()).padStart(2, '0')}:` +
+      `${String(d.getMinutes()).padStart(2, '0')}:` +
+      `${String(d.getSeconds()).padStart(2, '0')}.` +
+      `${String(d.getMilliseconds()).padStart(3, '0')}`;
+    setDebugLogs(prev => [`${t} — ${msg}`, ...prev].slice(0, 10));
+  }, []);
   // Mode auto-capture pour le rendu du bouton. true => label "Stop", bg rouge.
   // Mirror state du isAutoArmedRef pour declencher les re-render.
   const [isAutoArmed, setIsAutoArmed] = useState(false);
@@ -1765,6 +1787,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const photoCountScale = useRef(new Animated.Value(1)).current;
   const headerSlideY = useRef(new Animated.Value(-120)).current;
   const footerSlideY = useRef(new Animated.Value(300)).current;
+  // Pulse opacity du bouton Stop quand on capture activement (arme + visage en zone)
+  const recPulse = useRef(new Animated.Value(1)).current;
 
   // MLKit ne supporte pas confidenceThreshold (face *detection*); on garde
   // minFaceSize comme pré-filtre côté natif et on filtre maxFaceSize côté JS.
@@ -1780,14 +1804,17 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
   const { detectFaces } = useFaceDetector(faceDetectionOptions);
 
-  // Cooldown temporel par face id : on ne re-burst pas le même visage
-  // tant que cooldownSec n'est pas écoulé.
-  const lastBurstByFaceRef = useRef(new Map());
+  // Defauts capture continue : 1 photo / 200ms tant que visage en zone, avec
+  // 500ms de tolerance sur la perte momentanee de detection. Surchargeable
+  // via eventConfig.capture.intervalMs et eventConfig.capture.toleranceMs
+  // (dashboard admin).
+  const MIN_INTERVAL_MS_DEFAULT = 150;
+  const TOLERANCE_MS_DEFAULT = 500;
 
   const onFacesDetectedJS = useMemo(
     () => Worklets.createRunOnJS((facesData) => {
       // Push setState UNIQUEMENT si la valeur change. Avant : 30 setState/s
-      // saturaient la queue React et retardaient startBurst.
+      // saturaient la queue React et retardaient les captures.
       if (facesData.length !== lastFacesCountSeenRef.current) {
         lastFacesCountSeenRef.current = facesData.length;
         setFacesCount(facesData.length);
@@ -1800,9 +1827,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         facesInZoneCountRef.current = 0;
         return;
       }
-      const cooldownMs = (eventConfig.capture?.cooldownSec ?? 5) * 1000;
       const minFaces = eventConfig.faceDetection?.minFacesToTrigger ?? 1;
       const maxSize = (eventConfig.faceDetection?.maxFaceSizePercent ?? 80) / 100;
+      const minIntervalMs = eventConfig.capture?.intervalMs ?? MIN_INTERVAL_MS_DEFAULT;
+      const toleranceMs = eventConfig.capture?.toleranceMs ?? TOLERANCE_MS_DEFAULT;
       const now = Date.now();
 
       // Filtre les visages dans la zone, en éliminant ceux trop gros (trop près)
@@ -1815,33 +1843,50 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       }
       facesInZoneCountRef.current = validInZone.length;
 
-      if (validInZone.length < minFaces) return;
-      // Auto-capture doit etre arme (bouton Go presse) pour declencher.
-      // Sinon, on suit les visages mais on ne tire pas.
-      if (!isAutoArmedRef.current) return;
-      if (isCapturingRef.current) return;
-
-      // Au moins un visage doit avoir son cooldown écoulé pour déclencher
-      const eligible = validInZone.some(f => {
-        const last = lastBurstByFaceRef.current.get(f.id) || 0;
-        return now - last > cooldownMs;
-      });
-      if (!eligible) return;
-
-      // Stamp tous les visages de la zone (même cooldown qu'un seul nouveau)
-      for (const f of validInZone) lastBurstByFaceRef.current.set(f.id, now);
-      // GC simple: purge des entries vieilles de > 2× cooldown pour ne pas grossir
-      for (const [id, t] of lastBurstByFaceRef.current) {
-        if (now - t > cooldownMs * 2) lastBurstByFaceRef.current.delete(id);
+      const faceInZone = validInZone.length >= minFaces;
+      if (faceInZone) {
+        lastFaceSeenAtRef.current = now;
+        // 1ere detection apres une periode sans visage -> latency probe
+        if (lastFaceInZoneAtRef.current === 0) {
+          lastFaceInZoneAtRef.current = now;
+        }
       }
-      // Latency probe : timestamp au moment ou le JS thread valide la
-      // detection. startBurst lira ce ref pour mesurer le delta detection->1ere photo.
-      lastFaceInZoneAtRef.current = now;
-      console.log(`[latence] face-in-zone @ ${now} → startBurst()`);
-      startBurst();
+
+      // Pas arme : aucune capture. Reset la session en cours si on l'avait.
+      if (!isAutoArmedRef.current) {
+        if (currentBurstTsRef.current !== null) {
+          const m = `[capture] stop (armed=false)`;
+          console.log(m); addDebugLog(m);
+          currentBurstTsRef.current = null;
+          currentBurstIndexRef.current = 0;
+        }
+        return;
+      }
+
+      // Tolerance : si le visage a quitte la zone depuis > toleranceMs, on
+      // arrete la session courante. Sinon (perte momentanee) on continue.
+      const sinceLastFace = now - lastFaceSeenAtRef.current;
+      if (lastFaceSeenAtRef.current === 0 || sinceLastFace > toleranceMs) {
+        if (currentBurstTsRef.current !== null) {
+          const m = `[capture] stop (face left zone +${sinceLastFace}ms)`;
+          console.log(m); addDebugLog(m);
+          currentBurstTsRef.current = null;
+          currentBurstIndexRef.current = 0;
+          lastFaceInZoneAtRef.current = 0;
+        }
+        return;
+      }
+
+      // Visage present (ou dans la fenetre de tolerance) + arme.
+      // Capture si l'intervalle min est ecoule et qu'aucune capture n'est en cours.
+      if (isCapturingRef.current) return;
+      const sinceLastPhoto = now - lastPhotoTimeRef.current;
+      if (sinceLastPhoto < minIntervalMs) return;
+      captureOne();
     }),
     [
-      eventConfig.capture?.cooldownSec,
+      eventConfig.capture?.intervalMs,
+      eventConfig.capture?.toleranceMs,
       eventConfig.faceDetection?.minFacesToTrigger,
       eventConfig.faceDetection?.maxFaceSizePercent,
     ]
@@ -1873,6 +1918,24 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       Animated.timing(badgeOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
     ]).start();
   }, [facesCount > 0, isShooting, isDetectionEnabled]);
+
+  // Pulse "REC" sur le bouton Stop quand on capture activement
+  // (arme + visage dans la zone). Indique au photographe que le systeme
+  // tire en continu. Stop des qu'une des deux conditions tombe.
+  useEffect(() => {
+    const active = isAutoArmed && facesInZoneCount > 0;
+    if (active) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(recPulse, { toValue: 0.6, duration: 250, useNativeDriver: true }),
+          Animated.timing(recPulse, { toValue: 1, duration: 250, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      recPulse.stopAnimation();
+      Animated.timing(recPulse, { toValue: 1, duration: 120, useNativeDriver: true }).start();
+    }
+  }, [isAutoArmed, facesInZoneCount, recPulse]);
 
   // Zone de déclenchement : bande verticale, position gauche / centre / droite.
   const zonePct = (eventConfig.faceDetection?.triggerZoneWidthPercent ?? 33) / 100;
@@ -2253,7 +2316,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   }
 
   // Détection activée par défaut dès l'ouverture de l'écran photographe — la
-  // capture button et le frame processor déclenchent tous les deux startBurst().
+  // capture button et le frame processor declenchent tous les deux captureOne().
   // Slide-in du header/footer au mount.
   useEffect(() => {
     startSession();
@@ -2283,7 +2346,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // Bouton Go/Stop : toggle de l'auto-capture.
   // - Go (off) → tap arme : isAutoArmedRef=true, state isAutoArmed=true, label "Stop", bg rouge.
   // - Stop (on) → tap desarme : isAutoArmedRef=false, isAutoArmed=false, label "Go", bg rose.
-  //   Si une rafale est en cours au moment du desarmage, on l'abort.
+  //   Si captureOne() est en cours au moment du desarmage, on la laisse finir
+  //   (pas d'abort en plein takePhoto, pour ne pas corrompre le fichier).
   // Ref + state mis a jour synchroniquement (ref pour le worklet, state pour le rendu).
   function onCapturePress() {
     const next = !isAutoArmedRef.current;
@@ -2294,98 +2358,79 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       Animated.timing(captureScale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
       Animated.spring(captureScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
     ]).start();
-    if (!next && isCapturingRef.current) {
-      abortBurstRef.current = true;
+    if (!next) {
+      // Reset session en cours et compteurs de session
+      currentBurstTsRef.current = null;
+      currentBurstIndexRef.current = 0;
+      lastFaceInZoneAtRef.current = 0;
+      lastFaceSeenAtRef.current = 0;
     }
   }
 
-  async function startBurst() {
-    const t0 = Date.now();
+  // Capture une SEULE photo. Appelee en continu par le frame processor tant
+  // qu'un visage est dans la zone et que l'intervalle min est ecoule. Les
+  // photos consecutives partagent le meme burstTs (groupe d'un passage de
+  // coureur) tant que la session n'est pas reset (cf. onFacesDetectedJS).
+  async function captureOne() {
     if (isCapturingRef.current) return;
     if (!cameraRef.current || !isMountedRef.current) return;
     if (!isDetectionEnabledRef.current) return;
 
     isCapturingRef.current = true;
-    abortBurstRef.current = false;
     setIsShooting(true);
+    const t0 = Date.now();
 
-    const burstTs = t0;
-    const queue = [];
-    // Defauts rafale rapide (ex-defauts: 8 / 150ms = 1.2s mini, trop lent pour un
-    // coureur). 5 photos / 60ms = ~0.3s + latence native takePhoto. Reglable
-    // via eventConfig.capture.burstCount / interBurstMs depuis le dashboard.
-    const BURST_COUNT = eventConfig.capture?.burstCount ?? 5;
-    const INTER_BURST_MS = eventConfig.capture?.interBurstMs ?? 60;
-
-    // Feedback dès le départ — flash + vibration + pop sur le compteur (non-bloquant)
-    triggerBurstFeedback();
-
-    // Capture HQ découplée du frame processor: chaque takePhoto utilise
-    // la pleine résolution du capteur. Pas de throttle iOS-side, on laisse
-    // AVFoundation enchaîner tant qu'il peut. ProRAW si dispo + demandé,
-    // sinon HEIC HQ (photoQualityBalance + photoHdr réglés sur le composant Camera).
-    const wantsRaw =
-      eventConfig.capture?.format === 'dng' ||
-      eventConfig.capture?.quality === 'proraw';
-    const takePhotoOpts = {
-      flash: 'off',
-      enableShutterSound: false,
-      enableAutoRedEyeReduction: false,
-    };
-    if (wantsRaw && proRawEnabled) {
-      takePhotoOpts.enableRawCapture = true;
+    // Ouverture d'une nouvelle session si necessaire (1ere photo apres un
+    // passage de coureur). burstTs = timestamp de la 1ere photo.
+    const isFirstOfSession = currentBurstTsRef.current === null;
+    if (isFirstOfSession) {
+      currentBurstTsRef.current = t0;
+      currentBurstIndexRef.current = 0;
+      const detectAt = lastFaceInZoneAtRef.current;
+      const m = `[capture] start (armed=true, faceInZone=true)` +
+        (detectAt > 0 && detectAt !== t0 ? ` +${t0 - detectAt}ms apres detection` : '');
+      console.log(m); addDebugLog(m);
+      // Flash + pop compteur seulement sur la 1ere photo de la session
+      triggerBurstFeedback();
     }
+    const burstTs = currentBurstTsRef.current;
+    const idx = currentBurstIndexRef.current;
+    currentBurstIndexRef.current += 1;
+    lastPhotoTimeRef.current = t0;
 
-    // Mesure latence detection-in-zone -> debut startBurst
-    const detectAt = lastFaceInZoneAtRef.current;
-    if (detectAt > 0) {
-      console.log(`[latence] startBurst entry +${t0 - detectAt}ms apres detection`);
-    }
-
-    for (let i = 0; i < BURST_COUNT; i++) {
-      if (!isMountedRef.current || !isDetectionEnabledRef.current) break;
-      if (abortBurstRef.current) break;
+    // Capture via takeSnapshot : lit un frame du pipeline video deja en
+    // memoire (~50-150ms) au lieu de declencher AVCapturePhoto (~1100ms).
+    // Qualite = resolution du videoFormat actif (cible 1080p ci-dessus).
+    // Toujours JPEG (pas de RAW possible en snapshot).
+    let photo = null;
+    try {
       const photoStart = Date.now();
-      try {
-        const photo = await cameraRef.current.takePhoto(takePhotoOpts);
-        const photoEnd = Date.now();
-        if (i === 0 && detectAt > 0) {
-          console.log(`[latence] 1ere photo capturee @ +${photoEnd - detectAt}ms apres detection (takePhoto: ${photoEnd - photoStart}ms)`);
-        } else {
-          console.log(`[latence] photo ${i + 1}/${BURST_COUNT} takePhoto: ${photoEnd - photoStart}ms`);
-        }
-        queue.push({ photo, index: i, burstTs });
-      } catch (e) { console.warn('takePhoto', e); }
-      if (i < BURST_COUNT - 1) {
-        await new Promise(r => setTimeout(r, INTER_BURST_MS));
-      }
+      photo = await cameraRef.current.takeSnapshot({ quality: 85 });
+      const photoEnd = Date.now();
+      const m = `[capture] photo taken @ +${photoEnd - burstTs}ms (#${idx + 1} of session, takeSnapshot: ${photoEnd - photoStart}ms)`;
+      console.log(m); addDebugLog(m);
+    } catch (e) {
+      console.warn('takeSnapshot', e);
     }
 
     isCapturingRef.current = false;
     setIsShooting(false);
-    if (detectAt > 0) {
-      console.log(`[latence] rafale complete en ${Date.now() - detectAt}ms (${queue.length} photos)`);
-      lastFaceInZoneAtRef.current = 0;
-    }
 
-    if (queue.length > 0) {
+    if (photo) {
       const d = new Date();
       const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
       const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
-      const rawItems = queue.map(({ photo, index, burstTs: ts }) => {
-        const ext = photo.isRawPhoto ? 'dng' : 'jpg';
-        return {
-          key: `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${ts}_${index}.${ext}`,
-          tempPath: photo.path,
-          isRaw: !!photo.isRawPhoto,
-          burstTs: ts,
-          idx: index,
-          race: selectedRace ? String(selectedRace.km) : null,
-          km: selectedKm ? String(selectedKm) : null,
-        };
-      });
+      const item = {
+        key: `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${idx}.jpg`,
+        tempPath: photo.path,
+        isRaw: false,
+        burstTs,
+        idx,
+        race: selectedRace ? String(selectedRace.km) : null,
+        km: selectedKm ? String(selectedKm) : null,
+      };
       // copie persistante + enqueue (non bloquant) — drain au prochain online
-      enqueueBurstItems(rawItems);
+      enqueueBurstItems([item]);
     }
   }
 
@@ -2458,13 +2503,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         device={device}
         format={format}
         isActive={true}
-        photo={true}
+        // video=true requis pour takeSnapshot sur iOS (capture un frame du
+        // pipeline video). photo retire : on n'utilise plus takePhoto.
+        video={true}
         frameProcessor={frameProcessor}
         pixelFormat="yuv"
         zoom={zoomLevel}
         resizeMode="contain"
-        photoQualityBalance={photoQualityBalance}
-        photoHdr={photoHdrEnabled}
         videoStabilizationMode={videoStabilizationMode}
         exposure={cameraExposure}
         enableLocation={false}
@@ -2566,8 +2611,24 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             ) : null}
           </View>
 
-          {/* Spacer droit pour équilibrer la flèche retour à gauche et garder le titre centré. */}
-          <View style={{ width: 46 }} />
+          {/* Bouton DEBUG (toggle overlay logs [capture]). Largeur ~46 pour
+              equilibrer la fleche retour a gauche et garder le titre centre.
+              Temporaire — a retirer une fois la latence fixee. */}
+          <TouchableOpacity
+            onPress={() => setShowDebug(s => !s)}
+            hitSlop={10}
+            style={{
+              paddingHorizontal: 8, height: 28, borderRadius: 14,
+              backgroundColor: showDebug ? 'rgba(239,68,68,0.55)' : 'rgba(255,255,255,0.12)',
+              alignItems: 'center', justifyContent: 'center',
+              opacity: showDebug ? 1 : 0.5,
+              minWidth: 46,
+            }}
+          >
+            <Text style={{
+              color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.8,
+            }}>DEBUG</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Row 2 : pill statut + pill compteur photo, centrés sous le titre */}
@@ -2701,6 +2762,48 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           })}
         </View>
 
+        {/* ─── DEBUG OVERLAY (temporaire) : 10 derniers logs [capture].
+            Position absolute juste au-dessus du footer noir. Toggle via le
+            bouton DEBUG du header. A retirer une fois la latence fixee. ─── */}
+        {showDebug && (
+          <View
+            pointerEvents="box-none"
+            style={{
+              position: 'absolute',
+              bottom: Math.max(0, winH - (CAMERA_TOP + previewH)) + 8,
+              left: '5%',
+              right: '5%',
+              maxHeight: 200,
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              borderRadius: 8,
+              padding: 8,
+              zIndex: 20,
+            }}
+          >
+            <ScrollView>
+              {debugLogs.length === 0 ? (
+                <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, lineHeight: 12 }}>
+                  (aucun log [capture] pour l'instant)
+                </Text>
+              ) : (
+                debugLogs.map((l, i) => (
+                  <Text
+                    key={`${i}-${l.slice(0, 12)}`}
+                    style={{
+                      color: '#fff',
+                      fontSize: 10,
+                      lineHeight: 12,
+                      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                    }}
+                  >
+                    {l}
+                  </Text>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        )}
+
         <View style={{
           paddingHorizontal: 16,
           paddingTop: 0,
@@ -2723,14 +2826,15 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <Text style={{
+            <Animated.Text style={{
               color: '#fff',
               fontSize: 22,
               fontStyle: 'italic',
               fontWeight: '800',
               fontFamily: 'AVEstiana',
               letterSpacing: 1,
-            }}>{isAutoArmed ? 'Stop' : 'Go!'}</Text>
+              opacity: isAutoArmed ? recPulse : 1,
+            }}>{isAutoArmed ? 'Stop' : 'Go!'}</Animated.Text>
           </TouchableOpacity>
 
           {/* Row 2 : bandeau 2 sections (COURSE / KM) collé au Go!, edge-to-edge.
@@ -3172,6 +3276,73 @@ function CropImageModal({ visible, asset, onCancel, onConfirm }) {
   );
 }
 
+// Sous-modale slide-up reutilisable pour editer 1 champ texte (nom, email,
+// telephone, site web). Auto-focus a l'ouverture, KeyboardAvoidingView pour
+// que le bouton Enregistrer reste visible. Save par section via onSave.
+function SubModalInputText({ visible, title, value, onChangeText, placeholder, keyboardType, autoCapitalize, onClose, onSave, busy }) {
+  // Suivi manuel de la hauteur clavier : KeyboardAvoidingView est peu fiable
+  // sur iOS dans une Modal (encore moins avec presentationStyle). On applique
+  // un paddingBottom dynamique au container du bouton Enregistrer pour qu'il
+  // reste toujours au-dessus du clavier.
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    if (!visible) { setKbHeight(0); return; }
+    const showName = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideName = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const sh = Keyboard.addListener(showName, e => setKbHeight(e?.endCoordinates?.height || 0));
+    const hd = Keyboard.addListener(hideName, () => setKbHeight(0));
+    return () => { sh.remove(); hd.remove(); };
+  }, [visible]);
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+        <View style={{
+          paddingTop: 56, paddingHorizontal: 16, paddingBottom: 12,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E5E7EB',
+          backgroundColor: '#fff',
+        }}>
+          <View style={{ width: 60 }} />
+          <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>{title}</Text>
+          <TouchableOpacity onPress={onClose} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
+            <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12 }} keyboardShouldPersistTaps="handled">
+          <TextInput
+            value={value || ''}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            placeholderTextColor="#9CA3AF"
+            keyboardType={keyboardType}
+            autoCapitalize={autoCapitalize}
+            style={{
+              fontSize: 17, color: C.text,
+              paddingVertical: 14, paddingHorizontal: 16,
+              backgroundColor: '#fff', borderRadius: 14,
+              marginHorizontal: 16,
+            }}
+            autoFocus
+          />
+        </ScrollView>
+        <View style={{ paddingBottom: kbHeight }}>
+          <TouchableOpacity
+            onPress={onSave}
+            disabled={busy}
+            style={{
+              marginHorizontal: 16, marginBottom: kbHeight > 0 ? 12 : 28,
+              paddingVertical: 14, borderRadius: 14, backgroundColor: C.primary, alignItems: 'center',
+              opacity: busy ? 0.6 : 1,
+            }}
+          >
+            {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function CreateEventModal({ visible, onClose, onCreated, organizerSession, editEvent }) {
   const isEdit = !!editEvent;
   const [name, setName] = useState('');
@@ -3201,6 +3372,22 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const slideX = useRef(new Animated.Value(0)).current;
   const [userEditedCode, setUserEditedCode] = useState(false);
   const [showErr, setShowErr] = useState({ 1: false, 2: false, 3: false });
+  // Mode edition style "iOS Settings drill-down" : la home liste les sections,
+  // tap sur une row ouvre une sous-modale dediee avec save par section
+  // (PUT partiel via la whitelist worker).
+  const [editingField, setEditingField] = useState(null);
+  const [partialBusy, setPartialBusy] = useState(false);
+  // Hauteur du clavier pour ajuster les sub-modales d'edition (Lieu, Distances)
+  // ou KeyboardAvoidingView n'est pas fiable sur iOS avec une Modal RN.
+  const [editKbHeight, setEditKbHeight] = useState(0);
+  useEffect(() => {
+    if (!isEdit || !editingField) { setEditKbHeight(0); return; }
+    const showName = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideName = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const sh = Keyboard.addListener(showName, e => setEditKbHeight(e?.endCoordinates?.height || 0));
+    const hd = Keyboard.addListener(hideName, () => setEditKbHeight(0));
+    return () => { sh.remove(); hd.remove(); };
+  }, [isEdit, editingField]);
 
   const parseLocation = (loc = '') => {
     // Format attendu: "Louviers (27400)" ou "Louviers (27)"
@@ -3222,6 +3409,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
       setShowErr({ 1: false, 2: false, 3: false });
       slideX.setValue(0);
       setUserEditedCode(false);
+      setEditingField(null);
       if (isEdit) {
         setName(editEvent.name || '');
         setCode(editEvent.code || '');
@@ -3231,7 +3419,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         setPostalCode(pc); setCity(cy); setCitySuggestions([]);
         setEventType(editEvent.event_type || '');
         setWebsite(editEvent.website || '');
-        setContact(editEvent.contact || editEvent.org_name || '');
+        // Fallback en cascade : contact (email saisi a la creation) -> email orga -> ''
+        setContact(editEvent.contact || organizerSession?.email || '');
         setPhone(editEvent.phone || '');
         setDistances(Array.isArray(editEvent.distances) ? editEvent.distances.map(d => ({
           km: String(d.km || ''), time: d.time || '', elevation: d.elevation || '',
@@ -3439,6 +3628,611 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   };
 
   const types = ['Trail', 'Course sur route', 'Cross', 'Triathlon', 'Velo', 'Marche', 'Autre'];
+
+  // ───────────────── PICKERS COMMUNS (heure/denivele/km/crop/date) ─────────────────
+  // Extraits en helper pour etre reutilises par le wizard (creation) et le
+  // mode Settings (edition). Reference le scope local (state + setters).
+  // Pickers Km/Heure/Denivele — rendus DANS la sub-modal Distances (mode
+  // edition) ou DANS le Modal principal (mode creation/wizard) pour que les
+  // pickers se presentent au-dessus de la modal parente sur iOS.
+  const renderDistancePickers = () => (
+    <>
+      {/* Picker Heure */}
+      <Modal visible={timePickerIdx !== null} transparent animationType="slide" onRequestClose={() => setTimePickerIdx(null)}>
+        <TouchableOpacity activeOpacity={1} onPress={() => setTimePickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
+            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>Heure de départ</Text>
+            <View style={{ flexDirection: 'row', paddingHorizontal: 20, gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>HEURES</Text>
+                <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
+                  {Array.from({ length: 24 }).map((_, h) => {
+                    const cur = distances[timePickerIdx]?.time || '';
+                    const m = cur.match(/^(\d{1,2})h(\d{2})?/);
+                    const curH = m ? parseInt(m[1], 10) : -1;
+                    const active = curH === h;
+                    return (
+                      <TouchableOpacity
+                        key={h}
+                        onPress={() => {
+                          const cur2 = distances[timePickerIdx]?.time || '';
+                          const m2 = cur2.match(/h(\d{2})/);
+                          const min = m2 ? m2[1] : '00';
+                          updateDistance(timePickerIdx, 'time', `${h}h${min}`);
+                        }}
+                        style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
+                      >
+                        <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{h}h</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>MINUTES</Text>
+                <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
+                  {Array.from({ length: 12 }).map((_, i) => {
+                    const min = i * 5;
+                    const cur = distances[timePickerIdx]?.time || '';
+                    const m = cur.match(/h(\d{2})/);
+                    const curM = m ? parseInt(m[1], 10) : -1;
+                    const active = curM === min;
+                    return (
+                      <TouchableOpacity
+                        key={min}
+                        onPress={() => {
+                          const cur2 = distances[timePickerIdx]?.time || '';
+                          const m2 = cur2.match(/^(\d{1,2})h/);
+                          const h = m2 ? m2[1] : '9';
+                          updateDistance(timePickerIdx, 'time', `${h}h${String(min).padStart(2, '0')}`);
+                        }}
+                        style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
+                      >
+                        <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{String(min).padStart(2, '0')}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </View>
+            <TouchableOpacity onPress={() => setTimePickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>OK</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Picker Dénivelé */}
+      <Modal visible={elevPickerIdx !== null} transparent animationType="slide" onRequestClose={() => setElevPickerIdx(null)}>
+        <TouchableOpacity activeOpacity={1} onPress={() => setElevPickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
+            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>Dénivelé positif</Text>
+            <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>Par incréments de 10 m</Text>
+            <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
+              {Array.from({ length: 301 }).map((_, i) => {
+                const m = i * 10;
+                const cur = distances[elevPickerIdx]?.elevation || '';
+                const curM = parseInt((cur.match(/(\d+)/) || [])[1], 10);
+                const active = curM === m;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    onPress={() => updateDistance(elevPickerIdx, 'elevation', `${m}m D+`)}
+                    style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
+                  >
+                    <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{m} m</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity onPress={() => setElevPickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>OK</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Picker Distance (km) */}
+      <Modal visible={kmPickerIdx !== null} transparent animationType="slide" onRequestClose={() => setKmPickerIdx(null)}>
+        <TouchableOpacity activeOpacity={1} onPress={() => setKmPickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
+            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>Distance</Text>
+            <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>De 1 à 200 km</Text>
+            <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
+              {Array.from({ length: 200 }).map((_, i) => {
+                const km = i + 1;
+                const cur = distances[kmPickerIdx]?.km || '';
+                const curKm = parseFloat(cur);
+                const active = curKm === km;
+                return (
+                  <TouchableOpacity
+                    key={km}
+                    onPress={() => updateDistance(kmPickerIdx, 'km', String(km))}
+                    style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
+                  >
+                    <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{km} km</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity onPress={() => setKmPickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>OK</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  );
+
+  // CropImageModal rendu separement (utilise par la cover de la home + le
+  // wizard de creation). Pas besoin d'etre dans une sub-modal precise.
+  const renderCropModal = () => (
+    <CropImageModal
+      visible={!!cropAsset}
+      asset={cropAsset}
+      onCancel={() => setCropAsset(null)}
+      onConfirm={handleCropConfirm}
+    />
+  );
+
+  // ───────────────── MODE EDITION : iOS Settings drill-down ─────────────────
+  // Home page liste les sections (rows avec icone + valeur courante). Tap sur
+  // une row ouvre une sous-modale dediee qui save uniquement le champ modifie
+  // via PUT /organizer/event/:slug (whitelist worker existante).
+  if (isEdit) {
+    const sectionHeaderStyle = {
+      color: '#6B7280', fontSize: 13, fontWeight: '700',
+      letterSpacing: 0.6, textTransform: 'uppercase',
+      marginBottom: 8, marginLeft: 32, marginTop: 24,
+    };
+    const sectionCardStyle = {
+      backgroundColor: '#fff', borderRadius: 14,
+      marginHorizontal: 16, overflow: 'hidden',
+    };
+    const rowStyle = {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: 16, paddingVertical: 14, minHeight: 48,
+    };
+    const rowSeparatorStyle = {
+      height: StyleSheet.hairlineWidth, backgroundColor: '#E5E7EB', marginLeft: 16,
+    };
+    const subModalHeader = {
+      paddingTop: 16, paddingHorizontal: 16, paddingBottom: 12,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E5E7EB',
+      backgroundColor: '#fff',
+    };
+    const saveBtnStyle = {
+      marginHorizontal: 16, marginBottom: 28,
+      paddingVertical: 14, borderRadius: 14, backgroundColor: C.primary, alignItems: 'center',
+    };
+
+    // Previews valeurs courantes pour la home
+    const previewDate = eventDate
+      ? eventDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+      : 'Non définie';
+    const previewLocation = city
+      ? (postalCode ? `${city} (${postalCode})` : city)
+      : (editEvent?.location || 'Non défini');
+    const previewDistances = distances.length === 0
+      ? 'Aucune'
+      : distances.map(d => d.km ? `${d.km} km` : '?').join(', ');
+
+    // PUT partiel : met a jour uniquement les champs presents dans `patch`.
+    const savePartial = async (patch) => {
+      if (!editEvent?.code) return false;
+      setPartialBusy(true);
+      try {
+        const r = await fetch(`${API_URL}/organizer/event/${editEvent.code}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(organizerSession?.token ? { Authorization: `Bearer ${organizerSession.token}` } : {}),
+          },
+          body: JSON.stringify(patch),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          Alert.alert('Erreur', data.error || 'Échec de la modification');
+          return false;
+        }
+        onCreated?.();
+        return true;
+      } catch (e) {
+        Alert.alert('Erreur', e.message || 'Erreur réseau');
+        return false;
+      } finally {
+        setPartialBusy(false);
+      }
+    };
+
+    const SettingsRow = ({ label, value, onPress }) => {
+      return (
+        <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={rowStyle}>
+          <Text style={{ color: C.text, fontSize: 16, fontWeight: '600', flex: 1 }}>{label}</Text>
+          <Text style={{ color: '#6B7280', fontSize: 14, marginRight: 8, maxWidth: 140 }} numberOfLines={1}>
+            {value || '—'}
+          </Text>
+          <Text style={{ color: '#9CA3AF', fontSize: 18, fontWeight: '300' }}>›</Text>
+        </TouchableOpacity>
+      );
+    };
+
+    return (
+      <>
+        <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="formSheet">
+          <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+            {/* Header */}
+            <View style={{
+              paddingTop: 16, paddingHorizontal: 16, paddingBottom: 12,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+              backgroundColor: '#F2F2F7',
+            }}>
+              <View style={{ width: 32 }} />
+              <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>
+                Modifier l'événement
+              </Text>
+              <TouchableOpacity onPress={onClose} hitSlop={12} style={{ width: 32, alignItems: 'flex-end' }}>
+                <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+              {/* Cover 4:1 cliquable (ouvre le cropper via pickAndUploadCover) */}
+              <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+                <TouchableOpacity
+                  onPress={pickAndUploadCover}
+                  disabled={coverBusy}
+                  activeOpacity={0.85}
+                  style={{
+                    aspectRatio: 4, borderRadius: 14, overflow: 'hidden',
+                    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+                    borderWidth: (coverImage || pendingCoverLocal) ? 0 : 1,
+                    borderStyle: 'dashed', borderColor: '#d9d4ec',
+                  }}
+                >
+                  {coverBusy ? (
+                    <ActivityIndicator color={C.primary} />
+                  ) : (coverImage || pendingCoverLocal) ? (
+                    <ExpoImage source={{ uri: pendingCoverLocal || coverImage }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                  ) : (
+                    <Text style={{ color: C.textSoft, fontSize: 13 }}>+ Ajouter une image de couverture</Text>
+                  )}
+                </TouchableOpacity>
+                {(coverImage || pendingCoverLocal) && !coverBusy && (
+                  <TouchableOpacity onPress={pickAndUploadCover} style={{ marginTop: 6 }}>
+                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
+                      Changer l'image
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* ───── GÉNÉRAL ───── */}
+              <Text style={sectionHeaderStyle}>GÉNÉRAL</Text>
+              <View style={sectionCardStyle}>
+                <SettingsRow label="Nom" value={name} onPress={() => setEditingField('name')} />
+                <View style={rowSeparatorStyle} />
+                <SettingsRow label="Type d'épreuve" value={eventType ? displayEventType(eventType) : ''} onPress={() => setEditingField('type')} />
+                <View style={rowSeparatorStyle} />
+                <SettingsRow label="Date" value={previewDate} onPress={() => setEditingField('date')} />
+              </View>
+
+              {/* ───── LIEU & CONTACT ───── */}
+              <Text style={sectionHeaderStyle}>LIEU & CONTACT</Text>
+              <View style={sectionCardStyle}>
+                <SettingsRow label="Lieu" value={previewLocation} onPress={() => setEditingField('location')} />
+                <View style={rowSeparatorStyle} />
+                <SettingsRow label="Téléphone" value={phone} onPress={() => setEditingField('phone')} />
+                <View style={rowSeparatorStyle} />
+                <SettingsRow label="Email contact" value={contact} onPress={() => setEditingField('email')} />
+                <View style={rowSeparatorStyle} />
+                <SettingsRow label="Site web" value={website} onPress={() => setEditingField('website')} />
+              </View>
+
+              {/* ───── DISTANCES ───── */}
+              <Text style={sectionHeaderStyle}>DISTANCES</Text>
+              <View style={sectionCardStyle}>
+                <SettingsRow label="Distances proposées" value={previewDistances} onPress={() => setEditingField('distances')} />
+              </View>
+            </ScrollView>
+          </View>
+          {renderCropModal()}
+
+          {/* ─── Sub-modal: Nom ─── */}
+          <SubModalInputText
+            visible={editingField === 'name'}
+            title="Nom de l'événement"
+            value={name}
+            onChangeText={setName}
+            placeholder="Ex : Trail des Violettes"
+            onClose={() => setEditingField(null)}
+            onSave={async () => {
+              if (!name?.trim()) { Alert.alert('Nom requis'); return; }
+              const ok = await savePartial({ name: name.trim() });
+              if (ok) setEditingField(null);
+            }}
+            busy={partialBusy}
+          />
+
+          {/* ─── Sub-modal: Type d'épreuve (save immediat sur tap) ─── */}
+          <Modal visible={editingField === 'type'} animationType="slide" onRequestClose={() => setEditingField(null)} presentationStyle="formSheet">
+            <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+              <View style={subModalHeader}>
+                <View style={{ width: 60 }} />
+                <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>Type d'épreuve</Text>
+                <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
+                  <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12, paddingBottom: 32 }}>
+                <View style={sectionCardStyle}>
+                  {types.map((t, idx) => {
+                    const active = eventType === t;
+                    return (
+                      <React.Fragment key={t}>
+                        <TouchableOpacity
+                          onPress={async () => {
+                            setEventType(t);
+                            const ok = await savePartial({ event_type: t });
+                            if (ok) setEditingField(null);
+                          }}
+                          disabled={partialBusy}
+                          style={[rowStyle, { paddingVertical: 16 }]}
+                        >
+                          <Text style={{ color: active ? C.primary : C.text, fontSize: 16, fontWeight: '500', flex: 1 }}>
+                            {displayEventType(t)}
+                          </Text>
+                          {active && (
+                            <Text style={{ color: C.primary, fontSize: 18, fontWeight: '700' }}>✓</Text>
+                          )}
+                        </TouchableOpacity>
+                        {idx < types.length - 1 && <View style={rowSeparatorStyle} />}
+                      </React.Fragment>
+                    );
+                  })}
+                </View>
+                {partialBusy && <ActivityIndicator color={C.primary} style={{ marginTop: 16 }} />}
+              </ScrollView>
+            </View>
+          </Modal>
+
+          {/* ─── Sub-modal: Date ─── */}
+          <Modal visible={editingField === 'date'} animationType="slide" onRequestClose={() => setEditingField(null)} presentationStyle="formSheet">
+            <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+              <View style={subModalHeader}>
+                <View style={{ width: 60 }} />
+                <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>Date</Text>
+                <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
+                  <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ flex: 1, alignItems: 'center', paddingTop: 16 }}>
+                <DateTimePicker
+                  value={eventDate || new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  minimumDate={new Date()}
+                  onChange={(_e, selected) => { if (selected) setEventDate(selected); }}
+                  locale="fr-FR"
+                  style={{ width: 320 }}
+                />
+              </View>
+              <TouchableOpacity
+                onPress={async () => {
+                  const date_str = eventDate ? eventDate.toISOString().slice(0, 10) : '';
+                  if (!date_str) { Alert.alert('Date requise'); return; }
+                  const ok = await savePartial({ event_date: date_str });
+                  if (ok) setEditingField(null);
+                }}
+                disabled={partialBusy}
+                style={[saveBtnStyle, { opacity: partialBusy ? 0.6 : 1 }]}
+              >
+                {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
+              </TouchableOpacity>
+            </View>
+          </Modal>
+
+          {/* ─── Sub-modal: Lieu (postalCode + city) ─── */}
+          <Modal visible={editingField === 'location'} animationType="slide" onRequestClose={() => setEditingField(null)}>
+            <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+              <View style={[subModalHeader, { paddingTop: 56 }]}>
+                <View style={{ width: 60 }} />
+                <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>Lieu</Text>
+                <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
+                  <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+                <Text style={sectionHeaderStyle}>CODE POSTAL</Text>
+                <View style={sectionCardStyle}>
+                  <TextInput
+                    value={postalCode}
+                    onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); if (v !== postalCode) setCity(''); }}
+                    keyboardType="number-pad"
+                    maxLength={5}
+                    placeholder="75001"
+                    placeholderTextColor="#9CA3AF"
+                    style={{ paddingVertical: 14, paddingHorizontal: 16, fontSize: 16, color: C.text }}
+                  />
+                </View>
+                <Text style={sectionHeaderStyle}>VILLE</Text>
+                <View style={sectionCardStyle}>
+                  <TextInput
+                    value={city}
+                    onChangeText={setCity}
+                    placeholder="Paris"
+                    placeholderTextColor="#9CA3AF"
+                    style={{ paddingVertical: 14, paddingHorizontal: 16, fontSize: 16, color: C.text }}
+                  />
+                </View>
+                {citySuggestions.length > 0 && !city && (
+                  <View style={[sectionCardStyle, { marginTop: 8 }]}>
+                    {citySuggestions.slice(0, 6).map((c, idx, arr) => (
+                      <React.Fragment key={c}>
+                        <TouchableOpacity onPress={() => { setCity(c); setCitySuggestions([]); }} style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
+                          <Text style={{ color: C.primary, fontSize: 15 }}>{c}</Text>
+                        </TouchableOpacity>
+                        {idx < arr.length - 1 && <View style={rowSeparatorStyle} />}
+                      </React.Fragment>
+                    ))}
+                  </View>
+                )}
+                <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 12, marginHorizontal: 32 }}>
+                  Format suggéré : Ville (Département)
+                </Text>
+              </ScrollView>
+              <View style={{ paddingBottom: editKbHeight }}>
+                <TouchableOpacity
+                  onPress={async () => {
+                    if (!city?.trim()) { Alert.alert('Ville requise'); return; }
+                    const loc = postalCode ? `${city} (${postalCode})` : city;
+                    const ok = await savePartial({ location: loc });
+                    if (ok) setEditingField(null);
+                  }}
+                  disabled={partialBusy}
+                  style={[saveBtnStyle, { marginBottom: editKbHeight > 0 ? 12 : 28, opacity: partialBusy ? 0.6 : 1 }]}
+                >
+                  {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
+          {/* ─── Sub-modal: Téléphone ─── */}
+          <SubModalInputText
+            visible={editingField === 'phone'}
+            title="Téléphone"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            placeholder="06 12 34 56 78"
+            onClose={() => setEditingField(null)}
+            onSave={async () => {
+              const v = (phone || '').trim();
+              if (v) {
+                const digits = v.replace(/[\s.\-]/g, '');
+                if (!/^(\+33\d{9}|0\d{9}|\+?\d{10,15})$/.test(digits)) {
+                  Alert.alert('Téléphone invalide', 'Format attendu : 06 12 34 56 78 ou +33...');
+                  return;
+                }
+              }
+              const ok = await savePartial({ phone: v });
+              if (ok) setEditingField(null);
+            }}
+            busy={partialBusy}
+          />
+
+          {/* ─── Sub-modal: Email ─── */}
+          <SubModalInputText
+            visible={editingField === 'email'}
+            title="Email contact"
+            value={contact}
+            onChangeText={setContact}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            placeholder="contact@event.com"
+            onClose={() => setEditingField(null)}
+            onSave={async () => {
+              if (!emailOk) { Alert.alert('Email invalide'); return; }
+              const ok = await savePartial({ contact: contact.trim() });
+              if (ok) setEditingField(null);
+            }}
+            busy={partialBusy}
+          />
+
+          {/* ─── Sub-modal: Site web ─── */}
+          <SubModalInputText
+            visible={editingField === 'website'}
+            title="Site web"
+            value={website}
+            onChangeText={setWebsite}
+            keyboardType="url"
+            autoCapitalize="none"
+            placeholder="traildesviolettes.fr"
+            onClose={() => setEditingField(null)}
+            onSave={async () => {
+              let v = (website || '').trim();
+              if (v && !/^https?:\/\//.test(v)) v = `https://${v}`;
+              const ok = await savePartial({ website: v });
+              if (ok) {
+                setWebsite(v);
+                setEditingField(null);
+              }
+            }}
+            busy={partialBusy}
+          />
+
+          {/* ─── Sub-modal: Distances ─── */}
+          <Modal visible={editingField === 'distances'} animationType="slide" onRequestClose={() => setEditingField(null)}>
+            <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+              <View style={[subModalHeader, { paddingTop: 56 }]}>
+                <View style={{ width: 60 }} />
+                <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>Distances</Text>
+                <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
+                  <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12, paddingBottom: 32, paddingHorizontal: 16 }} keyboardShouldPersistTaps="handled">
+                {distances.map((d, idx) => (
+                  <View key={idx} style={{ backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 10 }}>
+                    <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-end' }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: '#6B7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DISTANCE</Text>
+                        <TouchableOpacity onPress={() => setKmPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ color: d.km ? C.text : '#9CA3AF', fontSize: 14 }}>{d.km ? `${d.km} km` : '—'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: '#6B7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉPART</Text>
+                        <TouchableOpacity onPress={() => setTimePickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ color: d.time ? C.text : '#9CA3AF', fontSize: 14 }}>{d.time || '—'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <View style={{ flex: 1.2 }}>
+                        <Text style={{ color: '#6B7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉNIVELÉ</Text>
+                        <TouchableOpacity onPress={() => setElevPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ color: d.elevation ? C.text : '#9CA3AF', fontSize: 14 }}>{d.elevation || '—'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <TouchableOpacity onPress={() => removeDistance(idx)} style={{ alignSelf: 'flex-end', marginTop: 8 }}>
+                      <Text style={{ color: '#DC2626', fontSize: 12, fontWeight: '600' }}>Supprimer</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                <TouchableOpacity onPress={addDistance} style={{ paddingVertical: 14, alignItems: 'center', borderRadius: 14, backgroundColor: '#fff', marginTop: 4 }}>
+                  <Text style={{ color: C.primary, fontWeight: '600', fontSize: 15 }}>+ Ajouter une distance</Text>
+                </TouchableOpacity>
+              </ScrollView>
+              <View style={{ paddingBottom: editKbHeight }}>
+                <TouchableOpacity
+                  onPress={async () => {
+                    const cleaned = distances.filter(d => d.km).map(d => ({
+                      km: parseFloat(d.km) || 0,
+                      time: d.time || '',
+                      elevation: d.elevation || '',
+                    }));
+                    if (cleaned.length === 0) { Alert.alert('Au moins une distance requise'); return; }
+                    if (!cleaned.every(d => d.km > 0)) { Alert.alert('Distance > 0 requise pour chaque course'); return; }
+                    const ok = await savePartial({ distances: cleaned });
+                    if (ok) setEditingField(null);
+                  }}
+                  disabled={partialBusy}
+                  style={[saveBtnStyle, { marginBottom: editKbHeight > 0 ? 12 : 28, opacity: partialBusy ? 0.6 : 1 }]}
+                >
+                  {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+            {/* Pickers Km/Heure/Denivele rendus DANS la sub-modal Distances
+                pour qu'ils s'affichent au-dessus d'elle (iOS z-order). */}
+            {renderDistancePickers()}
+          </Modal>
+        </Modal>
+      </>
+    );
+  }
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -6190,7 +6984,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   );
 }
 
-function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos, refreshKey = 0 }) {
+function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos, onOpenOrgRole, refreshKey = 0 }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(null); // slug en cours de paiement
@@ -6273,17 +7067,58 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
 
   return (
     <RefreshableScrollView onRefresh={reload} style={s.scroll} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-      {/* Header avec icône profil + Hello */}
-      <View style={[s.headerRow, { paddingVertical: 12 }]}>
-        <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.8} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <Icon.User color="#c9beed" />
-          <Text style={[s.welcome, { color: '#c9beed', fontSize: 22 }]}>
-            Hello {session?.profile?.firstName}
-          </Text>
-        </TouchableOpacity>
+      {/* Header (avatar gauche | bloc orga/photo droit) avec titre centre
+          en absolute pour ne pas etre decale par la difference de largeur
+          entre l'avatar (40x40) et le bloc orga/photo (~92). Structure et
+          dimensions strictement identiques au header de PhotosScreen pour
+          que l'avatar reste alignement Y/X au pixel pres entre les 2 onglets. */}
+      <View style={[s.headerRow, { position: 'relative' }]}>
+        <View style={s.headerLeft}>
+          <TouchableOpacity
+            hitSlop={10}
+            onPress={onOpenProfile}
+            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+          >
+            <Icon.User size={30} color={C.pinkPill} />
+          </TouchableOpacity>
+        </View>
+        <View style={s.orgToggle}>
+          <TouchableOpacity
+            style={s.orgToggleBtn}
+            onPress={() => onOpenOrgRole?.('organizer')}
+            activeOpacity={0.7}
+            hitSlop={6}
+          >
+            <Icon.GearOrg size={22} color={C.pinkPill} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.orgToggleBtn}
+            onPress={() => onOpenOrgRole?.('photographer')}
+            activeOpacity={0.7}
+            hitSlop={6}
+          >
+            <Icon.CamOrg size={24} color={C.pinkPill} />
+          </TouchableOpacity>
+        </View>
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 0, right: 0,
+            // Match s.headerRow paddings (12 top / 4 bottom) pour que le
+            // centre vertical de l'overlay = centre vertical de l'avatar
+            // et du bloc orga/photo (qui sont dans la zone "content").
+            top: 12, bottom: 4,
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Text style={[s.welcome, { color: C.primary, fontSize: 17 }]}>Mes events</Text>
+        </View>
       </View>
 
-      <Text style={[s.pageTitleCenter, { textAlign: 'left' }]}>Mes events</Text>
+      {/* Marge verticale entre le header et le contenu (14px = meme marge
+          que la search bar de HomeScreen). */}
+      <View style={{ height: 14 }} />
 
       <TouchableOpacity
         onPress={onCreateEvent}
@@ -6854,6 +7689,7 @@ export default function App() {
                     onEditEvent={(e) => setEditEventTarget(e)}
                     onOpenProfile={() => setOrganizerProfileMenu(true)}
                     onOpenEventPhotos={(e) => setOrganizerEventPhotosTarget(e)}
+                    onOpenOrgRole={handlePickRole}
                     refreshKey={orgRefreshKey}
                   />
                 </View>
@@ -7044,18 +7880,16 @@ const s = StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   orgToggle: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(244, 166, 255, 0.3)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 999,
+    backgroundColor: 'rgba(244, 166, 255, 0.2)',
+    borderRadius: 16,
     padding: 4,
     alignItems: 'center',
     gap: 4,
   },
   orgToggleBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 999,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -7063,23 +7897,23 @@ const s = StyleSheet.create({
   welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 18, color: C.text, fontWeight: '700' },
   welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 18, marginBottom: 18 },
 
-  selfieDoneBanner: { backgroundColor: C.white, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16, borderWidth: 1, borderColor: C.primaryLight },
+  selfieDoneBanner: { backgroundColor: C.white, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16, borderWidth: 1, borderColor: C.primaryLight },
   selfieCheckCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F4A6FF', alignItems: 'center', justifyContent: 'center' },
   selfieDoneTitle: { fontWeight: '700', fontSize: 15, color: C.primary, fontFamily: 'AVEstiana', fontStyle: 'normal' },
   selfieDoneSub: { fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
   selfieDelete: { padding: 6 },
 
-  selfieCard: { borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginTop: 14, marginBottom: 14 },
+  selfieCard: { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginTop: 14, marginBottom: 14 },
   selfieTitle: { color: '#fff', fontSize: 24, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 28 },
   selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
-  selfieAvatar: { width: 68, height: 68, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  selfieAvatar: { width: 68, height: 68, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 
   eventPick: { backgroundColor: C.white, borderRadius: 14, padding: 14, marginTop: 8 },
   eventPickName: { fontWeight: '700', fontSize: 15, color: C.text },
   eventPickDate: { fontSize: 12, color: C.textSoft, marginTop: 2 },
 
   sectionTitle: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 22, fontWeight: '700', color: C.text },
-  pill: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: 18 },
+  pill: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: 12 },
   pillActive: { backgroundColor: C.primary },
   pillText: { color: C.primary, fontWeight: '600', fontSize: 13 },
   pillTextActive: { color: '#fff' },
