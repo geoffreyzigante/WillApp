@@ -1627,6 +1627,16 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       cooldownSec: 5,
       quality: "ultrahd",   // standard / hd / ultrahd / proraw
       format: "jpeg",       // jpeg / heic / dng
+      // Reglages photo — sync avec defaultGlobalConfig.capture cote worker.
+      // VisionCamera 4.x : seul `exposureCompensation` est applique aujourd'hui
+      // (prop `exposure`). Les autres sont lus mais pas appliques tant que
+      // VisionCamera ne les expose pas (a venir).
+      shutterSpeed: "auto",
+      iso: "auto",
+      aperture: "auto",
+      focus: "continuous",
+      whiteBalance: "auto",
+      exposureCompensation: 0, // -2..+2 EV par pas de 0.5
     },
     faceDetection: {
       confidenceThreshold: 0.7,
@@ -1667,6 +1677,19 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     if (modes.includes('standard')) return 'standard';
     return 'off';
   }, [format]);
+
+  // Compensation d'exposition : VisionCamera 4.x expose la prop `exposure` (number)
+  // dans l'intervalle device.minExposure..device.maxExposure (EV bias). On clamp
+  // pour eviter de planter sur un device dont la plage est plus etroite que -2..+2.
+  // shutterSpeed / iso / whiteBalance / focus / aperture ne sont PAS encore exposes
+  // par VisionCamera : ces valeurs sont lues mais inertes (a venir).
+  const cameraExposure = useMemo(() => {
+    const raw = Number(eventConfig.capture?.exposureCompensation);
+    if (!Number.isFinite(raw) || raw === 0) return undefined;
+    const minE = typeof device?.minExposure === 'number' ? device.minExposure : -8;
+    const maxE = typeof device?.maxExposure === 'number' ? device.maxExposure : 8;
+    return Math.max(minE, Math.min(maxE, raw));
+  }, [device, eventConfig.capture?.exposureCompensation]);
   const proRawEnabled = !!device?.supportsRawCapture && !!format?.supportsPhotoHdr;
 
   // Map capture.quality → photoQualityBalance Vision Camera
@@ -2443,6 +2466,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         photoQualityBalance={photoQualityBalance}
         photoHdr={photoHdrEnabled}
         videoStabilizationMode={videoStabilizationMode}
+        exposure={cameraExposure}
         enableLocation={false}
       />
 
