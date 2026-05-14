@@ -1633,15 +1633,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       toleranceMs: 500,       // fenetre de tolerance perte de visage
       quality: "ultrahd",   // standard / hd / ultrahd / proraw
       format: "jpeg",       // jpeg / heic / dng
-      // Reglages photo — sync avec defaultGlobalConfig.capture cote worker.
-      // VisionCamera 4.x : seul `exposureCompensation` est applique aujourd'hui
-      // (prop `exposure`). Les autres sont lus mais pas appliques tant que
-      // VisionCamera ne les expose pas (a venir).
-      shutterSpeed: "auto",
-      iso: "auto",
+      videoResolution: "hd",   // hd (1920x1080) / 4k (3840x2160) — contrainte useCameraFormat
+      // Reglages photo cablables cote VisionCamera 4.x : focus (continu par
+      // defaut, locked declenche un warning car la prop n'est pas exposee en JS)
+      // et exposureCompensation (prop `exposure`, mappe device.min/max).
+      // shutterSpeed / iso / whiteBalance retires : non exposes par VisionCamera 4.x.
       aperture: "auto",
       focus: "continuous",
-      whiteBalance: "auto",
       exposureCompensation: 0, // -2..+2 EV par pas de 0.5
     },
     faceDetection: {
@@ -1666,15 +1664,35 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   }, []);
 
   // 4:3 prioritaire pour matcher la preview portrait (3:4) sans bandes noires
-  // ni crop -> on voit tout ce que le capteur capture. videoResolution max
-  // pour la meilleure qualite snapshot (takeSnapshot lit le buffer video).
-  // 30fps pour garder MLKit fluide.
+  // ni crop -> on voit tout ce que le capteur capture. videoResolution pilote
+  // depuis la config admin (hd 1080p par defaut, 4k optionnel) — takeSnapshot
+  // lit le buffer video donc la resolution snapshot suit. 30fps pour MLKit fluide.
+  const targetVideoResolution = useMemo(() => {
+    const v = eventConfig?.capture?.videoResolution ?? 'hd';
+    return v === '4k'
+      ? { width: 3840, height: 2160 }
+      : { width: 1920, height: 1080 };
+  }, [eventConfig?.capture?.videoResolution]);
+
   const format = useCameraFormat(device, [
     { videoAspectRatio: 4 / 3 },
-    { videoResolution: 'max' },
+    { videoResolution: targetVideoResolution },
     { fps: 30 },
   ]);
   const cameraRef = useRef(null);
+
+  // VisionCamera 4.x ne propose pas de prop `enableContinuousAutoFocus` ou
+  // equivalent en JS RN : le focus continu est actif par defaut, et seul un
+  // focus ponctuel imperatif `camera.focus({x,y})` est expose. Si l'admin
+  // demande `locked`, on ne peut que le logger — le focus reste continu.
+  useEffect(() => {
+    const focusMode = eventConfig?.capture?.focus;
+    if (focusMode === 'locked') {
+      console.warn(
+        '[camera] capture.focus="locked" demande mais VisionCamera 4.x ne le supporte pas en JS RN ; focus continu maintenu.'
+      );
+    }
+  }, [eventConfig?.capture?.focus]);
 
   const videoStabilizationMode = useMemo(() => {
     const modes = format?.videoStabilizationModes || [];
@@ -1687,8 +1705,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // Compensation d'exposition : VisionCamera 4.x expose la prop `exposure` (number)
   // dans l'intervalle device.minExposure..device.maxExposure (EV bias). On clamp
   // pour eviter de planter sur un device dont la plage est plus etroite que -2..+2.
-  // shutterSpeed / iso / whiteBalance / focus / aperture ne sont PAS encore exposes
-  // par VisionCamera : ces valeurs sont lues mais inertes (a venir).
+  // focus / aperture ne sont PAS exposes en JS RN par VisionCamera 4.x :
+  // ces valeurs sont lues mais inertes (focus continu par defaut natif).
   const cameraExposure = useMemo(() => {
     const raw = Number(eventConfig.capture?.exposureCompensation);
     if (!Number.isFinite(raw) || raw === 0) return undefined;
