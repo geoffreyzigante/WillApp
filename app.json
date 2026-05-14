@@ -79,7 +79,8 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-secure-store"
+      "expo-secure-store",
+      "./plugins/with-fast-shutter"
     ]
   }
 }
