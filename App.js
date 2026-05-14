@@ -1749,6 +1749,49 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       `${String(d.getMilliseconds()).padStart(3, '0')}`;
     setDebugLogs(prev => [`${t} — ${msg}`, ...prev].slice(0, 10));
   }, []);
+
+  // === Instrumentation cadence (mesure perf reelle MLKit + capture + queue) ===
+  // mlkitFps : fps moyen MLKit sur la derniere fenetre de 30 frames (mis a jour
+  // toutes les 30 frames depuis le worklet via runOnJS).
+  // captureFps : photos/s moyen sur la derniere fenetre de 30 photos (mis a jour
+  // toutes les 30 photos dans captureOne).
+  // Les compteurs frame/photo persistent entre updates ; lastTs = timestamp de la
+  // 1ere frame/photo de la fenetre courante.
+  // Worklets ne capture pas correctement les `let` locaux a un closure JS quand
+  // le worklet est recree (chaque hook). On utilise donc des SharedValues stables
+  // (createSharedValue) accessibles depuis le worklet et depuis JS.
+  const mlkitCountersRef = useRef(null);
+  if (mlkitCountersRef.current === null) {
+    mlkitCountersRef.current = {
+      frameCount: Worklets.createSharedValue(0),
+      windowStart: Worklets.createSharedValue(0),
+    };
+  }
+  const mlkitFrameCountSV = mlkitCountersRef.current.frameCount;
+  const mlkitWindowStartSV = mlkitCountersRef.current.windowStart;
+  const [mlkitFps, setMlkitFps] = useState(0);
+  const [captureFps, setCaptureFps] = useState(0);
+  const captureWindowStartRef = useRef(0);
+  const captureWindowCountRef = useRef(0);
+  // Toggle "Mode test (capture sans upload)" : capture continue mais photo
+  // supprimee immediatement apres takeSnapshot (pas d'enqueue, pas d'upload).
+  // Ref pour acces synchrone depuis captureOne, state pour le rendu UI.
+  const testNoUploadRef = useRef(false);
+  const [testNoUpload, setTestNoUpload] = useState(false);
+  const setTestNoUploadBoth = useCallback((v) => {
+    testNoUploadRef.current = !!v;
+    setTestNoUpload(!!v);
+  }, []);
+  // Push MLKit fps depuis le worklet (toutes les 30 frames).
+  const onMlkitWindowJS = useMemo(
+    () => Worklets.createRunOnJS((frames, elapsedMs) => {
+      const fps = elapsedMs > 0 ? Math.round((frames * 1000) / elapsedMs) : 0;
+      const m = `[mlkit] ${frames} frames in ${elapsedMs}ms (${fps} fps)`;
+      console.log(m); addDebugLog(m);
+      setMlkitFps(fps);
+    }),
+    [addDebugLog],
+  );
   // Mode auto-capture pour le rendu du bouton. true => label "Stop", bg rouge.
   // Mirror state du isAutoArmedRef pour declencher les re-render.
   const [isAutoArmed, setIsAutoArmed] = useState(false);
@@ -1947,6 +1990,21 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
+    // Compteur cadence MLKit : on incremente sur chaque frame, on logue toutes
+    // les 30 frames via runOnJS. Utilise des SharedValues pour persister entre
+    // executions du worklet (les `let` locaux seraient reset a chaque call).
+    const nowMs = Date.now();
+    if (mlkitWindowStartSV.value === 0) {
+      mlkitWindowStartSV.value = nowMs;
+    }
+    mlkitFrameCountSV.value = mlkitFrameCountSV.value + 1;
+    if (mlkitFrameCountSV.value >= 30) {
+      const elapsed = nowMs - mlkitWindowStartSV.value;
+      onMlkitWindowJS(mlkitFrameCountSV.value, elapsed);
+      mlkitFrameCountSV.value = 0;
+      mlkitWindowStartSV.value = nowMs;
+    }
+
     const faces = detectFaces(frame);
     const fW = frame.width;
     const fH = frame.height;
@@ -1985,7 +2043,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       };
     });
     onFacesDetectedJS(facesData);
-  }, [detectFaces, onFacesDetectedJS, zonePct, zonePosition, TRIGGER_VPCT]);
+  }, [detectFaces, onFacesDetectedJS, zonePct, zonePosition, TRIGGER_VPCT, onMlkitWindowJS, mlkitFrameCountSV, mlkitWindowStartSV]);
 
   const NO_FACE_TIMEOUT_MS = 500;
   const INTER_PHOTO_MS = 100; // ~5 photos/sec, optimum vitesse/utilité
@@ -2409,6 +2467,26 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       const photoEnd = Date.now();
       const m = `[capture] photo taken @ +${photoEnd - burstTs}ms (#${idx + 1} of session, takeSnapshot: ${photoEnd - photoStart}ms)`;
       console.log(m); addDebugLog(m);
+
+      // Compteur cadence : log toutes les 30 photos prises (toute session
+      // confondue, peu importe le mode test ou normal). Permet de mesurer
+      // la cadence reelle de la chaine de capture sans la moyenner sur une
+      // session entiere (la cadence varie selon thermal/cpu/zoom).
+      if (captureWindowStartRef.current === 0) {
+        captureWindowStartRef.current = photoEnd;
+      }
+      captureWindowCountRef.current += 1;
+      if (captureWindowCountRef.current >= 30) {
+        const elapsed = photoEnd - captureWindowStartRef.current;
+        const fps = elapsed > 0
+          ? Math.round((captureWindowCountRef.current * 1000) / elapsed * 10) / 10
+          : 0;
+        const cm = `[cadence] ${captureWindowCountRef.current} photos en ${elapsed}ms (${fps} photos/s)`;
+        console.log(cm); addDebugLog(cm);
+        if (isMountedRef.current) setCaptureFps(fps);
+        captureWindowCountRef.current = 0;
+        captureWindowStartRef.current = photoEnd;
+      }
     } catch (e) {
       console.warn('takeSnapshot', e);
     }
@@ -2417,6 +2495,18 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     setIsShooting(false);
 
     if (photo) {
+      // Mode test (capture sans upload) : on supprime le fichier temporaire
+      // immediatement et on n'enqueue rien. Comptabilise quand meme dans la
+      // cadence ci-dessus (mesure isolee du goulot upload).
+      if (testNoUploadRef.current) {
+        try {
+          const p = photo.path?.startsWith('file://') ? photo.path : `file://${photo.path}`;
+          new File(p).delete();
+        } catch {}
+        if (isMountedRef.current) setPhotoCount(c => c + 1);
+        return;
+      }
+
       const d = new Date();
       const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
       const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
@@ -2762,7 +2852,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           })}
         </View>
 
-        {/* ─── DEBUG OVERLAY (temporaire) : 10 derniers logs [capture].
+        {/* ─── DEBUG OVERLAY (temporaire) : stats temps reel + 10 derniers logs.
             Position absolute juste au-dessus du footer noir. Toggle via le
             bouton DEBUG du header. A retirer une fois la latence fixee. ─── */}
         {showDebug && (
@@ -2773,13 +2863,48 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               bottom: Math.max(0, winH - (CAMERA_TOP + previewH)) + 8,
               left: '5%',
               right: '5%',
-              maxHeight: 200,
+              maxHeight: 240,
               backgroundColor: 'rgba(0,0,0,0.7)',
               borderRadius: 8,
               padding: 8,
               zIndex: 20,
             }}
           >
+            {/* Stats temps reel : MLKit fps, capture photos/s, queue size, mode test. */}
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              paddingBottom: 6,
+              marginBottom: 6,
+              borderBottomWidth: 1,
+              borderBottomColor: 'rgba(255,255,255,0.18)',
+            }}>
+              <Text style={{
+                color: '#fff', fontSize: 11, lineHeight: 13,
+                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              }}>
+                mlkit {mlkitFps} fps
+              </Text>
+              <Text style={{
+                color: '#fff', fontSize: 11, lineHeight: 13,
+                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              }}>
+                capt {captureFps} ph/s
+              </Text>
+              <Text style={{
+                color: '#fff', fontSize: 11, lineHeight: 13,
+                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              }}>
+                queue {queueStats.total}
+              </Text>
+              <Text style={{
+                color: testNoUpload ? '#F59E0B' : 'rgba(255,255,255,0.45)',
+                fontSize: 11, lineHeight: 13,
+                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              }}>
+                {testNoUpload ? 'TEST' : 'live'}
+              </Text>
+            </View>
             <ScrollView>
               {debugLogs.length === 0 ? (
                 <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, lineHeight: 12 }}>
@@ -2909,6 +3034,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         onRetryAll={retryAllFailed}
         onDeleteItem={deleteQueueItem}
         onForceItem={forceUploadItem}
+        testNoUpload={testNoUpload}
+        onSetTestNoUpload={setTestNoUploadBoth}
         onLogout={() => {
           setShowSessionModal(false);
           Alert.alert(
@@ -2925,7 +3052,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   );
 }
 
-function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats, onRetryAll, onDeleteItem, onForceItem, onLogout }) {
+function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats, onRetryAll, onDeleteItem, onForceItem, onLogout, testNoUpload, onSetTestNoUpload }) {
   // Réfresh à chaque ouverture : queueRef.current peut muter sans déclencher de re-render
   const items = visible ? (queueItems || []) : [];
   // Tri : plus récents en premier
@@ -2996,6 +3123,50 @@ function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats
             </Svg>
           </TouchableOpacity>
         </View>
+
+        {/* Toggle "Mode test (capture sans upload)" — diagnostic perf.
+            Discret : rangee unique 36px, fond legerement plus clair que le
+            modal, switch standard a droite. Pas d'icone ni de fioriture. */}
+        {typeof onSetTestNoUpload === 'function' && (
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => onSetTestNoUpload(!testNoUpload)}
+            style={{
+              marginHorizontal: 16,
+              marginTop: 10,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              borderRadius: 10,
+              backgroundColor: 'rgba(255,255,255,0.05)',
+              borderWidth: 1,
+              borderColor: testNoUpload ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.08)',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
+                Mode test (capture sans upload)
+              </Text>
+              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2 }}>
+                Photos supprimees apres capture. Sert a mesurer la cadence sans le goulot upload.
+              </Text>
+            </View>
+            <View style={{
+              width: 36, height: 20, borderRadius: 10,
+              backgroundColor: testNoUpload ? '#F59E0B' : 'rgba(255,255,255,0.18)',
+              justifyContent: 'center',
+              paddingHorizontal: 2,
+            }}>
+              <View style={{
+                width: 16, height: 16, borderRadius: 8,
+                backgroundColor: '#fff',
+                transform: [{ translateX: testNoUpload ? 16 : 0 }],
+              }} />
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Grille thumbnails */}
         {sorted.length === 0 ? (
