@@ -7528,6 +7528,32 @@ export default function App() {
     }
   }, []);
 
+  // Refetch automatique du selfie depuis R2 quand un runner est connecte mais
+  // qu'on n'a pas (ou plus) son URI local. Couvre 2 cas :
+  //  - Login fresh sur un compte qui a deja un selfie en R2 (re-login mobile,
+  //    nouveau device, AsyncStorage vide apres logout).
+  //  - Boot de l'app avec session restoree depuis SecureStore mais selfie
+  //    AsyncStorage absent.
+  // Idempotent : early-return si selfieUri deja set, donc pas de boucle.
+  useEffect(() => {
+    const token = runnerSession?.token;
+    if (!token || selfieUri) return;
+    let cancelled = false;
+    fetch(`${API_URL}/runner/selfie`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled) return;
+        if (data?.exists && data?.uri) {
+          setSelfieUri(data.uri);
+          AsyncStorage.setItem('@will_selfie', data.uri).catch(() => {});
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [runnerSession?.token, selfieUri]);
+
   const requireAuth = useCallback((action) => {
     if (runnerSession) {
       action();
