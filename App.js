@@ -1831,9 +1831,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const [selectedKm, setSelectedKm] = useState(0);
   const distances = Array.isArray(session?.event?.distances) ? session.event.distances : [];
   const hasDistances = distances.length > 0;
-  const maxKm = hasDistances
-    ? Math.max(...distances.map(d => parseFloat(d.km) || 0).filter(n => n > 0), 50)
-    : 50;
+  // Course "Toutes" : ceiling = plus longue distance de l'event (pas un floor
+  // arbitraire). Course choisie : ceiling = sa distance. Fallback 50 km si
+  // aucune distance valide (event mal configure).
+  const validKms = distances.map(d => parseFloat(d.km) || 0).filter(n => n > 0);
+  const maxKm = validKms.length > 0 ? Math.max(...validKms) : 50;
   const kmCeiling = selectedRace
     ? Math.ceil(parseFloat(selectedRace.km) || maxKm)
     : Math.ceil(maxKm);
