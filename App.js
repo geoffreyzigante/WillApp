@@ -605,7 +605,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, favorites, onToggleFavorite, onRefresh }) {
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, favorites, onToggleFavorite, onRefresh, runnerFirstName }) {
   const [searchQuery, setSearchQuery] = useState('');
   const tabFiltered = events.filter(e => {
     if (tab === 'upcoming') return isUpcoming(e.event_date);
@@ -649,8 +649,16 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             )}
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-            <Text style={[s.welcome, { color: '#c9beed', fontSize: 17 }]} numberOfLines={1}>Bienvenue sur </Text>
-            <Icon.Logo width={36} color="#c9beed" />
+            {runnerFirstName ? (
+              <Text style={[s.welcome, { color: '#c9beed', fontSize: 17 }]} numberOfLines={1}>
+                Hello {runnerFirstName}
+              </Text>
+            ) : (
+              <>
+                <Text style={[s.welcome, { color: '#c9beed', fontSize: 17 }]} numberOfLines={1}>Bienvenue sur </Text>
+                <Icon.Logo width={36} color="#c9beed" />
+              </>
+            )}
           </View>
         </View>
         <View style={s.orgToggle}>
@@ -7896,6 +7904,7 @@ export default function App() {
                   favorites={favorites}
                   onToggleFavorite={(code) => requireAuth(() => toggleFavorite(code))}
                   onRefresh={reloadEvents}
+                  runnerFirstName={runnerSession?.profile?.firstName}
                 />
               </View>
               <View style={{ width: SCREEN_W }}>
