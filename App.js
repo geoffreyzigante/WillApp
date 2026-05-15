@@ -7727,7 +7727,19 @@ export default function App() {
     Alert.alert('Supprimer le selfie ?', 'Tu pourras en reprendre un nouveau.', [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Supprimer', style: 'destructive', onPress: async () => {
-        // RGPD : supprimer le selfie révoque aussi le consentement biométrique
+        // 1. Supprime le selfie cote serveur en premier. Sinon le useEffect
+        //    refetch (GET /runner/selfie) restaurerait la pastille verte
+        //    instantanement apres le clear local.
+        const token = runnerSession?.token;
+        if (token) {
+          try {
+            await fetch(`${API_URL}/runner/selfie`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } catch (e) { console.warn('delete selfie', e?.message); }
+        }
+        // 2. Clear local. RGPD : revoque aussi le consentement biometrique.
         await Promise.all([
           AsyncStorage.removeItem('@will_selfie'),
           Secure.removeItem(BIOMETRIC_CONSENT_KEY),
@@ -7735,7 +7747,7 @@ export default function App() {
         setSelfieUri(null);
       }},
     ]);
-  }, []);
+  }, [runnerSession]);
 
   const handlePickRole = (role) => {
     setOrgModal(false);
