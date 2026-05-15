@@ -33,16 +33,17 @@ const SEARCH = `    if device.isExposureModeSupported(.continuousAutoExposure) {
       device.exposureMode = .continuousAutoExposure
     }`;
 
-const REPLACE = `    // ${MARKER} Force exposureDuration to 1/1000s strict, ISO auto.
-    // VisionCamera 4.x patched at prebuild to freeze action shots.
+const REPLACE = `    // ${MARKER} Force exposureDuration to 1/1000s strict, ISO auto,
+    // BACK camera only. Front camera (selfie) keeps continuousAutoExposure
+    // because 1/1000s indoor without flash produces dark selfies.
     if device.isExposurePointOfInterestSupported {
       device.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
     }
-    if device.isExposureModeSupported(.custom) {
+    if device.position == .back && device.isExposureModeSupported(.custom) {
       device.exposureMode = .custom
       let fastShutter = CMTime(value: 1, timescale: 1000)
       device.setExposureModeCustom(duration: fastShutter, iso: AVCaptureDevice.currentISO) { _ in }
-      print("[FastShutter] exposureDuration forced to 1/1000s")
+      print("[FastShutter] exposureDuration forced to 1/1000s on back camera")
     } else if device.isExposureModeSupported(.continuousAutoExposure) {
       device.exposureMode = .continuousAutoExposure
     }`;
