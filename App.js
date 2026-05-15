@@ -2109,9 +2109,16 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     (async () => {
       ensurePendingDir();
       const arr = await loadUploadQueue();
+      // Photos d'un autre event (ou sans eventCode) : on les purge silencieusement
+      // pour eviter qu'un photographe qui change d'event voie l'ancienne session.
+      const currentEvent = session?.event?.code;
       const cleaned = [];
+      const orphans = [];
       for (const it of arr) {
-        // file:// → strip
+        if (it.eventCode !== currentEvent) {
+          orphans.push(it);
+          continue;
+        }
         const fileExists = (() => {
           try { return new File(it.localUri).exists; } catch { return false; }
         })();
@@ -2119,6 +2126,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         // recovery: tout 'uploading' redevient 'pending'
         if (it.status === 'uploading') cleaned.push({ ...it, status: 'pending' });
         else cleaned.push(it);
+      }
+      // Suppression des fichiers physiques des orphelins (espace disque).
+      for (const o of orphans) {
+        try { new File(o.localUri).delete(); } catch {}
       }
       if (!alive) return;
       await commitQueue(cleaned);
@@ -7809,8 +7820,12 @@ export default function App() {
             // Bouton retour : sort du mode sans effacer la session — le
             // photographe peut revenir avec un seul tap (pas de re-saisie mdp).
             onExit={() => setInPhotographerMode(false)}
-            // Vraie déconnexion : efface la session SecureStore.
-            onLogout={() => {
+            // Vraie déconnexion : efface la session SecureStore + queue locale.
+            // Au prochain login (meme event ou autre), la galerie repart vide :
+            // les photos uploadees restent consultables via le dashboard orga.
+            onLogout={async () => {
+              try { await AsyncStorage.multiRemove([UPLOAD_QUEUE_KEY, LAST_CAPTURE_KEY]); } catch {}
+              try { const d = pendingDir(); if (d.exists) d.delete(); } catch {}
               setSession(null);
               setInPhotographerMode(false);
               Secure.removeItem('@will_photographer_session').catch(() => {});
