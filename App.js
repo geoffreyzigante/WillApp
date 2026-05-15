@@ -2730,24 +2730,49 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             ) : null}
           </View>
 
-          {/* Bouton DEBUG (toggle overlay logs [capture]). Largeur ~46 pour
-              equilibrer la fleche retour a gauche et garder le titre centre.
-              Temporaire — a retirer une fois la latence fixee. */}
-          <TouchableOpacity
-            onPress={() => setShowDebug(s => !s)}
-            hitSlop={10}
-            style={{
-              paddingHorizontal: 8, height: 28, borderRadius: 14,
-              backgroundColor: showDebug ? 'rgba(239,68,68,0.55)' : 'rgba(255,255,255,0.12)',
-              alignItems: 'center', justifyContent: 'center',
-              opacity: showDebug ? 1 : 0.5,
-              minWidth: 46,
-            }}
-          >
-            <Text style={{
-              color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.8,
-            }}>DEBUG</Text>
-          </TouchableOpacity>
+          {/* Cluster a droite : Deconnexion (icone power) + LOGS (toggle overlay).
+              Le titre flex:1 reste a peu pres centre malgre l'asymetrie. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert(
+                  'Se déconnecter ?',
+                  'Tu devras saisir à nouveau le mot de passe pour reprendre ton événement.',
+                  [
+                    { text: 'Annuler', style: 'cancel' },
+                    { text: 'Déconnexion', style: 'destructive', onPress: onLogout },
+                  ],
+                  { cancelable: true }
+                );
+              }}
+              hitSlop={10}
+              style={{
+                width: 28, height: 28, borderRadius: 14,
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                <Path d="M12 2v10" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+                <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+              </Svg>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowDebug(s => !s)}
+              hitSlop={10}
+              style={{
+                paddingHorizontal: 8, height: 28, borderRadius: 14,
+                backgroundColor: showDebug ? 'rgba(239,68,68,0.55)' : 'rgba(255,255,255,0.12)',
+                alignItems: 'center', justifyContent: 'center',
+                opacity: showDebug ? 1 : 0.5,
+                minWidth: 42,
+              }}
+            >
+              <Text style={{
+                color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.8,
+              }}>LOGS</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Row 2 : pill statut + pill compteur photo, centrés sous le titre */}
@@ -2881,9 +2906,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           })}
         </View>
 
-        {/* ─── DEBUG OVERLAY (temporaire) : stats temps reel + 10 derniers logs.
-            Position absolute juste au-dessus du footer noir. Toggle via le
-            bouton DEBUG du header. A retirer une fois la latence fixee. ─── */}
+        {/* ─── LOGS OVERLAY (temporaire) : toggle mode test + stats + 10 derniers
+            logs. Position absolute juste au-dessus du footer noir. Toggle via
+            le bouton LOGS du header. A retirer une fois la latence fixee. ─── */}
         {showDebug && (
           <View
             pointerEvents="box-none"
@@ -2892,13 +2917,52 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               bottom: Math.max(0, winH - (CAMERA_TOP + previewH)) + 8,
               left: '5%',
               right: '5%',
-              maxHeight: 240,
+              maxHeight: 320,
               backgroundColor: 'rgba(0,0,0,0.7)',
               borderRadius: 8,
               padding: 8,
               zIndex: 20,
             }}
           >
+            {/* Toggle Mode test (capture sans upload) — diagnostic perf. */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setTestNoUploadBoth(!testNoUpload)}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                borderRadius: 6,
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                borderWidth: 1,
+                borderColor: testNoUpload ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.08)',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 8,
+              }}
+            >
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
+                  Mode test (capture sans upload)
+                </Text>
+                <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 }}>
+                  Photos supprimees apres capture. Sert a mesurer la cadence sans le goulot upload.
+                </Text>
+              </View>
+              <View style={{
+                width: 32, height: 18, borderRadius: 9,
+                backgroundColor: testNoUpload ? '#F59E0B' : 'rgba(255,255,255,0.18)',
+                justifyContent: 'center',
+                paddingHorizontal: 2,
+              }}>
+                <View style={{
+                  width: 14, height: 14, borderRadius: 7,
+                  backgroundColor: '#fff',
+                  transform: [{ translateX: testNoUpload ? 14 : 0 }],
+                }} />
+              </View>
+            </TouchableOpacity>
+
             {/* Stats temps reel : MLKit fps, capture photos/s, queue size, mode test. */}
             <View style={{
               flexDirection: 'row',
@@ -3063,25 +3127,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         onRetryAll={retryAllFailed}
         onDeleteItem={deleteQueueItem}
         onForceItem={forceUploadItem}
-        testNoUpload={testNoUpload}
-        onSetTestNoUpload={setTestNoUploadBoth}
-        onLogout={() => {
-          setShowSessionModal(false);
-          Alert.alert(
-            'Se déconnecter ?',
-            'Tu devras saisir à nouveau le mot de passe pour reprendre ton événement.',
-            [
-              { text: 'Annuler', style: 'cancel' },
-              { text: 'Se déconnecter', style: 'destructive', onPress: onLogout },
-            ],
-          );
-        }}
       />
     </View>
   );
 }
 
-function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats, onRetryAll, onDeleteItem, onForceItem, onLogout, testNoUpload, onSetTestNoUpload }) {
+function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats, onRetryAll, onDeleteItem, onForceItem }) {
   // Réfresh à chaque ouverture : queueRef.current peut muter sans déclencher de re-render
   const items = visible ? (queueItems || []) : [];
   // Tri : plus récents en premier
@@ -3153,58 +3204,12 @@ function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats
           </TouchableOpacity>
         </View>
 
-        {/* Toggle "Mode test (capture sans upload)" — diagnostic perf.
-            Discret : rangee unique 36px, fond legerement plus clair que le
-            modal, switch standard a droite. Pas d'icone ni de fioriture. */}
-        {typeof onSetTestNoUpload === 'function' && (
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => onSetTestNoUpload(!testNoUpload)}
-            style={{
-              marginHorizontal: 16,
-              marginTop: 10,
-              paddingHorizontal: 14,
-              paddingVertical: 10,
-              borderRadius: 10,
-              backgroundColor: 'rgba(255,255,255,0.05)',
-              borderWidth: 1,
-              borderColor: testNoUpload ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.08)',
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
-                Mode test (capture sans upload)
-              </Text>
-              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2 }}>
-                Photos supprimees apres capture. Sert a mesurer la cadence sans le goulot upload.
-              </Text>
-            </View>
-            <View style={{
-              width: 36, height: 20, borderRadius: 10,
-              backgroundColor: testNoUpload ? '#F59E0B' : 'rgba(255,255,255,0.18)',
-              justifyContent: 'center',
-              paddingHorizontal: 2,
-            }}>
-              <View style={{
-                width: 16, height: 16, borderRadius: 8,
-                backgroundColor: '#fff',
-                transform: [{ translateX: testNoUpload ? 16 : 0 }],
-              }} />
-            </View>
-          </TouchableOpacity>
-        )}
-
         {/* Grille thumbnails */}
         {sorted.length === 0 ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
             <Text style={{ color: 'rgba(255,255,255,0.6)', textAlign: 'center', fontSize: 13 }}>
-              Aucune photo en attente locale.{'\n'}
-              {uploadedCount > 0
-                ? `${uploadedCount} photo${uploadedCount > 1 ? 's ont' : ' a'} déjà été upload${uploadedCount > 1 ? 'ées' : 'ée'} (le fichier local est supprimé après l'envoi).`
-                : 'Lance la détection avec GO ! pour capturer des coureurs.'}
+              Aucune photo capturée pour le moment.
+              {uploadedCount > 0 ? `\n${uploadedCount} déjà uploadée${uploadedCount > 1 ? 's' : ''} (consultables sur le dashboard).` : ''}
             </Text>
           </View>
         ) : (
@@ -3282,23 +3287,6 @@ function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats
           )}
         </View>
 
-        {/* Bouton "Se déconnecter" : vraie purge de la session photographe.
-            Distinct du retour (flèche header) qui sort sans effacer le mdp. */}
-        {onLogout && (
-          <TouchableOpacity
-            onPress={onLogout}
-            style={{
-              position: 'absolute', bottom: 90, alignSelf: 'center',
-              paddingHorizontal: 18, paddingVertical: 10, borderRadius: 999,
-              backgroundColor: 'rgba(239,68,68,0.18)',
-              borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)',
-            }}
-          >
-            <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '700', letterSpacing: 0.3 }}>
-              Se déconnecter
-            </Text>
-          </TouchableOpacity>
-        )}
       </View>
     </Modal>
   );
