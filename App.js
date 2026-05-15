@@ -7541,7 +7541,9 @@ export default function App() {
     const lastEmail = runnerSession?.profile?.email;
     if (lastEmail) AsyncStorage.setItem('@will_last_email_runner', lastEmail).catch(() => {});
     setRunnerSession(null);
+    setSelfieUri(null);
     Secure.removeItem('@will_runner').catch(() => {});
+    AsyncStorage.removeItem('@will_selfie').catch(() => {});
   }, [runnerSession]);
 
   const handleOrganizerAuthSuccess = useCallback((session) => {
