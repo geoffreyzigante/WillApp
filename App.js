@@ -198,16 +198,17 @@ const C = {
   shadow: 'rgba(123, 47, 255, 0.08)',
 };
 
-// Palette vivace synchronisée avec dashboard (src/orga/pages/EventCard.js
-// → TYPE_TINTS). Toute modification doit être répercutée des deux côtés.
+// Palette arc-en-ciel synchronisée avec dashboard (src/orga/pages/EventCard.js
+// → TYPE_TINTS) et landing (will-app.com section "Pour qui"). Toute
+// modification doit être répercutée sur les trois surfaces.
 const TYPE_COLORS = {
-  Trail: '#10B981',
-  'Course sur route': '#0EA5E9',
-  Cross: '#06B6D4',
-  Triathlon: '#F43F5E',
-  Velo: '#8B5CF6',
+  Trail: '#22C55E',
+  'Course sur route': '#3B82F6',
+  Cross: '#A855F7',
+  Triathlon: '#6366F1',
+  Velo: '#F97316',
   Marche: '#EAB308',
-  Autre: '#7B2FFF',
+  Autre: '#EF4444',
 };
 
 // Label affiché pour event_type ; la valeur stockée reste sans accent ("Velo").
