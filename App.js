@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  AppState,
+  AppState, Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -198,14 +198,16 @@ const C = {
   shadow: 'rgba(123, 47, 255, 0.08)',
 };
 
+// Palette vivace synchronisée avec dashboard (src/orga/pages/EventCard.js
+// → TYPE_TINTS). Toute modification doit être répercutée des deux côtés.
 const TYPE_COLORS = {
-  Trail: '#4A9E7A',
-  'Course sur route': '#5B82C4',
-  Cross: '#B05A4A',
-  Triathlon: '#4A8A9E',
-  Velo: '#7A5AB0',
-  Marche: '#9E8A4A',
-  Autre: '#6A6A6A',
+  Trail: '#10B981',
+  'Course sur route': '#0EA5E9',
+  Cross: '#06B6D4',
+  Triathlon: '#F43F5E',
+  Velo: '#8B5CF6',
+  Marche: '#EAB308',
+  Autre: '#7B2FFF',
 };
 
 // Label affiché pour event_type ; la valeur stockée reste sans accent ("Velo").
@@ -3469,7 +3471,7 @@ function CropImageModal({ visible, asset, onCancel, onConfirm }) {
 // Sous-modale slide-up reutilisable pour editer 1 champ texte (nom, email,
 // telephone, site web). Auto-focus a l'ouverture, KeyboardAvoidingView pour
 // que le bouton Enregistrer reste visible. Save par section via onSave.
-function SubModalInputText({ visible, title, value, onChangeText, placeholder, keyboardType, autoCapitalize, onClose, onSave, busy }) {
+function SubModalInputText({ visible, title, value, onChangeText, placeholder, keyboardType, autoCapitalize, secureTextEntry, onClose, onSave, busy }) {
   // Suivi manuel de la hauteur clavier : KeyboardAvoidingView est peu fiable
   // sur iOS dans une Modal (encore moins avec presentationStyle). On applique
   // un paddingBottom dynamique au container du bouton Enregistrer pour qu'il
@@ -3506,6 +3508,7 @@ function SubModalInputText({ visible, title, value, onChangeText, placeholder, k
             placeholderTextColor="#9CA3AF"
             keyboardType={keyboardType}
             autoCapitalize={autoCapitalize}
+            secureTextEntry={!!secureTextEntry}
             style={{
               fontSize: 17, color: C.text,
               paddingVertical: 14, paddingHorizontal: 16,
@@ -3540,6 +3543,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const [password, setPassword] = useState('');
   const [eventDate, setEventDate] = useState(null); // Date object | null
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [startTime, setStartTime] = useState(''); // "HH:MM"
+  const [photographerPwd, setPhotographerPwd] = useState('');
+  const [revealPwd, setRevealPwd] = useState(false);
   const [postalCode, setPostalCode] = useState('');
   const [city, setCity] = useState('');
   const [citySuggestions, setCitySuggestions] = useState([]);
@@ -3605,6 +3611,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         setCode(editEvent.code || '');
         setPassword('');
         setEventDate(editEvent.event_date ? new Date(editEvent.event_date) : null);
+        setStartTime(editEvent.start_time || '');
+        setPhotographerPwd(editEvent.photographer_password || '');
+        setRevealPwd(false);
         const { city: cy, postalCode: pc } = parseLocation(editEvent.location || '');
         setPostalCode(pc); setCity(cy); setCitySuggestions([]);
         setEventType(editEvent.event_type || '');
@@ -3619,7 +3628,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         setPendingCoverLocal(null);
       } else {
         setName(''); setCode(''); setPassword('');
-        setEventDate(null); setPostalCode(''); setCity(''); setCitySuggestions([]);
+        setEventDate(null); setStartTime(''); setPhotographerPwd(''); setRevealPwd(false);
+        setPostalCode(''); setCity(''); setCitySuggestions([]);
         setEventType('');
         setWebsite(''); setContact(''); setPhone(''); setDistances([]);
         setCoverImage(null); setPendingCoverLocal(null);
@@ -4106,6 +4116,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                 <SettingsRow label="Type d'épreuve" value={eventType ? displayEventType(eventType) : ''} onPress={() => setEditingField('type')} />
                 <View style={rowSeparatorStyle} />
                 <SettingsRow label="Date" value={previewDate} onPress={() => setEditingField('date')} />
+                <View style={rowSeparatorStyle} />
+                <SettingsRow label="Heure de départ" value={startTime || ''} onPress={() => setEditingField('start_time')} />
               </View>
 
               {/* ───── LIEU & CONTACT ───── */}
@@ -4125,6 +4137,59 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
               <View style={sectionCardStyle}>
                 <SettingsRow label="Distances proposées" value={previewDistances} onPress={() => setEditingField('distances')} />
               </View>
+
+              {/* ───── IDENTIFIANTS PHOTOGRAPHES ───── */}
+              {isEdit && (
+                <>
+                  <Text style={sectionHeaderStyle}>IDENTIFIANTS PHOTOGRAPHES</Text>
+                  <Text style={{ paddingHorizontal: 28, marginBottom: 6, fontSize: 12, color: C.textSoft }}>
+                    À transmettre à tes photographes
+                  </Text>
+                  <View style={sectionCardStyle}>
+                    <View style={rowStyle}>
+                      <Text style={{ color: C.text, fontSize: 16, fontWeight: '600', flex: 1 }}>Mot de passe</Text>
+                      <Text style={{
+                        color: photographerPwd ? C.primary : C.textSoft,
+                        fontSize: 14, marginRight: 8, maxWidth: 140,
+                        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                      }} numberOfLines={1}>
+                        {photographerPwd ? (revealPwd ? photographerPwd : '••••••') : 'Non défini'}
+                      </Text>
+                    </View>
+                    <View style={rowSeparatorStyle} />
+                    <View style={[rowStyle, { gap: 0 }]}>
+                      <TouchableOpacity onPress={() => setRevealPwd(v => !v)} disabled={!photographerPwd} style={{ flex: 1, alignItems: 'center', paddingVertical: 4, opacity: photographerPwd ? 1 : 0.4 }}>
+                        <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>{revealPwd ? 'Masquer' : 'Afficher'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={async () => {
+                          if (!photographerPwd) return;
+                          // Pas de Clipboard natif (expo-clipboard pas installé) — on
+                          // passe par Share qui propose Copier dans la share-sheet iOS.
+                          try { await Share.share({ message: photographerPwd }); } catch {}
+                        }}
+                        disabled={!photographerPwd}
+                        style={{ flex: 1, alignItems: 'center', paddingVertical: 4, opacity: photographerPwd ? 1 : 0.4 }}
+                      >
+                        <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Copier</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setEditingField('photographer_password')} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
+                        <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>{photographerPwd ? 'Modifier' : 'Définir'}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* ───── FACTURATION ───── */}
+                  <Text style={sectionHeaderStyle}>FACTURATION</Text>
+                  <View style={sectionCardStyle}>
+                    <View style={rowStyle}>
+                      <Text style={{ color: C.text, fontSize: 16, fontWeight: '500', flex: 1 }}>
+                        Offre partenaire gratuite
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
             </ScrollView>
           </View>
           {renderCropModal()}
@@ -4222,6 +4287,70 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
               </TouchableOpacity>
             </View>
           </Modal>
+
+          {/* ─── Sub-modal: Heure de départ (time picker) ─── */}
+          <Modal visible={editingField === 'start_time'} animationType="slide" onRequestClose={() => setEditingField(null)} presentationStyle="formSheet">
+            <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+              <View style={subModalHeader}>
+                <View style={{ width: 60 }} />
+                <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>Heure de départ</Text>
+                <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
+                  <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ flex: 1, alignItems: 'center', paddingTop: 16 }}>
+                <DateTimePicker
+                  value={(() => {
+                    const m = String(startTime || '').match(/^(\d{1,2}):(\d{2})$/);
+                    const d = new Date();
+                    if (m) { d.setHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0); }
+                    else { d.setHours(8, 0, 0, 0); }
+                    return d;
+                  })()}
+                  mode="time"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(_e, selected) => {
+                    if (!selected) return;
+                    const hh = String(selected.getHours()).padStart(2, '0');
+                    const mm = String(selected.getMinutes()).padStart(2, '0');
+                    setStartTime(`${hh}:${mm}`);
+                  }}
+                  locale="fr-FR"
+                  is24Hour
+                  style={{ width: 320 }}
+                />
+              </View>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!/^\d{1,2}:\d{2}$/.test(startTime)) { Alert.alert('Format invalide', 'Heure attendue HH:MM'); return; }
+                  const ok = await savePartial({ start_time: startTime });
+                  if (ok) setEditingField(null);
+                }}
+                disabled={partialBusy}
+                style={[saveBtnStyle, { opacity: partialBusy ? 0.6 : 1 }]}
+              >
+                {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
+              </TouchableOpacity>
+            </View>
+          </Modal>
+
+          {/* ─── Sub-modal: Mot de passe photographe ─── */}
+          <SubModalInputText
+            visible={editingField === 'photographer_password'}
+            title="Mot de passe photographe"
+            value={photographerPwd}
+            onChangeText={setPhotographerPwd}
+            placeholder="4 caractères minimum"
+            secureTextEntry={!revealPwd}
+            autoCapitalize="none"
+            onClose={() => setEditingField(null)}
+            onSave={async () => {
+              if (!photographerPwd || photographerPwd.length < 4) { Alert.alert('Mot de passe', '4 caractères minimum.'); return; }
+              const ok = await savePartial({ photographer_password: photographerPwd });
+              if (ok) { setEditingField(null); setRevealPwd(false); }
+            }}
+            busy={partialBusy}
+          />
 
           {/* ─── Sub-modal: Lieu (postalCode + city) ─── */}
           <Modal visible={editingField === 'location'} animationType="slide" onRequestClose={() => setEditingField(null)}>
@@ -6813,6 +6942,188 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Détail événement (vue orga). Reproduit la card expanded du dashboard /orga :
+// bandeau coloré + statut + actions + identifiants + facturation + lien delete.
+// ─────────────────────────────────────────────────────────────────────────────
+function OrganizerEventDetailScreen({ session, event, onClose, onEdit, onOpenPhotos, onDeleted }) {
+  const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
+  const [revealPwd, setRevealPwd] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const photographerPwd = event?.photographer_password || '';
+  const isReady = !!event?.active;
+  const dotColor = isReady ? '#34D399' : '#FBBF24';
+  const statusLabel = isReady ? 'Prêt à démarrer' : 'En attente';
+
+  const dateStr = event.event_date
+    ? new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }).replace(/\./g, '').toUpperCase()
+    : 'Date à définir';
+
+  const countdown = (() => {
+    if (!event.event_date) return null;
+    const d = new Date(event.event_date); d.setHours(0, 0, 0, 0);
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    const days = Math.round((d - t) / 86400000);
+    if (days === 0) return 'JOUR J';
+    if (days > 0) return `J-${days}`;
+    return `J+${Math.abs(days)}`;
+  })();
+
+  const copyPwd = async () => {
+    if (!photographerPwd) return;
+    try { await Share.share({ message: photographerPwd }); } catch {}
+  };
+
+  const sharePublicLink = async () => {
+    try { await Share.share({ message: `https://will-app.com/event/${event.code}` }); } catch {}
+  };
+
+  const confirmDelete = () => {
+    Alert.alert(
+      'Supprimer cet événement ?',
+      'Cette action est définitive et irréversible.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              const r = await fetch(`${API_URL}/organizer/event/${event.code}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${session.token}` },
+              });
+              if (!r.ok) {
+                const data = await r.json().catch(() => ({}));
+                Alert.alert('Erreur', data.error || 'Suppression impossible');
+                setDeleting(false);
+                return;
+              }
+              onDeleted?.();
+            } catch (e) {
+              Alert.alert('Erreur', e.message || 'Erreur réseau');
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const sub = [event.location, event.event_type ? displayEventType(event.event_type) : null].filter(Boolean).join(' · ');
+
+  return (
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 }}>
+          <TouchableOpacity onPress={onClose} hitSlop={12}>
+            <Text style={{ color: C.primary, fontSize: 16, fontWeight: '500' }}>‹ Fermer</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+          {/* Bandeau coloré */}
+          <View style={{ height: 180, marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', backgroundColor: tint, position: 'relative' }}>
+            {event.cover_image ? (
+              <ExpoImage source={{ uri: event.cover_image }} style={{ position: 'absolute', width: '100%', height: '100%' }} contentFit="cover" />
+            ) : null}
+            <LinearGradient
+              colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.55)']}
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            />
+            <View style={{ flex: 1, padding: 18, justifyContent: 'flex-end' }}>
+              <Text style={{ color: 'rgba(255,255,255,0.92)', fontSize: 12, fontWeight: '600', letterSpacing: 1.2, marginBottom: 6 }}>
+                {dateStr}
+              </Text>
+              <Text style={{ color: '#fff', fontSize: 24, fontWeight: '700' }} numberOfLines={1}>
+                {event.name}
+              </Text>
+              {sub ? (
+                <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, marginTop: 4 }} numberOfLines={1}>
+                  {sub}
+                </Text>
+              ) : null}
+              <View style={{ marginTop: 10, flexDirection: 'row' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.92)' }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: dotColor }} />
+                  <Text style={{ color: '#1A1A1A', fontSize: 12, fontWeight: '500' }}>{statusLabel}</Text>
+                </View>
+              </View>
+            </View>
+            {countdown ? (
+              <Text style={{ position: 'absolute', right: 14, bottom: 10, color: '#fff', fontSize: 32, fontWeight: '700', fontStyle: 'italic', letterSpacing: -1 }}>
+                {countdown}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Actions */}
+          <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 16 }}>
+            <TouchableOpacity onPress={onOpenPhotos} style={{ flex: 2, backgroundColor: C.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Voir les photos</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onEdit} style={{ flex: 2, backgroundColor: '#F3EBFF', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+              <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Modifier</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={sharePublicLink} style={{ flex: 1, backgroundColor: '#F3EBFF', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+              <Text style={{ color: C.primary, fontSize: 18, fontWeight: '600' }}>↗</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Identifiants photographes */}
+          <View style={{ marginHorizontal: 16, marginTop: 28 }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: C.text }}>Identifiants photographes</Text>
+            <Text style={{ fontSize: 13, color: C.textSoft, marginTop: 2 }}>À transmettre à tes photographes</Text>
+            <View style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <Text style={{ color: C.textSoft, fontSize: 13 }}>Mot de passe :</Text>
+              <Text style={{
+                color: photographerPwd ? C.primary : C.textSoft,
+                fontSize: 16, fontWeight: '600',
+                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              }}>
+                {photographerPwd ? (revealPwd ? photographerPwd : '••••••') : 'Non défini'}
+              </Text>
+              {photographerPwd ? (
+                <>
+                  <TouchableOpacity onPress={() => setRevealPwd(v => !v)} hitSlop={8}>
+                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>{revealPwd ? 'Masquer' : 'Afficher'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={copyPwd} hitSlop={8}>
+                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>Copier</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={onEdit} hitSlop={8}>
+                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>Modifier</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity onPress={onEdit} hitSlop={8}>
+                  <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>Définir</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Facturation */}
+          <View style={{ marginHorizontal: 16, marginTop: 28 }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: C.text }}>Facturation</Text>
+            <Text style={{ fontSize: 14, color: C.text, marginTop: 8 }}>Offre partenaire gratuite</Text>
+          </View>
+
+          {/* Lien Supprimer */}
+          <View style={{ marginTop: 36, alignItems: 'center' }}>
+            <TouchableOpacity onPress={confirmDelete} disabled={deleting} hitSlop={12}>
+              <Text style={{ color: deleting ? C.textSoft : '#DC2626', fontSize: 14, fontWeight: '500' }}>
+                {deleting ? 'Suppression…' : 'Supprimer cet événement'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -7174,7 +7485,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   );
 }
 
-function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos, onOpenOrgRole, refreshKey = 0 }) {
+function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos, onOpenEventDetail, onOpenOrgRole, refreshKey = 0 }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(null); // slug en cours de paiement
@@ -7330,9 +7641,10 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
           const info = statusInfo(e.status);
           return (
             <View key={i} style={{ marginBottom: 14 }}>
-              {/* Carte event style accueil + badge statut en haut à droite */}
+              {/* Carte event style accueil + badge statut en haut à droite.
+                  Tap sur la card → écran Détail event (vue orga). */}
               <View style={{ position: 'relative' }}>
-                <EventCard event={e} onPress={() => onOpenEventPhotos?.(e)} />
+                <EventCard event={e} onPress={() => (onOpenEventDetail || onOpenEventPhotos)?.(e)} />
                 <View style={{
                   position: 'absolute',
                   top: 10, right: 10,
@@ -7419,6 +7731,7 @@ export default function App() {
   const [organizerAuthVisible, setOrganizerAuthVisible] = useState(false);
   const [organizerProfileMenu, setOrganizerProfileMenu] = useState(false);
   const [organizerEventPhotosTarget, setOrganizerEventPhotosTarget] = useState(null);
+  const [organizerEventDetailTarget, setOrganizerEventDetailTarget] = useState(null);
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const pendingActionRef = useRef(null); // action à exécuter après login
 
@@ -7831,7 +8144,10 @@ export default function App() {
         }
         setBottomTab(target);
         setOpenedEvent(null);
-        if (target !== 'events') setOrganizerEventPhotosTarget(null);
+        if (target !== 'events') {
+          setOrganizerEventPhotosTarget(null);
+          setOrganizerEventDetailTarget(null);
+        }
       });
   }, [tabs, bottomTab, runnerSession, requireAuth]);
 
@@ -7924,6 +8240,7 @@ export default function App() {
                     onEditEvent={(e) => setEditEventTarget(e)}
                     onOpenProfile={() => setOrganizerProfileMenu(true)}
                     onOpenEventPhotos={(e) => setOrganizerEventPhotosTarget(e)}
+                    onOpenEventDetail={(e) => setOrganizerEventDetailTarget(e)}
                     onOpenOrgRole={handlePickRole}
                     refreshKey={orgRefreshKey}
                   />
@@ -7954,6 +8271,28 @@ export default function App() {
           event={organizerEventPhotosTarget}
           onClose={() => setOrganizerEventPhotosTarget(null)}
           onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...opts })}
+        />
+      )}
+
+      {organizerEventDetailTarget && bottomTab === 'events' && organizerSession && (
+        <OrganizerEventDetailScreen
+          session={organizerSession}
+          event={organizerEventDetailTarget}
+          onClose={() => setOrganizerEventDetailTarget(null)}
+          onEdit={() => {
+            const e = organizerEventDetailTarget;
+            setOrganizerEventDetailTarget(null);
+            setEditEventTarget(e);
+          }}
+          onOpenPhotos={() => {
+            const e = organizerEventDetailTarget;
+            setOrganizerEventDetailTarget(null);
+            setOrganizerEventPhotosTarget(e);
+          }}
+          onDeleted={() => {
+            setOrganizerEventDetailTarget(null);
+            setOrgRefreshKey(k => k + 1);
+          }}
         />
       )}
 
