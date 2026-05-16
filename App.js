@@ -776,9 +776,11 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
             style={StyleSheet.absoluteFillObject}
             contentFit="cover"
           />
-          {/* Fondu tint → transparent étiré sur toute la zone image : 100 % tint au milieu de la card, 0 % au bord droit */}
+          {/* Fondu tint → 10% étiré sur toute la zone image : 100 % tint au
+              milieu de la card, 10 % au bord droit. L'image transparait
+              progressivement au lieu de disparaître complètement. */}
           <LinearGradient
-            colors={[tint, 'transparent']}
+            colors={[tint, tint + '1A']}
             locations={[0, 1]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
