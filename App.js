@@ -201,14 +201,21 @@ const C = {
 // Palette arc-en-ciel synchronisée avec dashboard (src/orga/pages/EventCard.js
 // → TYPE_TINTS) et landing (will-app.com section "Pour qui"). Toute
 // modification doit être répercutée sur les trois surfaces.
+// Clés en lowercase pour que le lookup soit insensible à la casse + aux
+// espaces parasites du champ event_type stocké en R2 — utiliser colorForType()
+// au lieu d'indexer directement TYPE_COLORS.
 const TYPE_COLORS = {
-  Trail: '#22C55E',
-  'Course sur route': '#3B82F6',
-  Cross: '#A855F7',
-  Triathlon: '#6366F1',
-  Velo: '#F97316',
-  Marche: '#EAB308',
-  Autre: '#EF4444',
+  trail: '#22C55E',
+  'course sur route': '#3B82F6',
+  cross: '#A855F7',
+  triathlon: '#6366F1',
+  velo: '#F97316',
+  marche: '#EAB308',
+  autre: '#EF4444',
+};
+const colorForType = (eventType) => {
+  const k = (eventType || '').toLowerCase().trim();
+  return TYPE_COLORS[k] || TYPE_COLORS.autre;
 };
 
 // Label affiché pour event_type ; la valeur stockée reste sans accent ("Velo").
@@ -763,7 +770,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
 }
 
 function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
-  const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
+  const tint = colorForType(event.event_type);
 
   return (
     <View style={s.eventCard}>
@@ -834,7 +841,7 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
   // Map event_code → couleur
   const eventTintMap = {};
   for (const e of events) {
-    eventTintMap[e.code] = TYPE_COLORS[e.event_type] || TYPE_COLORS.Autre;
+    eventTintMap[e.code] = colorForType(e.event_type);
   }
 
   const loadPhotos = useCallback(async () => {
@@ -1117,7 +1124,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const PAGE_SIZE = 30;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | composite key
-  const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
+  const tint = colorForType(event.event_type);
   const upcoming = isUpcoming(event.event_date);
 
   // Compte à rebours
@@ -6950,7 +6957,7 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
 // bandeau coloré + statut + actions + identifiants + facturation + lien delete.
 // ─────────────────────────────────────────────────────────────────────────────
 function OrganizerEventDetailScreen({ session, event, onClose, onEdit, onOpenPhotos, onDeleted }) {
-  const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
+  const tint = colorForType(event.event_type);
   const [revealPwd, setRevealPwd] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const photographerPwd = event?.photographer_password || '';
@@ -7136,7 +7143,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
-  const tint = TYPE_COLORS[event.event_type] || TYPE_COLORS.Autre;
+  const tint = colorForType(event.event_type);
 
   const loadPhotos = useCallback(async () => {
     setLoading(true);
