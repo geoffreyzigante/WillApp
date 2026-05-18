@@ -29,7 +29,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import Svg, { Path, Circle, Ellipse, Defs, Mask, Rect } from 'react-native-svg';
+import Svg, { Path, Circle, Ellipse, Defs, Mask, Rect, SvgXml } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import NetInfo from '@react-native-community/netinfo';
 import { Paths, File, Directory } from 'expo-file-system';
@@ -621,7 +621,7 @@ const api = {
 
 // ---------- SCREENS ----------
 
-function SelfieBlock({ selfieUri, onPress, onDelete }) {
+function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
   if (selfieUri) {
     return (
       <View style={s.selfieDoneBanner}>
@@ -642,6 +642,37 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
       </View>
     );
   }
+  // Etat renforce "selfie manquant" : encadre orange + CTA explicite. Active
+  // quand le coureur a explicitement skippe l'etape 2 du signup wizard.
+  if (missing) {
+    return (
+      <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
+        <LinearGradient
+          colors={['#8B3FFF', '#5A1FCC']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[s.selfieCard, { borderWidth: 2, borderColor: '#F59E0B', flexDirection: 'column', alignItems: 'stretch' }]}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={[s.selfieAvatar, { width: 56, height: 56, borderRadius: 14 }]}>
+              <Icon.User size={32} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#FFD89B', fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 }}>
+                Selfie manquant
+              </Text>
+              <Text style={[s.selfieSub, { marginTop: 0, fontSize: 13, lineHeight: 17 }]}>
+                Prends ton selfie pour récupérer tes photos
+              </Text>
+            </View>
+          </View>
+          <View style={{ marginTop: 12, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}>
+            <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>Faire mon selfie maintenant</Text>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  }
   return (
     <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
       <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
@@ -657,7 +688,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, favorites, onToggleFavorite, onRefresh, runnerFirstName }) {
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, favorites, onToggleFavorite, onRefresh, runnerFirstName, selfieSkipped = false }) {
   const [searchQuery, setSearchQuery] = useState('');
   const tabFiltered = events.filter(e => {
     if (tab === 'upcoming') return isUpcoming(e.event_date, e.event_date_end);
@@ -735,7 +766,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
 
       {/* Carte selfie : uniquement si pas encore pris */}
       {!selfieUri && (
-        <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
+        <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
       )}
 
       {/* Champ recherche : filtre la liste juste en dessous */}
@@ -878,7 +909,77 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite, style }) {
   );
 }
 
-function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites, userId, onOpenPhoto, runnerToken, photoFavoritesSet, onTogglePhotoFavorite }) {
+// Illustration selfie pour l'onboarding (visage stylise + FaceID).
+// Source: assets/Selfie.svg, inline pour eviter un require asset transform.
+const SELFIE_ILLUSTRATION_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17.61 17.61">
+  <path fill="#7B2FFF" d="M1.86,3.28c0-.77.62-1.4,1.4-1.4h4.12V0H1.4C.62,0,0,.62,0,1.4v5.98h1.86V3.28Z"/>
+  <path fill="#7B2FFF" d="M16.21,0h-5.98v1.88h4.12c.77,0,1.4.62,1.4,1.4v4.1h1.86V1.4C17.61.62,16.98,0,16.21,0Z"/>
+  <path fill="#7B2FFF" d="M15.75,13.64c0,.54-.31,1.01-.76,1.24-.23-1.89-2.9-3.38-6.18-3.38s-5.95,1.49-6.18,3.38c-.45-.23-.76-.7-.76-1.24v-3.41H0v5.98C0,16.98.62,17.61,1.4,17.61h2.84s0,0,0,0h9.12s0,0,0,0h2.84c.77,0,1.4-.62,1.4-1.4v-5.98h-1.86v3.41Z"/>
+  <path fill="#7B2FFF" d="M5.73,6.82c0,1.87,1.38,3.38,3.08,3.38s3.08-1.51,3.08-3.38-1.38-3.38-3.08-3.38-3.08,1.51-3.08,3.38Z"/>
+</svg>`;
+function SelfieIllustration({ size = 128 }) {
+  return <SvgXml xml={SELFIE_ILLUSTRATION_XML} width={size} height={size} />;
+}
+
+// Ecran "Photos" quand le coureur n'est pas connecte. Explique la valeur
+// (un selfie suffit) avant de proposer l'inscription. Les CTA pointent vers
+// AuthRunnerModal en mode register ou login selon le bouton.
+function PhotosUnauthScreen({ onSignup, onLogin }) {
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+      <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24 }}>
+        <View style={{ alignItems: 'center', marginBottom: 32 }}>
+          <SelfieIllustration size={128} />
+        </View>
+        <Text
+          style={{
+            fontSize: 30,
+            fontWeight: '700',
+            color: '#1A1A1A',
+            textAlign: 'center',
+            letterSpacing: -0.6,
+            marginBottom: 16,
+            fontFamily: 'AVEstiana',
+          }}
+        >
+          Toutes tes photos en un selfie
+        </Text>
+        <Text
+          style={{
+            fontSize: 16,
+            fontWeight: '400',
+            color: '#71717A',
+            textAlign: 'center',
+            lineHeight: 24,
+            marginBottom: 48,
+          }}
+        >
+          Crée ton compte, prends un selfie, et retrouve toutes tes photos sur tous les events Will.
+        </Text>
+        <TouchableOpacity
+          onPress={onSignup}
+          activeOpacity={0.85}
+          style={{
+            backgroundColor: C.primary,
+            paddingVertical: 16,
+            borderRadius: 14,
+            alignItems: 'center',
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600' }}>Créer mon compte</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onLogin} style={{ marginTop: 16, alignItems: 'center', paddingVertical: 8 }}>
+          <Text style={{ color: C.primary, fontSize: 15, fontWeight: '500' }}>
+            J'ai déjà un compte, me connecter
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites, userId, onOpenPhoto, runnerToken, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false }) {
   const hasFavorites = favorites && favorites.length > 0;
   const [photos, setPhotos] = useState([]);
   const [visibleCount, setVisibleCount] = useState(20);
@@ -976,7 +1077,7 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
 
       {/* Carte ajout selfie : uniquement si pas encore de selfie */}
       {!selfieUri && (
-        <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} />
+        <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
       )}
 
       {!hasFavorites ? (
@@ -5797,7 +5898,7 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
   );
 }
 
-function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
+function SelfieModal({ visible, onClose, onSaved, userId, runnerToken, signupMode = false, onSkip }) {
   const [uri, setUri] = useState(null);
   const [busy, setBusy] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -5934,8 +6035,17 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
             </>
           ) : (
             <>
-          <Text style={s.modalTitle}>Mon selfie</Text>
-          <Text style={s.modalSub}>Ton selfie est utilisé pour la reconnaissance faciale. Il est chiffré, stocké sur des serveurs européens, et supprimé automatiquement 30 jours après ton dernier événement.</Text>
+          {signupMode && (
+            <Text style={{ color: C.textSoft, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 6 }}>
+              Étape 2 sur 2
+            </Text>
+          )}
+          <Text style={s.modalTitle}>{signupMode ? 'Prends ton selfie' : 'Mon selfie'}</Text>
+          <Text style={s.modalSub}>
+            {signupMode
+              ? "Will reconnaîtra ton visage sur les photos des events auxquels tu participes. Image chiffrée, serveurs européens, supprimée 30 jours après ton dernier événement."
+              : "Ton selfie est utilisé pour la reconnaissance faciale. Il est chiffré, stocké sur des serveurs européens, et supprimé automatiquement 30 jours après ton dernier événement."}
+          </Text>
 
           <View style={s.selfiePreviewWrap}>
             <Animated.View style={{ transform: [{ scale: previewScale }] }}>
@@ -5969,8 +6079,8 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken }) {
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnPrimaryText}>Enregistrer mon selfie</Text>}
           </TouchableOpacity>
 
-          <TouchableOpacity style={s.modalCancel} onPress={onClose}>
-            <Text style={s.modalCancelText}>Fermer</Text>
+          <TouchableOpacity style={s.modalCancel} onPress={signupMode ? (onSkip || onClose) : onClose}>
+            <Text style={s.modalCancelText}>{signupMode ? 'Faire mon selfie plus tard' : 'Fermer'}</Text>
           </TouchableOpacity>
             </>
           )}
@@ -7236,8 +7346,8 @@ function passwordStrength(pwd) {
   return { score: 4, label: 'Très fort', color: '#059669' };
 }
 
-function AuthRunnerModal({ visible, onClose, onSuccess }) {
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' }) {
+  const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -7249,12 +7359,14 @@ function AuthRunnerModal({ visible, onClose, onSuccess }) {
   const [error, setError] = useState('');
 
   // Pré-remplit l'email avec la dernière valeur connue à chaque ouverture.
+  // Et resynchronise le mode (login/register) sur l'intention d'ouverture.
   useEffect(() => {
     if (!visible) return;
+    setMode(initialMode);
     AsyncStorage.getItem('@will_last_email_runner').then(v => {
       if (v) setEmail(prev => prev || v);
     }).catch(() => {});
-  }, [visible]);
+  }, [visible, initialMode]);
 
   const reset = () => {
     setEmail(''); setPassword(''); setFirstName(''); setLastName('');
@@ -7306,7 +7418,7 @@ function AuthRunnerModal({ visible, onClose, onSuccess }) {
         setBusy(false);
         return;
       }
-      onSuccess({ token: data.token, profile: data.profile });
+      onSuccess({ token: data.token, profile: data.profile, isNewSignup: mode === 'register' });
       reset();
     } catch (e) {
       setError(e.message || 'Erreur réseau');
@@ -7325,6 +7437,11 @@ function AuthRunnerModal({ visible, onClose, onSuccess }) {
           contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
         >
           <View style={{ backgroundColor: C.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 }}>
+          {mode === 'register' && (
+            <Text style={{ color: C.textSoft, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 6 }}>
+              Étape 1 sur 2
+            </Text>
+          )}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <Text style={{ color: C.text, fontSize: 22, fontWeight: '700' }}>
               {mode === 'login' ? 'Connexion' : 'Inscription'}
@@ -8377,6 +8494,13 @@ export default function App() {
   const [organizerEventPhotosTarget, setOrganizerEventPhotosTarget] = useState(null);
   const [organizerEventDetailTarget, setOrganizerEventDetailTarget] = useState(null);
   const [authModalVisible, setAuthModalVisible] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState('login'); // mode d'ouverture par defaut du modal auth
+  // Etape 2 du signup : selfie. Quand true, SelfieModal s'ouvre en mode "wizard"
+  // (indicateur etape 2/2 + bouton "Plus tard" qui passe l'etape sans selfie).
+  const [signupSelfieStep, setSignupSelfieStep] = useState(false);
+  // Persistance "selfie skippe a l'inscription" → l'accueil affiche un etat
+  // renforce sur la carte selfie tant que le coureur n'aura pas pris son selfie.
+  const [selfieSkipped, setSelfieSkipped] = useState(false);
   const pendingActionRef = useRef(null); // action à exécuter après login
 
   const reloadEvents = useCallback(async () => {
@@ -8417,6 +8541,7 @@ export default function App() {
     });
     reloadEvents();
     AsyncStorage.getItem('@will_selfie').then(v => v && setSelfieUri(v));
+    AsyncStorage.getItem('@will_selfie_skipped').then(v => setSelfieSkipped(v === '1'));
     AsyncStorage.getItem('@will_favorites').then(v => {
       if (v) {
         try { setFavorites(JSON.parse(v)); } catch { setFavorites([]); }
@@ -8476,10 +8601,20 @@ export default function App() {
   }, [userId]);
 
   const handleAuthSuccess = useCallback((session) => {
-    setRunnerSession(session);
-    Secure.setItem('@will_runner', JSON.stringify(session)).catch(() => {});
+    const { isNewSignup, ...stored } = session || {};
+    setRunnerSession(stored);
+    Secure.setItem('@will_runner', JSON.stringify(stored)).catch(() => {});
     setAuthModalVisible(false);
-    // Exécute l'action en attente (ex: ouvrir selfie modal après login)
+    // Etape 2 du wizard d'inscription : si c'est un nouveau compte sans selfie,
+    // on enchaine sur SelfieModal en mode "signup step". Bouton "Plus tard"
+    // ferme l'etape et marque @will_selfie_skipped pour renforcer la carte
+    // d'accueil. Sinon, comportement legacy : action en attente (login flow).
+    if (isNewSignup) {
+      AsyncStorage.removeItem('@will_selfie_skipped').catch(() => {});
+      setSelfieSkipped(false);
+      setTimeout(() => { setSignupSelfieStep(true); setSelfieModal(true); }, 300);
+      return;
+    }
     if (pendingActionRef.current) {
       const a = pendingActionRef.current;
       pendingActionRef.current = null;
@@ -8779,13 +8914,6 @@ export default function App() {
           }).start();
           return;
         }
-        if (target === 'photos' && !runnerSession) {
-          Animated.spring(tabsTranslateX, {
-            toValue: -idx * SCREEN_W, useNativeDriver: true, tension: 90, friction: 13,
-          }).start();
-          requireAuth(() => { setBottomTab('photos'); setOpenedEvent(null); });
-          return;
-        }
         setBottomTab(target);
         setOpenedEvent(null);
         if (target !== 'events') {
@@ -8857,23 +8985,32 @@ export default function App() {
                   onToggleFavorite={(code) => requireAuth(() => toggleFavorite(code))}
                   onRefresh={reloadEvents}
                   runnerFirstName={runnerSession?.profile?.firstName}
+                  selfieSkipped={!!runnerSession && selfieSkipped && !selfieUri}
                 />
               </View>
               <View style={{ width: SCREEN_W }}>
-                <PhotosScreen
-                  events={events}
-                  onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
-                  gallery={[]}
-                  selfieUri={selfieUri}
-                  onDeleteSelfie={deleteSelfie}
-                  onOpenProfile={() => setProfileMenu(true)}
-                  favorites={favorites}
-                  userId={userId}
-                  runnerToken={runnerSession?.token}
-                  onOpenPhoto={(photo, list) => setOpenedPhoto({ photo, photos: list })}
-                  photoFavoritesSet={photoFavoritesSet}
-                  onTogglePhotoFavorite={togglePhotoFavorite}
-                />
+                {runnerSession ? (
+                  <PhotosScreen
+                    events={events}
+                    onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
+                    gallery={[]}
+                    selfieUri={selfieUri}
+                    onDeleteSelfie={deleteSelfie}
+                    onOpenProfile={() => setProfileMenu(true)}
+                    favorites={favorites}
+                    userId={userId}
+                    runnerToken={runnerSession?.token}
+                    onOpenPhoto={(photo, list) => setOpenedPhoto({ photo, photos: list })}
+                    photoFavoritesSet={photoFavoritesSet}
+                    onTogglePhotoFavorite={togglePhotoFavorite}
+                    selfieSkipped={selfieSkipped && !selfieUri}
+                  />
+                ) : (
+                  <PhotosUnauthScreen
+                    onSignup={() => { setAuthInitialMode('register'); setAuthModalVisible(true); }}
+                    onLogin={() => { setAuthInitialMode('login'); setAuthModalVisible(true); }}
+                  />
+                )}
               </View>
               {organizerSession && (
                 <View style={{ width: SCREEN_W }}>
@@ -8948,7 +9085,7 @@ export default function App() {
           </View>
           <Text style={[s.navLabel, bottomTab === 'home' && { color: C.primary, fontWeight: '700' }]}>Accueil</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.navBtn} onPress={() => requireAuth(() => { setBottomTab('photos'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); })}>
+        <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('photos'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
           <View style={s.navIconWrap}>
             <Icon.Photos size={22} filled={bottomTab === 'photos'} color={bottomTab === 'photos' ? C.primary : C.text} />
           </View>
@@ -8979,10 +9116,23 @@ export default function App() {
 
       <SelfieModal
         visible={selfieModal}
-        onClose={() => setSelfieModal(false)}
-        onSaved={setSelfieUri}
+        onClose={() => { setSelfieModal(false); setSignupSelfieStep(false); }}
+        onSaved={(uri) => {
+          setSelfieUri(uri);
+          // Selfie pris → on retire la pastille "selfie manquant" sur l'accueil.
+          AsyncStorage.removeItem('@will_selfie_skipped').catch(() => {});
+          setSelfieSkipped(false);
+          setSignupSelfieStep(false);
+        }}
         userId={userId}
         runnerToken={runnerSession?.token}
+        signupMode={signupSelfieStep}
+        onSkip={() => {
+          AsyncStorage.setItem('@will_selfie_skipped', '1').catch(() => {});
+          setSelfieSkipped(true);
+          setSignupSelfieStep(false);
+          setSelfieModal(false);
+        }}
       />
 
       <LoginModal
@@ -9068,6 +9218,7 @@ export default function App() {
         visible={authModalVisible}
         onClose={() => setAuthModalVisible(false)}
         onSuccess={handleAuthSuccess}
+        initialMode={authInitialMode}
       />
 
       <AuthOrganizerModal
