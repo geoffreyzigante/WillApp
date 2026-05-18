@@ -4178,12 +4178,17 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
       if (!r.ok) {
         Alert.alert('Erreur', data.error || 'Échec');
       } else {
-        // Si création + cover en attente, on l'uploade maintenant
+        // Si création + cover en attente, on l'uploade maintenant — strictement
+        // séquentiel (POST submit-event terminé avant PUT cover) pour éviter
+        // les 404 "event introuvable".
+        let coverFailed = false;
         if (!isEdit && pendingCoverLocal) {
+          const slug = code.toLowerCase().replace(/\s+/g, '-');
+          console.log('[create-event] starting cover upload', { slug, uri: pendingCoverLocal });
           try {
-            const slug = code.toLowerCase().replace(/\s+/g, '-');
             const res = await fetch(pendingCoverLocal);
             const blob = await res.blob();
+            console.log('[create-event] cover blob ready', { size: blob?.size, type: blob?.type });
             const up = await fetch(`${API_URL}/organizer/cover/${slug}`, {
               method: 'PUT',
               headers: {
@@ -4192,15 +4197,28 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
               },
               body: blob,
             });
+            console.log('[create-event] cover upload result', up.status);
             if (!up.ok) {
               const txt = await up.text();
-              console.warn('cover upload failed', up.status, txt);
+              console.warn('[create-event] cover upload failed', up.status, txt);
+              coverFailed = true;
             }
           } catch (e) {
-            console.warn('cover upload error', e?.message || e);
+            console.warn('[create-event] cover upload error', e?.message || e);
+            coverFailed = true;
           }
         }
-        Alert.alert(isEdit ? 'Modifications enregistrées' : 'Demande envoyée', isEdit ? '' : 'Ton événement sera validé sous peu.');
+        const successTitle = isEdit ? 'Modifications enregistrées' : 'Demande envoyée';
+        const successMsg = isEdit ? '' : 'Ton événement sera validé sous peu.';
+        if (coverFailed) {
+          Alert.alert(
+            successTitle,
+            (successMsg ? successMsg + '\n\n' : '') +
+              "L'image de couverture n'a pas pu être envoyée. Tu pourras la recharger depuis l'édition de l'événement."
+          );
+        } else {
+          Alert.alert(successTitle, successMsg);
+        }
         onCreated?.();
         onClose();
       }
