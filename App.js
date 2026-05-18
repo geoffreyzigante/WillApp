@@ -2870,6 +2870,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     ? Math.max(0, Math.min(1, 1 - (queueStats.pending + queueStats.uploading) / drainStartTotal))
     : 0;
 
+  // Zone visuelle des lignes guides (modes Continu + 3 lignes) : bornee par
+  // la barre top et le toggle "Continu | 3 lignes" du footer. Le footer
+  // empile toggle (~38) + zoom pill (56) + panneau noir (au moins ~176, ou
+  // plus si la preview ne couvre pas tout l'ecran).
+  const linesTop = CAMERA_TOP + 32;
+  const linesBottom = 110 + Math.max(176, winH - (CAMERA_TOP + previewH));
+
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       {/* Caméra — resizeMode 'contain' (letterbox naturel), bandes noires explicites par-dessus.
@@ -2898,15 +2905,18 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       />
 
       {/* ─── CADRAGE DÉTECTION mode "Continu" : 2 lignes verticales subtiles
-          delimitant la bande de declenchement. Masque en mode "3 lignes". ─── */}
+          delimitant la bande de declenchement. Masque en mode "3 lignes".
+          NB : extension verticale = linesTop..linesBottom (au-dessus du
+          toggle, en-dessous de la barre top). Decouple de TRIGGER_VPCT qui
+          ne sert plus qu'a la logique de detection. ─── */}
       {captureMode === 'continuous' && (
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: CAMERA_TOP + previewH * (1 - TRIGGER_VPCT) / 2,
+            top: linesTop,
+            bottom: linesBottom,
             left: 0, right: 0,
-            height: previewH * TRIGGER_VPCT,
             flexDirection: 'row',
             justifyContent:
               zonePosition === 'left' ? 'flex-start' :
@@ -2928,15 +2938,15 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         </View>
       )}
 
-      {/* ─── MODE "3 LIGNES" : 3 lignes verticales pleine hauteur preview a
-          40%, 50%, 60% de la largeur ecran. Capture declenchee a chaque
-          traversee (voir onFacesDetectedJS). ─── */}
+      {/* ─── MODE "3 LIGNES" : 3 lignes verticales a 40%, 50%, 60% de la
+          largeur ecran, bornees verticalement comme le mode "Continu".
+          Capture declenchee a chaque traversee (voir onFacesDetectedJS). ─── */}
       {captureMode === '3lines' && (
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: CAMERA_TOP, left: 0, right: 0, height: previewH,
+            top: linesTop, bottom: linesBottom, left: 0, right: 0,
           }}
         >
           {[0.4, 0.5, 0.6].map((pct) => (
@@ -2946,8 +2956,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 position: 'absolute',
                 top: 0, bottom: 0,
                 left: `${pct * 100}%`,
-                width: 2,
-                marginLeft: -1,
+                width: 1,
+                marginLeft: -0.5,
                 backgroundColor: 'rgba(255,255,255,0.6)',
               }}
             />
