@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  AppState, Share,
+  AppState, Share, NativeModules,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -83,6 +83,14 @@ const MAX_RETRIES_DEFAULT = 5;
 const STORAGE_WARN_BYTES = 5 * 1024 * 1024 * 1024; // 5 Go pendingDir
 const DISK_LOW_BYTES = 1 * 1024 * 1024 * 1024;     // 1 Go iPhone restant
 const QUEUE_WARN_THRESHOLD = 100;
+// Plafond dur de la queue : au-dela, on FIFO-drop les plus anciens 'pending'/
+// 'failed' (jamais 'uploading') pour eviter qu'un evenement long sans reseau
+// ne sature le stockage. Aligne sur le brief Phase 2 (200 photos).
+const MAX_QUEUE_SIZE = 200;
+// Backoff exponentiel borne : delai (ms) avant retry #n. Plafonne a 8s.
+function retryDelayMs(retries) {
+  return Math.min(2000 * Math.pow(2, Math.max(0, retries - 1)), 8000);
+}
 
 function pendingDir() {
   return new Directory(Paths.document, PENDING_DIR_NAME);
@@ -1814,7 +1822,17 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       minFacesToTrigger: 1,
     },
     rekognition: { similarityThreshold: 80, maxMatchesPerPhoto: 5, collectionTtlDays: 14 },
-    imageProcessing: { generateThumbnail: true, generatePreview: true, thumbnailWidthPx: 400, previewWidthPx: 1200, previewQuality: 80 },
+    imageProcessing: {
+      generateThumbnail: true, generatePreview: true,
+      thumbnailWidthPx: 400, previewWidthPx: 1200, previewQuality: 80,
+      // Post-capture filter (Vision framework, iOS only). Une photo doit
+      // contenir au moins 1 visage >= minFaceWidthPx avec une faceCaptureQuality
+      // Vision >= minQuality, sinon elle est trashee avant upload.
+      // - minQuality 0.7 = strict (Vision scores reels 0.4-0.8) ; baisser
+      //   a 0.5 si trop de rejets.
+      // - enabled:false pour bypasser temporairement (debug).
+      postCaptureFilter: { enabled: true, minFaceWidthPx: 80, minQuality: 0.7 },
+    },
     upload: { mode: "immediate", batchSize: 10, maxRetries: 5, compressBeforeUpload: false },
     debug: { verboseLogs: false, skipRekognition: false, saveUnmatchedFrames: false },
   });
@@ -2212,7 +2230,15 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   useEffect(() => {
     isMountedRef.current = true;
     if (!hasPermission) requestPermission();
-    return () => { isMountedRef.current = false; };
+    return () => {
+      isMountedRef.current = false;
+      // Annule le timer de retry pour ne pas declencher un drainQueue
+      // post-unmount (qui ferait des fetch vers API_URL pour rien).
+      if (retryTickTimeoutRef.current) {
+        clearTimeout(retryTickTimeoutRef.current);
+        retryTickTimeoutRef.current = null;
+      }
+    };
   }, [hasPermission]);
 
   useEffect(() => {
@@ -2481,7 +2507,33 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         });
       } catch (e) { console.warn('enqueueBurstItems', e?.message); }
     }
-    const next = [...queueRef.current, ...newQueueItems];
+    let next = [...queueRef.current, ...newQueueItems];
+
+    // FIFO eviction : si la queue depasse MAX_QUEUE_SIZE (200), on vire les
+    // plus anciens items 'pending' ou 'failed' (jamais 'uploading' pour ne
+    // pas casser une requete en cours). Delete les fichiers locaux pour
+    // liberer le stockage. Warning unique pour notifier le photographe.
+    if (next.length > MAX_QUEUE_SIZE) {
+      const excess = next.length - MAX_QUEUE_SIZE;
+      const dropped = [];
+      const kept = [];
+      let droppedCount = 0;
+      for (const it of next) {
+        if (droppedCount < excess && it.status !== 'uploading') {
+          dropped.push(it);
+          droppedCount++;
+        } else {
+          kept.push(it);
+        }
+      }
+      for (const it of dropped) {
+        try { new File(it.localUri).delete(); } catch {}
+      }
+      if (dropped.length > 0) {
+        console.warn(`[upload] FIFO drop ${dropped.length} oldest items (queue at max ${MAX_QUEUE_SIZE})`);
+      }
+      next = kept;
+    }
     await commitQueue(next);
 
     // Timestamp de dernière capture — utilisé par l'alerte de reprise au démarrage.
@@ -2496,13 +2548,18 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       );
     }
 
-    // Warning si beaucoup de photos en attente (throttle 5 min)
+    // Warning si beaucoup de photos en attente (throttle 5 min). Mentionne
+    // explicitement le FIFO eviction au-dela de MAX_QUEUE_SIZE pour que le
+    // photographe sache qu'il risque de perdre les plus anciennes.
     const now = Date.now();
     if (next.length >= QUEUE_WARN_THRESHOLD && now - lastQueueWarnAtRef.current > 5 * 60 * 1000) {
       lastQueueWarnAtRef.current = now;
+      const tail = next.length >= MAX_QUEUE_SIZE
+        ? ` Au-dela de ${MAX_QUEUE_SIZE}, les plus anciennes sont supprimees automatiquement.`
+        : '';
       Alert.alert(
         'Beaucoup de photos en attente',
-        `${next.length} photos en attente d'upload. Pense à retrouver du réseau pour les envoyer.`,
+        `${next.length} photos en attente d'upload. Pense à retrouver du réseau pour les envoyer.${tail}`,
       );
     }
 
@@ -2522,6 +2579,53 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     drainQueue();
   }
 
+  // setTimeout id pour le re-trigger de drain apres un cooldown de backoff.
+  // Reset/replace dans scheduleRetryTick pour ne pas accumuler les callbacks.
+  const retryTickTimeoutRef = useRef(null);
+
+  // Programme un re-trigger de drainQueue au plus proche nextAttemptAt parmi
+  // les items 'pending'. Si rien n'est en cooldown, no-op. Appele a la fin
+  // de chaque drain pour reprendre les retries 2/4/8s sans attendre le
+  // heartbeat 30s.
+  function scheduleRetryTick() {
+    if (retryTickTimeoutRef.current) {
+      clearTimeout(retryTickTimeoutRef.current);
+      retryTickTimeoutRef.current = null;
+    }
+    const arr = queueRef.current;
+    const now = Date.now();
+    let nextAt = Infinity;
+    for (const it of arr) {
+      if (it.status !== 'pending') continue;
+      if (it.nextAttemptAt && it.nextAttemptAt > now && it.nextAttemptAt < nextAt) {
+        nextAt = it.nextAttemptAt;
+      }
+    }
+    if (!isFinite(nextAt)) return;
+    const delay = Math.max(50, nextAt - now);
+    retryTickTimeoutRef.current = setTimeout(() => {
+      retryTickTimeoutRef.current = null;
+      drainQueue();
+    }, delay);
+  }
+
+  // Calcule le nouvel etat d'un item apres echec d'upload. Sous maxRetries :
+  // bumps retries + planifie le prochain essai avec backoff exponentiel
+  // (retryDelayMs : 2s, 4s, 8s, plafond 8s). Au-dela : 'failed' definitif
+  // (l'utilisateur peut force-retry via le sous-ecran admin).
+  function nextRetryState(item, maxRetries) {
+    const retries = (item.retries || 0) + 1;
+    if (retries >= maxRetries) {
+      return { ...item, retries, status: 'failed', nextAttemptAt: null };
+    }
+    return {
+      ...item,
+      retries,
+      status: 'pending',
+      nextAttemptAt: Date.now() + retryDelayMs(retries),
+    };
+  }
+
   async function drainQueue() {
     if (drainingRef.current) return;
     if (!session?.token) return;
@@ -2535,10 +2639,19 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     drainingRef.current = true;
     try {
       const arr = [...queueRef.current];
+      const now = Date.now();
+      // 'failed' = max retries atteint -> on n'essaie plus automatiquement
+      // (l'utilisateur peut retry manuellement). Pour 'pending', on respecte
+      // le cooldown nextAttemptAt (backoff exponentiel).
       const uploadable = arr
         .map((it, i) => ({ it, i }))
-        .filter(({ it }) => it.status === 'pending' || it.status === 'failed');
-      if (uploadable.length === 0) { drainingRef.current = false; return; }
+        .filter(({ it }) => it.status === 'pending'
+          && (!it.nextAttemptAt || it.nextAttemptAt <= now));
+      if (uploadable.length === 0) {
+        drainingRef.current = false;
+        scheduleRetryTick();
+        return;
+      }
 
       const verbose = !!eventConfig.debug?.verboseLogs;
       const maxRetries = eventConfig.upload?.maxRetries ?? MAX_RETRIES_DEFAULT;
@@ -2562,10 +2675,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       drainStartTotalRef.current = uploadable.length;
       if (isMountedRef.current) setDrainStartTotal(uploadable.length);
 
-      const CONCURRENCY = 4;
+      // CONCURRENCY 3 : compromis entre debit utile (3 connexions saturent
+      // un 4G/5G correct) et battery / thermal (4 workers en parallele
+      // chauffent le NPU/CPU plus vite). Conforme au brief Phase 2.
+      const CONCURRENCY = 3;
       let cursor = 0;
       // mark all as uploading upfront so UI reflète
-      for (const { i } of uploadable) arr[i] = { ...arr[i], status: 'uploading' };
+      for (const { i } of uploadable) arr[i] = { ...arr[i], status: 'uploading', nextAttemptAt: null };
       await commitQueue(arr);
 
       async function worker() {
@@ -2596,22 +2712,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               arr[i] = null;
               if (isMountedRef.current) setPhotoCount(c => c + 1);
             } else {
-              const retries = (item.retries || 0) + 1;
-              if (verbose) console.warn(`[upload] HTTP ${res.status} ${item.id} retries=${retries}`);
-              arr[i] = {
-                ...item,
-                retries,
-                status: retries >= maxRetries ? 'failed' : 'pending',
-              };
+              const updated = nextRetryState(item, maxRetries);
+              if (verbose) console.warn(`[upload] HTTP ${res.status} ${item.id} -> retries=${updated.retries}, next=${updated.nextAttemptAt ?? 'never'}`);
+              arr[i] = updated;
             }
           } catch (e) {
-            const retries = (item.retries || 0) + 1;
-            if (verbose) console.warn(`[upload] err ${item.id}`, e?.message);
-            arr[i] = {
-              ...item,
-              retries,
-              status: retries >= maxRetries ? 'failed' : 'pending',
-            };
+            const updated = nextRetryState(item, maxRetries);
+            if (verbose) console.warn(`[upload] err ${item.id} -> retries=${updated.retries}`, e?.message);
+            arr[i] = updated;
           }
         }
       }
@@ -2625,12 +2733,17 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       drainingRef.current = false;
       drainStartTotalRef.current = 0;
       if (isMountedRef.current) setDrainStartTotal(0);
+      // Re-trigger drain au plus proche cooldown : les retries 2/4/8s
+      // partent sans attendre le heartbeat 30s ni un evt NetInfo.
+      scheduleRetryTick();
     }
   }
 
   async function retryAllFailed() {
     const next = queueRef.current.map(it =>
-      it.status === 'failed' ? { ...it, retries: 0, status: 'pending' } : it,
+      it.status === 'failed'
+        ? { ...it, retries: 0, status: 'pending', nextAttemptAt: null }
+        : it,
     );
     await commitQueue(next);
     drainQueue();
@@ -2647,10 +2760,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     await commitQueue(next);
   }
 
-  // Force l'upload d'un item : reset retries + status pending + trigger drain.
+  // Force l'upload d'un item : reset retries + status pending + cooldown,
+  // puis trigger drain. Le reset de nextAttemptAt evite que l'item soit
+  // skip par le filtre du worker si on est encore dans la fenetre 2/4/8s.
   async function forceUploadItem(id) {
     const next = queueRef.current.map(it =>
-      it.id === id ? { ...it, retries: 0, status: 'pending' } : it,
+      it.id === id
+        ? { ...it, retries: 0, status: 'pending', nextAttemptAt: null }
+        : it,
     );
     await commitQueue(next);
     drainQueue();
@@ -2793,14 +2910,50 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     setIsShooting(false);
 
     if (photo) {
+      const rawPath = photo.path?.startsWith('file://') ? photo.path : `file://${photo.path}`;
+
+      // Post-capture filter (Vision framework iOS) : on rejette les photos
+      // sans visage / trop petit / floues avant qu'elles n'entrent dans la
+      // queue d'upload. Bypasse en mode test sans upload (on veut mesurer la
+      // cadence pure capture), ou si le module natif n'est pas disponible
+      // (Android, dev sans rebuild, etc).
+      const filterCfg = eventConfig.imageProcessing?.postCaptureFilter;
+      const filterEnabled = filterCfg?.enabled !== false
+        && !testNoUploadRef.current
+        && Platform.OS === 'ios'
+        && NativeModules.WillPhotoFilter;
+      if (filterEnabled) {
+        try {
+          const verdict = await NativeModules.WillPhotoFilter.evaluate(
+            rawPath,
+            filterCfg.minFaceWidthPx ?? 80,
+            filterCfg.minQuality ?? 0.7,
+          );
+          if (!verdict.accepted) {
+            const m = `[Will-Filter] rejected: ${verdict.reason} `
+              + `(face=${verdict.faceWidthPx}px, q=${verdict.faceCaptureQuality ?? 'n/a'})`;
+            console.log(m); addDebugLog(m);
+            try { new File(rawPath).delete(); } catch {}
+            return;
+          }
+          if (eventConfig.debug?.verboseLogs) {
+            const m = `[Will-Filter] accepted: `
+              + `face=${verdict.faceWidthPx}px, q=${verdict.faceCaptureQuality?.toFixed?.(2)}`;
+            console.log(m);
+          }
+        } catch (e) {
+          // Erreur dure (chargement image, Vision crash) : on garde la photo
+          // plutot que de la jeter, pour ne pas perdre une photo a cause
+          // d'un bug Vision intermittent.
+          console.warn('[Will-Filter] error, photo kept:', e?.message);
+        }
+      }
+
       // Mode test (capture sans upload) : on supprime le fichier temporaire
       // immediatement et on n'enqueue rien. Comptabilise quand meme dans la
       // cadence ci-dessus (mesure isolee du goulot upload).
       if (testNoUploadRef.current) {
-        try {
-          const p = photo.path?.startsWith('file://') ? photo.path : `file://${photo.path}`;
-          new File(p).delete();
-        } catch {}
+        try { new File(rawPath).delete(); } catch {}
         if (isMountedRef.current) setPhotoCount(c => c + 1);
         return;
       }
@@ -3040,9 +3193,34 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             ) : null}
           </View>
 
-          {/* Cluster a droite : Deconnexion (icone power) + LOGS (toggle overlay).
+          {/* Cluster a droite : Charge upload (📤 N) + Deconnexion + LOGS.
               Le titre flex:1 reste a peu pres centre malgre l'asymetrie. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {/* Badge charge queue upload : visible des qu'il y a 1+ photos
+                en attente. Couleur evolue selon la pression (🟢 <20, 🟡 20-100,
+                🔴 >100, signal d'approche du FIFO max ${MAX_QUEUE_SIZE}). */}
+            {queueStats.total > 0 && (() => {
+              const total = queueStats.total;
+              const tier = total > 100 ? 'red' : total >= 20 ? 'yellow' : 'green';
+              const bg = tier === 'red' ? 'rgba(239,68,68,0.55)'
+                : tier === 'yellow' ? 'rgba(245,158,11,0.55)'
+                : 'rgba(34,197,94,0.45)';
+              return (
+                <View
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 4,
+                    paddingHorizontal: 8, height: 28, borderRadius: 14,
+                    backgroundColor: bg,
+                  }}
+                >
+                  <Text style={{ fontSize: 12 }}>📤</Text>
+                  <Text style={{
+                    color: '#fff', fontSize: 11, fontWeight: '800',
+                    letterSpacing: 0.3, minWidth: 12, textAlign: 'center',
+                  }}>{total}</Text>
+                </View>
+              );
+            })()}
             <TouchableOpacity
               onPress={() => {
                 Alert.alert(
