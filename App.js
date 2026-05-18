@@ -4972,24 +4972,15 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
 
                     {!isEdit && (
                       <>
+                        {/* Le code event reste géré silencieusement (slug auto-généré depuis
+                            le nom, utilisé pour les URLs publiques + clés R2 + API). Seul
+                            le mot de passe photographe est visible à l'orga ici. */}
                         <TouchableOpacity onPress={() => setAdvancedOpen(o => !o)} style={{ marginTop: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
                           <Text style={{ color: C.primary, fontWeight: '700', fontSize: 13 }}>{advancedOpen ? '−' : '+'} Avancé</Text>
-                          <Text style={{ color: C.textSoft, fontSize: 11, marginLeft: 8 }}>Code et mot de passe photographe</Text>
+                          <Text style={{ color: C.textSoft, fontSize: 11, marginLeft: 8 }}>Mot de passe photographe</Text>
                         </TouchableOpacity>
                         {advancedOpen && (
                           <View>
-                            <TextInput
-                              placeholder="Code unique (ex : trail-2027) *"
-                              placeholderTextColor={C.textSoft}
-                              value={code}
-                              onChangeText={(v) => { setCode(v); setUserEditedCode(true); }}
-                              autoCapitalize="none"
-                              style={formSectionStyle.input}
-                            />
-                            <Text style={{ color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
-                              Auto-généré depuis le nom · modifiable
-                            </Text>
-                            {showErr[3] && !code?.trim() && <Text style={errStyle}>Code requis</Text>}
                             <TextInput
                               placeholder="Mot de passe photographe *"
                               placeholderTextColor={C.textSoft}
@@ -4998,11 +4989,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                               secureTextEntry
                               style={formSectionStyle.input}
                             />
+                            <Text style={{ color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
+                              À transmettre à tes photographes le jour J.
+                            </Text>
                             {showErr[3] && !password && <Text style={errStyle}>Mot de passe requis</Text>}
                           </View>
                         )}
-                        {!advancedOpen && showErr[3] && (!code?.trim() || !password) && (
-                          <Text style={errStyle}>Ouvre la section Avancé pour compléter code + mot de passe</Text>
+                        {!advancedOpen && showErr[3] && !password && (
+                          <Text style={errStyle}>Ouvre la section Avancé pour définir le mot de passe photographe</Text>
                         )}
                       </>
                     )}
