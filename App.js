@@ -1172,14 +1172,20 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const tint = colorForType(event.event_type);
   const upcoming = isUpcoming(event.event_date, event.event_date_end);
 
-  // Compte à rebours
-  const daysUntil = (() => {
+  // Compte à rebours multi-jours : "J-3" avant, "GO !" pendant toute la durée
+  // (event_date → event_date_end), "J+5" après. End absent → single-day.
+  const countdown = (() => {
     if (!event.event_date) return null;
-    const d = new Date(event.event_date);
-    if (isNaN(d.getTime())) return null;
-    const diffMs = d.getTime() - Date.now();
-    const diffDays = Math.ceil(diffMs / 86400000);
-    return diffDays;
+    const start = new Date(event.event_date);
+    if (isNaN(start.getTime())) return null;
+    start.setHours(0, 0, 0, 0);
+    const end = event.event_date_end ? new Date(event.event_date_end) : new Date(event.event_date);
+    if (isNaN(end.getTime())) end.setTime(start.getTime());
+    end.setHours(0, 0, 0, 0);
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    if (t < start) return `J-${Math.round((start - t) / 86400000)}`;
+    if (t <= end) return 'GO !';
+    return `J+${Math.round((t - end) / 86400000)}`;
   })();
 
   const loadPhotos = useCallback(async () => {
@@ -1337,19 +1343,26 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
       <View style={{ position: 'relative', marginTop: 12, marginBottom: 8 }}>
         <View style={s.eventCard}>
+          {/* Layer 0 : aplat coloré pleine carte (fallback + fond sous image) */}
           <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
+          {/* Layer 1 : cover image pleine carte */}
           {event.cover_image ? (
-            <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '50%', overflow: 'hidden' }}>
-              <ExpoImage source={{ uri: event.cover_image }} style={StyleSheet.absoluteFillObject} contentFit="cover" />
-              <LinearGradient
-                colors={[tint, 'transparent']}
-                locations={[0, 1]}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={StyleSheet.absoluteFillObject}
-                pointerEvents="none"
-              />
-            </View>
+            <ExpoImage
+              source={{ uri: event.cover_image }}
+              style={StyleSheet.absoluteFillObject}
+              contentFit="cover"
+            />
+          ) : null}
+          {/* Layer 2 : gradient — solide à gauche (0-50%), fade 100→10% à droite (50-100%) */}
+          {event.cover_image ? (
+            <LinearGradient
+              colors={[tint, tint + '1A']}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              locations={[0.5, 1]}
+              style={StyleSheet.absoluteFillObject}
+              pointerEvents="none"
+            />
           ) : null}
           <View style={s.eventCardCenter}>
             <Text style={s.eventDate}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
@@ -1387,14 +1400,14 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           </TouchableOpacity>
         )}
 
-        {/* Compte à rebours en bas à droite (uniquement à venir) */}
-        {upcoming && daysUntil !== null && daysUntil >= 0 && (
-          <View style={{ position: 'absolute', bottom: 22, right: 18, alignItems: 'flex-end' }}>
-            <Text style={[s.welcome, { color: '#fff', fontSize: 26, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 }]}>
-              {daysUntil === 0 ? (photos.length > 0 ? "Go !" : "Aujourd'hui") : `J-${daysUntil}`}
+        {/* Décompte en bas droite : J-X / GO ! / J+X (multi-jours supporté) */}
+        {countdown ? (
+          <View style={{ position: 'absolute', bottom: 16, right: 16 }}>
+            <Text style={{ color: '#fff', fontSize: 38, fontWeight: '700', fontStyle: 'italic', letterSpacing: -1 }}>
+              {countdown}
             </Text>
           </View>
-        )}
+        ) : null}
       </View>
 
       {/* Courses : un seul bloc avec header de labels + lignes de valeurs */}
@@ -1446,35 +1459,17 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </View>
       )}
 
-      {/* Site web (infos pratiques) */}
+      {/* Bloc Infos : label uppercase gris + valeur en violet cliquable */}
       {event.website ? (
         <View style={{ marginBottom: 16 }}>
-          <Text style={[s.sectionTitle, { marginBottom: 10 }]}>Infos pratiques</Text>
-          <TouchableOpacity
-            onPress={openWebsite}
-            style={{
-              backgroundColor: '#faf9ff', borderRadius: 14, padding: 14,
-              flexDirection: 'row', alignItems: 'center',
-            }}
-          >
-            <View style={{
-              width: 36, height: 36, borderRadius: 10, backgroundColor: C.primary,
-              alignItems: 'center', justifyContent: 'center', marginRight: 12,
-            }}>
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                <Circle cx="12" cy="12" r="9" stroke="#fff" strokeWidth={1.8} />
-                <Path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" stroke="#fff" strokeWidth={1.5} />
-              </Svg>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: C.text, fontSize: 14, fontWeight: '600' }}>Site web</Text>
-              <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 1 }} numberOfLines={1}>
-                {event.website}
-              </Text>
-            </View>
-            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-              <Path d="m9 6 6 6-6 6" stroke={C.textSoft} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
+          <Text style={[s.sectionTitle, { marginBottom: 10 }]}>Infos</Text>
+          <Text style={{ color: C.textSoft, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 }}>
+            Site web
+          </Text>
+          <TouchableOpacity onPress={openWebsite} activeOpacity={0.7}>
+            <Text style={{ color: '#7B2FFF', fontSize: 14, fontWeight: '500' }} numberOfLines={1}>
+              {event.website}
+            </Text>
           </TouchableOpacity>
         </View>
       ) : null}
