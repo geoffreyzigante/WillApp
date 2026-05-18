@@ -1826,16 +1826,16 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       generateThumbnail: true, generatePreview: true,
       thumbnailWidthPx: 400, previewWidthPx: 1200, previewQuality: 80,
       // Post-capture filter (Vision framework, iOS only). Une photo doit
-      // contenir au moins 1 visage >= minFaceWidthPx avec une faceCaptureQuality
-      // Vision >= minQuality, sinon elle est trashee avant upload.
-      // - minQuality 0.25 : le modele Apple VNDetectFaceCaptureQuality est
-      //   calibre studio-grade — sur le terrain (coureurs en mouvement),
-      //   meme des visages bien nets de 500+px scorent 0.30-0.45. 0.25 garde
-      //   la grande majorite des photos OK tout en ecartant les vrais flous
-      //   (qui tombent sous 0.2). Eviter de remonter au-dessus de 0.4 sans
-      //   valider les logs verbose au prealable.
+      // contenir au moins 1 visage >= minFaceWidthPx, sinon elle est trashee
+      // avant upload. Le score VNDetectFaceCaptureQuality (Apple Vision) a
+      // ete neutralise (minQuality=0) : le pipeline natif AVCapturePhotoOutput
+      // + Deep Fusion + cap shutter 1/500 garantit deja la nettete. Le score
+      // Apple, calibre studio-grade, rejetait abusivement les coureurs a
+      // distance (scores 0.3-0.5 sur des photos OK). On garde quand meme le
+      // filtre visage : il evite d'uploader les photos sans personne (faux
+      // declenchements MLKit, capteur cache, etc).
       // - enabled:false pour bypasser temporairement (debug).
-      postCaptureFilter: { enabled: true, minFaceWidthPx: 80, minQuality: 0.25 },
+      postCaptureFilter: { enabled: true, minFaceWidthPx: 80, minQuality: 0 },
     },
     upload: { mode: "immediate", batchSize: 10, maxRetries: 5, compressBeforeUpload: false },
     debug: { verboseLogs: false, skipRekognition: false, saveUnmatchedFrames: false },
@@ -1904,32 +1904,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
   const isCapturingRef = useRef(false);
 
-  // Indicateur shutter adaptatif (patch natif iOS with-fast-shutter) :
-  // le controleur Swift ecrit Caches/will_shutter.json toutes les 500ms, on
-  // poll a 1Hz pour afficher la pastille couleur + le shutter courant. Null
-  // tant qu'aucune lecture valide (Android, pas de back camera, ou avant
-  // 1ere ecriture native).
-  const [shutterInfo, setShutterInfo] = useState(null); // { shutter: "1/1000s", level: "green"|"yellow"|"red" }
-  useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const f = new File(Paths.cache, 'will_shutter.json');
-        if (!f.exists) return;
-        const txt = await f.text();
-        const data = JSON.parse(txt);
-        if (cancelled) return;
-        if (data?.shutter && data?.level) {
-          setShutterInfo({ shutter: data.shutter, level: data.level });
-        }
-      } catch {}
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
-
   // Mode capture : 'continuous' (rafale tant qu'un visage est dans la zone)
   // ou '3lines' (declenchement quand un visage traverse une des 3 lignes
   // verticales a 40/50/60% de la largeur ecran). Persiste dans AsyncStorage.
@@ -1953,12 +1927,19 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     setCaptureMode(next);
     captureModeRef.current = next;
     prevFaceCentersRef.current = new Map();
+    faceTrackingRef.current = new Map();
     AsyncStorage.setItem(CAPTURE_MODE_KEY, next).catch(() => {});
   };
-  // Timestamp de la derniere frame MLKit avec visage dans la zone. Sert a
-  // appliquer une tolerance (TOLERANCE_MS) sur la perte momentanee de
-  // detection (clignement, occlusion bref, faux negatif MLKit) avant d'arreter
-  // la capture continue.
+  // Tracker par trackingId pour le mode continu : { firstSeenAt, lastCaptureAt }
+  // - firstSeenAt : timestamp d'entree du visage dans la zone (debounce 200ms
+  //   avant capture, pour eviter de tirer sur un faux positif MLKit transitoire).
+  // - lastCaptureAt : timestamp de la derniere photo prise pour ce visage
+  //   (cooldown 800ms entre 2 captures du meme visage, pour eviter le spam
+  //   sur un coureur statique).
+  // Cleanup automatique quand un id ne reapparait plus dans validInZone.
+  const faceTrackingRef = useRef(new Map());
+  // Timestamp de la derniere frame MLKit avec visage dans la zone (mode 3 lignes
+  // legacy, ne sert plus en mode continu apres le refactor settle+cooldown).
   const lastFaceSeenAtRef = useRef(0);
   // Timestamp de la derniere photo prise. La capture continue tire une nouvelle
   // photo des que (now - lastPhotoTime) >= MIN_INTERVAL_MS et qu'un visage est
@@ -2030,15 +2011,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const [captureFps, setCaptureFps] = useState(0);
   const captureWindowStartRef = useRef(0);
   const captureWindowCountRef = useRef(0);
-  // Toggle "Mode test (capture sans upload)" : capture continue mais photo
-  // supprimee immediatement apres takePhoto (pas d'enqueue, pas d'upload).
-  // Ref pour acces synchrone depuis captureOne, state pour le rendu UI.
-  const testNoUploadRef = useRef(false);
-  const [testNoUpload, setTestNoUpload] = useState(false);
-  const setTestNoUploadBoth = useCallback((v) => {
-    testNoUploadRef.current = !!v;
-    setTestNoUpload(!!v);
-  }, []);
   // Push MLKit fps depuis le worklet (toutes les 30 frames).
   const onMlkitWindowJS = useMemo(
     () => Worklets.createRunOnJS((frames, elapsedMs) => {
@@ -2166,13 +2138,18 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         return;
       }
 
-      // ─── MODE "CONTINU" (defaut) : logique historique ────────────────
-      const minFaces = eventConfig.faceDetection?.minFacesToTrigger ?? 1;
+      // ─── MODE "CONTINU" : settle 200ms + cooldown 800ms per-face ─────
+      // Logique : chaque visage qui entre dans la zone declenche UNE photo
+      // apres 200ms de stabilite (anti-faux-positif MLKit), puis au plus une
+      // photo toutes les 800ms tant qu'il reste dans la zone. Quand il sort,
+      // son entree disparait du tracker. Garantit une capture systematique
+      // meme a distance, sans dependre d'un toleranceMs global qui pouvait
+      // tuer la session avant qu'on tire.
+      const SETTLE_MS = 200;
+      const COOLDOWN_MS = 800;
       const maxSize = (eventConfig.faceDetection?.maxFaceSizePercent ?? 80) / 100;
-      const minIntervalMs = eventConfig.capture?.intervalMs ?? MIN_INTERVAL_MS_DEFAULT;
-      const toleranceMs = eventConfig.capture?.toleranceMs ?? TOLERANCE_MS_DEFAULT;
 
-      // Filtre les visages dans la zone, en éliminant ceux trop gros (trop près)
+      // Filtre les visages dans la zone (trop gros = trop pres = exclu).
       const validInZone = facesData.filter(f =>
         f.inZone && (f.sizeFraction == null || f.sizeFraction <= maxSize)
       );
@@ -2182,32 +2159,29 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       }
       facesInZoneCountRef.current = validInZone.length;
 
-      const faceInZone = validInZone.length >= minFaces;
-      if (faceInZone) {
-        lastFaceSeenAtRef.current = now;
-        // 1ere detection apres une periode sans visage -> latency probe
-        if (lastFaceInZoneAtRef.current === 0) {
-          lastFaceInZoneAtRef.current = now;
-        }
-      }
-
-      // Pas arme : aucune capture. Reset la session en cours si on l'avait.
+      // Pas arme : tout reset (tracker + session burst), aucune capture.
       if (!isAutoArmedRef.current) {
-        if (currentBurstTsRef.current !== null) {
+        if (currentBurstTsRef.current !== null || faceTrackingRef.current.size > 0) {
           const m = `[capture] stop (armed=false)`;
           console.log(m); addDebugLog(m);
           currentBurstTsRef.current = null;
           currentBurstIndexRef.current = 0;
+          faceTrackingRef.current.clear();
         }
         return;
       }
 
-      // Tolerance : si le visage a quitte la zone depuis > toleranceMs, on
-      // arrete la session courante. Sinon (perte momentanee) on continue.
-      const sinceLastFace = now - lastFaceSeenAtRef.current;
-      if (lastFaceSeenAtRef.current === 0 || sinceLastFace > toleranceMs) {
+      // Cleanup : retire du tracker les visages qui ne sont plus dans la zone
+      // (sortis du cadre, perdus par MLKit, ou trackingId reattribue).
+      const liveIds = new Set(validInZone.map(f => f.id));
+      for (const id of [...faceTrackingRef.current.keys()]) {
+        if (!liveIds.has(id)) faceTrackingRef.current.delete(id);
+      }
+
+      // Aucun visage en zone : on cloture le burst courant et on attend.
+      if (validInZone.length === 0) {
         if (currentBurstTsRef.current !== null) {
-          const m = `[capture] stop (face left zone +${sinceLastFace}ms)`;
+          const m = `[capture] burst ended (zone empty)`;
           console.log(m); addDebugLog(m);
           currentBurstTsRef.current = null;
           currentBurstIndexRef.current = 0;
@@ -2216,17 +2190,30 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         return;
       }
 
-      // Visage present (ou dans la fenetre de tolerance) + arme.
-      // Capture si l'intervalle min est ecoule et qu'aucune capture n'est en cours.
+      // Un capture deja en cours : on attend qu'il se termine pour evaluer.
       if (isCapturingRef.current) return;
-      const sinceLastPhoto = now - lastPhotoTimeRef.current;
-      if (sinceLastPhoto < minIntervalMs) return;
-      captureOne();
+
+      // Pour chaque visage en zone, decide s'il est temps de tirer. On stoppe
+      // au premier visage eligible (1 capture par frame max). Les autres
+      // visages se feront capturer aux frames suivantes selon leur cooldown.
+      for (const f of validInZone) {
+        let entry = faceTrackingRef.current.get(f.id);
+        if (!entry) {
+          entry = { firstSeenAt: now, lastCaptureAt: 0 };
+          faceTrackingRef.current.set(f.id, entry);
+          if (lastFaceInZoneAtRef.current === 0) lastFaceInZoneAtRef.current = now;
+        }
+        // Settle : pas encore reste assez longtemps dans la zone.
+        if (now - entry.firstSeenAt < SETTLE_MS) continue;
+        // Cooldown : on a deja tire sur ce visage il y a peu.
+        if (entry.lastCaptureAt > 0 && now - entry.lastCaptureAt < COOLDOWN_MS) continue;
+        // Tir.
+        entry.lastCaptureAt = now;
+        captureOne();
+        return;
+      }
     }),
     [
-      eventConfig.capture?.intervalMs,
-      eventConfig.capture?.toleranceMs,
-      eventConfig.faceDetection?.minFacesToTrigger,
       eventConfig.faceDetection?.maxFaceSizePercent,
     ]
   );
@@ -2917,13 +2904,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       const rawPath = photo.path?.startsWith('file://') ? photo.path : `file://${photo.path}`;
 
       // Post-capture filter (Vision framework iOS) : on rejette les photos
-      // sans visage / trop petit / floues avant qu'elles n'entrent dans la
-      // queue d'upload. Bypasse en mode test sans upload (on veut mesurer la
-      // cadence pure capture), ou si le module natif n'est pas disponible
-      // (Android, dev sans rebuild, etc).
+      // sans visage / trop petit avant qu'elles n'entrent dans la queue
+      // d'upload. Bypasse si module natif indisponible (Android, dev sans
+      // rebuild). Le score qualite Apple Vision a ete neutralise (minQuality=0)
+      // car redondant avec le pipeline natif Deep Fusion + cap shutter 1/500s.
       const filterCfg = eventConfig.imageProcessing?.postCaptureFilter;
       const filterEnabled = filterCfg?.enabled !== false
-        && !testNoUploadRef.current
         && Platform.OS === 'ios'
         && NativeModules.WillPhotoFilter;
       if (filterEnabled) {
@@ -2931,7 +2917,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           const verdict = await NativeModules.WillPhotoFilter.evaluate(
             rawPath,
             filterCfg.minFaceWidthPx ?? 80,
-            filterCfg.minQuality ?? 0.25,
+            filterCfg.minQuality ?? 0,
           );
           if (!verdict.accepted) {
             const m = `[Will-Filter] rejected: ${verdict.reason} `
@@ -2951,15 +2937,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           // d'un bug Vision intermittent.
           console.warn('[Will-Filter] error, photo kept:', e?.message);
         }
-      }
-
-      // Mode test (capture sans upload) : on supprime le fichier temporaire
-      // immediatement et on n'enqueue rien. Comptabilise quand meme dans la
-      // cadence ci-dessus (mesure isolee du goulot upload).
-      if (testNoUploadRef.current) {
-        try { new File(rawPath).delete(); } catch {}
-        if (isMountedRef.current) setPhotoCount(c => c + 1);
-        return;
       }
 
       const d = new Date();
@@ -3307,32 +3284,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444', marginLeft: 2 }} />
             )}
           </TouchableOpacity>
-
-          {/* Indicateur shutter : iOS gere l'exposition (continuousAutoExposure
-              + cap 1/1000s), on lit juste la valeur effective. Mode "auto" =
-              texte seul (pas de pastille). Mode legacy (green/yellow/red) =
-              pastille couleur (compat builds anciens, retire au prochain run). */}
-          {shutterInfo && (
-            <View
-              style={{
-                flexDirection: 'row', alignItems: 'center', gap: 6,
-                paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
-                backgroundColor: 'rgba(255,255,255,0.1)',
-              }}
-            >
-              {shutterInfo.level !== 'auto' && (
-                <View style={{
-                  width: 8, height: 8, borderRadius: 4,
-                  backgroundColor:
-                    shutterInfo.level === 'green' ? '#22C55E' :
-                    shutterInfo.level === 'yellow' ? '#F59E0B' : '#EF4444',
-                }} />
-              )}
-              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 }}>
-                {shutterInfo.shutter}
-              </Text>
-            </View>
-          )}
         </View>
 
         {/* Progress bar : visible quand un drain en cours porte sur > 5 photos. */}
@@ -3464,9 +3415,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           })}
         </View>
 
-        {/* ─── LOGS OVERLAY (temporaire) : toggle mode test + stats + 10 derniers
-            logs. Position absolute juste au-dessus du footer noir. Toggle via
-            le bouton LOGS du header. A retirer une fois la latence fixee. ─── */}
+        {/* ─── LOGS OVERLAY : stats temps reel + 10 derniers logs [capture] /
+            [Will-Filter] / [upload]. Cache par defaut, toggle via le bouton
+            LOGS du header (debug uniquement, pas vu par le photographe). ─── */}
         {showDebug && (
           <View
             pointerEvents="box-none"
@@ -3482,46 +3433,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               zIndex: 20,
             }}
           >
-            {/* Toggle Mode test (capture sans upload) — diagnostic perf. */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => setTestNoUploadBoth(!testNoUpload)}
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 8,
-                borderRadius: 6,
-                backgroundColor: 'rgba(255,255,255,0.05)',
-                borderWidth: 1,
-                borderColor: testNoUpload ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.08)',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: 8,
-              }}
-            >
-              <View style={{ flex: 1, paddingRight: 10 }}>
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
-                  Mode test (capture sans upload)
-                </Text>
-                <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 }}>
-                  Photos supprimees apres capture. Sert a mesurer la cadence sans le goulot upload.
-                </Text>
-              </View>
-              <View style={{
-                width: 32, height: 18, borderRadius: 9,
-                backgroundColor: testNoUpload ? '#F59E0B' : 'rgba(255,255,255,0.18)',
-                justifyContent: 'center',
-                paddingHorizontal: 2,
-              }}>
-                <View style={{
-                  width: 14, height: 14, borderRadius: 7,
-                  backgroundColor: '#fff',
-                  transform: [{ translateX: testNoUpload ? 14 : 0 }],
-                }} />
-              </View>
-            </TouchableOpacity>
-
-            {/* Stats temps reel : MLKit fps, capture photos/s, queue size, mode test. */}
+            {/* Stats temps reel : MLKit fps, capture photos/s, queue size. */}
             <View style={{
               flexDirection: 'row',
               justifyContent: 'space-between',
@@ -3547,13 +3459,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
               }}>
                 queue {queueStats.total}
-              </Text>
-              <Text style={{
-                color: testNoUpload ? '#F59E0B' : 'rgba(255,255,255,0.45)',
-                fontSize: 11, lineHeight: 13,
-                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-              }}>
-                {testNoUpload ? 'TEST' : 'live'}
               </Text>
             </View>
             <ScrollView>

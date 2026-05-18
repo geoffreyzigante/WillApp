@@ -42,14 +42,21 @@ const SWIFT_SOURCE = `//
 //
 //  Evaluates a captured photo via Apple Vision framework and returns a
 //  verdict to JS (accept / reject + reason). Used by the photographer mode
-//  single-shot HQ pipeline to discard blurry / faceless / too-small photos
-//  before they enter the upload queue.
+//  single-shot HQ pipeline to discard faceless / too-small photos before
+//  they enter the upload queue.
 //
-//  Vision request : VNDetectFaceCaptureQualityRequest, available since iOS 13.
-//  This request returns face bounding boxes + a faceCaptureQuality score in
-//  [0..1] that combines sharpness, lighting, expression and pose. It's a
-//  better proxy than raw Laplacian-based sharpness because it focuses on the
-//  face region (where it matters for race photos).
+//  Vision request : VNDetectFaceRectanglesRequest. Cheaper than the previous
+//  VNDetectFaceCaptureQualityRequest — we no longer compute Apple's quality
+//  score because it was studio-calibrated and rejected acceptable race
+//  photos (runners at distance scored 0.3-0.5 even when sharp). Sharpness
+//  is now guaranteed upstream by the native pipeline : Deep Fusion + Smart
+//  HDR + shutter cap 1/500s on AVCapturePhotoOutput. The filter only acts
+//  as a face-presence gate to drop blank photos (false MLKit triggers,
+//  obscured lens, etc).
+//
+//  minQuality is kept as an ignored parameter for ABI compat with the JS
+//  side (so an OTA can roll without breaking the bridge) — to be removed
+//  next time both sides ship together.
 //
 
 import Foundation
@@ -68,15 +75,15 @@ final class WillPhotoFilter: NSObject {
   //   await NativeModules.WillPhotoFilter.evaluate(path, minFaceWidthPx, minQuality)
   // - path: absolute file URL (with or without file:// prefix) to the JPEG.
   // - minFaceWidthPx: int, the largest face must be >= this width (pixels).
-  // - minQuality: float in [0..1], the largest face must have a Vision
-  //   faceCaptureQuality >= this value.
+  // - minQuality: ignored (deprecated). Kept in the signature for ABI compat
+  //   with the JS bridge — see header note.
   // Resolves with a dict; never rejects on "rejected by filter" — only on
   // hard errors (image load failure, Vision crash). The JS layer decides
   // what to do with the verdict.
   @objc
   func evaluate(_ pathArg: NSString,
                 minFaceWidthPx: NSNumber,
-                minQuality: NSNumber,
+                minQuality _: NSNumber,
                 resolver: @escaping RCTPromiseResolveBlock,
                 rejecter: @escaping RCTPromiseRejectBlock) {
     let raw = pathArg as String
@@ -103,7 +110,7 @@ final class WillPhotoFilter: NSObject {
       let handler = VNImageRequestHandler(cgImage: cgImage,
                                           orientation: orientation,
                                           options: [:])
-      let request = VNDetectFaceCaptureQualityRequest()
+      let request = VNDetectFaceRectanglesRequest()
 
       do {
         try handler.perform([request])
@@ -141,26 +148,17 @@ final class WillPhotoFilter: NSObject {
         }
       }
       let faceWidthPx = Int(best.boundingBox.width * imageWidth)
-      // faceCaptureQuality est optionnel : nil sur ancien iOS ou sur certains
-      // formats. On traite nil comme "qualite inconnue" -> on accepte plutot
-      // que rejeter, pour ne pas trasher des photos a cause d'un detail Vision.
-      let qualityOpt = best.faceCaptureQuality
       let minWidth = minFaceWidthPx.intValue
-      let minQ = minQuality.floatValue
-      var accepted = true
-      var reason = "ok"
-      if faceWidthPx < minWidth {
-        accepted = false
-        reason = "face_too_small"
-      } else if let q = qualityOpt, Float(q) < minQ {
-        accepted = false
-        reason = "low_quality"
-      }
+      let accepted = faceWidthPx >= minWidth
+      let reason = accepted ? "ok" : "face_too_small"
       resolver([
         "accepted": accepted,
         "hasFace": true,
         "faceWidthPx": faceWidthPx,
-        "faceCaptureQuality": qualityOpt.map { NSNumber(value: Float($0)) } ?? NSNull(),
+        // faceCaptureQuality plus calcule : la nettete est garantie en
+        // amont par AVCapturePhotoOutput. On renvoie NSNull pour ABI compat
+        // (le JS lit "verdict.faceCaptureQuality" en log verbose).
+        "faceCaptureQuality": NSNull(),
         "reason": reason,
       ])
     }
