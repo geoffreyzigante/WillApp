@@ -8157,11 +8157,15 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
       const r = await fetch(`${API_URL}/organizer/event-photos/${event.code}`, {
         headers: { Authorization: `Bearer ${session.token}` },
       });
-      const data = r.ok ? await r.json() : { photos: [] };
-      // Filtre défensif : on jette les entrées qui n'ont pas une url+key string
-      // valides. Une seule entrée bancale peut faire crasher ExpoImage au render
-      // et entraîner tout l'écran (la map ci-dessous propage l'objet tel quel).
-      const list = (data.photos || [])
+      const data = r.ok ? await r.json() : { before_event: [], during_event: [] };
+      // Le worker separe les photos en before_event (setup/test avant l'heure
+      // de depart) et during_event (course). Cote mobile on les fusionne et
+      // on trie par burstTs DESC : les plus recentes en haut, ce qui revient
+      // naturellement a mettre during_event au-dessus de before_event.
+      // Filtre defensif : on jette les entrees qui n'ont pas url+key string
+      // valides — une entree bancale peut faire crasher ExpoImage au render.
+      const raw = [...(data.during_event || []), ...(data.before_event || [])];
+      const list = raw
         .filter(p => p && typeof p.url === 'string' && p.url.length > 0
                        && typeof p.key === 'string' && p.key.length > 0)
         .map(p => ({
