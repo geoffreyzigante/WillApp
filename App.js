@@ -2965,12 +2965,23 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     let photo = null;
     try {
       const photoStart = Date.now();
+      const m0 = `[capture] takePhoto called (#${idx + 1} of session)`;
+      console.log(m0); addDebugLog(m0);
       photo = await cameraRef.current.takePhoto({
         flash: 'off',
         enableShutterSound: false,
       });
       const photoEnd = Date.now();
-      const m = `[capture] photo taken @ +${photoEnd - burstTs}ms (#${idx + 1} of session, takePhoto: ${photoEnd - photoStart}ms)`;
+      // Lit la taille du fichier pour diagnostiquer un takePhoto qui resout
+      // mais sans contenu reel (rare, mais arrive si AVCapture echoue
+      // silencieusement apres callback Apple).
+      let sizeKb = '?';
+      try {
+        const fpath = photo?.path?.startsWith('file://') ? photo.path : `file://${photo?.path}`;
+        const sz = new File(fpath).size;
+        if (typeof sz === 'number') sizeKb = Math.round(sz / 1024);
+      } catch {}
+      const m = `[capture] takePhoto resolved size=${sizeKb}kb @ +${photoEnd - burstTs}ms (#${idx + 1} of session, ${photoEnd - photoStart}ms)`;
       console.log(m); addDebugLog(m);
 
       // Compteur cadence : log toutes les 30 photos prises. Permet de mesurer
@@ -2992,7 +3003,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         captureWindowStartRef.current = photoEnd;
       }
     } catch (e) {
-      console.warn('takePhoto', e);
+      const m = `[capture] takePhoto FAILED: ${e?.message || e?.code || String(e)}`;
+      console.warn(m); addDebugLog(m);
     }
 
     isCapturingRef.current = false;
