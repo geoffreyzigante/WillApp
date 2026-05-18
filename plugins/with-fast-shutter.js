@@ -5,7 +5,7 @@
  * auto exposure on the back camera (photographer mode):
  *  - exposureMode = .continuousAutoExposure (laisse iOS gerer ISO + shutter
  *    + tone mapping, ce qui inclut le HDR multi-frame du buffer video).
- *  - activeMaxExposureDuration = 1/1000s (plafond shutter pour eviter le
+ *  - activeMaxExposureDuration = 1/250s (plafond shutter pour eviter le
  *    flou de bouge sur les coureurs — iOS reste libre d'aller plus vite).
  *  - isVideoHDREnabled = true si le format actif le supporte.
  *  - automaticallyEnablesLowLightBoostWhenAvailable = true si supporte.
@@ -49,7 +49,7 @@ const SEARCH = `    if device.isExposureModeSupported(.continuousAutoExposure) {
     }`;
 
 const REPLACE = `    // ${MARKER} BACK camera: continuousAutoExposure + activeMaxExposureDuration
-    // capped at 1/1000s. Lets iOS pick the right ISO/shutter combo (Smart
+    // capped at 1/250s. Lets iOS pick the right ISO/shutter combo (Smart
     // tone mapping included) while still preventing motion blur on runners.
     // .custom mode disables video HDR + low-light boost, so we abandon it.
     if device.isExposurePointOfInterestSupported {
@@ -75,12 +75,12 @@ const REPLACE = `    // ${MARKER} BACK camera: continuousAutoExposure + activeMa
       if device.isExposureModeSupported(.continuousAutoExposure) {
         device.exposureMode = .continuousAutoExposure
       }
-      // Plafond shutter = 1/1000s. iOS reste libre d'aller plus vite en bonne
-      // lumiere, mais ne ralentira pas sous 1/1000s (compromis flou de bouge).
-      let maxDuration = CMTime(value: 1, timescale: 1000)
+      // Plafond shutter = 1/250s. iOS reste libre d'aller plus vite en bonne
+      // lumiere, mais ne ralentira pas sous 1/250s (compromis flou de bouge).
+      let maxDuration = CMTime(value: 1, timescale: 250)
       device.activeMaxExposureDuration = maxDuration
       WillAdaptiveShutter.shared.startMonitor(device: device)
-      NSLog("[FastShutter] continuousAutoExposure + cap 1/1000s on back camera")
+      NSLog("[FastShutter] continuousAutoExposure + cap 1/250s on back camera")
     } else if device.isExposureModeSupported(.continuousAutoExposure) {
       device.exposureMode = .continuousAutoExposure
     }`;
