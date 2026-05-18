@@ -1420,10 +1420,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           style={{
             backgroundColor: tint,
             borderRadius: 14,
-            paddingVertical: 14,
+            paddingVertical: 10,
             paddingHorizontal: 24,
             alignItems: 'center',
-            marginBottom: 16,
+            marginTop: -2,
+            marginBottom: 10,
           }}
         >
           <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
