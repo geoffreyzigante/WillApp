@@ -1880,6 +1880,32 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
   const isCapturingRef = useRef(false);
 
+  // Indicateur shutter adaptatif (patch natif iOS with-fast-shutter) :
+  // le controleur Swift ecrit Caches/will_shutter.json toutes les 500ms, on
+  // poll a 1Hz pour afficher la pastille couleur + le shutter courant. Null
+  // tant qu'aucune lecture valide (Android, pas de back camera, ou avant
+  // 1ere ecriture native).
+  const [shutterInfo, setShutterInfo] = useState(null); // { shutter: "1/1000s", level: "green"|"yellow"|"red" }
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const f = new File(Paths.cache, 'will_shutter.json');
+        if (!f.exists) return;
+        const txt = await f.text();
+        const data = JSON.parse(txt);
+        if (cancelled) return;
+        if (data?.shutter && data?.level) {
+          setShutterInfo({ shutter: data.shutter, level: data.level });
+        }
+      } catch {}
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
   // Mode capture : 'continuous' (rafale tant qu'un visage est dans la zone)
   // ou '3lines' (declenchement quand un visage traverse une des 3 lignes
   // verticales a 40/50/60% de la largeur ecran). Persiste dans AsyncStorage.
@@ -3079,6 +3105,29 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444', marginLeft: 2 }} />
             )}
           </TouchableOpacity>
+
+          {/* Pastille shutter adaptatif : vert (>=1/1000s, bonne lumiere),
+              jaune (1/500s, lumiere faible), rouge (1/250s, tres faible).
+              Sert au photographe pour savoir si la zone est exploitable. */}
+          {shutterInfo && (
+            <View
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 6,
+                paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999,
+                backgroundColor: 'rgba(255,255,255,0.1)',
+              }}
+            >
+              <View style={{
+                width: 8, height: 8, borderRadius: 4,
+                backgroundColor:
+                  shutterInfo.level === 'green' ? '#22C55E' :
+                  shutterInfo.level === 'yellow' ? '#F59E0B' : '#EF4444',
+              }} />
+              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 }}>
+                {shutterInfo.shutter}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Progress bar : visible quand un drain en cours porte sur > 5 photos. */}
