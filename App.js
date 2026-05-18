@@ -1410,6 +1410,27 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         ) : null}
       </View>
 
+      {/* CTA Site web : juste sous le header, coloré au type d'épreuve.
+          Affiche le domaine sans préfixe https://. Caché si pas de website. */}
+      {event.website ? (
+        <TouchableOpacity
+          onPress={openWebsite}
+          activeOpacity={0.85}
+          style={{
+            backgroundColor: tint,
+            borderRadius: 14,
+            paddingVertical: 14,
+            paddingHorizontal: 24,
+            alignSelf: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
+            {event.website.replace(/^https?:\/\//, '')} →
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
       {/* Courses : un seul bloc avec header de labels + lignes de valeurs */}
       {distances.length > 0 && photos.length === 0 && (
         <View style={{
@@ -1458,21 +1479,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           ))}
         </View>
       )}
-
-      {/* Bloc Infos : label uppercase gris + valeur en violet cliquable */}
-      {event.website ? (
-        <View style={{ marginBottom: 16 }}>
-          <Text style={[s.sectionTitle, { marginBottom: 10 }]}>Infos</Text>
-          <Text style={{ color: C.textSoft, fontSize: 11, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 }}>
-            Site web
-          </Text>
-          <TouchableOpacity onPress={openWebsite} activeOpacity={0.7}>
-            <Text style={{ color: '#7B2FFF', fontSize: 14, fontWeight: '500' }} numberOfLines={1}>
-              {event.website}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
 
       {/* Galerie ou message à venir */}
       {upcoming && photos.length === 0 ? (
