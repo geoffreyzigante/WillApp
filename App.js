@@ -1838,7 +1838,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       postCaptureFilter: { enabled: true, minFaceWidthPx: 80, minQuality: 0 },
     },
     upload: { mode: "immediate", batchSize: 10, maxRetries: 5, compressBeforeUpload: false },
-    debug: { verboseLogs: false, skipRekognition: false, saveUnmatchedFrames: false },
+    debug: { verboseLogs: true, skipRekognition: false, saveUnmatchedFrames: false },
   });
 
   useEffect(() => {
