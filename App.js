@@ -1342,7 +1342,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       </View>
 
       <View style={{ position: 'relative', marginTop: 12, marginBottom: 8 }}>
-        <View style={s.eventCard}>
+        {/* Override le marginBottom: 10 hérité de s.eventCard — l'espacement
+            avec le bloc suivant est géré par le wrapper (marginBottom: 8). */}
+        <View style={[s.eventCard, { marginBottom: 0 }]}>
           {/* Layer 0 : aplat coloré pleine carte (fallback + fond sous image) */}
           <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
           {/* Layer 1 : cover image pleine carte */}
