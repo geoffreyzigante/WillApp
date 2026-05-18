@@ -76,6 +76,7 @@ async function migrateSensitiveKeysToSecureStore() {
 // + photos stockées hors-cache pour survivre au kill / nettoyage iOS.
 const UPLOAD_QUEUE_KEY = '@will_upload_queue';
 const LAST_CAPTURE_KEY = '@will_last_capture_at';
+const CAPTURE_MODE_KEY = '@will_photographer_capture_mode';
 const PENDING_DIR_NAME = 'will_pending';
 const COVERS_DIR_NAME = 'will_event_covers';
 const MAX_RETRIES_DEFAULT = 5;
@@ -1777,6 +1778,32 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   }, [device, eventConfig.capture?.exposureCompensation]);
 
   const isCapturingRef = useRef(false);
+
+  // Mode capture : 'continuous' (rafale tant qu'un visage est dans la zone)
+  // ou '3lines' (declenchement quand un visage traverse une des 3 lignes
+  // verticales a 40/50/60% de la largeur ecran). Persiste dans AsyncStorage.
+  const [captureMode, setCaptureMode] = useState('continuous');
+  const captureModeRef = useRef('continuous');
+  // Centre Y (axe horizontal ecran) de chaque visage a la frame precedente,
+  // indexe par trackingId. Utilise pour detecter la traversee d'une des 3
+  // lignes entre 2 frames. useRef pour eviter les re-renders a 30fps.
+  const prevFaceCentersRef = useRef(new Map());
+
+  useEffect(() => {
+    AsyncStorage.getItem(CAPTURE_MODE_KEY).then(v => {
+      if (v === '3lines' || v === 'continuous') {
+        setCaptureMode(v);
+        captureModeRef.current = v;
+      }
+    }).catch(() => {});
+  }, []);
+
+  const onCaptureModeChange = (next) => {
+    setCaptureMode(next);
+    captureModeRef.current = next;
+    prevFaceCentersRef.current = new Map();
+    AsyncStorage.setItem(CAPTURE_MODE_KEY, next).catch(() => {});
+  };
   // Timestamp de la derniere frame MLKit avec visage dans la zone. Sert a
   // appliquer une tolerance (TOLERANCE_MS) sur la perte momentanee de
   // detection (clignement, occlusion bref, faux negatif MLKit) avant d'arreter
@@ -1949,13 +1976,50 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           setFacesInZoneCount(0);
         }
         facesInZoneCountRef.current = 0;
+        prevFaceCentersRef.current = new Map();
         return;
       }
+      const now = Date.now();
+
+      // ─── MODE "3 LIGNES" : declenchement sur traversee ───────────────
+      // Lignes a cyFraction = 0.4, 0.5, 0.6 (correspond visuellement aux
+      // 3 lignes verticales a 40/50/60% de la largeur ecran). On compare
+      // la position de chaque visage entre frame N-1 et frame N : si le
+      // centre a change de cote par rapport a au moins une ligne, on
+      // declenche une capture (throttle 200ms via captureOne).
+      if (captureModeRef.current === '3lines') {
+        const LINES = [0.4, 0.5, 0.6];
+        const next = new Map();
+        let crossed = false;
+        for (const f of facesData) {
+          if (!f.verticalOk) continue; // ignore les visages hors band vertical
+          next.set(f.id, f.cyFraction);
+          if (crossed) continue;
+          const prev = prevFaceCentersRef.current.get(f.id);
+          if (prev == null) continue;
+          for (const line of LINES) {
+            if ((prev <= line && f.cyFraction > line) || (prev >= line && f.cyFraction < line)) {
+              crossed = true;
+              break;
+            }
+          }
+        }
+        prevFaceCentersRef.current = next;
+        if (crossed && isAutoArmedRef.current && !isCapturingRef.current) {
+          const sinceLastPhoto = now - lastPhotoTimeRef.current;
+          if (sinceLastPhoto >= 200) {
+            lastFaceSeenAtRef.current = now;
+            captureOne();
+          }
+        }
+        return;
+      }
+
+      // ─── MODE "CONTINU" (defaut) : logique historique ────────────────
       const minFaces = eventConfig.faceDetection?.minFacesToTrigger ?? 1;
       const maxSize = (eventConfig.faceDetection?.maxFaceSizePercent ?? 80) / 100;
       const minIntervalMs = eventConfig.capture?.intervalMs ?? MIN_INTERVAL_MS_DEFAULT;
       const toleranceMs = eventConfig.capture?.toleranceMs ?? TOLERANCE_MS_DEFAULT;
-      const now = Date.now();
 
       // Filtre les visages dans la zone, en éliminant ceux trop gros (trop près)
       const validInZone = facesData.filter(f =>
@@ -2117,10 +2181,19 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         (bounds.height || 0) / fH,
       );
       const inside = (cy >= testMin && cy <= testMax) && (cx >= vMin && cx <= vMax);
+      // cyFraction = position horizontale ecran (0=droite, 1=gauche en
+      // orientation portrait + landscape-right). Utilise par le mode "3 lignes"
+      // pour detecter la traversee.
+      const cyFraction = fH > 0 ? cy / fH : 0;
+      // verticalOk = visage dans le band TRIGGER_VPCT centre verticalement.
+      // Sert au mode 3 lignes : on ignore les visages aux extremites top/bottom.
+      const verticalOk = cx >= vMin && cx <= vMax;
       return {
         id: f.trackingId != null ? String(f.trackingId) : `${Math.round(cx)}_${Math.round(cy)}`,
         inZone: inside,
         sizeFraction,
+        cyFraction,
+        verticalOk,
       };
     });
     onFacesDetectedJS(facesData);
@@ -2697,36 +2770,63 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         enableLocation={false}
       />
 
-      {/* ─── CADRAGE DÉTECTION : 2 lignes verticales subtiles uniquement.
-          Bande verticale = TRIGGER_VPCT de la preview centrée. Le worklet
-          MLKit applique strictement la même contrainte (cf. vMin/vMax dans
-          le frame processor), donc visuel et logique sont alignés. ─── */}
-      <View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          top: CAMERA_TOP + previewH * (1 - TRIGGER_VPCT) / 2,
-          left: 0, right: 0,
-          height: previewH * TRIGGER_VPCT,
-          flexDirection: 'row',
-          justifyContent:
-            zonePosition === 'left' ? 'flex-start' :
-            zonePosition === 'right' ? 'flex-end' : 'center',
-        }}
-      >
-        <View style={{ width: `${zonePct * 100}%`, height: '100%' }}>
-          {(() => {
-            const inZone = facesInZoneCount > 0;
-            const lineColor = inZone ? 'rgba(16, 185, 129, 0.85)' : 'rgba(255, 255, 255, 0.35)';
-            return (
-              <>
-                <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 1, backgroundColor: lineColor }} />
-                <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 1, backgroundColor: lineColor }} />
-              </>
-            );
-          })()}
+      {/* ─── CADRAGE DÉTECTION mode "Continu" : 2 lignes verticales subtiles
+          delimitant la bande de declenchement. Masque en mode "3 lignes". ─── */}
+      {captureMode === 'continuous' && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: CAMERA_TOP + previewH * (1 - TRIGGER_VPCT) / 2,
+            left: 0, right: 0,
+            height: previewH * TRIGGER_VPCT,
+            flexDirection: 'row',
+            justifyContent:
+              zonePosition === 'left' ? 'flex-start' :
+              zonePosition === 'right' ? 'flex-end' : 'center',
+          }}
+        >
+          <View style={{ width: `${zonePct * 100}%`, height: '100%' }}>
+            {(() => {
+              const inZone = facesInZoneCount > 0;
+              const lineColor = inZone ? 'rgba(16, 185, 129, 0.85)' : 'rgba(255, 255, 255, 0.35)';
+              return (
+                <>
+                  <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 1, backgroundColor: lineColor }} />
+                  <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 1, backgroundColor: lineColor }} />
+                </>
+              );
+            })()}
+          </View>
         </View>
-      </View>
+      )}
+
+      {/* ─── MODE "3 LIGNES" : 3 lignes verticales pleine hauteur preview a
+          40%, 50%, 60% de la largeur ecran. Capture declenchee a chaque
+          traversee (voir onFacesDetectedJS). ─── */}
+      {captureMode === '3lines' && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: CAMERA_TOP, left: 0, right: 0, height: previewH,
+          }}
+        >
+          {[0.4, 0.5, 0.6].map((pct) => (
+            <View
+              key={pct}
+              style={{
+                position: 'absolute',
+                top: 0, bottom: 0,
+                left: `${pct * 100}%`,
+                width: 2,
+                marginLeft: -1,
+                backgroundColor: 'rgba(255,255,255,0.6)',
+              }}
+            />
+          ))}
+        </View>
+      )}
 
       {/* ─── FLASH RAFALE (full-screen, blanc, 120ms) ─── */}
       <Animated.View
@@ -2920,6 +3020,46 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           zIndex: 10,
         }}
       >
+        {/* Segmented control Mode capture : "Continu" | "3 lignes".
+            Au-dessus du pill Zoom, sobre, persiste dans AsyncStorage. */}
+        <View style={{
+          alignSelf: 'center',
+          flexDirection: 'row',
+          backgroundColor: 'rgba(0,0,0,0.45)',
+          borderWidth: 0.5,
+          borderColor: 'rgba(255,255,255,0.2)',
+          borderRadius: 999,
+          padding: 2,
+          marginBottom: 10,
+        }}>
+          {[
+            { id: 'continuous', label: 'Continu' },
+            { id: '3lines', label: '3 lignes' },
+          ].map(opt => {
+            const active = captureMode === opt.id;
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                onPress={() => onCaptureModeChange(opt.id)}
+                activeOpacity={0.7}
+                style={{
+                  paddingHorizontal: 14, paddingVertical: 6,
+                  borderRadius: 999,
+                  backgroundColor: active ? 'rgba(255,255,255,0.9)' : 'transparent',
+                }}
+              >
+                <Text style={{
+                  color: active ? '#000' : 'rgba(255,255,255,0.85)',
+                  fontWeight: '600',
+                  fontSize: 12,
+                }}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {/* Pill Zoom flottante sur la vue photographe (au-dessus du bandeau noir, avec un gap) */}
         <View style={{
           alignSelf: 'center',
