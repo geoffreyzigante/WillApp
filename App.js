@@ -815,27 +815,29 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
 
   return (
     <View style={s.eventCard}>
-      {/* Layer 1 : aplat coloré pleine carte (toujours présent, sert de fond
-          pur côté gauche et de fallback si pas de cover). */}
+      {/* Layer 0 : aplat coloré solide pleine carte. Sert de fallback total
+          quand pas de cover, et de fond sous l'image (techniquement caché par
+          l'image dans ce cas, mais protège contre tout artefact d'aliasing). */}
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
-      {/* Layer 2 : cover image positionnée à droite (60% de largeur), sans
-          recouvrement coloré — l'image reste nette à droite. */}
+      {/* Layer 1 : cover image pleine carte. Le gradient au-dessus la masque
+          totalement à gauche et la révèle progressivement à droite. */}
       {event.cover_image ? (
         <ExpoImage
           source={{ uri: event.cover_image }}
-          style={{ position: 'absolute', top: 0, right: 0, width: '60%', height: '100%' }}
+          style={StyleSheet.absoluteFillObject}
           contentFit="cover"
         />
       ) : null}
-      {/* Layer 3 : gradient tint → transparent sur 0-50% de la carte. Sert
-          de fondu doux entre l'aplat coloré (gauche) et l'image (droite) :
-          tint opaque à x=0, ~20% opacité au bord gauche de l'image (x=0.4),
-          0% à x=0.5. L'image reste pleinement visible à droite de x=0.5. */}
+      {/* Layer 2 : gradient coloré pleine largeur. locations=[0.5, 1] →
+          - 0% à 50% : tint 100% opaque (aplat pur, image complètement masquée)
+          - 50% à 100% : tint passe de 100% à 10% (image émerge progressivement)
+          tint+'1A' = #RRGGBB1A = 10% opacité (alpha 0x1A = 26/255). */}
       {event.cover_image ? (
         <LinearGradient
-          colors={[tint, 'transparent']}
+          colors={[tint, tint + '1A']}
           start={{ x: 0, y: 0.5 }}
-          end={{ x: 0.5, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          locations={[0.5, 1]}
           style={StyleSheet.absoluteFillObject}
           pointerEvents="none"
         />
