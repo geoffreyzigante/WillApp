@@ -1423,7 +1423,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             paddingVertical: 10,
             paddingHorizontal: 24,
             alignItems: 'center',
-            marginTop: -2,
+            marginTop: 10,
             marginBottom: 10,
           }}
         >
