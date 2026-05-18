@@ -2758,7 +2758,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         return;
       }
 
-      if (verbose) console.log(`[upload] drain ${uploadable.length} items (online=${online})`);
+      if (verbose) {
+        const m = `[upload] drain ${uploadable.length} items (online=${online})`;
+        console.log(m); addDebugLog(m);
+      }
 
       // Mémorise le total initial pour la progress bar du header.
       drainStartTotalRef.current = uploadable.length;
@@ -2800,14 +2803,22 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               try { new File(item.localUri).delete(); } catch {}
               arr[i] = null;
               if (isMountedRef.current) setPhotoCount(c => c + 1);
+              if (verbose) {
+                const m = `[upload] OK ${item.id} (key=${item.key})`;
+                console.log(m); addDebugLog(m);
+              }
             } else {
               const updated = nextRetryState(item, maxRetries);
-              if (verbose) console.warn(`[upload] HTTP ${res.status} ${item.id} -> retries=${updated.retries}, next=${updated.nextAttemptAt ?? 'never'}`);
+              const m = `[upload] HTTP ${res.status} ${item.id} -> retries=${updated.retries}, next=${updated.nextAttemptAt ?? 'never'}`;
+              if (verbose) console.warn(m);
+              addDebugLog(m);
               arr[i] = updated;
             }
           } catch (e) {
             const updated = nextRetryState(item, maxRetries);
-            if (verbose) console.warn(`[upload] err ${item.id} -> retries=${updated.retries}`, e?.message);
+            const m = `[upload] err ${item.id} -> retries=${updated.retries}: ${e?.message || e?.code || e}`;
+            if (verbose) console.warn(m);
+            addDebugLog(m);
             arr[i] = updated;
           }
         }
@@ -3040,7 +3051,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           if (eventConfig.debug?.verboseLogs) {
             const m = `[Will-Filter] accepted: `
               + `face=${verdict.faceWidthPx}px, q=${verdict.faceCaptureQuality?.toFixed?.(2)}`;
-            console.log(m);
+            console.log(m); addDebugLog(m);
           }
         } catch (e) {
           // Erreur dure (chargement image, Vision crash) : on garde la photo
