@@ -33,6 +33,12 @@ import Svg, { Path, Circle, Ellipse, Defs, Mask, Rect, SvgXml } from 'react-nati
 import DateTimePicker from '@react-native-community/datetimepicker';
 import NetInfo from '@react-native-community/netinfo';
 import { Paths, File, Directory } from 'expo-file-system';
+import * as Updates from 'expo-updates';
+
+// Active le panneau debug en build de dev (Metro/expo start) ou de preview
+// (EAS preview channel). En production, le bouton ⚙️ est masque pour ne pas
+// laisser fuiter des toggles internes a l'utilisateur final.
+const IS_PREVIEW_OR_DEV = __DEV__ || Updates.channel === 'preview';
 
 const API_URL = 'https://will-api.geoffreyzigante.workers.dev';
 const R2_PUBLIC = 'https://pub-f9a5894e66a44f8cbb34582302930449.r2.dev';
@@ -77,6 +83,9 @@ async function migrateSensitiveKeysToSecureStore() {
 const UPLOAD_QUEUE_KEY = '@will_upload_queue';
 const LAST_CAPTURE_KEY = '@will_last_capture_at';
 const CAPTURE_MODE_KEY = '@will_photographer_capture_mode';
+// Panneau debug (preview/dev only) : toggles d'activation des filtres pipeline.
+// Survit aux force-close pour faciliter les sessions de test sur le terrain.
+const DEBUG_FILTERS_KEY = '@will_debug_filters';
 const PENDING_DIR_NAME = 'will_pending';
 const COVERS_DIR_NAME = 'will_event_covers';
 const MAX_RETRIES_DEFAULT = 5;
@@ -1838,7 +1847,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       postCaptureFilter: { enabled: true, minFaceWidthPx: 40, minQuality: 0 },
     },
     upload: { mode: "immediate", batchSize: 10, maxRetries: 5, compressBeforeUpload: false },
-    debug: { verboseLogs: true, skipRekognition: false, saveUnmatchedFrames: false },
+    debug: {
+      verboseLogs: true, skipRekognition: false, saveUnmatchedFrames: false,
+      // Toggles preview/dev only (panneau ⚙️) pour activer/desactiver chaque
+      // gate du pipeline capture. Defaut = tous actifs (comportement prod).
+      // Persiste dans AsyncStorage DEBUG_FILTERS_KEY pour survivre aux reloads.
+      filters: { willPhotoFilter: true, cooldown: true, settle: true },
+    },
   });
 
   useEffect(() => {
@@ -1847,6 +1862,81 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       .then(cfg => { if (cfg) setEventConfig(prev => ({ ...prev, ...cfg })); })
       .catch(() => {});
   }, []);
+
+  // Restaure les toggles du panneau debug (preview/dev only) depuis AsyncStorage.
+  // Override les valeurs venant de eventConfig pour survivre aux reloads sans
+  // depasser le scope debug (le worker n'enverra jamais debug.filters).
+  useEffect(() => {
+    if (!IS_PREVIEW_OR_DEV) return;
+    AsyncStorage.getItem(DEBUG_FILTERS_KEY).then(raw => {
+      if (!raw) return;
+      try {
+        const stored = JSON.parse(raw);
+        setEventConfig(prev => ({
+          ...prev,
+          debug: {
+            ...prev.debug,
+            filters: { ...prev.debug?.filters, ...(stored.filters || {}) },
+          },
+          imageProcessing: {
+            ...prev.imageProcessing,
+            postCaptureFilter: {
+              ...prev.imageProcessing?.postCaptureFilter,
+              ...(typeof stored.minFaceWidthPx === 'number'
+                ? { minFaceWidthPx: stored.minFaceWidthPx }
+                : {}),
+            },
+          },
+        }));
+      } catch {}
+    }).catch(() => {});
+  }, []);
+
+  // Setters utilises par DebugFiltersModal. Mutent eventConfig en memoire ET
+  // persistent dans AsyncStorage pour le prochain demarrage. Le pipeline lit
+  // les valeurs depuis eventConfig donc l'effet est immediat (sans recreer
+  // le worklet pour les toggles, seul minFaceWidthPx est read-only-par-frame
+  // car il est cable dans captureOne et non dans le worklet).
+  const persistDebug = useCallback((next) => {
+    const payload = {
+      filters: next.debug?.filters,
+      minFaceWidthPx: next.imageProcessing?.postCaptureFilter?.minFaceWidthPx,
+    };
+    AsyncStorage.setItem(DEBUG_FILTERS_KEY, JSON.stringify(payload)).catch(() => {});
+  }, []);
+
+  const setDebugFilter = useCallback((key, value) => {
+    setEventConfig(prev => {
+      const next = {
+        ...prev,
+        debug: {
+          ...prev.debug,
+          filters: { ...prev.debug?.filters, [key]: value },
+        },
+      };
+      persistDebug(next);
+      return next;
+    });
+  }, [persistDebug]);
+
+  const setMinFaceWidthPx = useCallback((value) => {
+    setEventConfig(prev => {
+      const next = {
+        ...prev,
+        imageProcessing: {
+          ...prev.imageProcessing,
+          postCaptureFilter: {
+            ...prev.imageProcessing?.postCaptureFilter,
+            minFaceWidthPx: value,
+          },
+        },
+      };
+      persistDebug(next);
+      return next;
+    });
+  }, [persistDebug]);
+
+  const [debugFiltersOpen, setDebugFiltersOpen] = useState(false);
 
   // 4:3 prioritaire pour matcher la preview portrait (3:4) sans bandes noires
   // ni crop -> on voit tout ce que le capteur capture. videoResolution pilote
@@ -2145,8 +2235,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       // son entree disparait du tracker. Garantit une capture systematique
       // meme a distance, sans dependre d'un toleranceMs global qui pouvait
       // tuer la session avant qu'on tire.
+      // Les deux gates (settle + cooldown) sont desactivables individuellement
+      // via le panneau debug (preview/dev only). Si settle off -> capture des
+      // la premiere detection ; si cooldown off -> capture a chaque frame ou
+      // l'isCapturingRef le permet (utile pour stress-test la chaine upload).
       const SETTLE_MS = 200;
       const COOLDOWN_MS = 800;
+      const settleEnabled = eventConfig.debug?.filters?.settle !== false;
+      const cooldownEnabled = eventConfig.debug?.filters?.cooldown !== false;
       const maxSize = (eventConfig.faceDetection?.maxFaceSizePercent ?? 80) / 100;
 
       // Filtre les visages dans la zone (trop gros = trop pres = exclu).
@@ -2204,9 +2300,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           if (lastFaceInZoneAtRef.current === 0) lastFaceInZoneAtRef.current = now;
         }
         // Settle : pas encore reste assez longtemps dans la zone.
-        if (now - entry.firstSeenAt < SETTLE_MS) continue;
+        if (settleEnabled && now - entry.firstSeenAt < SETTLE_MS) continue;
         // Cooldown : on a deja tire sur ce visage il y a peu.
-        if (entry.lastCaptureAt > 0 && now - entry.lastCaptureAt < COOLDOWN_MS) continue;
+        if (cooldownEnabled && entry.lastCaptureAt > 0 && now - entry.lastCaptureAt < COOLDOWN_MS) continue;
         // Tir.
         entry.lastCaptureAt = now;
         captureOne();
@@ -2215,6 +2311,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     }),
     [
       eventConfig.faceDetection?.maxFaceSizePercent,
+      eventConfig.debug?.filters?.settle,
+      eventConfig.debug?.filters?.cooldown,
     ]
   );
 
@@ -2906,10 +3004,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       // Post-capture filter (Vision framework iOS) : on rejette les photos
       // sans visage / trop petit avant qu'elles n'entrent dans la queue
       // d'upload. Bypasse si module natif indisponible (Android, dev sans
-      // rebuild). Le score qualite Apple Vision a ete neutralise (minQuality=0)
-      // car redondant avec le pipeline natif Deep Fusion + cap shutter 1/500s.
+      // rebuild) ou si l'utilisateur a desactive le toggle dans le panneau
+      // debug (eventConfig.debug.filters.willPhotoFilter = false).
       const filterCfg = eventConfig.imageProcessing?.postCaptureFilter;
       const filterEnabled = filterCfg?.enabled !== false
+        && eventConfig.debug?.filters?.willPhotoFilter !== false
         && Platform.OS === 'ios'
         && NativeModules.WillPhotoFilter;
       if (filterEnabled) {
@@ -3226,6 +3325,19 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
               </Svg>
             </TouchableOpacity>
+            {IS_PREVIEW_OR_DEV && (
+              <TouchableOpacity
+                onPress={() => setDebugFiltersOpen(true)}
+                hitSlop={10}
+                style={{
+                  width: 28, height: 28, borderRadius: 14,
+                  backgroundColor: 'rgba(255,255,255,0.12)',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 14 }}>⚙️</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => setShowDebug(s => !s)}
               hitSlop={10}
@@ -3591,7 +3703,154 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         onDeleteItem={deleteQueueItem}
         onForceItem={forceUploadItem}
       />
+      {IS_PREVIEW_OR_DEV && (
+        <DebugFiltersModal
+          visible={debugFiltersOpen}
+          onClose={() => setDebugFiltersOpen(false)}
+          filters={eventConfig.debug?.filters || {}}
+          minFaceWidthPx={eventConfig.imageProcessing?.postCaptureFilter?.minFaceWidthPx ?? 40}
+          onChangeFilter={setDebugFilter}
+          onChangeMinFaceWidth={setMinFaceWidthPx}
+        />
+      )}
     </View>
+  );
+}
+
+// Panneau debug preview/dev only : toggles d'activation des gates pipeline
+// + selecteur minFaceWidthPx. Mute eventConfig en memoire (effet immediat
+// sur la capture suivante) + persiste dans AsyncStorage. Caché en prod via
+// IS_PREVIEW_OR_DEV au montage du bouton ⚙️.
+function DebugFiltersModal({ visible, onClose, filters, minFaceWidthPx, onChangeFilter, onChangeMinFaceWidth }) {
+  const FACE_WIDTH_BUCKETS = [10, 20, 40, 60, 80, 100, 120, 150, 200];
+  // Lit la valeur courante en se rabattant sur true (defaut actif). Permet
+  // au modal de rendre l'etat ON meme si la cle n'existe pas encore dans
+  // eventConfig.debug.filters.
+  const isOn = (key) => filters?.[key] !== false;
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <TouchableOpacity
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => {}}
+          style={{
+            marginTop: 'auto',
+            backgroundColor: '#1a1a1a',
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            paddingTop: 16,
+            paddingHorizontal: 20,
+            paddingBottom: 40,
+          }}
+        >
+          <View style={{ alignItems: 'center', marginBottom: 14 }}>
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>Debug filtres capture</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10}>
+              <Text style={{ color: '#888', fontSize: 14, fontWeight: '600' }}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={{ color: '#888', fontSize: 11, marginBottom: 18, lineHeight: 15 }}>
+            Preview / dev only. Toggles persistes localement (AsyncStorage).
+            Defaut prod = tous actifs. Effet immediat sur la capture suivante.
+          </Text>
+
+          <DebugToggleRow
+            label="WillPhotoFilter"
+            sublabel="Visage present + taille minimum (natif Vision)"
+            value={isOn('willPhotoFilter')}
+            onValueChange={(v) => onChangeFilter('willPhotoFilter', v)}
+          />
+          <DebugToggleRow
+            label="Cooldown 800ms"
+            sublabel="Espace 2 captures du meme visage. Off = capture chaque frame."
+            value={isOn('cooldown')}
+            onValueChange={(v) => onChangeFilter('cooldown', v)}
+          />
+          <DebugToggleRow
+            label="Settle 200ms"
+            sublabel="Visage stable avant 1re capture. Off = capture immediate."
+            value={isOn('settle')}
+            onValueChange={(v) => onChangeFilter('settle', v)}
+          />
+
+          <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>minFaceWidthPx</Text>
+              <Text style={{ color: '#10B981', fontSize: 14, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
+                {minFaceWidthPx}px
+              </Text>
+            </View>
+            <Text style={{ color: '#888', fontSize: 11, marginBottom: 10, lineHeight: 15 }}>
+              Largeur min du visage detecte par WillPhotoFilter. Plus bas = accepte les visages lointains.
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {FACE_WIDTH_BUCKETS.map(bucket => {
+                const selected = bucket === minFaceWidthPx;
+                return (
+                  <TouchableOpacity
+                    key={bucket}
+                    onPress={() => onChangeMinFaceWidth(bucket)}
+                    style={{
+                      paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8,
+                      backgroundColor: selected ? '#10B981' : 'rgba(255,255,255,0.08)',
+                      borderWidth: 1,
+                      borderColor: selected ? '#10B981' : 'rgba(255,255,255,0.12)',
+                    }}
+                  >
+                    <Text style={{
+                      color: selected ? '#000' : '#fff',
+                      fontSize: 12, fontWeight: '700',
+                      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                    }}>{bucket}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+function DebugToggleRow({ label, sublabel, value, onValueChange }) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.7}
+      onPress={() => onValueChange(!value)}
+      style={{
+        flexDirection: 'row', alignItems: 'center',
+        paddingVertical: 12,
+        borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
+      }}
+    >
+      <View style={{ flex: 1, paddingRight: 12 }}>
+        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>{label}</Text>
+        {sublabel ? (
+          <Text style={{ color: '#888', fontSize: 11, marginTop: 2, lineHeight: 14 }}>{sublabel}</Text>
+        ) : null}
+      </View>
+      <View style={{
+        width: 44, height: 26, borderRadius: 13,
+        backgroundColor: value ? '#10B981' : 'rgba(255,255,255,0.18)',
+        justifyContent: 'center',
+        paddingHorizontal: 3,
+      }}>
+        <View style={{
+          width: 20, height: 20, borderRadius: 10,
+          backgroundColor: '#fff',
+          transform: [{ translateX: value ? 18 : 0 }],
+        }} />
+      </View>
+    </TouchableOpacity>
   );
 }
 
