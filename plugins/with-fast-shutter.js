@@ -1,27 +1,35 @@
 /**
  * Expo Config Plugin: with-fast-shutter
  *
- * Patches react-native-vision-camera (iOS) to use an ADAPTIVE shutter on the
- * back camera. The control loop reads `exposureTargetOffset` every 500ms and
- * picks a rung on a 4-step shutter ladder (1/2000, 1/1000, 1/500, 1/250) to
- * keep the exposure roughly centered without crushing motion. ISO is capped
- * at min(activeFormat.maxISO, 6400) to give headroom in low light.
+ * Patches react-native-vision-camera (iOS) to enable Smart-HDR-friendly
+ * auto exposure on the back camera (photographer mode):
+ *  - exposureMode = .continuousAutoExposure (laisse iOS gerer ISO + shutter
+ *    + tone mapping, ce qui inclut le HDR multi-frame du buffer video).
+ *  - activeMaxExposureDuration = 1/1000s (plafond shutter pour eviter le
+ *    flou de bouge sur les coureurs — iOS reste libre d'aller plus vite).
+ *  - isVideoHDREnabled = true si le format actif le supporte.
+ *  - automaticallyEnablesLowLightBoostWhenAvailable = true si supporte.
  *
- * The current rung is mirrored to <Caches>/will_shutter.json so the JS side
- * (PhotographerScreen) can poll it and render a light indicator (green /
- * yellow / red) + the live shutter speed. Front camera keeps the auto
- * exposure path (selfies need slow shutter indoors).
+ * Le mode .custom precedent (shutter forcee + ladder adaptative) etait
+ * incompatible avec ces optimisations iOS, d'ou le passage en auto borne.
+ * Un monitor read-only (WillAdaptiveShutter) lit la shutter effective tous
+ * les 500ms et la mirroie vers <Caches>/will_shutter.json pour permettre au
+ * JS d'afficher la valeur courante (sans pastille couleur — c'est iOS qui
+ * decide, plus de "fail state" a signaler).
  *
- * IMPORTANT: this patch ships native Swift, so it requires a new EAS BUILD
- * (eas build --profile preview --platform ios) — NOT an OTA update.
+ * Front camera : intouchee, continuousAutoExposure comme avant (selfies
+ * indoor demandent une shutter plus lente que ce que la cap impose ici).
+ *
+ * IMPORTANT: ce patch ajoute du Swift, il faut un nouveau eas build iOS —
+ * pas d'OTA possible.
  *
  * Implementation notes:
  *  - Idempotent: marker check skips re-patching.
  *  - Fail-loud: throws if the upstream block has moved (vision-camera bump),
  *    so the regression surfaces in CI rather than producing a silent broken
  *    binary.
- *  - The adaptive controller is appended at the end of the same file as a
- *    fileprivate class — avoids creating new build inputs in node_modules.
+ *  - Le monitor est appended fileprivate au meme fichier — pas de nouveau
+ *    build input a injecter dans node_modules.
  */
 
 const { withDangerousMod } = require('@expo/config-plugins');
@@ -40,20 +48,39 @@ const SEARCH = `    if device.isExposureModeSupported(.continuousAutoExposure) {
       device.exposureMode = .continuousAutoExposure
     }`;
 
-const REPLACE = `    // ${MARKER} Adaptive shutter on BACK camera: ladder 1/2000 → 1/250 driven
-    // by exposureTargetOffset. Front camera keeps continuousAutoExposure
-    // because forcing fast shutter indoors makes selfies unusable.
+const REPLACE = `    // ${MARKER} BACK camera: continuousAutoExposure + activeMaxExposureDuration
+    // capped at 1/1000s. Lets iOS pick the right ISO/shutter combo (Smart
+    // tone mapping included) while still preventing motion blur on runners.
+    // .custom mode disables video HDR + low-light boost, so we abandon it.
     if device.isExposurePointOfInterestSupported {
       device.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
     }
-    if device.position == .back && device.isExposureModeSupported(.custom) {
-      device.exposureMode = .custom
-      let initialShutter = CMTime(value: 1, timescale: 1000)
-      let isoCap = min(device.activeFormat.maxISO, 6400)
-      let initialIso = max(device.activeFormat.minISO, min(isoCap, AVCaptureDevice.currentISO))
-      device.setExposureModeCustom(duration: initialShutter, iso: initialIso) { _ in }
-      WillAdaptiveShutter.shared.start(device: device, isoCap: isoCap)
-      print("[FastShutter] adaptive shutter started on back camera (iso cap=\\(isoCap))")
+    if device.position == .back {
+      // Video HDR (10-bit) si le format courant le supporte — donne plus de
+      // marge sur les contrastes (NB: ce n'est pas le Smart HDR multi-frame
+      // d'AVCapturePhotoOutput, mais aide takeSnapshot qui lit le buffer video).
+      if device.activeFormat.isVideoHDRSupported {
+        device.automaticallyAdjustsVideoHDREnabled = false
+        device.isVideoHDREnabled = true
+        NSLog("[Will-HDR] video HDR enabled on active format")
+      } else {
+        NSLog("[Will-HDR] active format does not support video HDR")
+      }
+      // Low-light boost iOS si supporte (booste la sensibilite en tres faible
+      // lumiere sans cramer le bruit, geree par iOS).
+      if device.isLowLightBoostSupported {
+        device.automaticallyEnablesLowLightBoostWhenAvailable = true
+        NSLog("[Will-HDR] low-light boost enabled")
+      }
+      if device.isExposureModeSupported(.continuousAutoExposure) {
+        device.exposureMode = .continuousAutoExposure
+      }
+      // Plafond shutter = 1/1000s. iOS reste libre d'aller plus vite en bonne
+      // lumiere, mais ne ralentira pas sous 1/1000s (compromis flou de bouge).
+      let maxDuration = CMTime(value: 1, timescale: 1000)
+      device.activeMaxExposureDuration = maxDuration
+      WillAdaptiveShutter.shared.startMonitor(device: device)
+      NSLog("[FastShutter] continuousAutoExposure + cap 1/1000s on back camera")
     } else if device.isExposureModeSupported(.continuousAutoExposure) {
       device.exposureMode = .continuousAutoExposure
     }`;
@@ -61,38 +88,21 @@ const REPLACE = `    // ${MARKER} Adaptive shutter on BACK camera: ladder 1/2000
 const HELPER = `
 
 ${HELPER_MARKER}
-// Adaptive shutter controller for the WillApp photographer mode.
-// Reads exposureTargetOffset every 500ms and maps it directly to a rung on
-// the shutter ladder. iOS convention: positive offset = scene BRIGHTER than
-// the current custom exposure (faster shutter is OK), negative offset =
-// scene DARKER (need to slow shutter down to let more light in).
-// Mirrors current state to <Caches>/will_shutter.json so JS can render a
-// light indicator. Singleton to survive across configureExposure calls.
+// Read-only shutter monitor for the WillApp photographer mode.
+// iOS gere desormais l'exposition automatiquement (continuousAutoExposure +
+// activeMaxExposureDuration). Ce monitor lit la shutter effective choisie
+// par iOS toutes les 500ms et la mirroie vers <Caches>/will_shutter.json
+// pour que le JS affiche la valeur courante dans la barre top.
 // (Foundation + AVFoundation are already imported at the top of this file.)
 
 fileprivate final class WillAdaptiveShutter {
   static let shared = WillAdaptiveShutter()
 
-  // Direct offset → shutter mapping (no step/hysteresis state to avoid the
-  // direction-confusion bug we hit before). Thresholds aligned with the
-  // user's spec : >=+1.5 EV = bright outdoor, -1.5 to +0.5 = normal/low,
-  // <=-1.5 = very dark.
-  private static func rungFor(offset: Float) -> (CMTime, String, String) {
-    if offset >= 1.5  { return (CMTime(value: 1, timescale: 2000), "1/2000s", "green") }
-    if offset >= 0.5  { return (CMTime(value: 1, timescale: 1000), "1/1000s", "green") }
-    if offset >= -1.5 { return (CMTime(value: 1, timescale: 500),  "1/500s",  "yellow") }
-    return (CMTime(value: 1, timescale: 250), "1/250s", "red")
-  }
-
   private var timer: DispatchSourceTimer?
   private weak var device: AVCaptureDevice?
-  private var isoCap: Float = 6400
-  private var lastTimescale: Int32 = 0 // pour ne re-appliquer la config que sur changement de rung
 
-  func start(device: AVCaptureDevice, isoCap: Float) {
+  func startMonitor(device: AVCaptureDevice) {
     self.device = device
-    self.isoCap = isoCap
-    self.lastTimescale = 0
     timer?.cancel()
     let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
     t.schedule(deadline: .now() + .milliseconds(500), repeating: .milliseconds(500))
@@ -103,32 +113,20 @@ fileprivate final class WillAdaptiveShutter {
 
   private func tick() {
     guard let device = device else { return }
-    let offset = device.exposureTargetOffset
-    let rung = WillAdaptiveShutter.rungFor(offset: offset)
-    NSLog("[Will-Shutter] offset=%.2f shutter=%@", offset, rung.1)
-    if rung.0.timescale != lastTimescale {
-      lastTimescale = rung.0.timescale
-      apply(duration: rung.0)
-    }
-    writeState(label: rung.1, level: rung.2)
+    let duration = device.exposureDuration
+    let seconds = CMTimeGetSeconds(duration)
+    guard seconds.isFinite, seconds > 0 else { return }
+    let denom = Int((1.0 / seconds).rounded())
+    let label = "1/\\(denom)s"
+    NSLog("[Will-Shutter] auto exposure shutter=%@ iso=%.0f", label, device.iso)
+    writeState(label: label)
   }
 
-  private func apply(duration: CMTime) {
-    guard let device = device else { return }
-    do {
-      try device.lockForConfiguration()
-      let minIso = device.activeFormat.minISO
-      let targetIso = max(minIso, min(isoCap, AVCaptureDevice.currentISO))
-      device.setExposureModeCustom(duration: duration, iso: targetIso) { _ in }
-      device.unlockForConfiguration()
-    } catch {
-      NSLog("[Will-Shutter] lockForConfiguration failed: %@", String(describing: error))
-    }
-  }
-
-  private func writeState(label: String, level: String) {
+  private func writeState(label: String) {
     let ts = Int(Date().timeIntervalSince1970 * 1000)
-    let json = "{\\"shutter\\":\\"\\(label)\\",\\"level\\":\\"\\(level)\\",\\"ts\\":\\(ts)}"
+    // level toujours "auto" : le rendu JS sait que c'est juste un readout
+    // (pas de pastille couleur, simple texte).
+    let json = "{\\"shutter\\":\\"\\(label)\\",\\"level\\":\\"auto\\",\\"ts\\":\\(ts)}"
     guard let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
     let url = dir.appendingPathComponent("will_shutter.json")
     try? json.data(using: .utf8)?.write(to: url, options: .atomic)

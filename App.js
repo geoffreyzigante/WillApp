@@ -3116,9 +3116,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             )}
           </TouchableOpacity>
 
-          {/* Pastille shutter adaptatif : vert (>=1/1000s, bonne lumiere),
-              jaune (1/500s, lumiere faible), rouge (1/250s, tres faible).
-              Sert au photographe pour savoir si la zone est exploitable. */}
+          {/* Indicateur shutter : iOS gere l'exposition (continuousAutoExposure
+              + cap 1/1000s), on lit juste la valeur effective. Mode "auto" =
+              texte seul (pas de pastille). Mode legacy (green/yellow/red) =
+              pastille couleur (compat builds anciens, retire au prochain run). */}
           {shutterInfo && (
             <View
               style={{
@@ -3127,12 +3128,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 backgroundColor: 'rgba(255,255,255,0.1)',
               }}
             >
-              <View style={{
-                width: 8, height: 8, borderRadius: 4,
-                backgroundColor:
-                  shutterInfo.level === 'green' ? '#22C55E' :
-                  shutterInfo.level === 'yellow' ? '#F59E0B' : '#EF4444',
-              }} />
+              {shutterInfo.level !== 'auto' && (
+                <View style={{
+                  width: 8, height: 8, borderRadius: 4,
+                  backgroundColor:
+                    shutterInfo.level === 'green' ? '#22C55E' :
+                    shutterInfo.level === 'yellow' ? '#F59E0B' : '#EF4444',
+                }} />
+              )}
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 }}>
                 {shutterInfo.shutter}
               </Text>
