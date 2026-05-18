@@ -605,7 +605,12 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, password, role, photographer_name }),
     });
-    return r.ok ? r.json() : null;
+    if (r.ok) return r.json();
+    // Non-OK : on remonte status + error pour distinguer 429 (rate limit)
+    // de 401 (PIN incorrect). Le caller affiche le message adapte.
+    let error = '';
+    try { error = (await r.json())?.error || ''; } catch {}
+    return { status: r.status, error };
   },
 };
 
@@ -3755,6 +3760,131 @@ function CalendarRangeModal({ visible, onClose, initialStart, initialEnd, minDat
   );
 }
 
+// Helpers PIN photographe (4 chiffres). Centralise la generation aleatoire
+// et la validation pour eviter les divergences entre wizard / edition / login.
+const PIN_REGEX = /^\d{4}$/;
+const isValidPin = (v) => PIN_REGEX.test(String(v || ''));
+const generateRandomPin = () => String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+
+// Composant input PIN : 4 cases numeriques separees, auto-focus + auto-advance.
+// Utilise dans le wizard de creation (step 4), l'edition drill-down, et le
+// login photographe. La prop `autoSubmit` declenche onComplete quand la
+// derniere case est remplie (cas login).
+function PinInputRow({ value, onChange, onComplete, autoFocus = true, focusTrigger = 0, error = false, size = 'lg' }) {
+  const inputs = useRef([null, null, null, null]);
+  const digits = String(value || '').padEnd(4, ' ').split('').slice(0, 4).map(c => c === ' ' ? '' : c);
+  const shake = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (autoFocus) {
+      const t = setTimeout(() => inputs.current[0]?.focus(), 200);
+      return () => clearTimeout(t);
+    }
+  }, [autoFocus]);
+
+  // focusTrigger : bumpe par le parent pour reposer le focus sur la 1ere case
+  // (ex: passage a l'etape PIN du wizard, ou re-affichage du modal d'edition).
+  useEffect(() => {
+    if (focusTrigger > 0) {
+      const t = setTimeout(() => inputs.current[0]?.focus(), 120);
+      return () => clearTimeout(t);
+    }
+  }, [focusTrigger]);
+
+  useEffect(() => {
+    if (!error) return;
+    Animated.sequence([
+      Animated.timing(shake, { toValue: 8, duration: 50, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: -8, duration: 50, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: 6, duration: 50, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: -6, duration: 50, useNativeDriver: true }),
+      Animated.timing(shake, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  }, [error, shake]);
+
+  const setDigitAt = (i, raw) => {
+    const d = String(raw || '').replace(/\D/g, '').slice(-1);
+    const next = [...digits];
+    next[i] = d;
+    const joined = next.join('').slice(0, 4);
+    onChange(joined);
+    if (d && i < 3) inputs.current[i + 1]?.focus();
+    if (joined.length === 4 && /^\d{4}$/.test(joined) && onComplete) {
+      setTimeout(() => onComplete(joined), 80);
+    }
+  };
+
+  const onKeyPress = (i, e) => {
+    if (e.nativeEvent.key === 'Backspace' && !digits[i] && i > 0) {
+      inputs.current[i - 1]?.focus();
+      const next = [...digits];
+      next[i - 1] = '';
+      onChange(next.join(''));
+    }
+  };
+
+  const boxW = size === 'lg' ? 60 : 52;
+  const boxH = size === 'lg' ? 68 : 60;
+  const fontSize = size === 'lg' ? 30 : 26;
+
+  return (
+    <Animated.View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, transform: [{ translateX: shake }] }}>
+      {[0, 1, 2, 3].map(i => {
+        const filled = !!digits[i];
+        return (
+          <TextInput
+            key={i}
+            ref={r => (inputs.current[i] = r)}
+            value={digits[i]}
+            onChangeText={v => setDigitAt(i, v)}
+            onKeyPress={e => onKeyPress(i, e)}
+            keyboardType="number-pad"
+            maxLength={1}
+            selectTextOnFocus
+            textContentType="oneTimeCode"
+            style={{
+              width: boxW, height: boxH,
+              borderRadius: 14,
+              borderWidth: 1.5,
+              borderColor: error ? '#DC2626' : (filled ? C.primary : '#e8defc'),
+              backgroundColor: filled ? '#faf9ff' : '#fff',
+              fontSize, fontWeight: '700',
+              fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              color: C.primary,
+              textAlign: 'center',
+            }}
+          />
+        );
+      })}
+    </Animated.View>
+  );
+}
+
+// Pour l'affichage en lecture seule (detail event, masque/reveal) : 4 chiffres
+// gros, espaces, monospace violet.
+function PinDisplay({ pin, masked = true }) {
+  const valid = isValidPin(pin);
+  const chars = valid ? String(pin).split('') : ['', '', '', ''];
+  const display = masked ? ['•', '•', '•', '•'] : chars;
+  return (
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      {display.map((c, i) => (
+        <Text
+          key={i}
+          style={{
+            fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+            fontSize: 28, fontWeight: '700',
+            color: valid ? C.primary : C.textSoft,
+            minWidth: 22, textAlign: 'center',
+          }}
+        >
+          {valid ? c : '—'}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 function CreateEventModal({ visible, onClose, onCreated, organizerSession, editEvent }) {
   const isEdit = !!editEvent;
   const [name, setName] = useState('');
@@ -3783,11 +3913,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const [cropAsset, setCropAsset] = useState(null); // asset {uri,width,height} → ouvre CropImageModal
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(1);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [sheetW, setSheetW] = useState(0);
   const slideX = useRef(new Animated.Value(0)).current;
   const [userEditedCode, setUserEditedCode] = useState(false);
-  const [showErr, setShowErr] = useState({ 1: false, 2: false, 3: false });
+  const [showErr, setShowErr] = useState({ 1: false, 2: false, 3: false, 4: false });
   // Mode edition style "iOS Settings drill-down" : la home liste les sections,
   // tap sur une row ouvre une sous-modale dediee avec save par section
   // (PUT partiel via la whitelist worker).
@@ -3821,8 +3950,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   useEffect(() => {
     if (visible) {
       setStep(1);
-      setAdvancedOpen(false);
-      setShowErr({ 1: false, 2: false, 3: false });
+      setShowErr({ 1: false, 2: false, 3: false, 4: false });
       slideX.setValue(0);
       setUserEditedCode(false);
       setEditingField(null);
@@ -3974,13 +4102,19 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const distancesOk = distances.length === 0 || distances.every(d => parseFloat(d.km) > 0);
   const step1Ok = !!name?.trim() && !!eventType && dateOk;
   const step2Ok = locationOk && distancesOk;
-  const step3Ok = emailOk && (isEdit || (!!code?.trim() && !!password));
-  // Step 4 (cover) est toujours valide — la cover est optionnelle, le bouton
+  // En creation : step 3 valide uniquement le contact (email). Le PIN photographe
+  // a sa propre etape dediee (step 4). En edition : le PIN est gere dans le
+  // drill-down dedie, donc on n'exige rien ici.
+  const step3Ok = emailOk && (isEdit || !!code?.trim());
+  // Step 4 (PIN photographe) : 4 chiffres exactement, obligatoire en creation.
+  // En edition, le PIN s'edite via le drill-down — etape inexistante dans le wizard.
+  const step4Ok = isEdit || isValidPin(password);
+  // Step 5 (cover) est toujours valide — la cover est optionnelle, le bouton
   // "Ajouter plus tard" passe directement à la soumission sans upload.
-  const step4Ok = true;
-  const canSubmit = step1Ok && step2Ok && step3Ok && step4Ok && !busy;
+  const step5Ok = true;
+  const canSubmit = step1Ok && step2Ok && step3Ok && step4Ok && step5Ok && !busy;
 
-  const TOTAL_STEPS = 4;
+  const TOTAL_STEPS = isEdit ? 4 : 5;
   const goStep = (n) => {
     if (n < 1 || n > TOTAL_STEPS || !sheetW) { setStep(n); return; }
     setStep(n);
@@ -3994,11 +4128,13 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
     if (step === 1) { if (!step1Ok) { setShowErr(e => ({ ...e, 1: true })); return; } goStep(2); return; }
     if (step === 2) { if (!step2Ok) { setShowErr(e => ({ ...e, 2: true })); return; } goStep(3); return; }
     if (step === 3) { if (!step3Ok) { setShowErr(e => ({ ...e, 3: true })); return; } goStep(4); return; }
+    if (step === 4) { if (!step4Ok) { setShowErr(e => ({ ...e, 4: true })); return; } goStep(5); return; }
   };
   const trySubmit = () => {
     if (!step1Ok) { setShowErr(e => ({ ...e, 1: true })); goStep(1); return; }
     if (!step2Ok) { setShowErr(e => ({ ...e, 2: true })); goStep(2); return; }
     if (!step3Ok) { setShowErr(e => ({ ...e, 3: true })); goStep(3); return; }
+    if (!step4Ok) { setShowErr(e => ({ ...e, 4: true })); goStep(4); return; }
     submit();
   };
   const errStyle = { color: '#DC2626', fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 };
@@ -4386,43 +4522,36 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                 <SettingsRow label="Distances proposées" value={previewDistances} onPress={() => setEditingField('distances')} />
               </View>
 
-              {/* ───── IDENTIFIANTS PHOTOGRAPHES ───── */}
+              {/* ───── CODE PIN PHOTOGRAPHE ───── */}
               {isEdit && (
                 <>
-                  <Text style={sectionHeaderStyle}>IDENTIFIANTS PHOTOGRAPHES</Text>
+                  <Text style={sectionHeaderStyle}>CODE PIN PHOTOGRAPHE</Text>
                   <Text style={{ paddingHorizontal: 28, marginBottom: 6, fontSize: 12, color: C.textSoft }}>
-                    À transmettre à tes photographes
+                    À transmettre à tes photographes le jour J
                   </Text>
                   <View style={sectionCardStyle}>
-                    <View style={rowStyle}>
-                      <Text style={{ color: C.text, fontSize: 16, fontWeight: '600', flex: 1 }}>Mot de passe</Text>
-                      <Text style={{
-                        color: photographerPwd ? C.primary : C.textSoft,
-                        fontSize: 14, marginRight: 8, maxWidth: 140,
-                        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-                      }} numberOfLines={1}>
-                        {photographerPwd ? (revealPwd ? photographerPwd : '••••••') : 'Non défini'}
-                      </Text>
+                    <View style={[rowStyle, { paddingVertical: 18, justifyContent: 'center' }]}>
+                      <PinDisplay pin={photographerPwd} masked={!revealPwd} />
                     </View>
                     <View style={rowSeparatorStyle} />
                     <View style={[rowStyle, { gap: 0 }]}>
-                      <TouchableOpacity onPress={() => setRevealPwd(v => !v)} disabled={!photographerPwd} style={{ flex: 1, alignItems: 'center', paddingVertical: 4, opacity: photographerPwd ? 1 : 0.4 }}>
+                      <TouchableOpacity onPress={() => setRevealPwd(v => !v)} disabled={!isValidPin(photographerPwd)} style={{ flex: 1, alignItems: 'center', paddingVertical: 4, opacity: isValidPin(photographerPwd) ? 1 : 0.4 }}>
                         <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>{revealPwd ? 'Masquer' : 'Afficher'}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={async () => {
-                          if (!photographerPwd) return;
+                          if (!isValidPin(photographerPwd)) return;
                           // Pas de Clipboard natif (expo-clipboard pas installé) — on
                           // passe par Share qui propose Copier dans la share-sheet iOS.
                           try { await Share.share({ message: photographerPwd }); } catch {}
                         }}
-                        disabled={!photographerPwd}
-                        style={{ flex: 1, alignItems: 'center', paddingVertical: 4, opacity: photographerPwd ? 1 : 0.4 }}
+                        disabled={!isValidPin(photographerPwd)}
+                        style={{ flex: 1, alignItems: 'center', paddingVertical: 4, opacity: isValidPin(photographerPwd) ? 1 : 0.4 }}
                       >
                         <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Copier</Text>
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => setEditingField('photographer_password')} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
-                        <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>{photographerPwd ? 'Modifier' : 'Définir'}</Text>
+                        <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>{isValidPin(photographerPwd) ? 'Modifier' : 'Définir'}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -4582,23 +4711,53 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
             </View>
           </Modal>
 
-          {/* ─── Sub-modal: Mot de passe photographe ─── */}
-          <SubModalInputText
-            visible={editingField === 'photographer_password'}
-            title="Mot de passe photographe"
-            value={photographerPwd}
-            onChangeText={setPhotographerPwd}
-            placeholder="4 caractères minimum"
-            secureTextEntry={!revealPwd}
-            autoCapitalize="none"
-            onClose={() => setEditingField(null)}
-            onSave={async () => {
-              if (!photographerPwd || photographerPwd.length < 4) { Alert.alert('Mot de passe', '4 caractères minimum.'); return; }
-              const ok = await savePartial({ photographer_password: photographerPwd });
-              if (ok) { setEditingField(null); setRevealPwd(false); }
-            }}
-            busy={partialBusy}
-          />
+          {/* ─── Sub-modal: Code PIN photographe (4 chiffres) ─── */}
+          <Modal visible={editingField === 'photographer_password'} animationType="slide" transparent onRequestClose={() => setEditingField(null)}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+              <TouchableOpacity activeOpacity={1} onPress={() => setEditingField(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 24 }}>
+                <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderRadius: 18, padding: 24 }}>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: C.text, marginBottom: 4 }}>Code PIN photographe</Text>
+                  <Text style={{ fontSize: 13, color: C.textSoft, marginBottom: 22, lineHeight: 18 }}>
+                    4 chiffres à transmettre à tes photographes le jour J.
+                  </Text>
+                  <PinInputRow
+                    value={photographerPwd}
+                    onChange={setPhotographerPwd}
+                    autoFocus
+                  />
+                  <TouchableOpacity
+                    onPress={() => setPhotographerPwd(generateRandomPin())}
+                    style={{ alignSelf: 'center', marginTop: 18, paddingVertical: 8 }}
+                  >
+                    <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Générer aléatoirement</Text>
+                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 22 }}>
+                    <TouchableOpacity
+                      onPress={() => setEditingField(null)}
+                      style={{ flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: '#f5f3ff' }}
+                    >
+                      <Text style={{ color: C.primary, fontSize: 14, fontWeight: '700' }}>Annuler</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={async () => {
+                        if (!isValidPin(photographerPwd)) { Alert.alert('Code PIN', 'Le code PIN doit être composé de 4 chiffres.'); return; }
+                        const ok = await savePartial({ photographer_password: photographerPwd });
+                        if (ok) { setEditingField(null); setRevealPwd(false); }
+                      }}
+                      disabled={!isValidPin(photographerPwd) || partialBusy}
+                      style={{
+                        flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center',
+                        backgroundColor: isValidPin(photographerPwd) ? C.primary : '#e9e4f9',
+                        opacity: partialBusy ? 0.6 : 1,
+                      }}
+                    >
+                      {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: isValidPin(photographerPwd) ? '#fff' : C.textSoft, fontSize: 14, fontWeight: '700' }}>Confirmer</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </KeyboardAvoidingView>
+          </Modal>
 
           {/* ─── Sub-modal: Lieu (postalCode + city) ─── */}
           <Modal visible={editingField === 'location'} animationType="slide" onRequestClose={() => setEditingField(null)}>
@@ -4822,7 +4981,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
 
             {/* Barre de progression */}
             <View style={{ height: 4, backgroundColor: '#e9e4f9', borderRadius: 2, marginBottom: 14 }}>
-              <View style={{ height: 4, width: `${(step / 4) * 100}%`, backgroundColor: C.primary, borderRadius: 2 }} />
+              <View style={{ height: 4, width: `${(step / TOTAL_STEPS) * 100}%`, backgroundColor: C.primary, borderRadius: 2 }} />
             </View>
 
             {/* Wizard slide */}
@@ -4836,7 +4995,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                 }
               }}
             >
-              <Animated.View style={{ flexDirection: 'row', width: sheetW * 4, transform: [{ translateX: slideX }] }}>
+              <Animated.View style={{ flexDirection: 'row', width: sheetW * TOTAL_STEPS, transform: [{ translateX: slideX }] }}>
 
                 {/* ===== STEP 1 : Identité ===== */}
                 <View style={{ width: sheetW }}>
@@ -4957,7 +5116,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                   </ScrollView>
                 </View>
 
-                {/* ===== STEP 3 : Contact + Avancé ===== */}
+                {/* ===== STEP 3 : Contact ===== */}
                 <View style={{ width: sheetW }}>
                   <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
                     <Text style={formSectionStyle.heading}>Contact</Text>
@@ -4968,42 +5127,40 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                     </Text>
                     {showErr[3] && !emailOk && <Text style={errStyle}>Email invalide</Text>}
                     <TextInput placeholder="Téléphone de contact (optionnel)" placeholderTextColor={C.textSoft} value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
+                  </ScrollView>
+                </View>
 
-
+                {/* ===== STEP 4 : Code PIN photographe ===== */}
+                <View style={{ width: sheetW }}>
+                  <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
+                    <Text style={formSectionStyle.heading}>Code PIN photographe</Text>
+                    <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 22, marginLeft: 4, lineHeight: 18 }}>
+                      4 chiffres à transmettre à tes photographes le jour J. Ils l'utiliseront pour se connecter à ton event sur l'app Will.
+                    </Text>
                     {!isEdit && (
                       <>
-                        {/* Le code event reste géré silencieusement (slug auto-généré depuis
-                            le nom, utilisé pour les URLs publiques + clés R2 + API). Seul
-                            le mot de passe photographe est visible à l'orga ici. */}
-                        <TouchableOpacity onPress={() => setAdvancedOpen(o => !o)} style={{ marginTop: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
-                          <Text style={{ color: C.primary, fontWeight: '700', fontSize: 13 }}>{advancedOpen ? '−' : '+'} Avancé</Text>
-                          <Text style={{ color: C.textSoft, fontSize: 11, marginLeft: 8 }}>Mot de passe photographe</Text>
+                        <PinInputRow
+                          value={password}
+                          onChange={setPassword}
+                          autoFocus={false}
+                          focusTrigger={step === 4 ? 1 : 0}
+                          error={showErr[4] && !isValidPin(password)}
+                        />
+                        <TouchableOpacity
+                          onPress={() => setPassword(generateRandomPin())}
+                          style={{ alignSelf: 'center', marginTop: 18, paddingVertical: 8, paddingHorizontal: 14 }}
+                        >
+                          <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Générer aléatoirement</Text>
                         </TouchableOpacity>
-                        {advancedOpen && (
-                          <View>
-                            <TextInput
-                              placeholder="Mot de passe photographe *"
-                              placeholderTextColor={C.textSoft}
-                              value={password}
-                              onChangeText={setPassword}
-                              secureTextEntry
-                              style={formSectionStyle.input}
-                            />
-                            <Text style={{ color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
-                              À transmettre à tes photographes le jour J.
-                            </Text>
-                            {showErr[3] && !password && <Text style={errStyle}>Mot de passe requis</Text>}
-                          </View>
-                        )}
-                        {!advancedOpen && showErr[3] && !password && (
-                          <Text style={errStyle}>Ouvre la section Avancé pour définir le mot de passe photographe</Text>
+                        {showErr[4] && !isValidPin(password) && (
+                          <Text style={[errStyle, { textAlign: 'center', marginTop: 6 }]}>Le code PIN doit être composé de 4 chiffres</Text>
                         )}
                       </>
                     )}
                   </ScrollView>
                 </View>
 
-                {/* ===== STEP 4 : Cover image (skippable) ===== */}
+                {/* ===== STEP 5 : Cover image (skippable) ===== */}
                 <View style={{ width: sheetW }}>
                   <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
                     <Text style={formSectionStyle.heading}>Image de couverture</Text>
@@ -5671,33 +5828,67 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
   const [resetCode, setResetCode] = useState('');
   const [resetNewPassword, setResetNewPassword] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
+  // PIN error UI (photographe) : shake animation + message inline + compteur tentatives.
+  const [pinError, setPinError] = useState('');
+  const [pinErrorTick, setPinErrorTick] = useState(0); // bumpe pour relancer le shake
+  const [pinAttempts, setPinAttempts] = useState(0);
+  const [rateLimited, setRateLimited] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setCode(''); setPassword('');
       setResetMode('login'); setResetCode(''); setResetNewPassword('');
+      setPinError(''); setPinAttempts(0); setRateLimited(false);
     }
   }, [visible]);
 
   const upcoming = events.filter(e => isUpcoming(e.event_date));
 
-  const submit = async () => {
+  const doLogin = async (pwdOverride) => {
+    const pwd = (pwdOverride ?? password).trim();
     if (!code) return Alert.alert('Événement requis', role === 'photographer' ? 'Choisis un événement.' : 'Entre le code.');
-    if (!password) return Alert.alert('Mot de passe requis');
+    if (!pwd) {
+      if (role === 'photographer') setPinError('Code PIN requis');
+      else Alert.alert('Mot de passe requis');
+      return;
+    }
     setBusy(true);
     try {
-      const r = await api.login(code.trim(), password.trim(), role, 'photographer');
+      const r = await api.login(code.trim(), pwd, role, 'photographer');
       setBusy(false);
-      if (!r?.token) return Alert.alert('Échec', 'Identifiants invalides.');
+      if (!r?.token) {
+        if (role === 'photographer') {
+          // 429 ou auth fail. api.login renvoie { error } sur non-2xx (cf api wrapper).
+          const isRate = r?.status === 429 || /5 minutes|rate/i.test(String(r?.error || ''));
+          if (isRate) {
+            setRateLimited(true);
+            setPinError('Trop de tentatives. Patiente 5 min.');
+          } else {
+            setPinAttempts(n => n + 1);
+            setPinError(pinAttempts + 1 >= 3 ? 'Trop de tentatives. Patiente 5 min.' : 'Code PIN incorrect');
+          }
+          setPinErrorTick(t => t + 1);
+          setPassword('');
+        } else {
+          Alert.alert('Échec', 'Identifiants invalides.');
+        }
+        return;
+      }
       onSuccess(r);
     } catch {
       setBusy(false);
-      Alert.alert(
-        'Hors ligne',
-        'Première connexion impossible sans réseau. Connecte-toi en wifi pour activer ton événement — ensuite l\'app fonctionnera offline.',
-      );
+      if (role === 'photographer') {
+        setPinError('Hors ligne');
+        setPinErrorTick(t => t + 1);
+      } else {
+        Alert.alert(
+          'Hors ligne',
+          'Première connexion impossible sans réseau. Connecte-toi en wifi pour activer ton événement — ensuite l\'app fonctionnera offline.',
+        );
+      }
     }
   };
+  const submit = () => doLogin();
 
   const requestReset = async () => {
     const slug = code.trim().toLowerCase();
@@ -5762,7 +5953,7 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
               {role === 'organizer' ? 'Espace organisateur' : 'Espace photographe'}
             </Text>
             <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18 }}>
-              {role === 'photographer' ? 'Sélectionne ton événement et entre ton mot de passe' : 'Connecte-toi à ton événement'}
+              {role === 'photographer' ? 'Sélectionne ton événement et entre ton code PIN' : 'Connecte-toi à ton événement'}
             </Text>
 
             {role === 'photographer' ? (
@@ -5809,16 +6000,30 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 </ScrollView>
                 {code ? (
                   <>
-                    <Text style={[formSectionStyle.heading, { marginTop: 0 }]}>Mot de passe</Text>
-                    <TextInput
-                      placeholder="Mot de passe photographe"
-                      placeholderTextColor={C.textSoft}
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry
-                      autoFocus
-                      style={formSectionStyle.input}
-                    />
+                    <Text style={[formSectionStyle.heading, { marginTop: 0 }]}>Code PIN photographe</Text>
+                    <View style={{ marginTop: 4, marginBottom: 8 }}>
+                      <PinInputRow
+                        key={pinErrorTick /* force remount sur erreur pour reset focus */}
+                        value={password}
+                        onChange={(v) => { setPassword(v); if (pinError) setPinError(''); }}
+                        autoFocus
+                        error={!!pinError}
+                        onComplete={(full) => {
+                          if (rateLimited) return;
+                          doLogin(full);
+                        }}
+                      />
+                      {pinError ? (
+                        <Text style={{ color: '#DC2626', fontSize: 13, textAlign: 'center', marginTop: 12, fontWeight: '500' }}>
+                          {pinError}
+                        </Text>
+                      ) : null}
+                      {busy ? (
+                        <View style={{ alignItems: 'center', marginTop: 12 }}>
+                          <ActivityIndicator color={C.pinkPill} />
+                        </View>
+                      ) : null}
+                    </View>
                   </>
                 ) : null}
               </>
@@ -7335,20 +7540,18 @@ function OrganizerEventDetailScreen({ session, event, onClose, onEdit, onOpenPho
             </TouchableOpacity>
           </View>
 
-          {/* Identifiants photographes */}
+          {/* Code PIN photographe */}
           <View style={{ marginHorizontal: 16, marginTop: 28 }}>
-            <Text style={{ fontSize: 16, fontWeight: '600', color: C.text }}>Identifiants photographes</Text>
-            <Text style={{ fontSize: 13, color: C.textSoft, marginTop: 2 }}>À transmettre à tes photographes</Text>
-            <View style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <Text style={{ color: C.textSoft, fontSize: 13 }}>Mot de passe :</Text>
-              <Text style={{
-                color: photographerPwd ? C.primary : C.textSoft,
-                fontSize: 16, fontWeight: '600',
-                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-              }}>
-                {photographerPwd ? (revealPwd ? photographerPwd : '••••••') : 'Non défini'}
-              </Text>
-              {photographerPwd ? (
+            <Text style={{ fontSize: 16, fontWeight: '600', color: C.text }}>Code PIN photographe</Text>
+            <Text style={{ fontSize: 13, color: C.textSoft, marginTop: 2 }}>À transmettre à tes photographes le jour J</Text>
+            <View style={{ marginTop: 14, alignItems: 'center' }}>
+              {isValidPin(photographerPwd) ? (
+                <PinDisplay pin={photographerPwd} masked={!revealPwd} />
+              ) : (
+                <Text style={{ color: C.textSoft, fontSize: 14 }}>Non défini</Text>
+              )}
+              <View style={{ flexDirection: 'row', gap: 18, marginTop: 14 }}>
+              {isValidPin(photographerPwd) ? (
                 <>
                   <TouchableOpacity onPress={() => setRevealPwd(v => !v)} hitSlop={8}>
                     <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>{revealPwd ? 'Masquer' : 'Afficher'}</Text>
@@ -7365,6 +7568,7 @@ function OrganizerEventDetailScreen({ session, event, onClose, onEdit, onOpenPho
                   <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>Définir</Text>
                 </TouchableOpacity>
               )}
+              </View>
             </View>
           </View>
 
