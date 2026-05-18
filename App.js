@@ -1828,13 +1828,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       // Post-capture filter (Vision framework, iOS only). Une photo doit
       // contenir au moins 1 visage >= minFaceWidthPx avec une faceCaptureQuality
       // Vision >= minQuality, sinon elle est trashee avant upload.
-      // - minQuality 0.4 : le modele Apple VNDetectFaceCaptureQuality est
-      //   calibre studio-grade — les photos de course nettes scorent 0.4-0.6
-      //   en pratique, 0.7 serait trop strict (rejet quasi-total). Baisser
-      //   a 0.3 si encore des photos OK rejetees ; ne pas remonter au-dessus
-      //   de 0.5 sans valider les logs verbose.
+      // - minQuality 0.25 : le modele Apple VNDetectFaceCaptureQuality est
+      //   calibre studio-grade — sur le terrain (coureurs en mouvement),
+      //   meme des visages bien nets de 500+px scorent 0.30-0.45. 0.25 garde
+      //   la grande majorite des photos OK tout en ecartant les vrais flous
+      //   (qui tombent sous 0.2). Eviter de remonter au-dessus de 0.4 sans
+      //   valider les logs verbose au prealable.
       // - enabled:false pour bypasser temporairement (debug).
-      postCaptureFilter: { enabled: true, minFaceWidthPx: 80, minQuality: 0.4 },
+      postCaptureFilter: { enabled: true, minFaceWidthPx: 80, minQuality: 0.25 },
     },
     upload: { mode: "immediate", batchSize: 10, maxRetries: 5, compressBeforeUpload: false },
     debug: { verboseLogs: false, skipRekognition: false, saveUnmatchedFrames: false },
@@ -2930,7 +2931,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           const verdict = await NativeModules.WillPhotoFilter.evaluate(
             rawPath,
             filterCfg.minFaceWidthPx ?? 80,
-            filterCfg.minQuality ?? 0.4,
+            filterCfg.minQuality ?? 0.25,
           );
           if (!verdict.accepted) {
             const m = `[Will-Filter] rejected: ${verdict.reason} `
