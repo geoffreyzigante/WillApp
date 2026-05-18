@@ -4972,7 +4972,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
               <View style={{ flex: 1 }}>
                 <Text style={s.modalTitle}>{isEdit ? 'Modifier l\'événement' : 'Créer un événement'}</Text>
-                <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>Étape {step} sur 4</Text>
+                <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>Étape {step} sur {TOTAL_STEPS}</Text>
               </View>
               <TouchableOpacity onPress={onClose} hitSlop={12} style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
                 <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
