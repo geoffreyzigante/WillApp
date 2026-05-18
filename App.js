@@ -548,9 +548,13 @@ const formatDateForForm = (iso, isoEnd) => {
   return formatDateLong(iso, isoEnd);
 };
 
-const isUpcoming = (iso) => {
-  if (!iso) return true;
-  const d = new Date(iso);
+// Event "à venir / en cours" si la date de fin (ou la date de début si pas
+// d'end) n'est pas passée. Couvre les events multi-jours : tant que end >= today,
+// l'event reste dans la liste "À venir".
+const isUpcoming = (iso, isoEnd) => {
+  const ref = isoEnd || iso;
+  if (!ref) return true;
+  const d = new Date(ref);
   if (isNaN(d.getTime())) return true;
   return d.getTime() >= Date.now() - 86400000;
 };
@@ -655,8 +659,8 @@ function SelfieBlock({ selfieUri, onPress, onDelete }) {
 function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, favorites, onToggleFavorite, onRefresh, runnerFirstName }) {
   const [searchQuery, setSearchQuery] = useState('');
   const tabFiltered = events.filter(e => {
-    if (tab === 'upcoming') return isUpcoming(e.event_date);
-    if (tab === 'past') return !isUpcoming(e.event_date);
+    if (tab === 'upcoming') return isUpcoming(e.event_date, e.event_date_end);
+    if (tab === 'past') return !isUpcoming(e.event_date, e.event_date_end);
     if (tab === 'favorites') return favorites.includes(e.code);
     return true;
   });
@@ -1162,7 +1166,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | composite key
   const tint = colorForType(event.event_type);
-  const upcoming = isUpcoming(event.event_date);
+  const upcoming = isUpcoming(event.event_date, event.event_date_end);
 
   // Compte à rebours
   const daysUntil = (() => {
@@ -5860,7 +5864,7 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
     }
   }, [visible]);
 
-  const upcoming = events.filter(e => isUpcoming(e.event_date));
+  const upcoming = events.filter(e => isUpcoming(e.event_date, e.event_date_end));
 
   const doLogin = async (pwdOverride) => {
     const pwd = (pwdOverride ?? password).trim();
@@ -6162,7 +6166,7 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
 }
 
 function SearchModal({ visible, events, onClose, onPick }) {
-  const upcoming = events.filter(e => isUpcoming(e.event_date));
+  const upcoming = events.filter(e => isUpcoming(e.event_date, e.event_date_end));
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
