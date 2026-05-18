@@ -1939,17 +1939,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const [debugFiltersOpen, setDebugFiltersOpen] = useState(false);
 
   // 4:3 prioritaire pour matcher la preview portrait (3:4) sans bandes noires
-  // ni crop -> on voit tout ce que le capteur capture. videoResolution pilote
-  // depuis la config admin (hd 1080p par defaut, 4k optionnel) pour le preview
-  // / frame processor MLKit ; les photos HQ via takePhoto sortent en
-  // resolution maximale du capteur (Deep Fusion gere la qualite). 30fps pour
-  // MLKit fluide.
-  const targetVideoResolution = useMemo(() => {
-    const v = eventConfig?.capture?.videoResolution ?? 'hd';
-    return v === '4k'
-      ? { width: 3840, height: 2160 }
-      : { width: 1920, height: 1080 };
-  }, [eventConfig?.capture?.videoResolution]);
+  // ni crop. videoResolution forcee a 4K (3840x2160) pour que takeSnapshot
+  // (mode peloton, lit la derniere frame video) sorte a ~8 MP. En HD on tombe
+  // a 2 MP, insuffisant pour la reco visage a distance. Les photos HQ via
+  // takePhoto restent en resolution capteur max independamment.
+  const targetVideoResolution = useMemo(
+    () => ({ width: 3840, height: 2160 }),
+    []
+  );
 
   const format = useCameraFormat(device, [
     { videoAspectRatio: 4 / 3 },
@@ -2028,6 +2025,17 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   //   sur un coureur statique).
   // Cleanup automatique quand un id ne reapparait plus dans validInZone.
   const faceTrackingRef = useRef(new Map());
+
+  // ─── Mode densite : 'normal' (peu de coureurs) ↔ 'peloton' (>=3 visages) ──
+  // Pilote le pipeline capture : normal = burst 3x takePhoto HQ (~900ms),
+  // peloton = 1x takeSnapshot 4K (~100ms). Bascule auto via hysteresis :
+  // normal→peloton si >=3 visages stable 200ms ; peloton→normal si <3 visages
+  // stable 500ms. forcePelotonModeRef permet de forcer 'peloton' depuis le
+  // panneau debug (test seul devant la camera).
+  const densityModeRef = useRef('normal');
+  const densityHistoryRef = useRef([]);  // [{t, count}, ...] sur 600ms glissants
+  const forcePelotonModeRef = useRef(false);
+  const [densityModeState, setDensityModeState] = useState('normal');
   // Timestamp de la derniere frame MLKit avec visage dans la zone (mode 3 lignes
   // legacy, ne sert plus en mode continu apres le refactor settle+cooldown).
   const lastFaceSeenAtRef = useRef(0);
@@ -2222,7 +2230,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           const sinceLastPhoto = now - lastPhotoTimeRef.current;
           if (sinceLastPhoto >= 200) {
             lastFaceSeenAtRef.current = now;
-            captureOne();
+            // Mode 3 lignes : 1 seule photo HQ par traversee (comportement legacy).
+            captureOne('normal-single');
           }
         }
         return;
@@ -2254,6 +2263,43 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         setFacesInZoneCount(validInZone.length);
       }
       facesInZoneCountRef.current = validInZone.length;
+
+      // ─── BASCULE DENSITE normal ↔ peloton (hysteresis) ───────────────
+      // Push (t, count) dans l'historique glissant 600ms. Le seuil c'est
+      // "TOUTES les frames de la fenetre verifient la condition" : evite
+      // qu'une frame isolee fasse clignoter le mode.
+      // - normal→peloton : >=3 visages stable sur 200ms (reaction rapide)
+      // - peloton→normal : <3 visages stable sur 500ms (sortie prudente)
+      // Override debug : forcePelotonModeRef court-circuite la logique auto.
+      densityHistoryRef.current.push({ t: now, count: validInZone.length });
+      densityHistoryRef.current = densityHistoryRef.current.filter(
+        e => now - e.t < 600
+      );
+      const dh = densityHistoryRef.current;
+      const last200 = dh.filter(e => now - e.t < 200);
+      const last500 = dh.filter(e => now - e.t < 500);
+      let newMode = densityModeRef.current;
+      if (forcePelotonModeRef.current) {
+        newMode = 'peloton';
+      } else if (
+        densityModeRef.current === 'normal'
+        && last200.length > 0
+        && last200.every(e => e.count >= 3)
+      ) {
+        newMode = 'peloton';
+      } else if (
+        densityModeRef.current === 'peloton'
+        && last500.length > 0
+        && last500.every(e => e.count < 3)
+      ) {
+        newMode = 'normal';
+      }
+      if (newMode !== densityModeRef.current) {
+        densityModeRef.current = newMode;
+        setDensityModeState(newMode);
+        const m = `[MODE] → ${newMode} (faces=${validInZone.length})`;
+        console.log(m); addDebugLog(m);
+      }
 
       // Pas arme : tout reset (tracker + session burst), aucune capture.
       if (!isAutoArmedRef.current) {
@@ -2303,9 +2349,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         if (settleEnabled && now - entry.firstSeenAt < SETTLE_MS) continue;
         // Cooldown : on a deja tire sur ce visage il y a peu.
         if (cooldownEnabled && entry.lastCaptureAt > 0 && now - entry.lastCaptureAt < COOLDOWN_MS) continue;
-        // Tir.
+        // Tir : mode normal = burst 3x takePhoto HQ, mode peloton = 1x snapshot 4K.
         entry.lastCaptureAt = now;
-        captureOne();
+        captureOne(densityModeRef.current);
         return;
       }
     }),
@@ -2936,14 +2982,27 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     }
   }
 
-  // Capture une SEULE photo. Appelee en continu par le frame processor tant
-  // qu'un visage est dans la zone et que l'intervalle min est ecoule. Les
-  // photos consecutives partagent le meme burstTs (groupe d'un passage de
+  // Capture des photos pour un visage eligible.
+  //
+  // mode='normal' (defaut)   : 3x takePhoto HQ enchaines (Deep Fusion + Smart
+  //                            HDR), ~900ms total, latence par photo ~300-800ms.
+  // mode='peloton'           : 1x takeSnapshot 4K depuis le flux video, ~100ms.
+  //                            Pas de Deep Fusion, mais 1 photo / face / 800ms
+  //                            de cooldown au lieu de 3 -> tient en peloton dense.
+  // mode='normal-single'     : 1x takePhoto HQ (legacy mode 3 lignes, ou test).
+  //
+  // Les photos consecutives partagent le meme burstTs (groupe d'un passage de
   // coureur) tant que la session n'est pas reset (cf. onFacesDetectedJS).
-  async function captureOne() {
+  // isCapturingRef est tenu pendant TOUTE la sequence (3 photos en normal) pour
+  // empecher un 2e captureOne de se declencher au milieu d'un burst. Le post-
+  // processing (Will-Filter + enqueue) se fait apres relachement du lock.
+  async function captureOne(mode = 'normal') {
     if (isCapturingRef.current) return;
     if (!cameraRef.current || !isMountedRef.current) return;
     if (!isDetectionEnabledRef.current) return;
+
+    const useSnapshot = mode === 'peloton';
+    const count = mode === 'normal' ? 3 : 1;
 
     isCapturingRef.current = true;
     setIsShooting(true);
@@ -2956,15 +3015,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       currentBurstTsRef.current = t0;
       currentBurstIndexRef.current = 0;
       const detectAt = lastFaceInZoneAtRef.current;
-      const m = `[capture] start (armed=true, faceInZone=true)` +
+      const m = `[capture] start (armed=true, mode=${mode}, faceInZone=true)` +
         (detectAt > 0 && detectAt !== t0 ? ` +${t0 - detectAt}ms apres detection` : '');
       console.log(m); addDebugLog(m);
       // Flash + pop compteur seulement sur la 1ere photo de la session
       triggerBurstFeedback();
     }
     const burstTs = currentBurstTsRef.current;
-    const idx = currentBurstIndexRef.current;
-    currentBurstIndexRef.current += 1;
     lastPhotoTimeRef.current = t0;
 
     // Capture HQ via AVCapturePhotoOutput (Deep Fusion + Smart HDR quand iOS
@@ -2973,67 +3030,82 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     // et photoOutput.isResponsiveCaptureEnabled cote natif (iOS 17+).
     // Le rate limit naturel via isCapturingRef evite l'empilement : tant que
     // takePhoto est en cours, les frame processor calls return immediatement.
-    let photo = null;
-    try {
-      const photoStart = Date.now();
-      const m0 = `[capture] takePhoto called (#${idx + 1} of session)`;
-      console.log(m0); addDebugLog(m0);
-      photo = await cameraRef.current.takePhoto({
-        flash: 'off',
-        enableShutterSound: false,
-      });
-      const photoEnd = Date.now();
-      // Lit la taille du fichier pour diagnostiquer un takePhoto qui resout
-      // mais sans contenu reel (rare, mais arrive si AVCapture echoue
-      // silencieusement apres callback Apple).
-      let sizeKb = '?';
-      try {
-        const fpath = photo?.path?.startsWith('file://') ? photo.path : `file://${photo?.path}`;
-        const sz = new File(fpath).size;
-        if (typeof sz === 'number') sizeKb = Math.round(sz / 1024);
-      } catch {}
-      const m = `[capture] takePhoto resolved size=${sizeKb}kb @ +${photoEnd - burstTs}ms (#${idx + 1} of session, ${photoEnd - photoStart}ms)`;
-      console.log(m); addDebugLog(m);
+    const captured = []; // [{ photo, idx }, ...]
+    for (let k = 0; k < count; k++) {
+      if (!isMountedRef.current || !isDetectionEnabledRef.current) break;
+      const idx = currentBurstIndexRef.current;
+      currentBurstIndexRef.current += 1;
 
-      // Compteur cadence : log toutes les 30 photos prises. Permet de mesurer
-      // la cadence reelle de la chaine de capture (la cadence varie selon
-      // thermal/cpu/zoom + maintenant selon le pipeline Deep Fusion choisi).
-      if (captureWindowStartRef.current === 0) {
-        captureWindowStartRef.current = photoEnd;
+      let photo = null;
+      try {
+        const photoStart = Date.now();
+        const apiLabel = useSnapshot ? 'takeSnapshot' : 'takePhoto';
+        const m0 = `[capture] ${apiLabel} called (#${idx + 1} of session, mode=${mode}, k=${k + 1}/${count})`;
+        console.log(m0); addDebugLog(m0);
+        photo = await (useSnapshot
+          ? cameraRef.current.takeSnapshot({ quality: 90 })
+          : cameraRef.current.takePhoto({
+              flash: 'off',
+              enableShutterSound: false,
+            }));
+        const photoEnd = Date.now();
+        // Lit la taille du fichier pour diagnostiquer un capture qui resout
+        // mais sans contenu reel (rare, mais arrive si AVCapture echoue
+        // silencieusement apres callback Apple).
+        let sizeKb = '?';
+        try {
+          const fpath = photo?.path?.startsWith('file://') ? photo.path : `file://${photo?.path}`;
+          const sz = new File(fpath).size;
+          if (typeof sz === 'number') sizeKb = Math.round(sz / 1024);
+        } catch {}
+        const m = `[capture] ${apiLabel} resolved size=${sizeKb}kb @ +${photoEnd - burstTs}ms (#${idx + 1} of session, ${photoEnd - photoStart}ms)`;
+        console.log(m); addDebugLog(m);
+
+        // Compteur cadence : log toutes les 30 photos prises. Permet de mesurer
+        // la cadence reelle de la chaine de capture (la cadence varie selon
+        // thermal/cpu/zoom + maintenant selon le pipeline Deep Fusion choisi).
+        if (captureWindowStartRef.current === 0) {
+          captureWindowStartRef.current = photoEnd;
+        }
+        captureWindowCountRef.current += 1;
+        if (captureWindowCountRef.current >= 30) {
+          const elapsed = photoEnd - captureWindowStartRef.current;
+          const fps = elapsed > 0
+            ? Math.round((captureWindowCountRef.current * 1000) / elapsed * 10) / 10
+            : 0;
+          const cm = `[cadence] ${captureWindowCountRef.current} photos en ${elapsed}ms (${fps} photos/s)`;
+          console.log(cm); addDebugLog(cm);
+          if (isMountedRef.current) setCaptureFps(fps);
+          captureWindowCountRef.current = 0;
+          captureWindowStartRef.current = photoEnd;
+        }
+      } catch (e) {
+        const apiLabel = useSnapshot ? 'takeSnapshot' : 'takePhoto';
+        const m = `[capture] ${apiLabel} FAILED: ${e?.message || e?.code || String(e)}`;
+        console.warn(m); addDebugLog(m);
       }
-      captureWindowCountRef.current += 1;
-      if (captureWindowCountRef.current >= 30) {
-        const elapsed = photoEnd - captureWindowStartRef.current;
-        const fps = elapsed > 0
-          ? Math.round((captureWindowCountRef.current * 1000) / elapsed * 10) / 10
-          : 0;
-        const cm = `[cadence] ${captureWindowCountRef.current} photos en ${elapsed}ms (${fps} photos/s)`;
-        console.log(cm); addDebugLog(cm);
-        if (isMountedRef.current) setCaptureFps(fps);
-        captureWindowCountRef.current = 0;
-        captureWindowStartRef.current = photoEnd;
-      }
-    } catch (e) {
-      const m = `[capture] takePhoto FAILED: ${e?.message || e?.code || String(e)}`;
-      console.warn(m); addDebugLog(m);
+
+      if (photo) captured.push({ photo, idx });
     }
 
     isCapturingRef.current = false;
     setIsShooting(false);
 
-    if (photo) {
+    // Post-capture filter + enqueue, pour chaque photo capturee. Le filter
+    // Will (Vision framework iOS) rejette les photos sans visage / trop petit
+    // avant qu'elles n'entrent dans la queue d'upload. Bypasse si module natif
+    // indisponible (Android, dev sans rebuild) ou si l'utilisateur a desactive
+    // le toggle dans le panneau debug (eventConfig.debug.filters.willPhotoFilter
+    // = false).
+    const filterCfg = eventConfig.imageProcessing?.postCaptureFilter;
+    const filterEnabled = filterCfg?.enabled !== false
+      && eventConfig.debug?.filters?.willPhotoFilter !== false
+      && Platform.OS === 'ios'
+      && NativeModules.WillPhotoFilter;
+
+    for (const { photo, idx } of captured) {
       const rawPath = photo.path?.startsWith('file://') ? photo.path : `file://${photo.path}`;
 
-      // Post-capture filter (Vision framework iOS) : on rejette les photos
-      // sans visage / trop petit avant qu'elles n'entrent dans la queue
-      // d'upload. Bypasse si module natif indisponible (Android, dev sans
-      // rebuild) ou si l'utilisateur a desactive le toggle dans le panneau
-      // debug (eventConfig.debug.filters.willPhotoFilter = false).
-      const filterCfg = eventConfig.imageProcessing?.postCaptureFilter;
-      const filterEnabled = filterCfg?.enabled !== false
-        && eventConfig.debug?.filters?.willPhotoFilter !== false
-        && Platform.OS === 'ios'
-        && NativeModules.WillPhotoFilter;
       if (filterEnabled) {
         try {
           const verdict = await NativeModules.WillPhotoFilter.evaluate(
@@ -3046,7 +3118,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               + `(face=${verdict.faceWidthPx}px, q=${verdict.faceCaptureQuality ?? 'n/a'})`;
             console.log(m); addDebugLog(m);
             try { new File(rawPath).delete(); } catch {}
-            return;
+            continue;
           }
           if (eventConfig.debug?.verboseLogs) {
             const m = `[Will-Filter] accepted: `
@@ -3568,7 +3640,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               zIndex: 20,
             }}
           >
-            {/* Stats temps reel : MLKit fps, capture photos/s, queue size. */}
+            {/* Stats temps reel : mode densite, MLKit fps, capture photos/s, queue size. */}
             <View style={{
               flexDirection: 'row',
               justifyContent: 'space-between',
@@ -3577,6 +3649,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               borderBottomWidth: 1,
               borderBottomColor: 'rgba(255,255,255,0.18)',
             }}>
+              <Text style={{
+                color: densityModeState === 'peloton' ? '#F4A6FF' : '#fff',
+                fontSize: 11, lineHeight: 13, fontWeight: '700',
+                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              }}>
+                mode {densityModeState}
+              </Text>
               <Text style={{
                 color: '#fff', fontSize: 11, lineHeight: 13,
                 fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
@@ -3734,6 +3813,21 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           minFaceWidthPx={eventConfig.imageProcessing?.postCaptureFilter?.minFaceWidthPx ?? 40}
           onChangeFilter={setDebugFilter}
           onChangeMinFaceWidth={setMinFaceWidthPx}
+          forcePeloton={densityModeState === 'peloton' && forcePelotonModeRef.current}
+          onChangeForcePeloton={(v) => {
+            forcePelotonModeRef.current = v;
+            if (!v) {
+              // Quitte la force : laisse la bascule auto reprendre la main au
+              // prochain frame (elle reevaluera selon last200/last500).
+              densityHistoryRef.current = [];
+            }
+            // Reflete immediatement dans l'overlay (sera reecrit a la prochaine
+            // frame par la logique auto si force=true).
+            if (v && densityModeRef.current !== 'peloton') {
+              densityModeRef.current = 'peloton';
+              setDensityModeState('peloton');
+            }
+          }}
         />
       )}
     </View>
@@ -3744,7 +3838,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 // + selecteur minFaceWidthPx. Mute eventConfig en memoire (effet immediat
 // sur la capture suivante) + persiste dans AsyncStorage. Caché en prod via
 // IS_PREVIEW_OR_DEV au montage du bouton ⚙️.
-function DebugFiltersModal({ visible, onClose, filters, minFaceWidthPx, onChangeFilter, onChangeMinFaceWidth }) {
+function DebugFiltersModal({ visible, onClose, filters, minFaceWidthPx, onChangeFilter, onChangeMinFaceWidth, forcePeloton, onChangeForcePeloton }) {
   const FACE_WIDTH_BUCKETS = [10, 20, 40, 60, 80, 100, 120, 150, 200];
   // Lit la valeur courante en se rabattant sur true (defaut actif). Permet
   // au modal de rendre l'etat ON meme si la cle n'existe pas encore dans
@@ -3802,6 +3896,12 @@ function DebugFiltersModal({ visible, onClose, filters, minFaceWidthPx, onChange
             sublabel="Visage stable avant 1re capture. Off = capture immediate."
             value={isOn('settle')}
             onValueChange={(v) => onChangeFilter('settle', v)}
+          />
+          <DebugToggleRow
+            label="Force mode peloton"
+            sublabel="Court-circuite la bascule auto : 1x takeSnapshot 4K par face au lieu de 3x takePhoto. Test seul devant la camera."
+            value={!!forcePeloton}
+            onValueChange={(v) => onChangeForcePeloton?.(v)}
           />
 
           <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' }}>
