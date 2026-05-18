@@ -815,28 +815,30 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
 
   return (
     <View style={s.eventCard}>
-      {/* Tint plein-fond derrière toute la card */}
+      {/* Layer 1 : aplat coloré pleine carte (toujours présent, sert de fond
+          pur côté gauche et de fallback si pas de cover). */}
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
-      {/* Image confinée à la moitié droite (ratio 2:1 dans une card 4:1) */}
+      {/* Layer 2 : cover image positionnée à droite (60% de largeur), sans
+          recouvrement coloré — l'image reste nette à droite. */}
       {event.cover_image ? (
-        <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '50%', overflow: 'hidden' }}>
-          <ExpoImage
-            source={{ uri: event.cover_image }}
-            style={StyleSheet.absoluteFillObject}
-            contentFit="cover"
-          />
-          {/* Fondu tint → 10% étiré sur toute la zone image : 100 % tint au
-              milieu de la card, 10 % au bord droit. L'image transparait
-              progressivement au lieu de disparaître complètement. */}
-          <LinearGradient
-            colors={[tint, tint + '1A']}
-            locations={[0, 1]}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFillObject}
-            pointerEvents="none"
-          />
-        </View>
+        <ExpoImage
+          source={{ uri: event.cover_image }}
+          style={{ position: 'absolute', top: 0, right: 0, width: '60%', height: '100%' }}
+          contentFit="cover"
+        />
+      ) : null}
+      {/* Layer 3 : gradient tint → transparent sur 0-50% de la carte. Sert
+          de fondu doux entre l'aplat coloré (gauche) et l'image (droite) :
+          tint opaque à x=0, ~20% opacité au bord gauche de l'image (x=0.4),
+          0% à x=0.5. L'image reste pleinement visible à droite de x=0.5. */}
+      {event.cover_image ? (
+        <LinearGradient
+          colors={[tint, 'transparent']}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 0.5, y: 0.5 }}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
       ) : null}
       {/* Zone tactile principale (ouvre l'événement) */}
       <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={StyleSheet.absoluteFillObject} />
