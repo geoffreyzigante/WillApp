@@ -3839,8 +3839,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         setPostalCode(pc); setCity(cy); setCitySuggestions([]);
         setEventType(editEvent.event_type || '');
         setWebsite(editEvent.website || '');
-        // Fallback en cascade : contact (email saisi a la creation) -> email orga -> ''
-        setContact(editEvent.contact || organizerSession?.email || '');
+        // Fallback en cascade : contact (email saisi à la creation) -> email orga -> ''.
+        // organizerSession est structuré { token, profile } — l'email est sous profile.
+        setContact(editEvent.contact || organizerSession?.profile?.email || '');
         setPhone(editEvent.phone || '');
         setDistances(Array.isArray(editEvent.distances) ? editEvent.distances.map(d => ({
           km: String(d.km || ''), time: d.time || '', elevation: d.elevation || '',
@@ -3853,14 +3854,27 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         setStartTime(''); setPhotographerPwd(''); setRevealPwd(false);
         setPostalCode(''); setCity(''); setCitySuggestions([]);
         setEventType('');
-        // Pré-rempli avec l'email orga connecté (éditable). Si l'orga veut
-        // utiliser un email different pour le contact public il peut le
-        // modifier — la valeur sera affichée sur la page event publique.
-        setWebsite(''); setContact(organizerSession?.email || ''); setPhone(''); setDistances([]);
+        // Pré-rempli avec l'email du compte orga connecté (éditable). La session
+        // est structurée { token, profile } — l'email est sous profile.email. Si
+        // la session arrive de manière asynchrone après l'ouverture du modal, un
+        // second useEffect ci-dessous (deps [visible, isEdit, organizerSession])
+        // re-tire l'email tant que l'utilisateur n'a rien saisi.
+        setWebsite(''); setContact(organizerSession?.profile?.email || ''); setPhone(''); setDistances([]);
         setCoverImage(null); setPendingCoverLocal(null);
       }
     }
   }, [visible, isEdit]);
+
+  // Fallback : si organizerSession arrive APRES l'ouverture du modal (race au
+  // boot, restore AsyncStorage asynchrone), on retire l'email pré-rempli tant
+  // que le user n'a rien saisi. Ne touche pas au champ en mode édition.
+  useEffect(() => {
+    if (!visible || isEdit) return;
+    const email = organizerSession?.profile?.email;
+    if (email && !contact) setContact(email);
+    // contact est volontairement hors deps : on ne veut pas écraser une saisie
+    // user. Le check `&& !contact` dans le corps de l'effet suffit.
+  }, [visible, isEdit, organizerSession]);
 
   // Slug auto-généré depuis le nom (création seulement, tant que l'utilisateur ne l'a pas modifié manuellement)
   useEffect(() => {
@@ -3954,7 +3968,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const locationOk = /^\d{5}$/.test(postalCode) && !!city?.trim();
   const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
   const dateOk = !!eventDate && eventDate >= todayMidnight;
-  const distancesOk = distances.length > 0 && distances.every(d => parseFloat(d.km) > 0);
+  // Distances optionnelles : un event peut être créé sans aucune course (event
+  // type "course non chronométrée", marche libre, etc.). Si l'orga ajoute des
+  // courses, chacune doit avoir un km > 0 pour rester cohérente.
+  const distancesOk = distances.length === 0 || distances.every(d => parseFloat(d.km) > 0);
   const step1Ok = !!name?.trim() && !!eventType && dateOk;
   const step2Ok = locationOk && distancesOk;
   const step3Ok = emailOk && (isEdit || (!!code?.trim() && !!password));
@@ -4900,7 +4917,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                     ) : null}
                     {showErr[2] && !city?.trim() && <Text style={errStyle}>Ville requise</Text>}
 
-                    <Text style={formSectionStyle.heading}>Courses *</Text>
+                    <Text style={formSectionStyle.heading}>Courses</Text>
                     {distances.map((d, idx) => (
                       <View key={idx} style={{ backgroundColor: '#faf9ff', borderRadius: 12, padding: 10, marginBottom: 8 }}>
                         <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -4934,7 +4951,6 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                     >
                       <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>+ Ajouter une course</Text>
                     </TouchableOpacity>
-                    {showErr[2] && distances.length === 0 && <Text style={errStyle}>Au moins 1 course requise</Text>}
                     {showErr[2] && distances.length > 0 && !distances.every(d => parseFloat(d.km) > 0) && (
                       <Text style={errStyle}>Distance &gt; 0 requise pour chaque course</Text>
                     )}
