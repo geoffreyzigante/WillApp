@@ -62,8 +62,10 @@ const HELPER = `
 
 ${HELPER_MARKER}
 // Adaptive shutter controller for the WillApp photographer mode.
-// Reads exposureTargetOffset every 500ms and steps the shutter rung up or
-// down to stay close to the metered exposure while preferring fast shutter.
+// Reads exposureTargetOffset every 500ms and maps it directly to a rung on
+// the shutter ladder. iOS convention: positive offset = scene BRIGHTER than
+// the current custom exposure (faster shutter is OK), negative offset =
+// scene DARKER (need to slow shutter down to let more light in).
 // Mirrors current state to <Caches>/will_shutter.json so JS can render a
 // light indicator. Singleton to survive across configureExposure calls.
 // (Foundation + AVFoundation are already imported at the top of this file.)
@@ -71,74 +73,62 @@ ${HELPER_MARKER}
 fileprivate final class WillAdaptiveShutter {
   static let shared = WillAdaptiveShutter()
 
-  // Ladder rungs: (CMTime duration, label, "level" tag for the UI dot).
-  // level mapping: green for 1/2000 and 1/1000, yellow for 1/500, red for 1/250.
-  private struct Rung {
-    let duration: CMTime
-    let label: String
-    let level: String
+  // Direct offset → shutter mapping (no step/hysteresis state to avoid the
+  // direction-confusion bug we hit before). Thresholds aligned with the
+  // user's spec : >=+1.5 EV = bright outdoor, -1.5 to +0.5 = normal/low,
+  // <=-1.5 = very dark.
+  private static func rungFor(offset: Float) -> (CMTime, String, String) {
+    if offset >= 1.5  { return (CMTime(value: 1, timescale: 2000), "1/2000s", "green") }
+    if offset >= 0.5  { return (CMTime(value: 1, timescale: 1000), "1/1000s", "green") }
+    if offset >= -1.5 { return (CMTime(value: 1, timescale: 500),  "1/500s",  "yellow") }
+    return (CMTime(value: 1, timescale: 250), "1/250s", "red")
   }
-  private let rungs: [Rung] = [
-    Rung(duration: CMTime(value: 1, timescale: 250),  label: "1/250s",  level: "red"),
-    Rung(duration: CMTime(value: 1, timescale: 500),  label: "1/500s",  level: "yellow"),
-    Rung(duration: CMTime(value: 1, timescale: 1000), label: "1/1000s", level: "green"),
-    Rung(duration: CMTime(value: 1, timescale: 2000), label: "1/2000s", level: "green"),
-  ]
-  // Hysteresis thresholds (in stops). offset > +X = scene darker than custom
-  // expects, step rung DOWN (slower shutter); offset < -X = brighter, step UP.
-  private let stepDownOffset: Float = 0.8
-  private let stepUpOffset: Float = -0.8
 
   private var timer: DispatchSourceTimer?
   private weak var device: AVCaptureDevice?
   private var isoCap: Float = 6400
-  private var rungIdx: Int = 2 // start at 1/1000s (neutral)
+  private var lastTimescale: Int32 = 0 // pour ne re-appliquer la config que sur changement de rung
 
   func start(device: AVCaptureDevice, isoCap: Float) {
     self.device = device
     self.isoCap = isoCap
-    self.rungIdx = 2
+    self.lastTimescale = 0
     timer?.cancel()
     let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
     t.schedule(deadline: .now() + .milliseconds(500), repeating: .milliseconds(500))
     t.setEventHandler { [weak self] in self?.tick() }
     t.resume()
     timer = t
-    writeState(rung: rungs[rungIdx])
   }
 
   private func tick() {
     guard let device = device else { return }
     let offset = device.exposureTargetOffset
-    var nextIdx = rungIdx
-    if offset > stepDownOffset {
-      nextIdx = max(0, rungIdx - 1)
-    } else if offset < stepUpOffset {
-      nextIdx = min(rungs.count - 1, rungIdx + 1)
+    let rung = WillAdaptiveShutter.rungFor(offset: offset)
+    NSLog("[Will-Shutter] offset=%.2f shutter=%@", offset, rung.1)
+    if rung.0.timescale != lastTimescale {
+      lastTimescale = rung.0.timescale
+      apply(duration: rung.0)
     }
-    if nextIdx != rungIdx {
-      rungIdx = nextIdx
-      apply(rung: rungs[rungIdx])
-    }
-    writeState(rung: rungs[rungIdx])
+    writeState(label: rung.1, level: rung.2)
   }
 
-  private func apply(rung: Rung) {
+  private func apply(duration: CMTime) {
     guard let device = device else { return }
     do {
       try device.lockForConfiguration()
       let minIso = device.activeFormat.minISO
       let targetIso = max(minIso, min(isoCap, AVCaptureDevice.currentISO))
-      device.setExposureModeCustom(duration: rung.duration, iso: targetIso) { _ in }
+      device.setExposureModeCustom(duration: duration, iso: targetIso) { _ in }
       device.unlockForConfiguration()
     } catch {
-      print("[WillAdaptiveShutter] lockForConfiguration failed: \\(error)")
+      NSLog("[Will-Shutter] lockForConfiguration failed: %@", String(describing: error))
     }
   }
 
-  private func writeState(rung: Rung) {
+  private func writeState(label: String, level: String) {
     let ts = Int(Date().timeIntervalSince1970 * 1000)
-    let json = "{\\"shutter\\":\\"\\(rung.label)\\",\\"level\\":\\"\\(rung.level)\\",\\"ts\\":\\(ts)}"
+    let json = "{\\"shutter\\":\\"\\(label)\\",\\"level\\":\\"\\(level)\\",\\"ts\\":\\(ts)}"
     guard let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
     let url = dir.appendingPathComponent("will_shutter.json")
     try? json.data(using: .utf8)?.write(to: url, options: .atomic)
