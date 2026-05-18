@@ -1835,7 +1835,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       // filtre visage : il evite d'uploader les photos sans personne (faux
       // declenchements MLKit, capteur cache, etc).
       // - enabled:false pour bypasser temporairement (debug).
-      postCaptureFilter: { enabled: true, minFaceWidthPx: 80, minQuality: 0 },
+      postCaptureFilter: { enabled: true, minFaceWidthPx: 40, minQuality: 0 },
     },
     upload: { mode: "immediate", batchSize: 10, maxRetries: 5, compressBeforeUpload: false },
     debug: { verboseLogs: true, skipRekognition: false, saveUnmatchedFrames: false },
@@ -2916,7 +2916,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         try {
           const verdict = await NativeModules.WillPhotoFilter.evaluate(
             rawPath,
-            filterCfg.minFaceWidthPx ?? 80,
+            filterCfg.minFaceWidthPx ?? 40,
             filterCfg.minQuality ?? 0,
           );
           if (!verdict.accepted) {
