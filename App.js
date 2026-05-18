@@ -1411,7 +1411,8 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       </View>
 
       {/* CTA Site web : juste sous le header, coloré au type d'épreuve.
-          Affiche le domaine sans préfixe https://. Caché si pas de website. */}
+          Pleine largeur (comme les autres blocs), texte centré. Caché si pas
+          de website. */}
       {event.website ? (
         <TouchableOpacity
           onPress={openWebsite}
@@ -1421,7 +1422,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             borderRadius: 14,
             paddingVertical: 14,
             paddingHorizontal: 24,
-            alignSelf: 'center',
+            alignItems: 'center',
             marginBottom: 16,
           }}
         >
