@@ -747,7 +747,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         borderColor: '#E5E0FF',
         paddingHorizontal: 16,
         paddingVertical: 4,
-        marginBottom: 5,
+        marginBottom: 8,
       }}>
         <Icon.Search size={18} color={C.primary} />
         <TextInput
@@ -771,7 +771,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         backgroundColor: C.pillBg,
         borderRadius: 16,
         padding: 4,
-        marginBottom: 5,
+        marginBottom: 8,
       }}>
         <TouchableOpacity onPress={() => setTab('upcoming')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'upcoming' && s.pillActive]}>
           <Text style={[s.pillText, tab === 'upcoming' && s.pillTextActive]}>À venir</Text>
@@ -802,7 +802,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             onPress={() => onOpenEvent(event)}
             isFavorite={favorites.includes(event.code)}
             onToggleFavorite={() => onToggleFavorite(event.code)}
-            style={{ marginBottom: 5 }}
+            style={{ marginBottom: 8 }}
           />
         ))
       )}
@@ -1341,7 +1341,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </TouchableOpacity>
       </View>
 
-      <View style={{ position: 'relative', marginTop: 12, marginBottom: 5 }}>
+      <View style={{ position: 'relative', marginTop: 12, marginBottom: 8 }}>
         <View style={s.eventCard}>
           {/* Layer 0 : aplat coloré pleine carte (fallback + fond sous image) */}
           <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
@@ -1423,7 +1423,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             paddingVertical: 10,
             paddingHorizontal: 24,
             alignItems: 'center',
-            marginBottom: 5,
+            marginBottom: 8,
           }}
         >
           <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
@@ -1435,7 +1435,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       {/* Courses : un seul bloc avec header de labels + lignes de valeurs */}
       {distances.length > 0 && photos.length === 0 && (
         <View style={{
-          marginBottom: 5,
+          marginBottom: 8,
           backgroundColor: `${tint}1A`,
           borderRadius: 12,
           paddingVertical: 12, paddingHorizontal: 16,
@@ -8973,13 +8973,13 @@ const s = StyleSheet.create({
   welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 18, color: C.text, fontWeight: '700' },
   welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 18, marginBottom: 18 },
 
-  selfieDoneBanner: { backgroundColor: C.white, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 5, borderWidth: 1, borderColor: C.primaryLight },
+  selfieDoneBanner: { backgroundColor: C.white, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 8, borderWidth: 1, borderColor: C.primaryLight },
   selfieCheckCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F4A6FF', alignItems: 'center', justifyContent: 'center' },
   selfieDoneTitle: { fontWeight: '700', fontSize: 15, color: C.primary, fontFamily: 'AVEstiana', fontStyle: 'normal' },
   selfieDoneSub: { fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
   selfieDelete: { padding: 6 },
 
-  selfieCard: { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 5 },
+  selfieCard: { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 8 },
   selfieTitle: { color: '#fff', fontSize: 24, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 28 },
   selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
   selfieAvatar: { width: 68, height: 68, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
