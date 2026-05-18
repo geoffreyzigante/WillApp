@@ -508,12 +508,29 @@ class GridErrorBoundary extends React.Component {
 }
 
 // ---------- HELPERS ----------
-const formatDateLong = (iso) => {
+// Format date uppercase pour le bandeau (mono-jour) ou la plage (multi-jours).
+// Synchronisé avec dashboard/EventCard.js → formatDateMobile et la page
+// publique /event/<code> sur will-app.com. Toute modification ici doit être
+// répercutée sur les deux autres surfaces.
+const MONTHS_FULL = ['JANVIER','FÉVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOÛT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DÉCEMBRE'];
+const MONTHS_SHORT = ['JANV','FÉVR','MARS','AVR','MAI','JUIN','JUIL','AOÛT','SEPT','OCT','NOV','DÉC'];
+const formatDateLong = (iso, isoEnd) => {
   if (!iso) return 'DATE À VENIR';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return 'DATE À VENIR';
-  const months = ['JANVIER','FÉVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOÛT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DÉCEMBRE'];
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  const ds = new Date(iso);
+  if (isNaN(ds.getTime())) return 'DATE À VENIR';
+  const single = (d) => `${d.getDate()} ${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`;
+  if (!isoEnd || isoEnd === iso) return single(ds);
+  const de = new Date(isoEnd);
+  if (isNaN(de.getTime())) return single(ds);
+  const sameYear = ds.getFullYear() === de.getFullYear();
+  const sameMonth = sameYear && ds.getMonth() === de.getMonth();
+  if (sameMonth) {
+    return `DU ${ds.getDate()} AU ${de.getDate()} ${MONTHS_SHORT[de.getMonth()]} ${de.getFullYear()}`;
+  }
+  if (sameYear) {
+    return `DU ${ds.getDate()} ${MONTHS_SHORT[ds.getMonth()]} AU ${de.getDate()} ${MONTHS_SHORT[de.getMonth()]} ${de.getFullYear()}`;
+  }
+  return `DU ${ds.getDate()} ${MONTHS_SHORT[ds.getMonth()]} ${ds.getFullYear()} AU ${de.getDate()} ${MONTHS_SHORT[de.getMonth()]} ${de.getFullYear()}`;
 };
 
 const isUpcoming = (iso) => {
@@ -801,7 +818,7 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite }) {
       <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={StyleSheet.absoluteFillObject} />
       {/* Texte par-dessus la zone tactile (pointerEvents none pour que le tap passe au TouchableOpacity en dessous) */}
       <View style={s.eventCardCenter} pointerEvents="none">
-        <Text style={s.eventDate}>{formatDateLong(event.event_date)}</Text>
+        <Text style={s.eventDate}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
         <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
         <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
       </View>
@@ -1307,7 +1324,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             </View>
           ) : null}
           <View style={s.eventCardCenter}>
-            <Text style={s.eventDate}>{formatDateLong(event.event_date)}</Text>
+            <Text style={s.eventDate}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
               {event.event_type ? (
@@ -2739,7 +2756,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 }}
                 numberOfLines={1}
               >
-                {formatDateLong(session.event.event_date)}
+                {formatDateLong(session.event.event_date, session.event.event_date_end)}
               </Text>
             ) : null}
           </View>
@@ -5539,7 +5556,7 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         <View style={{ flex: 1 }}>
                           <Text style={{ color: active ? '#fff' : C.text, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>{e.name}</Text>
                           <Text style={{ color: active ? 'rgba(255,255,255,0.85)' : C.textSoft, fontSize: 11, marginTop: 2 }}>
-                            {formatDateLong(e.event_date)}{e.location ? ` · ${cityLabel(e.location)}` : ''}
+                            {formatDateLong(e.event_date, e.event_date_end)}{e.location ? ` · ${cityLabel(e.location)}` : ''}
                           </Text>
                         </View>
                         {active && (
@@ -5699,7 +5716,7 @@ function SearchModal({ visible, events, onClose, onPick }) {
             {upcoming.map(e => (
               <TouchableOpacity key={e.code} style={s.eventPick} onPress={() => { onPick(e); onClose(); }}>
                 <Text style={s.eventPickName}>{e.name}</Text>
-                <Text style={s.eventPickDate}>{formatDateLong(e.event_date)} · {cityLabel(e.location)}</Text>
+                <Text style={s.eventPickDate}>{formatDateLong(e.event_date, e.event_date_end)} · {cityLabel(e.location)}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -7324,7 +7341,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
           </View>
         ) : null}
         <View style={s.eventCardCenter}>
-          <Text style={s.eventDate}>{formatDateLong(event.event_date)}</Text>
+          <Text style={s.eventDate}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
           <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
           <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
         </View>
