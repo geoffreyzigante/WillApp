@@ -1,33 +1,42 @@
 /**
  * Expo Config Plugin: with-fast-shutter
  *
- * Patches react-native-vision-camera (iOS) to enable Smart-HDR-friendly
- * auto exposure on the back camera (photographer mode):
- *  - exposureMode = .continuousAutoExposure (laisse iOS gerer ISO + shutter
- *    + tone mapping, ce qui inclut le HDR multi-frame du buffer video).
- *  - activeMaxExposureDuration = 1/250s (plafond shutter pour eviter le
- *    flou de bouge sur les coureurs — iOS reste libre d'aller plus vite).
- *  - isVideoHDREnabled = true si le format actif le supporte.
- *  - automaticallyEnablesLowLightBoostWhenAvailable = true si supporte.
+ * Patches react-native-vision-camera (iOS) for the WillApp photographer mode.
+ * Trois patches independants, tous idempotents :
  *
- * Le mode .custom precedent (shutter forcee + ladder adaptative) etait
- * incompatible avec ces optimisations iOS, d'ou le passage en auto borne.
- * Un monitor read-only (WillAdaptiveShutter) lit la shutter effective tous
- * les 500ms et la mirroie vers <Caches>/will_shutter.json pour permettre au
- * JS d'afficher la valeur courante (sans pastille couleur — c'est iOS qui
- * decide, plus de "fail state" a signaler).
+ *  1. SHUTTER (configureDevice)
+ *     - exposureMode = .continuousAutoExposure (laisse iOS gerer ISO + shutter
+ *       + tone mapping, ce qui inclut le multi-frame HDR du buffer video).
+ *     - activeMaxExposureDuration = 1/500s (plafond shutter pour figer les
+ *       coureurs jusqu'a ~25 km/h sans flou de bouge. iOS reste libre d'aller
+ *       plus vite en bonne lumiere, le plafond ne s'applique que comme borne
+ *       max de la duree d'exposition).
+ *     - isVideoHDREnabled = true si le format actif le supporte.
+ *     - automaticallyEnablesLowLightBoostWhenAvailable = true si supporte.
+ *     - Monitor lit la shutter effective tous les 500ms -> will_shutter.json.
  *
- * Front camera : intouchee, continuousAutoExposure comme avant (selfies
- * indoor demandent une shutter plus lente que ce que la cap impose ici).
+ *  2. PHOTO OUTPUT (configureOutputs)
+ *     - Force photoOutput.maxPhotoQualityPrioritization = .quality regardless
+ *       of the JS-side photoQualityBalance prop. Ca rend la photo eligible
+ *       Deep Fusion (iOS choisit automatiquement quand les conditions sont
+ *       reunies : capteur wide/tele, bonne lumiere medium-low, iPhone 11+).
+ *     - iOS 17+ : isResponsiveCaptureEnabled + isFastCapturePrioritizationEnabled
+ *       quand supporte. Reduit la latence shutter-to-shutter pour les bursts
+ *       photo (necessaire en single-shot intelligent).
+ *
+ *  3. HELPER (WillAdaptiveShutter)
+ *     - Class fileprivate appended a CameraSession+Configuration.swift.
+ *     - Lit device.exposureDuration toutes les 500ms, ecrit will_shutter.json
+ *       pour que le JS affiche la valeur courante dans la barre top.
  *
  * IMPORTANT: ce patch ajoute du Swift, il faut un nouveau eas build iOS —
  * pas d'OTA possible.
  *
  * Implementation notes:
- *  - Idempotent: marker check skips re-patching.
- *  - Fail-loud: throws if the upstream block has moved (vision-camera bump),
- *    so the regression surfaces in CI rather than producing a silent broken
- *    binary.
+ *  - Idempotent : chaque patch verifie son propre marqueur avant d'agir.
+ *  - Fail-loud : throws si un bloc upstream a bouge (vision-camera bump),
+ *    pour que la regression surface en CI au lieu de produire un binaire
+ *    silencieusement casse.
  *  - Le monitor est appended fileprivate au meme fichier — pas de nouveau
  *    build input a injecter dans node_modules.
  */
@@ -38,18 +47,22 @@ const path = require('path');
 
 const SWIFT_REL_PATH =
   'node_modules/react-native-vision-camera/ios/Core/CameraSession+Configuration.swift';
-const MARKER = '[will-fast-shutter]';
+
+// Markers — chaque patch a son propre marker pour rester independant.
+const SHUTTER_MARKER = '[will-fast-shutter]';
+const PHOTO_MARKER = '[will-photo-hq]';
 const HELPER_MARKER = '// [will-fast-shutter-helper]';
 
-const SEARCH = `    if device.isExposureModeSupported(.continuousAutoExposure) {
+// ─── Patch 1 : exposure / shutter cap ────────────────────────────────────
+const SHUTTER_SEARCH = `    if device.isExposureModeSupported(.continuousAutoExposure) {
       if device.isExposurePointOfInterestSupported {
         device.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5)
       }
       device.exposureMode = .continuousAutoExposure
     }`;
 
-const REPLACE = `    // ${MARKER} BACK camera: continuousAutoExposure + activeMaxExposureDuration
-    // capped at 1/250s. Lets iOS pick the right ISO/shutter combo (Smart
+const SHUTTER_REPLACE = `    // ${SHUTTER_MARKER} BACK camera: continuousAutoExposure + activeMaxExposureDuration
+    // capped at 1/500s. Lets iOS pick the right ISO/shutter combo (Smart
     // tone mapping included) while still preventing motion blur on runners.
     // .custom mode disables video HDR + low-light boost, so we abandon it.
     if device.isExposurePointOfInterestSupported {
@@ -58,7 +71,7 @@ const REPLACE = `    // ${MARKER} BACK camera: continuousAutoExposure + activeMa
     if device.position == .back {
       // Video HDR (10-bit) si le format courant le supporte — donne plus de
       // marge sur les contrastes (NB: ce n'est pas le Smart HDR multi-frame
-      // d'AVCapturePhotoOutput, mais aide takeSnapshot qui lit le buffer video).
+      // d'AVCapturePhotoOutput, mais aide la preview qui lit le buffer video).
       if device.activeFormat.isVideoHDRSupported {
         device.automaticallyAdjustsVideoHDREnabled = false
         device.isVideoHDREnabled = true
@@ -75,16 +88,49 @@ const REPLACE = `    // ${MARKER} BACK camera: continuousAutoExposure + activeMa
       if device.isExposureModeSupported(.continuousAutoExposure) {
         device.exposureMode = .continuousAutoExposure
       }
-      // Plafond shutter = 1/250s. iOS reste libre d'aller plus vite en bonne
-      // lumiere, mais ne ralentira pas sous 1/250s (compromis flou de bouge).
-      let maxDuration = CMTime(value: 1, timescale: 250)
+      // Plafond shutter = 1/500s (durci depuis 1/250s pour figer les coureurs
+      // jusqu'a ~25 km/h). iOS reste libre d'aller plus vite en plein soleil,
+      // mais ne ralentira pas en-dessous de 1/500s. Compromis : en basse
+      // lumiere, l'ISO monte plus haut (bruit) au lieu de ralentir.
+      let maxDuration = CMTime(value: 1, timescale: 500)
       device.activeMaxExposureDuration = maxDuration
       WillAdaptiveShutter.shared.startMonitor(device: device)
-      NSLog("[FastShutter] continuousAutoExposure + cap 1/250s on back camera")
+      NSLog("[FastShutter] continuousAutoExposure + cap 1/500s on back camera")
     } else if device.isExposureModeSupported(.continuousAutoExposure) {
       device.exposureMode = .continuousAutoExposure
     }`;
 
+// ─── Patch 2 : photo output HQ (Deep Fusion + iOS 17 optims) ─────────────
+// On accroche le patch sur le bloc TODO d'origine de VisionCamera 4.x. Si
+// upstream supprime/modifie ces TODOs, le patch fail-loud (souhaite : signal
+// fort qu'il faut revoir le hook).
+const PHOTO_SEARCH = `      photoOutput.isMirrored = configuration.isMirrored
+      // TODO: Enable isResponsiveCaptureEnabled? (iOS 17+)
+      // TODO: Enable isFastCapturePrioritizationEnabled? (iOS 17+)
+
+      self.photoOutput = photoOutput`;
+
+const PHOTO_REPLACE = `      photoOutput.isMirrored = configuration.isMirrored
+      // ${PHOTO_MARKER} Force quality prioritization (Deep Fusion eligible)
+      // + iOS 17 fast capture flags. WillApp single-shot HQ pipeline.
+      if #available(iOS 13.0, *) {
+        photoOutput.maxPhotoQualityPrioritization = .quality
+        NSLog("[Will-Photo] maxPhotoQualityPrioritization=.quality (Deep Fusion eligible)")
+      }
+      if #available(iOS 17.0, *) {
+        if photoOutput.isResponsiveCaptureSupported {
+          photoOutput.isResponsiveCaptureEnabled = true
+          NSLog("[Will-Photo] responsive capture enabled (iOS 17+)")
+          if photoOutput.isFastCapturePrioritizationSupported {
+            photoOutput.isFastCapturePrioritizationEnabled = true
+            NSLog("[Will-Photo] fast capture prioritization enabled (iOS 17+)")
+          }
+        }
+      }
+
+      self.photoOutput = photoOutput`;
+
+// ─── Helper class (appended fileprivate) ─────────────────────────────────
 const HELPER = `
 
 ${HELPER_MARKER}
@@ -143,22 +189,47 @@ function patchSwift(projectRoot) {
     );
   }
   let content = fs.readFileSync(filePath, 'utf8');
-  if (content.includes(MARKER) && content.includes(HELPER_MARKER)) {
-    console.log('[with-fast-shutter] Already patched, skipping');
-    return;
-  }
-  if (!content.includes(SEARCH)) {
+  let changed = false;
+
+  // Patch 1 : shutter cap
+  if (content.includes(SHUTTER_MARKER)) {
+    console.log('[with-fast-shutter] shutter patch already applied, skipping');
+  } else if (!content.includes(SHUTTER_SEARCH)) {
     throw new Error(
-      `[with-fast-shutter] Bloc original introuvable dans ${SWIFT_REL_PATH}. ` +
+      `[with-fast-shutter] Bloc shutter introuvable dans ${SWIFT_REL_PATH}. ` +
         'VisionCamera a peut-etre ete mis a jour - revoir le patch dans plugins/with-fast-shutter.js.'
     );
+  } else {
+    content = content.replace(SHUTTER_SEARCH, SHUTTER_REPLACE);
+    console.log('[with-fast-shutter] shutter cap 1/500s applied');
+    changed = true;
   }
-  content = content.replace(SEARCH, REPLACE);
+
+  // Patch 2 : photo output HQ
+  if (content.includes(PHOTO_MARKER)) {
+    console.log('[with-fast-shutter] photo HQ patch already applied, skipping');
+  } else if (!content.includes(PHOTO_SEARCH)) {
+    throw new Error(
+      `[with-fast-shutter] Bloc photo output introuvable dans ${SWIFT_REL_PATH}. ` +
+        'VisionCamera a peut-etre ete mis a jour - revoir le patch photo dans plugins/with-fast-shutter.js.'
+    );
+  } else {
+    content = content.replace(PHOTO_SEARCH, PHOTO_REPLACE);
+    console.log('[with-fast-shutter] photo HQ (Deep Fusion + iOS 17 optims) applied');
+    changed = true;
+  }
+
+  // Helper (append en fin de fichier)
   if (!content.includes(HELPER_MARKER)) {
     content = content + HELPER;
+    console.log('[with-fast-shutter] helper class appended');
+    changed = true;
   }
-  fs.writeFileSync(filePath, content, 'utf8');
-  console.log('[with-fast-shutter] Patched CameraSession+Configuration.swift (adaptive shutter)');
+
+  if (changed) {
+    fs.writeFileSync(filePath, content, 'utf8');
+    console.log('[with-fast-shutter] CameraSession+Configuration.swift updated');
+  }
 }
 
 module.exports = function withFastShutter(config) {

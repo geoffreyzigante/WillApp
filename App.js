@@ -1792,7 +1792,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       burstCount: 8,          // legacy (mode rafale, plus utilise)
       interBurstMs: 150,      // legacy
       cooldownSec: 5,         // legacy
-      intervalMs: 150,        // cadence min entre 2 photos (takeSnapshot ~100-150ms)
+      intervalMs: 150,        // cadence min entre 2 photos (takePhoto HQ ~300-800ms borne haute, isCapturingRef gate le rythme reel)
       toleranceMs: 500,       // fenetre de tolerance perte de visage
       quality: "ultrahd",   // standard / hd / ultrahd / proraw
       format: "jpeg",       // jpeg / heic / dng
@@ -1828,8 +1828,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
   // 4:3 prioritaire pour matcher la preview portrait (3:4) sans bandes noires
   // ni crop -> on voit tout ce que le capteur capture. videoResolution pilote
-  // depuis la config admin (hd 1080p par defaut, 4k optionnel) — takeSnapshot
-  // lit le buffer video donc la resolution snapshot suit. 30fps pour MLKit fluide.
+  // depuis la config admin (hd 1080p par defaut, 4k optionnel) pour le preview
+  // / frame processor MLKit ; les photos HQ via takePhoto sortent en
+  // resolution maximale du capteur (Deep Fusion gere la qualite). 30fps pour
+  // MLKit fluide.
   const targetVideoResolution = useMemo(() => {
     const v = eventConfig?.capture?.videoResolution ?? 'hd';
     return v === '4k'
@@ -2007,7 +2009,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const captureWindowStartRef = useRef(0);
   const captureWindowCountRef = useRef(0);
   // Toggle "Mode test (capture sans upload)" : capture continue mais photo
-  // supprimee immediatement apres takeSnapshot (pas d'enqueue, pas d'upload).
+  // supprimee immediatement apres takePhoto (pas d'enqueue, pas d'upload).
   // Ref pour acces synchrone depuis captureOne, state pour le rendu UI.
   const testNoUploadRef = useRef(false);
   const [testNoUpload, setTestNoUpload] = useState(false);
@@ -2748,22 +2750,26 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     currentBurstIndexRef.current += 1;
     lastPhotoTimeRef.current = t0;
 
-    // Capture via takeSnapshot : lit un frame du pipeline video deja en
-    // memoire (~50-150ms) au lieu de declencher AVCapturePhoto (~1100ms).
-    // Qualite = resolution du videoFormat actif (cible 1080p ci-dessus).
-    // Toujours JPEG (pas de RAW possible en snapshot).
+    // Capture HQ via AVCapturePhotoOutput (Deep Fusion + Smart HDR quand iOS
+    // les juge utiles). Latence reelle ~300-800ms (vs ~100-150ms pour
+    // takeSnapshot), compensee par photoQualityBalance="quality" cote camera
+    // et photoOutput.isResponsiveCaptureEnabled cote natif (iOS 17+).
+    // Le rate limit naturel via isCapturingRef evite l'empilement : tant que
+    // takePhoto est en cours, les frame processor calls return immediatement.
     let photo = null;
     try {
       const photoStart = Date.now();
-      photo = await cameraRef.current.takeSnapshot({ quality: 85 });
+      photo = await cameraRef.current.takePhoto({
+        flash: 'off',
+        enableShutterSound: false,
+      });
       const photoEnd = Date.now();
-      const m = `[capture] photo taken @ +${photoEnd - burstTs}ms (#${idx + 1} of session, takeSnapshot: ${photoEnd - photoStart}ms)`;
+      const m = `[capture] photo taken @ +${photoEnd - burstTs}ms (#${idx + 1} of session, takePhoto: ${photoEnd - photoStart}ms)`;
       console.log(m); addDebugLog(m);
 
-      // Compteur cadence : log toutes les 30 photos prises (toute session
-      // confondue, peu importe le mode test ou normal). Permet de mesurer
-      // la cadence reelle de la chaine de capture sans la moyenner sur une
-      // session entiere (la cadence varie selon thermal/cpu/zoom).
+      // Compteur cadence : log toutes les 30 photos prises. Permet de mesurer
+      // la cadence reelle de la chaine de capture (la cadence varie selon
+      // thermal/cpu/zoom + maintenant selon le pipeline Deep Fusion choisi).
       if (captureWindowStartRef.current === 0) {
         captureWindowStartRef.current = photoEnd;
       }
@@ -2780,7 +2786,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         captureWindowStartRef.current = photoEnd;
       }
     } catch (e) {
-      console.warn('takeSnapshot', e);
+      console.warn('takePhoto', e);
     }
 
     isCapturingRef.current = false;
@@ -2892,9 +2898,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         device={device}
         format={format}
         isActive={true}
-        // video=true requis pour takeSnapshot sur iOS (capture un frame du
-        // pipeline video). photo retire : on n'utilise plus takePhoto.
+        // video=true pour le frame processor (detection MLKit live).
+        // photo=true + photoQualityBalance="quality" pour AVCapturePhotoOutput
+        // HQ (Deep Fusion eligible quand iOS estime les conditions reunies).
+        // Les 2 outputs coexistent sur la meme AVCaptureSession.
         video={true}
+        photo={true}
+        photoQualityBalance="quality"
         frameProcessor={frameProcessor}
         pixelFormat="yuv"
         zoom={zoomLevel}
