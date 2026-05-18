@@ -533,6 +533,21 @@ const formatDateLong = (iso, isoEnd) => {
   return `DU ${ds.getDate()} ${MONTHS_SHORT[ds.getMonth()]} ${ds.getFullYear()} AU ${de.getDate()} ${MONTHS_SHORT[de.getMonth()]} ${de.getFullYear()}`;
 };
 
+// Variante du format pour le champ "Date(s)" du formulaire de création d'event.
+// Sur 1 jour on préfixe par le jour de la semaine court ("VEN. 15 MAI 2026")
+// pour aider l'orga à confirmer visuellement le bon jour ; sur une plage on
+// retombe sur formatDateLong (déjà explicite avec "DU ... AU ...").
+const formatDateForForm = (iso, isoEnd) => {
+  if (!iso) return '';
+  const start = new Date(iso); start.setHours(0, 0, 0, 0);
+  if (isNaN(start.getTime())) return '';
+  if (!isoEnd || isoEnd === iso) {
+    const wd = start.toLocaleDateString('fr-FR', { weekday: 'short' }).replace(/\./g, '').toUpperCase();
+    return `${wd}. ${formatDateLong(iso, null)}`;
+  }
+  return formatDateLong(iso, isoEnd);
+};
+
 const isUpcoming = (iso) => {
   if (!iso) return true;
   const d = new Date(iso);
@@ -3563,13 +3578,191 @@ function SubModalInputText({ visible, title, value, onChangeText, placeholder, k
   );
 }
 
+// CalendarRangeModal — picker calendrier custom (sans dépendance externe).
+// Mode plage : 1er tap = début, 2e tap = fin. Si le 2e tap est < début, la
+// sélection redémarre depuis ce jour. Même jour tapé deux fois ⇒ event 1 jour
+// (end === start). Le grid affiche 6 semaines × 7 jours commençant un lundi
+// pour rester proche du Calendrier iOS / dashboard.
+function CalendarRangeModal({ visible, onClose, initialStart, initialEnd, minDate, onConfirm }) {
+  const today = useMemo(() => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); return d;
+  }, []);
+  const minD = useMemo(() => {
+    if (!minDate) return null;
+    const d = new Date(minDate); d.setHours(0, 0, 0, 0); return d;
+  }, [minDate]);
+  const initialView = initialStart || today;
+  const [viewYear, setViewYear] = useState(initialView.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initialView.getMonth());
+  const [start, setStart] = useState(initialStart ? new Date(initialStart) : null);
+  const [end, setEnd] = useState(initialEnd ? new Date(initialEnd) : null);
+
+  useEffect(() => {
+    if (visible) {
+      const init = initialStart || today;
+      setViewYear(init.getFullYear());
+      setViewMonth(init.getMonth());
+      setStart(initialStart ? new Date(initialStart) : null);
+      setEnd(initialEnd ? new Date(initialEnd) : null);
+    }
+  }, [visible]);
+
+  const monthDays = useMemo(() => {
+    // 6 rangées × 7 jours en partant du lundi précédent le 1er du mois.
+    const first = new Date(viewYear, viewMonth, 1);
+    const firstWeekday = (first.getDay() + 6) % 7; // 0=Lun ... 6=Dim
+    const grid = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(viewYear, viewMonth, 1 - firstWeekday + i);
+      d.setHours(0, 0, 0, 0);
+      grid.push(d);
+    }
+    return grid;
+  }, [viewYear, viewMonth]);
+
+  const sameDay = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const isCurrentMonth = (d) => d.getMonth() === viewMonth;
+  const isBeforeMin = (d) => minD && d < minD;
+
+  const onTapDay = (d) => {
+    if (isBeforeMin(d) || !isCurrentMonth(d)) return;
+    const dn = new Date(d); dn.setHours(0, 0, 0, 0);
+    if (!start || (start && end)) {
+      // Nouvelle sélection
+      setStart(dn); setEnd(null);
+      return;
+    }
+    // start déjà défini, end pas encore.
+    if (sameDay(dn, start)) {
+      // Tap deux fois sur le même jour ⇒ event 1 jour (end === start).
+      setEnd(dn);
+      return;
+    }
+    if (dn < start) {
+      // Redémarre la sélection depuis le 2e tap.
+      setStart(dn); setEnd(null);
+    } else {
+      setEnd(dn);
+    }
+  };
+
+  const goPrev = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
+    else setViewMonth(viewMonth - 1);
+  };
+  const goNext = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
+    else setViewMonth(viewMonth + 1);
+  };
+
+  const canConfirm = !!start;
+  const isSingle = start && (!end || sameDay(start, end));
+  const handleConfirm = () => {
+    if (!start) return;
+    onConfirm(start, isSingle ? null : end);
+    onClose();
+  };
+
+  const monthRaw = new Date(viewYear, viewMonth, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  const monthLabel = monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1);
+
+  const summary = (() => {
+    if (!start) return 'Tape un jour pour commencer';
+    if (!end) return `Début : ${start.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} · tape un 2e jour pour finir (ou le même pour 1 jour)`;
+    return formatDateForForm(start.toISOString().slice(0, 10), sameDay(start, end) ? null : end.toISOString().slice(0, 10));
+  })();
+
+  // Cell renderer factorisé : on sépare le fill (bar pale violet) du dot (cercle
+  // primary), pour rendre les bords du range proprement. On gate sur inMonth pour
+  // ne pas tracer la range sur les jours grisés du mois adjacent.
+  const renderCell = (d, idx) => {
+    const inMonth = isCurrentMonth(d);
+    const disabled = !inMonth || isBeforeMin(d);
+    const isStart = inMonth && sameDay(d, start);
+    const isEnd = inMonth && sameDay(d, end);
+    const hasRange = start && end && !sameDay(start, end);
+    const inMiddle = inMonth && hasRange && d > start && d < end;
+    const showLeftBar = inMonth && hasRange && (inMiddle || (isEnd && !isStart));
+    const showRightBar = inMonth && hasRange && (inMiddle || (isStart && !isEnd));
+    const isEdge = isStart || isEnd;
+    return (
+      <TouchableOpacity
+        key={idx}
+        onPress={() => onTapDay(d)}
+        disabled={disabled}
+        activeOpacity={0.7}
+        style={{ flex: 1, height: 42, alignItems: 'center', justifyContent: 'center' }}
+      >
+        {showLeftBar ? (
+          <View style={{ position: 'absolute', top: 6, bottom: 6, left: 0, right: '50%', backgroundColor: '#EDE5FF' }} />
+        ) : null}
+        {showRightBar ? (
+          <View style={{ position: 'absolute', top: 6, bottom: 6, left: '50%', right: 0, backgroundColor: '#EDE5FF' }} />
+        ) : null}
+        {isEdge ? (
+          <View style={{ position: 'absolute', width: 36, height: 36, borderRadius: 18, backgroundColor: C.primary }} />
+        ) : null}
+        <Text style={{
+          color: disabled ? '#cfcadd' : isEdge ? '#fff' : (showLeftBar || showRightBar) ? C.text : C.text,
+          fontWeight: isEdge ? '700' : '500',
+          fontSize: 14,
+        }}>
+          {d.getDate()}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity activeOpacity={1} onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, paddingBottom: 30 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <TouchableOpacity onPress={goPrev} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#f5f3ff' }}>
+              <Text style={{ fontSize: 22, color: C.primary, marginTop: -2 }}>‹</Text>
+            </TouchableOpacity>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: C.text }}>{monthLabel}</Text>
+            <TouchableOpacity onPress={goNext} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#f5f3ff' }}>
+              <Text style={{ fontSize: 22, color: C.primary, marginTop: -2 }}>›</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ flexDirection: 'row', marginBottom: 2 }}>
+            {['L','M','M','J','V','S','D'].map((d, i) => (
+              <View key={i} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
+                <Text style={{ color: C.textSoft, fontSize: 11, fontWeight: '700' }}>{d}</Text>
+              </View>
+            ))}
+          </View>
+          {Array.from({ length: 6 }).map((_, row) => (
+            <View key={row} style={{ flexDirection: 'row' }}>
+              {monthDays.slice(row * 7, row * 7 + 7).map((d, i) => renderCell(d, `${row}-${i}`))}
+            </View>
+          ))}
+          <Text style={{ color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 14, paddingHorizontal: 4, lineHeight: 17 }}>
+            {summary}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+            <TouchableOpacity onPress={onClose} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: '#f5f3ff' }}>
+              <Text style={{ color: C.primary, fontSize: 15, fontWeight: '700' }}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleConfirm} disabled={!canConfirm} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.pinkPill, opacity: canConfirm ? 1 : 0.5 }}>
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Confirmer</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 function CreateEventModal({ visible, onClose, onCreated, organizerSession, editEvent }) {
   const isEdit = !!editEvent;
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [eventDate, setEventDate] = useState(null); // Date object | null
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [eventDateEnd, setEventDateEnd] = useState(null); // Date object | null (null ⇒ event 1 jour)
+  const [showCalendar, setShowCalendar] = useState(false);
   const [startTime, setStartTime] = useState(''); // "HH:MM"
   const [photographerPwd, setPhotographerPwd] = useState('');
   const [revealPwd, setRevealPwd] = useState(false);
@@ -3638,6 +3831,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         setCode(editEvent.code || '');
         setPassword('');
         setEventDate(editEvent.event_date ? new Date(editEvent.event_date) : null);
+        setEventDateEnd(editEvent.event_date_end ? new Date(editEvent.event_date_end) : null);
         setStartTime(editEvent.start_time || '');
         setPhotographerPwd(editEvent.photographer_password || '');
         setRevealPwd(false);
@@ -3655,10 +3849,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         setPendingCoverLocal(null);
       } else {
         setName(''); setCode(''); setPassword('');
-        setEventDate(null); setStartTime(''); setPhotographerPwd(''); setRevealPwd(false);
+        setEventDate(null); setEventDateEnd(null);
+        setStartTime(''); setPhotographerPwd(''); setRevealPwd(false);
         setPostalCode(''); setCity(''); setCitySuggestions([]);
         setEventType('');
-        setWebsite(''); setContact(''); setPhone(''); setDistances([]);
+        // Pré-rempli avec l'email orga connecté (éditable). Si l'orga veut
+        // utiliser un email different pour le contact public il peut le
+        // modifier — la valeur sera affichée sur la page event publique.
+        setWebsite(''); setContact(organizerSession?.email || ''); setPhone(''); setDistances([]);
         setCoverImage(null); setPendingCoverLocal(null);
       }
     }
@@ -3760,10 +3958,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const step1Ok = !!name?.trim() && !!eventType && dateOk;
   const step2Ok = locationOk && distancesOk;
   const step3Ok = emailOk && (isEdit || (!!code?.trim() && !!password));
-  const canSubmit = step1Ok && step2Ok && step3Ok && !busy;
+  // Step 4 (cover) est toujours valide — la cover est optionnelle, le bouton
+  // "Ajouter plus tard" passe directement à la soumission sans upload.
+  const step4Ok = true;
+  const canSubmit = step1Ok && step2Ok && step3Ok && step4Ok && !busy;
 
+  const TOTAL_STEPS = 4;
   const goStep = (n) => {
-    if (n < 1 || n > 3 || !sheetW) { setStep(n); return; }
+    if (n < 1 || n > TOTAL_STEPS || !sheetW) { setStep(n); return; }
     setStep(n);
     Animated.timing(slideX, {
       toValue: -(n - 1) * sheetW,
@@ -3774,11 +3976,12 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   const tryNext = () => {
     if (step === 1) { if (!step1Ok) { setShowErr(e => ({ ...e, 1: true })); return; } goStep(2); return; }
     if (step === 2) { if (!step2Ok) { setShowErr(e => ({ ...e, 2: true })); return; } goStep(3); return; }
+    if (step === 3) { if (!step3Ok) { setShowErr(e => ({ ...e, 3: true })); return; } goStep(4); return; }
   };
   const trySubmit = () => {
     if (!step1Ok) { setShowErr(e => ({ ...e, 1: true })); goStep(1); return; }
     if (!step2Ok) { setShowErr(e => ({ ...e, 2: true })); goStep(2); return; }
-    if (!step3Ok) { setShowErr(e => ({ ...e, 3: true })); return; }
+    if (!step3Ok) { setShowErr(e => ({ ...e, 3: true })); goStep(3); return; }
     submit();
   };
   const errStyle = { color: '#DC2626', fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 };
@@ -3794,6 +3997,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         contact,
         phone: phone.trim(),
         event_date: eventDate ? eventDate.toISOString().slice(0, 10) : '',
+        event_date_end: eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : '',
         location: city ? `${city} (${postalCode})` : '',
         event_type: eventType,
         website,
@@ -4592,7 +4796,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
               <View style={{ flex: 1 }}>
                 <Text style={s.modalTitle}>{isEdit ? 'Modifier l\'événement' : 'Créer un événement'}</Text>
-                <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>Étape {step} sur 3</Text>
+                <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>Étape {step} sur 4</Text>
               </View>
               <TouchableOpacity onPress={onClose} hitSlop={12} style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
                 <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
@@ -4601,7 +4805,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
 
             {/* Barre de progression */}
             <View style={{ height: 4, backgroundColor: '#e9e4f9', borderRadius: 2, marginBottom: 14 }}>
-              <View style={{ height: 4, width: `${(step / 3) * 100}%`, backgroundColor: C.primary, borderRadius: 2 }} />
+              <View style={{ height: 4, width: `${(step / 4) * 100}%`, backgroundColor: C.primary, borderRadius: 2 }} />
             </View>
 
             {/* Wizard slide */}
@@ -4615,38 +4819,11 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                 }
               }}
             >
-              <Animated.View style={{ flexDirection: 'row', width: sheetW * 3, transform: [{ translateX: slideX }] }}>
+              <Animated.View style={{ flexDirection: 'row', width: sheetW * 4, transform: [{ translateX: slideX }] }}>
 
                 {/* ===== STEP 1 : Identité ===== */}
                 <View style={{ width: sheetW }}>
                   <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
-                    <Text style={formSectionStyle.heading}>Image de couverture</Text>
-                    <TouchableOpacity
-                      onPress={pickAndUploadCover}
-                      disabled={coverBusy}
-                      style={{
-                        height: 140, borderRadius: 12, backgroundColor: '#faf9ff', marginBottom: 8,
-                        overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
-                        borderWidth: (coverImage || pendingCoverLocal) ? 0 : 1, borderStyle: 'dashed', borderColor: '#d9d4ec',
-                      }}
-                    >
-                      {coverBusy ? (
-                        <ActivityIndicator color={C.primary} />
-                      ) : (coverImage || pendingCoverLocal) ? (
-                        <ExpoImage source={{ uri: pendingCoverLocal || coverImage }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                      ) : (
-                        <>
-                          <Text style={{ color: C.textSoft, fontSize: 14, marginBottom: 4 }}>+ Ajouter une image</Text>
-                          <Text style={{ color: C.textSoft, fontSize: 11 }}>Format paysage 16:9 recommandé</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                    {(coverImage || pendingCoverLocal) && !coverBusy && (
-                      <TouchableOpacity onPress={pickAndUploadCover} style={{ alignSelf: 'flex-end', marginTop: -4, marginBottom: 8 }}>
-                        <Text style={{ color: C.primary, fontSize: 12, fontWeight: '600' }}>Changer l'image</Text>
-                      </TouchableOpacity>
-                    )}
-
                     <Text style={formSectionStyle.heading}>Nom de l'événement *</Text>
                     <TextInput placeholder="Ex : Trail des Violettes" placeholderTextColor={C.textSoft} value={name} onChangeText={setName} style={formSectionStyle.input} />
                     {showErr[1] && !name?.trim() && <Text style={errStyle}>Champ requis</Text>}
@@ -4661,33 +4838,23 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                     </View>
                     {showErr[1] && !eventType && <Text style={errStyle}>Sélectionne un type</Text>}
 
-                    <Text style={formSectionStyle.heading}>Date de l'événement *</Text>
+                    <Text style={formSectionStyle.heading}>Date(s) de l'événement *</Text>
                     <TouchableOpacity
-                      onPress={() => setShowDatePicker(true)}
+                      onPress={() => setShowCalendar(true)}
                       style={[formSectionStyle.input, { justifyContent: 'center' }]}
                     >
                       <Text style={{ color: eventDate ? C.text : C.textSoft, fontSize: 15 }}>
-                        {eventDate ? eventDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'Date de l\'événement'}
+                        {eventDate
+                          ? formatDateForForm(
+                              eventDate.toISOString().slice(0, 10),
+                              eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : null,
+                            )
+                          : 'Choisir une date (ou une plage)'}
                       </Text>
                     </TouchableOpacity>
-                    {showDatePicker && (
-                      <DateTimePicker
-                        value={eventDate || new Date()}
-                        mode="date"
-                        display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                        minimumDate={new Date()}
-                        onChange={(_e, selected) => {
-                          if (Platform.OS === 'android') setShowDatePicker(false);
-                          if (selected) setEventDate(selected);
-                        }}
-                        locale="fr-FR"
-                      />
-                    )}
-                    {Platform.OS === 'ios' && showDatePicker && (
-                      <TouchableOpacity onPress={() => setShowDatePicker(false)} style={{ alignSelf: 'flex-end', paddingHorizontal: 8, paddingVertical: 6 }}>
-                        <Text style={{ color: C.primary, fontWeight: '600' }}>OK</Text>
-                      </TouchableOpacity>
-                    )}
+                    <Text style={{ color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
+                      Tape 2 fois la même date pour un événement sur 1 jour.
+                    </Text>
                     {showErr[1] && !dateOk && <Text style={errStyle}>Date requise (pas dans le passé)</Text>}
                   </ScrollView>
                 </View>
@@ -4780,6 +4947,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                     <Text style={formSectionStyle.heading}>Contact</Text>
                     <TextInput placeholder="Site web (optionnel)" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
                     <TextInput placeholder="Email de contact *" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
+                    <Text style={{ color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
+                      Cet email sera affiché publiquement sur la page de ton événement.
+                    </Text>
                     {showErr[3] && !emailOk && <Text style={errStyle}>Email invalide</Text>}
                     <TextInput placeholder="Téléphone de contact (optionnel)" placeholderTextColor={C.textSoft} value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
 
@@ -4823,10 +4993,50 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                   </ScrollView>
                 </View>
 
+                {/* ===== STEP 4 : Cover image (skippable) ===== */}
+                <View style={{ width: sheetW }}>
+                  <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
+                    <Text style={formSectionStyle.heading}>Image de couverture</Text>
+                    <Text style={{ color: C.textSoft, fontSize: 12, marginBottom: 10, marginLeft: 4, lineHeight: 17 }}>
+                      Cette image sera affichée sur la page de ton event et dans l'app coureur. Format paysage 16:9 recommandé.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={pickAndUploadCover}
+                      disabled={coverBusy}
+                      style={{
+                        height: 160, borderRadius: 12, backgroundColor: '#faf9ff', marginBottom: 8,
+                        overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
+                        borderWidth: (coverImage || pendingCoverLocal) ? 0 : 1, borderStyle: 'dashed', borderColor: '#d9d4ec',
+                      }}
+                    >
+                      {coverBusy ? (
+                        <ActivityIndicator color={C.primary} />
+                      ) : (coverImage || pendingCoverLocal) ? (
+                        <ExpoImage source={{ uri: pendingCoverLocal || coverImage }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                      ) : (
+                        <>
+                          <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600', marginBottom: 4 }}>+ Choisir une image</Text>
+                          <Text style={{ color: C.textSoft, fontSize: 11 }}>Depuis ta galerie</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                    {(coverImage || pendingCoverLocal) && !coverBusy && (
+                      <TouchableOpacity onPress={pickAndUploadCover} style={{ alignSelf: 'flex-end', marginTop: -4, marginBottom: 8 }}>
+                        <Text style={{ color: C.primary, fontSize: 12, fontWeight: '600' }}>Changer l'image</Text>
+                      </TouchableOpacity>
+                    )}
+                    {!(coverImage || pendingCoverLocal) && (
+                      <Text style={{ color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 8, lineHeight: 17 }}>
+                        Pas de visuel sous la main ? Tu peux ajouter l'image plus tard depuis l'édition de ton event.
+                      </Text>
+                    )}
+                  </ScrollView>
+                </View>
+
               </Animated.View>
             </View>
 
-            {/* Bottom nav : Précédent / Suivant ou Enregistrer */}
+            {/* Bottom nav : Précédent / Suivant ou Soumettre / Ajouter plus tard */}
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
               {step > 1 && (
                 <TouchableOpacity
@@ -4836,7 +5046,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                   <Text style={{ color: C.primary, fontSize: 15, fontWeight: '700' }}>Précédent</Text>
                 </TouchableOpacity>
               )}
-              {step < 3 ? (
+              {step < TOTAL_STEPS ? (
                 <TouchableOpacity
                   onPress={tryNext}
                   style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.pinkPill }}
@@ -4850,7 +5060,11 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                   style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.pinkPill, opacity: busy ? 0.6 : 1 }}
                 >
                   {busy ? <ActivityIndicator color="#fff" /> : (
-                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{isEdit ? 'Enregistrer' : 'Soumettre'}</Text>
+                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                      {isEdit
+                        ? 'Enregistrer'
+                        : (coverImage || pendingCoverLocal) ? 'Soumettre' : 'Ajouter plus tard'}
+                    </Text>
                   )}
                 </TouchableOpacity>
               )}
@@ -4858,6 +5072,19 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
           </TouchableOpacity>
         </TouchableOpacity>
       </KeyboardAvoidingView>
+
+      {/* Calendrier custom (range) — remplace le DateTimePicker natif iOS */}
+      <CalendarRangeModal
+        visible={showCalendar}
+        onClose={() => setShowCalendar(false)}
+        initialStart={eventDate}
+        initialEnd={eventDateEnd}
+        minDate={(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })()}
+        onConfirm={(start, end) => {
+          setEventDate(start);
+          setEventDateEnd(end);
+        }}
+      />
 
       {/* Picker Heure */}
       <Modal visible={timePickerIdx !== null} transparent animationType="slide" onRequestClose={() => setTimePickerIdx(null)}>
