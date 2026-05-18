@@ -1341,7 +1341,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </TouchableOpacity>
       </View>
 
-      <View style={{ position: 'relative', marginTop: 12, marginBottom: 8 }}>
+      <View style={{ position: 'relative', marginTop: 12, marginBottom: 10 }}>
         <View style={s.eventCard}>
           {/* Layer 0 : aplat coloré pleine carte (fallback + fond sous image) */}
           <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
@@ -1423,7 +1423,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             paddingVertical: 10,
             paddingHorizontal: 24,
             alignItems: 'center',
-            marginTop: 10,
             marginBottom: 10,
           }}
         >
@@ -1436,7 +1435,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       {/* Courses : un seul bloc avec header de labels + lignes de valeurs */}
       {distances.length > 0 && photos.length === 0 && (
         <View style={{
-          marginBottom: 16, marginTop: -6,
+          marginBottom: 10,
           backgroundColor: `${tint}1A`,
           borderRadius: 12,
           paddingVertical: 12, paddingHorizontal: 16,
@@ -1484,7 +1483,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
       {/* Galerie ou message à venir */}
       {upcoming && photos.length === 0 ? (
-        <View style={{ paddingVertical: 30, alignItems: 'center', backgroundColor: `${tint}1A`, borderRadius: 16, marginTop: 4 }}>
+        <View style={{ paddingVertical: 30, alignItems: 'center', backgroundColor: `${tint}1A`, borderRadius: 16 }}>
           <Icon.PhotoCam size={40} color={tint} />
           <Text style={{ color: tint, fontSize: 14, fontWeight: '700', marginTop: 12, textAlign: 'center' }}>
             Photos disponibles le jour J
