@@ -7446,14 +7446,20 @@ function OrganizerEventDetailScreen({ session, event, onClose, onEdit, onOpenPho
     ? new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }).replace(/\./g, '').toUpperCase()
     : 'Date à définir';
 
+  // "J-3" avant l'event, "GO !" pendant toute la durée (event_date →
+  // event_date_end), "J+5" après. End absent → single-day (start = end).
   const countdown = (() => {
     if (!event.event_date) return null;
-    const d = new Date(event.event_date); d.setHours(0, 0, 0, 0);
+    const start = new Date(event.event_date);
+    if (isNaN(start.getTime())) return null;
+    start.setHours(0, 0, 0, 0);
+    const end = event.event_date_end ? new Date(event.event_date_end) : new Date(event.event_date);
+    if (isNaN(end.getTime())) end.setTime(start.getTime());
+    end.setHours(0, 0, 0, 0);
     const t = new Date(); t.setHours(0, 0, 0, 0);
-    const days = Math.round((d - t) / 86400000);
-    if (days === 0) return 'JOUR J';
-    if (days > 0) return `J-${days}`;
-    return `J+${Math.abs(days)}`;
+    if (t < start) return `J-${Math.round((start - t) / 86400000)}`;
+    if (t <= end) return 'GO !';
+    return `J+${Math.round((t - end) / 86400000)}`;
   })();
 
   const copyPwd = async () => {
