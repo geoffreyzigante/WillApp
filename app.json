@@ -80,7 +80,10 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-secure-store",
-      "./plugins/with-fast-shutter"
+      "./plugins/with-human-detector",
+      "./plugins/with-shutter-lock",
+      "./plugins/with-photo-metadata-burner",
+      "./plugins/with-heic-capture"
     ]
   }
 }
