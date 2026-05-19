@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  AppState, Share, NativeModules,
+  AppState, Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -82,10 +82,6 @@ async function migrateSensitiveKeysToSecureStore() {
 // + photos stockées hors-cache pour survivre au kill / nettoyage iOS.
 const UPLOAD_QUEUE_KEY = '@will_upload_queue';
 const LAST_CAPTURE_KEY = '@will_last_capture_at';
-const CAPTURE_MODE_KEY = '@will_photographer_capture_mode';
-// Panneau debug (preview/dev only) : toggles d'activation des filtres pipeline.
-// Survit aux force-close pour faciliter les sessions de test sur le terrain.
-const DEBUG_FILTERS_KEY = '@will_debug_filters';
 const PENDING_DIR_NAME = 'will_pending';
 const COVERS_DIR_NAME = 'will_event_covers';
 const MAX_RETRIES_DEFAULT = 5;
@@ -1849,10 +1845,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     upload: { mode: "immediate", batchSize: 10, maxRetries: 5, compressBeforeUpload: false },
     debug: {
       verboseLogs: true, skipRekognition: false, saveUnmatchedFrames: false,
-      // Toggles preview/dev only (panneau ⚙️) pour activer/desactiver chaque
-      // gate du pipeline capture. Defaut = tous actifs (comportement prod).
-      // Persiste dans AsyncStorage DEBUG_FILTERS_KEY pour survivre aux reloads.
-      filters: { willPhotoFilter: true, cooldown: true, settle: true },
     },
   });
 
@@ -1862,81 +1854,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       .then(cfg => { if (cfg) setEventConfig(prev => ({ ...prev, ...cfg })); })
       .catch(() => {});
   }, []);
-
-  // Restaure les toggles du panneau debug (preview/dev only) depuis AsyncStorage.
-  // Override les valeurs venant de eventConfig pour survivre aux reloads sans
-  // depasser le scope debug (le worker n'enverra jamais debug.filters).
-  useEffect(() => {
-    if (!IS_PREVIEW_OR_DEV) return;
-    AsyncStorage.getItem(DEBUG_FILTERS_KEY).then(raw => {
-      if (!raw) return;
-      try {
-        const stored = JSON.parse(raw);
-        setEventConfig(prev => ({
-          ...prev,
-          debug: {
-            ...prev.debug,
-            filters: { ...prev.debug?.filters, ...(stored.filters || {}) },
-          },
-          imageProcessing: {
-            ...prev.imageProcessing,
-            postCaptureFilter: {
-              ...prev.imageProcessing?.postCaptureFilter,
-              ...(typeof stored.minFaceWidthPx === 'number'
-                ? { minFaceWidthPx: stored.minFaceWidthPx }
-                : {}),
-            },
-          },
-        }));
-      } catch {}
-    }).catch(() => {});
-  }, []);
-
-  // Setters utilises par DebugFiltersModal. Mutent eventConfig en memoire ET
-  // persistent dans AsyncStorage pour le prochain demarrage. Le pipeline lit
-  // les valeurs depuis eventConfig donc l'effet est immediat (sans recreer
-  // le worklet pour les toggles, seul minFaceWidthPx est read-only-par-frame
-  // car il est cable dans captureOne et non dans le worklet).
-  const persistDebug = useCallback((next) => {
-    const payload = {
-      filters: next.debug?.filters,
-      minFaceWidthPx: next.imageProcessing?.postCaptureFilter?.minFaceWidthPx,
-    };
-    AsyncStorage.setItem(DEBUG_FILTERS_KEY, JSON.stringify(payload)).catch(() => {});
-  }, []);
-
-  const setDebugFilter = useCallback((key, value) => {
-    setEventConfig(prev => {
-      const next = {
-        ...prev,
-        debug: {
-          ...prev.debug,
-          filters: { ...prev.debug?.filters, [key]: value },
-        },
-      };
-      persistDebug(next);
-      return next;
-    });
-  }, [persistDebug]);
-
-  const setMinFaceWidthPx = useCallback((value) => {
-    setEventConfig(prev => {
-      const next = {
-        ...prev,
-        imageProcessing: {
-          ...prev.imageProcessing,
-          postCaptureFilter: {
-            ...prev.imageProcessing?.postCaptureFilter,
-            minFaceWidthPx: value,
-          },
-        },
-      };
-      persistDebug(next);
-      return next;
-    });
-  }, [persistDebug]);
-
-  const [debugFiltersOpen, setDebugFiltersOpen] = useState(false);
 
   // 4:3 prioritaire pour matcher la preview portrait (3:4) sans bandes noires
   // ni crop. videoResolution forcee a 4K (3840x2160) pour que takeSnapshot
@@ -1991,32 +1908,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
   const isCapturingRef = useRef(false);
 
-  // Mode capture : 'continuous' (rafale tant qu'un visage est dans la zone)
-  // ou '3lines' (declenchement quand un visage traverse une des 3 lignes
-  // verticales a 40/50/60% de la largeur ecran). Persiste dans AsyncStorage.
-  const [captureMode, setCaptureMode] = useState('continuous');
-  const captureModeRef = useRef('continuous');
-  // Centre Y (axe horizontal ecran) de chaque visage a la frame precedente,
-  // indexe par trackingId. Utilise pour detecter la traversee d'une des 3
-  // lignes entre 2 frames. useRef pour eviter les re-renders a 30fps.
-  const prevFaceCentersRef = useRef(new Map());
-
-  useEffect(() => {
-    AsyncStorage.getItem(CAPTURE_MODE_KEY).then(v => {
-      if (v === '3lines' || v === 'continuous') {
-        setCaptureMode(v);
-        captureModeRef.current = v;
-      }
-    }).catch(() => {});
-  }, []);
-
-  const onCaptureModeChange = (next) => {
-    setCaptureMode(next);
-    captureModeRef.current = next;
-    prevFaceCentersRef.current = new Map();
-    faceTrackingRef.current = new Map();
-    AsyncStorage.setItem(CAPTURE_MODE_KEY, next).catch(() => {});
-  };
   // Tracker par trackingId pour le mode continu : { firstSeenAt, lastCaptureAt }
   // - firstSeenAt : timestamp d'entree du visage dans la zone (debounce 200ms
   //   avant capture, pour eviter de tirer sur un faux positif MLKit transitoire).
@@ -2030,11 +1921,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // Pilote le pipeline capture : normal = burst 3x takePhoto HQ (~900ms),
   // peloton = 1x takeSnapshot 4K (~100ms). Bascule auto via hysteresis :
   // normal→peloton si >=3 visages stable 200ms ; peloton→normal si <3 visages
-  // stable 500ms. forcePelotonModeRef permet de forcer 'peloton' depuis le
-  // panneau debug (test seul devant la camera).
+  // stable 500ms.
   const densityModeRef = useRef('normal');
   const densityHistoryRef = useRef([]);  // [{t, count}, ...] sur 600ms glissants
-  const forcePelotonModeRef = useRef(false);
   const [densityModeState, setDensityModeState] = useState('normal');
   // Timestamp de la derniere frame MLKit avec visage dans la zone (mode 3 lignes
   // legacy, ne sert plus en mode continu apres le refactor settle+cooldown).
@@ -2072,30 +1961,15 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const [facesCount, setFacesCount] = useState(0);
   const [facesInZoneCount, setFacesInZoneCount] = useState(0);
   const [isShooting, setIsShooting] = useState(false);
-  // Debug overlay temporaire pour diagnostic latence sur device (sans Metro).
-  // Affiche les 10 derniers messages [capture]. A retirer une fois fixe.
-  const [debugLogs, setDebugLogs] = useState([]);
-  const [showDebug, setShowDebug] = useState(false);
-  const addDebugLog = useCallback((msg) => {
-    const d = new Date();
-    const t =
-      `${String(d.getHours()).padStart(2, '0')}:` +
-      `${String(d.getMinutes()).padStart(2, '0')}:` +
-      `${String(d.getSeconds()).padStart(2, '0')}.` +
-      `${String(d.getMilliseconds()).padStart(3, '0')}`;
-    setDebugLogs(prev => [`${t} — ${msg}`, ...prev].slice(0, 10));
-  }, []);
+  // Stub no-op : remplace l'ancien overlay debug pour eviter de toucher les
+  // ~20 call sites disséminés dans le pipeline capture.
+  const addDebugLog = () => {};
 
-  // === Instrumentation cadence (mesure perf reelle MLKit + capture + queue) ===
-  // mlkitFps : fps moyen MLKit sur la derniere fenetre de 30 frames (mis a jour
-  // toutes les 30 frames depuis le worklet via runOnJS).
-  // captureFps : photos/s moyen sur la derniere fenetre de 30 photos (mis a jour
-  // toutes les 30 photos dans captureOne).
-  // Les compteurs frame/photo persistent entre updates ; lastTs = timestamp de la
-  // 1ere frame/photo de la fenetre courante.
-  // Worklets ne capture pas correctement les `let` locaux a un closure JS quand
-  // le worklet est recree (chaque hook). On utilise donc des SharedValues stables
-  // (createSharedValue) accessibles depuis le worklet et depuis JS.
+  // === Instrumentation cadence (compteurs worklet/capture conservés) ===
+  // mlkitFrameCountSV / mlkitWindowStartSV / captureWindowStartRef /
+  // captureWindowCountRef sont referencés par le frame processor et captureOne
+  // - on garde la mécanique de comptage (utile pour logs console), mais les
+  // setters d'affichage sont des no-ops puisque l'UI debug a été retirée.
   const mlkitCountersRef = useRef(null);
   if (mlkitCountersRef.current === null) {
     mlkitCountersRef.current = {
@@ -2105,8 +1979,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   }
   const mlkitFrameCountSV = mlkitCountersRef.current.frameCount;
   const mlkitWindowStartSV = mlkitCountersRef.current.windowStart;
-  const [mlkitFps, setMlkitFps] = useState(0);
-  const [captureFps, setCaptureFps] = useState(0);
   const captureWindowStartRef = useRef(0);
   const captureWindowCountRef = useRef(0);
   // Push MLKit fps depuis le worklet (toutes les 30 frames).
@@ -2114,18 +1986,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     () => Worklets.createRunOnJS((frames, elapsedMs) => {
       const fps = elapsedMs > 0 ? Math.round((frames * 1000) / elapsedMs) : 0;
       const m = `[mlkit] ${frames} frames in ${elapsedMs}ms (${fps} fps)`;
-      console.log(m); addDebugLog(m);
-      setMlkitFps(fps);
+      console.log(m);
     }),
-    [addDebugLog],
+    [],
   );
   // Mode auto-capture pour le rendu du bouton. true => label "Stop", bg rouge.
   // Mirror state du isAutoArmedRef pour declencher les re-render.
   const [isAutoArmed, setIsAutoArmed] = useState(false);
-  const [photoCount, setPhotoCount] = useState(0);
   const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [showSessionModal, setShowSessionModal] = useState(false);
 
   // Caméra ancrée juste sous le header (au lieu de absoluteFill + letterbox 4:3
   // qui laissait un grand vide noir entre le header et l'image visible sur les
@@ -2156,7 +2024,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // Flash blanc full-screen au début d'une rafale + animations de l'UI.
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const captureScale = useRef(new Animated.Value(1)).current;
-  const photoCountScale = useRef(new Animated.Value(1)).current;
   const headerSlideY = useRef(new Animated.Value(-120)).current;
   const footerSlideY = useRef(new Animated.Value(300)).current;
   // Pulse opacity du bouton Stop quand on capture activement (arme + visage en zone)
@@ -2197,45 +2064,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           setFacesInZoneCount(0);
         }
         facesInZoneCountRef.current = 0;
-        prevFaceCentersRef.current = new Map();
         return;
       }
       const now = Date.now();
-
-      // ─── MODE "3 LIGNES" : declenchement sur traversee ───────────────
-      // Lignes a cyFraction = 0.4, 0.5, 0.6 (correspond visuellement aux
-      // 3 lignes verticales a 40/50/60% de la largeur ecran). On compare
-      // la position de chaque visage entre frame N-1 et frame N : si le
-      // centre a change de cote par rapport a au moins une ligne, on
-      // declenche une capture (throttle 200ms via captureOne).
-      if (captureModeRef.current === '3lines') {
-        const LINES = [0.4, 0.5, 0.6];
-        const next = new Map();
-        let crossed = false;
-        for (const f of facesData) {
-          if (!f.verticalOk) continue; // ignore les visages hors band vertical
-          next.set(f.id, f.cyFraction);
-          if (crossed) continue;
-          const prev = prevFaceCentersRef.current.get(f.id);
-          if (prev == null) continue;
-          for (const line of LINES) {
-            if ((prev <= line && f.cyFraction > line) || (prev >= line && f.cyFraction < line)) {
-              crossed = true;
-              break;
-            }
-          }
-        }
-        prevFaceCentersRef.current = next;
-        if (crossed && isAutoArmedRef.current && !isCapturingRef.current) {
-          const sinceLastPhoto = now - lastPhotoTimeRef.current;
-          if (sinceLastPhoto >= 200) {
-            lastFaceSeenAtRef.current = now;
-            // Mode 3 lignes : 1 seule photo HQ par traversee (comportement legacy).
-            captureOne('normal-single');
-          }
-        }
-        return;
-      }
 
       // ─── MODE "CONTINU" : settle 200ms + cooldown 800ms per-face ─────
       // Logique : chaque visage qui entre dans la zone declenche UNE photo
@@ -2244,14 +2075,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       // son entree disparait du tracker. Garantit une capture systematique
       // meme a distance, sans dependre d'un toleranceMs global qui pouvait
       // tuer la session avant qu'on tire.
-      // Les deux gates (settle + cooldown) sont desactivables individuellement
-      // via le panneau debug (preview/dev only). Si settle off -> capture des
-      // la premiere detection ; si cooldown off -> capture a chaque frame ou
-      // l'isCapturingRef le permet (utile pour stress-test la chaine upload).
       const SETTLE_MS = 200;
       const COOLDOWN_MS = 800;
-      const settleEnabled = eventConfig.debug?.filters?.settle !== false;
-      const cooldownEnabled = eventConfig.debug?.filters?.cooldown !== false;
+      const settleEnabled = true;
+      const cooldownEnabled = true;
       const maxSize = (eventConfig.faceDetection?.maxFaceSizePercent ?? 80) / 100;
 
       // Filtre les visages dans la zone (trop gros = trop pres = exclu).
@@ -2270,7 +2097,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       // qu'une frame isolee fasse clignoter le mode.
       // - normal→peloton : >=3 visages stable sur 200ms (reaction rapide)
       // - peloton→normal : <3 visages stable sur 500ms (sortie prudente)
-      // Override debug : forcePelotonModeRef court-circuite la logique auto.
       densityHistoryRef.current.push({ t: now, count: validInZone.length });
       densityHistoryRef.current = densityHistoryRef.current.filter(
         e => now - e.t < 600
@@ -2279,9 +2105,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       const last200 = dh.filter(e => now - e.t < 200);
       const last500 = dh.filter(e => now - e.t < 500);
       let newMode = densityModeRef.current;
-      if (forcePelotonModeRef.current) {
-        newMode = 'peloton';
-      } else if (
+      if (
         densityModeRef.current === 'normal'
         && last200.length > 0
         && last200.every(e => e.count >= 3)
@@ -2357,8 +2181,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     }),
     [
       eventConfig.faceDetection?.maxFaceSizePercent,
-      eventConfig.debug?.filters?.settle,
-      eventConfig.debug?.filters?.cooldown,
     ]
   );
 
@@ -2848,7 +2670,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               // succès → delete fichier local + drop item
               try { new File(item.localUri).delete(); } catch {}
               arr[i] = null;
-              if (isMountedRef.current) setPhotoCount(c => c + 1);
               if (verbose) {
                 const m = `[upload] OK ${item.id} (key=${item.key})`;
                 console.log(m); addDebugLog(m);
@@ -2950,11 +2771,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     Animated.sequence([
       Animated.timing(flashOpacity, { toValue: 0.55, duration: 40, useNativeDriver: true }),
       Animated.timing(flashOpacity, { toValue: 0, duration: 120, useNativeDriver: true }),
-    ]).start();
-    // 3. Pop scale sur le compteur "N photos" : 1 → 1.3 → 1
-    Animated.sequence([
-      Animated.timing(photoCountScale, { toValue: 1.3, duration: 140, useNativeDriver: true }),
-      Animated.spring(photoCountScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
     ]).start();
   }
 
@@ -3075,7 +2891,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             : 0;
           const cm = `[cadence] ${captureWindowCountRef.current} photos en ${elapsed}ms (${fps} photos/s)`;
           console.log(cm); addDebugLog(cm);
-          if (isMountedRef.current) setCaptureFps(fps);
           captureWindowCountRef.current = 0;
           captureWindowStartRef.current = photoEnd;
         }
@@ -3091,48 +2906,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     isCapturingRef.current = false;
     setIsShooting(false);
 
-    // Post-capture filter + enqueue, pour chaque photo capturee. Le filter
-    // Will (Vision framework iOS) rejette les photos sans visage / trop petit
-    // avant qu'elles n'entrent dans la queue d'upload. Bypasse si module natif
-    // indisponible (Android, dev sans rebuild) ou si l'utilisateur a desactive
-    // le toggle dans le panneau debug (eventConfig.debug.filters.willPhotoFilter
-    // = false).
-    const filterCfg = eventConfig.imageProcessing?.postCaptureFilter;
-    const filterEnabled = filterCfg?.enabled !== false
-      && eventConfig.debug?.filters?.willPhotoFilter !== false
-      && Platform.OS === 'ios'
-      && NativeModules.WillPhotoFilter;
-
+    // Enqueue, pour chaque photo capturee.
     for (const { photo, idx } of captured) {
-      const rawPath = photo.path?.startsWith('file://') ? photo.path : `file://${photo.path}`;
-
-      if (filterEnabled) {
-        try {
-          const verdict = await NativeModules.WillPhotoFilter.evaluate(
-            rawPath,
-            filterCfg.minFaceWidthPx ?? 40,
-            filterCfg.minQuality ?? 0,
-          );
-          if (!verdict.accepted) {
-            const m = `[Will-Filter] rejected: ${verdict.reason} `
-              + `(face=${verdict.faceWidthPx}px, q=${verdict.faceCaptureQuality ?? 'n/a'})`;
-            console.log(m); addDebugLog(m);
-            try { new File(rawPath).delete(); } catch {}
-            continue;
-          }
-          if (eventConfig.debug?.verboseLogs) {
-            const m = `[Will-Filter] accepted: `
-              + `face=${verdict.faceWidthPx}px, q=${verdict.faceCaptureQuality?.toFixed?.(2)}`;
-            console.log(m); addDebugLog(m);
-          }
-        } catch (e) {
-          // Erreur dure (chargement image, Vision crash) : on garde la photo
-          // plutot que de la jeter, pour ne pas perdre une photo a cause
-          // d'un bug Vision intermittent.
-          console.warn('[Will-Filter] error, photo kept:', e?.message);
-        }
-      }
-
       const d = new Date();
       const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
       const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
@@ -3204,13 +2979,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     ? Math.max(0, Math.min(1, 1 - (queueStats.pending + queueStats.uploading) / drainStartTotal))
     : 0;
 
-  // Zone visuelle des lignes guides (modes Continu + 3 lignes) : bornee par
-  // la barre top et le toggle "Continu | 3 lignes" du footer. Le footer
-  // empile toggle (~38) + zoom pill (56) + panneau noir (au moins ~176, ou
-  // plus si la preview ne couvre pas tout l'ecran).
-  const linesTop = CAMERA_TOP + 32;
-  const linesBottom = 110 + Math.max(176, winH - (CAMERA_TOP + previewH));
-
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       {/* Caméra — resizeMode 'contain' (letterbox naturel), bandes noires explicites par-dessus.
@@ -3235,73 +3003,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         photoQualityBalance="quality"
         frameProcessor={frameProcessor}
         pixelFormat="yuv"
-        zoom={zoomLevel}
+        zoom={device.minZoom}
         resizeMode="contain"
         videoStabilizationMode={videoStabilizationMode}
         exposure={cameraExposure}
         enableLocation={false}
       />
-
-      {/* ─── CADRAGE DÉTECTION mode "Continu" : 2 lignes verticales subtiles
-          delimitant la bande de declenchement. Masque en mode "3 lignes".
-          NB : extension verticale = linesTop..linesBottom (au-dessus du
-          toggle, en-dessous de la barre top). Decouple de TRIGGER_VPCT qui
-          ne sert plus qu'a la logique de detection. ─── */}
-      {captureMode === 'continuous' && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: linesTop,
-            bottom: linesBottom,
-            left: 0, right: 0,
-            flexDirection: 'row',
-            justifyContent:
-              zonePosition === 'left' ? 'flex-start' :
-              zonePosition === 'right' ? 'flex-end' : 'center',
-          }}
-        >
-          <View style={{ width: `${zonePct * 100}%`, height: '100%' }}>
-            {(() => {
-              const inZone = facesInZoneCount > 0;
-              const lineColor = inZone ? 'rgba(16, 185, 129, 0.85)' : 'rgba(255, 255, 255, 0.35)';
-              return (
-                <>
-                  <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 1, backgroundColor: lineColor }} />
-                  <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 1, backgroundColor: lineColor }} />
-                </>
-              );
-            })()}
-          </View>
-        </View>
-      )}
-
-      {/* ─── MODE "3 LIGNES" : 3 lignes verticales a 40%, 50%, 60% de la
-          largeur ecran, bornees verticalement comme le mode "Continu".
-          Capture declenchee a chaque traversee (voir onFacesDetectedJS). ─── */}
-      {captureMode === '3lines' && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: linesTop, bottom: linesBottom, left: 0, right: 0,
-          }}
-        >
-          {[0.4, 0.5, 0.6].map((pct) => (
-            <View
-              key={pct}
-              style={{
-                position: 'absolute',
-                top: 0, bottom: 0,
-                left: `${pct * 100}%`,
-                width: 1,
-                marginLeft: -0.5,
-                backgroundColor: 'rgba(255,255,255,0.6)',
-              }}
-            />
-          ))}
-        </View>
-      )}
 
       {/* ─── FLASH RAFALE (full-screen, blanc, 120ms) ─── */}
       <Animated.View
@@ -3368,34 +3075,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             ) : null}
           </View>
 
-          {/* Cluster a droite : Charge upload (📤 N) + Deconnexion + LOGS.
-              Le titre flex:1 reste a peu pres centre malgre l'asymetrie. */}
+          {/* Cluster a droite : Deconnexion. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {/* Badge charge queue upload : visible des qu'il y a 1+ photos
-                en attente. Couleur evolue selon la pression (🟢 <20, 🟡 20-100,
-                🔴 >100, signal d'approche du FIFO max ${MAX_QUEUE_SIZE}). */}
-            {queueStats.total > 0 && (() => {
-              const total = queueStats.total;
-              const tier = total > 100 ? 'red' : total >= 20 ? 'yellow' : 'green';
-              const bg = tier === 'red' ? 'rgba(239,68,68,0.55)'
-                : tier === 'yellow' ? 'rgba(245,158,11,0.55)'
-                : 'rgba(34,197,94,0.45)';
-              return (
-                <View
-                  style={{
-                    flexDirection: 'row', alignItems: 'center', gap: 4,
-                    paddingHorizontal: 8, height: 28, borderRadius: 14,
-                    backgroundColor: bg,
-                  }}
-                >
-                  <Text style={{ fontSize: 12 }}>📤</Text>
-                  <Text style={{
-                    color: '#fff', fontSize: 11, fontWeight: '800',
-                    letterSpacing: 0.3, minWidth: 12, textAlign: 'center',
-                  }}>{total}</Text>
-                </View>
-              );
-            })()}
             <TouchableOpacity
               onPress={() => {
                 Alert.alert(
@@ -3420,77 +3101,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
               </Svg>
             </TouchableOpacity>
-            {IS_PREVIEW_OR_DEV && (
-              <TouchableOpacity
-                onPress={() => setDebugFiltersOpen(true)}
-                hitSlop={10}
-                style={{
-                  width: 28, height: 28, borderRadius: 14,
-                  backgroundColor: 'rgba(255,255,255,0.12)',
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <Text style={{ fontSize: 14 }}>⚙️</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              onPress={() => setShowDebug(s => !s)}
-              hitSlop={10}
-              style={{
-                paddingHorizontal: 8, height: 28, borderRadius: 14,
-                backgroundColor: showDebug ? 'rgba(239,68,68,0.55)' : 'rgba(255,255,255,0.12)',
-                alignItems: 'center', justifyContent: 'center',
-                opacity: showDebug ? 1 : 0.5,
-                minWidth: 42,
-              }}
-            >
-              <Text style={{
-                color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.8,
-              }}>LOGS</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-
-        {/* Row 2 : pill statut + pill compteur photo, centrés sous le titre */}
-        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 8 }}>
-          <Animated.View
-            style={{
-              flexDirection: 'row', alignItems: 'center', gap: 6,
-              paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
-              backgroundColor: statusInfo.bg,
-              transform: [{ scale: badgePulse }],
-            }}
-          >
-            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusInfo.dot }} />
-            <Text style={{
-              color: statusInfo.text,
-              fontSize: 11, fontWeight: '800', letterSpacing: 0.4,
-            }}>{statusInfo.label.toUpperCase()}</Text>
-          </Animated.View>
-
-          <TouchableOpacity
-            onPress={() => setShowSessionModal(true)}
-            activeOpacity={0.7}
-            style={{
-              flexDirection: 'row', alignItems: 'center', gap: 6,
-              paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
-              backgroundColor: 'rgba(255,255,255,0.1)',
-            }}
-          >
-            {!isOnline ? (
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path d="M3 3l18 18M7 8a5 5 0 0 1 9-1.5M19 14a4 4 0 0 0-2-7.5M9 17h7a3 3 0 0 0 .5-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
-              </Svg>
-            ) : (
-              <Icon.PhotoCam size={14} color="#fff" />
-            )}
-            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
-              {(photoCount + queueStats.total) > 0 ? (photoCount + queueStats.total) : '—'}
-            </Text>
-            {queueStats.failed > 0 && (
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444', marginLeft: 2 }} />
-            )}
-          </TouchableOpacity>
         </View>
 
         {/* Progress bar : visible quand un drain en cours porte sur > 5 photos. */}
@@ -3533,172 +3144,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           zIndex: 10,
         }}
       >
-        {/* Segmented control Mode capture : "Continu" | "3 lignes".
-            Au-dessus du pill Zoom, sobre, persiste dans AsyncStorage. */}
-        <View style={{
-          alignSelf: 'center',
-          flexDirection: 'row',
-          backgroundColor: 'rgba(0,0,0,0.45)',
-          borderWidth: 0.5,
-          borderColor: 'rgba(255,255,255,0.2)',
-          borderRadius: 999,
-          padding: 2,
-          marginBottom: 10,
-        }}>
-          {[
-            { id: 'continuous', label: 'Continu' },
-            { id: '3lines', label: '3 lignes' },
-          ].map(opt => {
-            const active = captureMode === opt.id;
-            return (
-              <TouchableOpacity
-                key={opt.id}
-                onPress={() => onCaptureModeChange(opt.id)}
-                activeOpacity={0.7}
-                style={{
-                  paddingHorizontal: 14, paddingVertical: 6,
-                  borderRadius: 999,
-                  backgroundColor: active ? 'rgba(255,255,255,0.9)' : 'transparent',
-                }}
-              >
-                <Text style={{
-                  color: active ? '#000' : 'rgba(255,255,255,0.85)',
-                  fontWeight: '600',
-                  fontSize: 12,
-                }}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Pill Zoom flottante sur la vue photographe (au-dessus du bandeau noir, avec un gap) */}
-        <View style={{
-          alignSelf: 'center',
-          flexDirection: 'row',
-          alignItems: 'center', justifyContent: 'center',
-          backgroundColor: 'transparent',
-          borderWidth: 0.5,
-          borderColor: 'rgba(255,255,255,0.25)',
-          borderRadius: 999, padding: 1,
-          height: 44, width: 90,
-          marginBottom: 12,
-        }}>
-          {[1, 1.5].map(z => {
-            const active = zoomLevel === z;
-            return (
-              <TouchableOpacity
-                key={z}
-                onPress={() => setZoomLevel(z)}
-                style={{
-                  flex: 1, height: '100%',
-                  alignItems: 'center', justifyContent: 'center',
-                  backgroundColor: 'transparent',
-                  borderWidth: 0.5,
-                  borderColor: active ? C.pinkPillActive : 'transparent',
-                  borderRadius: 999,
-                  overflow: 'hidden',
-                }}
-              >
-                {active && (
-                  <LinearGradient
-                    colors={['rgba(230,115,255,0.7)', 'rgba(230,115,255,0)']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFillObject}
-                    pointerEvents="none"
-                  />
-                )}
-                <Text style={{
-                  color: active ? '#fff' : 'rgba(255,255,255,0.6)',
-                  fontWeight: '800',
-                  fontSize: 12,
-                }}>
-                  {z === 1 ? '1×' : '1,5×'}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* ─── LOGS OVERLAY : stats temps reel + 10 derniers logs [capture] /
-            [Will-Filter] / [upload]. Cache par defaut, toggle via le bouton
-            LOGS du header (debug uniquement, pas vu par le photographe). ─── */}
-        {showDebug && (
-          <View
-            pointerEvents="box-none"
-            style={{
-              position: 'absolute',
-              bottom: Math.max(0, winH - (CAMERA_TOP + previewH)) + 8,
-              left: '5%',
-              right: '5%',
-              maxHeight: 320,
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              borderRadius: 8,
-              padding: 8,
-              zIndex: 20,
-            }}
-          >
-            {/* Stats temps reel : mode densite, MLKit fps, capture photos/s, queue size. */}
-            <View style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              paddingBottom: 6,
-              marginBottom: 6,
-              borderBottomWidth: 1,
-              borderBottomColor: 'rgba(255,255,255,0.18)',
-            }}>
-              <Text style={{
-                color: densityModeState === 'peloton' ? '#F4A6FF' : '#fff',
-                fontSize: 11, lineHeight: 13, fontWeight: '700',
-                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-              }}>
-                mode {densityModeState}
-              </Text>
-              <Text style={{
-                color: '#fff', fontSize: 11, lineHeight: 13,
-                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-              }}>
-                mlkit {mlkitFps} fps
-              </Text>
-              <Text style={{
-                color: '#fff', fontSize: 11, lineHeight: 13,
-                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-              }}>
-                capt {captureFps} ph/s
-              </Text>
-              <Text style={{
-                color: '#fff', fontSize: 11, lineHeight: 13,
-                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-              }}>
-                queue {queueStats.total}
-              </Text>
-            </View>
-            <ScrollView>
-              {debugLogs.length === 0 ? (
-                <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, lineHeight: 12 }}>
-                  (aucun log [capture] pour l'instant)
-                </Text>
-              ) : (
-                debugLogs.map((l, i) => (
-                  <Text
-                    key={`${i}-${l.slice(0, 12)}`}
-                    style={{
-                      color: '#fff',
-                      fontSize: 10,
-                      lineHeight: 12,
-                      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-                    }}
-                  >
-                    {l}
-                  </Text>
-                ))
-              )}
-            </ScrollView>
-          </View>
-        )}
-
         <View style={{
           paddingHorizontal: 16,
           paddingTop: 0,
@@ -3795,356 +3240,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         </View>
       </Animated.View>
 
-      <SessionPhotosModal
-        visible={showSessionModal}
-        onClose={() => setShowSessionModal(false)}
-        queueItems={queueRef.current}
-        uploadedCount={photoCount}
-        stats={queueStats}
-        onRetryAll={retryAllFailed}
-        onDeleteItem={deleteQueueItem}
-        onForceItem={forceUploadItem}
-      />
-      {IS_PREVIEW_OR_DEV && (
-        <DebugFiltersModal
-          visible={debugFiltersOpen}
-          onClose={() => setDebugFiltersOpen(false)}
-          filters={eventConfig.debug?.filters || {}}
-          minFaceWidthPx={eventConfig.imageProcessing?.postCaptureFilter?.minFaceWidthPx ?? 40}
-          onChangeFilter={setDebugFilter}
-          onChangeMinFaceWidth={setMinFaceWidthPx}
-          forcePeloton={densityModeState === 'peloton' && forcePelotonModeRef.current}
-          onChangeForcePeloton={(v) => {
-            forcePelotonModeRef.current = v;
-            if (!v) {
-              // Quitte la force : laisse la bascule auto reprendre la main au
-              // prochain frame (elle reevaluera selon last200/last500).
-              densityHistoryRef.current = [];
-            }
-            // Reflete immediatement dans l'overlay (sera reecrit a la prochaine
-            // frame par la logique auto si force=true).
-            if (v && densityModeRef.current !== 'peloton') {
-              densityModeRef.current = 'peloton';
-              setDensityModeState('peloton');
-            }
-          }}
-        />
-      )}
     </View>
   );
 }
 
-// Panneau debug preview/dev only : toggles d'activation des gates pipeline
-// + selecteur minFaceWidthPx. Mute eventConfig en memoire (effet immediat
-// sur la capture suivante) + persiste dans AsyncStorage. Caché en prod via
-// IS_PREVIEW_OR_DEV au montage du bouton ⚙️.
-function DebugFiltersModal({ visible, onClose, filters, minFaceWidthPx, onChangeFilter, onChangeMinFaceWidth, forcePeloton, onChangeForcePeloton }) {
-  const FACE_WIDTH_BUCKETS = [10, 20, 40, 60, 80, 100, 120, 150, 200];
-  // Lit la valeur courante en se rabattant sur true (defaut actif). Permet
-  // au modal de rendre l'etat ON meme si la cle n'existe pas encore dans
-  // eventConfig.debug.filters.
-  const isOn = (key) => filters?.[key] !== false;
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <TouchableOpacity
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
-        activeOpacity={1}
-        onPress={onClose}
-      >
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => {}}
-          style={{
-            marginTop: 'auto',
-            backgroundColor: '#1a1a1a',
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            paddingTop: 16,
-            paddingHorizontal: 20,
-            paddingBottom: 40,
-          }}
-        >
-          <View style={{ alignItems: 'center', marginBottom: 14 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>Debug filtres capture</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={10}>
-              <Text style={{ color: '#888', fontSize: 14, fontWeight: '600' }}>Fermer</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={{ color: '#888', fontSize: 11, marginBottom: 18, lineHeight: 15 }}>
-            Preview / dev only. Toggles persistes localement (AsyncStorage).
-            Defaut prod = tous actifs. Effet immediat sur la capture suivante.
-          </Text>
-
-          <DebugToggleRow
-            label="WillPhotoFilter"
-            sublabel="Visage present + taille minimum (natif Vision)"
-            value={isOn('willPhotoFilter')}
-            onValueChange={(v) => onChangeFilter('willPhotoFilter', v)}
-          />
-          <DebugToggleRow
-            label="Cooldown 800ms"
-            sublabel="Espace 2 captures du meme visage. Off = capture chaque frame."
-            value={isOn('cooldown')}
-            onValueChange={(v) => onChangeFilter('cooldown', v)}
-          />
-          <DebugToggleRow
-            label="Settle 200ms"
-            sublabel="Visage stable avant 1re capture. Off = capture immediate."
-            value={isOn('settle')}
-            onValueChange={(v) => onChangeFilter('settle', v)}
-          />
-          <DebugToggleRow
-            label="Force mode peloton"
-            sublabel="Court-circuite la bascule auto : 1x takeSnapshot 4K par face au lieu de 3x takePhoto. Test seul devant la camera."
-            value={!!forcePeloton}
-            onValueChange={(v) => onChangeForcePeloton?.(v)}
-          />
-
-          <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>minFaceWidthPx</Text>
-              <Text style={{ color: '#10B981', fontSize: 14, fontWeight: '700', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
-                {minFaceWidthPx}px
-              </Text>
-            </View>
-            <Text style={{ color: '#888', fontSize: 11, marginBottom: 10, lineHeight: 15 }}>
-              Largeur min du visage detecte par WillPhotoFilter. Plus bas = accepte les visages lointains.
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {FACE_WIDTH_BUCKETS.map(bucket => {
-                const selected = bucket === minFaceWidthPx;
-                return (
-                  <TouchableOpacity
-                    key={bucket}
-                    onPress={() => onChangeMinFaceWidth(bucket)}
-                    style={{
-                      paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8,
-                      backgroundColor: selected ? '#10B981' : 'rgba(255,255,255,0.08)',
-                      borderWidth: 1,
-                      borderColor: selected ? '#10B981' : 'rgba(255,255,255,0.12)',
-                    }}
-                  >
-                    <Text style={{
-                      color: selected ? '#000' : '#fff',
-                      fontSize: 12, fontWeight: '700',
-                      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-                    }}>{bucket}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
-
-function DebugToggleRow({ label, sublabel, value, onValueChange }) {
-  return (
-    <TouchableOpacity
-      activeOpacity={0.7}
-      onPress={() => onValueChange(!value)}
-      style={{
-        flexDirection: 'row', alignItems: 'center',
-        paddingVertical: 12,
-        borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)',
-      }}
-    >
-      <View style={{ flex: 1, paddingRight: 12 }}>
-        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>{label}</Text>
-        {sublabel ? (
-          <Text style={{ color: '#888', fontSize: 11, marginTop: 2, lineHeight: 14 }}>{sublabel}</Text>
-        ) : null}
-      </View>
-      <View style={{
-        width: 44, height: 26, borderRadius: 13,
-        backgroundColor: value ? '#10B981' : 'rgba(255,255,255,0.18)',
-        justifyContent: 'center',
-        paddingHorizontal: 3,
-      }}>
-        <View style={{
-          width: 20, height: 20, borderRadius: 10,
-          backgroundColor: '#fff',
-          transform: [{ translateX: value ? 18 : 0 }],
-        }} />
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-function SessionPhotosModal({ visible, onClose, queueItems, uploadedCount, stats, onRetryAll, onDeleteItem, onForceItem }) {
-  // Réfresh à chaque ouverture : queueRef.current peut muter sans déclencher de re-render
-  const items = visible ? (queueItems || []) : [];
-  // Tri : plus récents en premier
-  const sorted = [...items].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  // Tick local pour forcer un re-render après une action sur un item, car
-  // queueItems vient d'un ref muté hors React (pas de prop diff fiable).
-  const [, tick] = useState(0);
-  const refresh = () => tick(x => x + 1);
-
-  function openItemActions(item) {
-    Alert.alert(
-      'Photo en attente',
-      item.status === 'failed'
-        ? 'Cette photo a échoué après plusieurs tentatives.'
-        : 'Que veux-tu faire avec cette photo ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Forcer l\'upload',
-          onPress: async () => { await onForceItem?.(item.id); refresh(); },
-        },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => { await onDeleteItem?.(item.id); refresh(); },
-        },
-      ],
-    );
-  }
-  const COLS = 3;
-  const GUTTER = 4;
-  const screenW = Dimensions.get('window').width;
-  const cell = Math.floor((screenW - 32 - GUTTER * (COLS - 1)) / COLS);
-
-  const totalSession = uploadedCount + (stats?.total || 0);
-  const inFlight = (stats?.pending || 0) + (stats?.uploading || 0);
-  const failed = stats?.failed || 0;
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)' }}>
-        {/* Header */}
-        <View style={{
-          paddingTop: 56, paddingBottom: 12, paddingHorizontal: 16,
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
-        }}>
-          <View>
-            <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>
-              Photos de cette session
-            </Text>
-            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 }}>
-              {totalSession} prise{totalSession > 1 ? 's' : ''} depuis ta connexion
-              {sorted.length > 0 ? ' · appui long pour actions' : ''}
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={onClose}
-            hitSlop={10}
-            style={{
-              width: 36, height: 36, borderRadius: 18,
-              backgroundColor: 'rgba(255,255,255,0.12)',
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-              <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-            </Svg>
-          </TouchableOpacity>
-        </View>
-
-        {/* Grille thumbnails */}
-        {sorted.length === 0 ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-            <Text style={{ color: 'rgba(255,255,255,0.6)', textAlign: 'center', fontSize: 13 }}>
-              Aucune photo capturée pour le moment.
-              {uploadedCount > 0 ? `\n${uploadedCount} déjà uploadée${uploadedCount > 1 ? 's' : ''} (consultables sur le dashboard).` : ''}
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={sorted}
-            keyExtractor={(it) => it.id}
-            numColumns={COLS}
-            contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
-            columnWrapperStyle={{ gap: GUTTER, marginBottom: GUTTER }}
-            renderItem={({ item }) => {
-              const failedItem = item.status === 'failed';
-              const uploading = item.status === 'uploading';
-              return (
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onLongPress={() => openItemActions(item)}
-                  delayLongPress={350}
-                  style={{ width: cell, height: cell, borderRadius: 8, overflow: 'hidden', backgroundColor: '#222' }}
-                >
-                  <Image
-                    source={{ uri: item.localUri }}
-                    style={{ width: '100%', height: '100%' }}
-                    resizeMode="cover"
-                  />
-                  {(failedItem || uploading) && (
-                    <View style={{
-                      position: 'absolute', top: 4, right: 4,
-                      paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
-                      backgroundColor: failedItem ? 'rgba(239,68,68,0.92)' : 'rgba(245,158,11,0.92)',
-                    }}>
-                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>
-                        {failedItem ? 'ÉCHEC' : 'UPLOAD'}
-                      </Text>
-                    </View>
-                  )}
-                  {item.isRaw && (
-                    <View style={{
-                      position: 'absolute', bottom: 4, left: 4,
-                      paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4,
-                      backgroundColor: 'rgba(0,0,0,0.65)',
-                    }}>
-                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700' }}>RAW</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            }}
-          />
-        )}
-
-        {/* Footer stats */}
-        <View style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          paddingHorizontal: 16, paddingTop: 12, paddingBottom: 28,
-          backgroundColor: 'rgba(0,0,0,0.95)',
-          borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        }}>
-          <View style={{ flexDirection: 'row', gap: 14, flex: 1, flexWrap: 'wrap' }}>
-            <SessionStat label="Total" value={totalSession} color="#fff" />
-            <SessionStat label="Uploadées" value={uploadedCount} color="#22C55E" />
-            <SessionStat label="En attente" value={inFlight} color="#F59E0B" />
-            <SessionStat label="Échouées" value={failed} color="#EF4444" />
-          </View>
-          {failed > 0 && (
-            <TouchableOpacity
-              onPress={onRetryAll}
-              style={{
-                paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
-                backgroundColor: 'rgba(255,255,255,0.95)',
-              }}
-            >
-              <Text style={{ color: '#000', fontSize: 12, fontWeight: '700' }}>Réessayer</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-      </View>
-    </Modal>
-  );
-}
-
-function SessionStat({ label, value, color }) {
-  return (
-    <View>
-      <Text style={{ color, fontSize: 18, fontWeight: '800' }}>{value}</Text>
-      <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, marginTop: 1 }}>{label}</Text>
-    </View>
-  );
-}
 
 const formSectionStyle = StyleSheet.create({
   heading: { fontSize: 13, fontWeight: '700', color: C.textSoft, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 14, marginBottom: 8 },
