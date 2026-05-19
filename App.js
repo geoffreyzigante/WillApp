@@ -1855,22 +1855,37 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       .catch(() => {});
   }, []);
 
-  // 4:3 prioritaire pour matcher la preview portrait (3:4) sans bandes noires
-  // ni crop. videoResolution forcee a 4K (3840x2160) pour que takeSnapshot
-  // (mode peloton, lit la derniere frame video) sorte a ~8 MP. En HD on tombe
-  // a 2 MP, insuffisant pour la reco visage a distance. Les photos HQ via
-  // takePhoto restent en resolution capteur max independamment.
-  const targetVideoResolution = useMemo(
-    () => ({ width: 3840, height: 2160 }),
-    []
-  );
-
+  // Format photo-prioritaire : photoResolution:'max' force iOS a selectionner
+  // un AVCaptureDeviceFormat photo-oriente (haute resolution capteur, Deep
+  // Fusion + Smart HDR eligibles via photoQualityBalance="quality" cote prop
+  // Camera). Tradeoff : la frame video du format choisi sera typiquement
+  // 1920x1080 (~2 MP) au lieu de 3840x2160 (~8 MP), donc takeSnapshot (mode
+  // peloton) perd en resolution. A re-evaluer si la reco visage a distance
+  // souffre en peloton.
   const format = useCameraFormat(device, [
+    { photoResolution: 'max' },
     { videoAspectRatio: 4 / 3 },
-    { videoResolution: targetVideoResolution },
     { fps: 30 },
   ]);
   const cameraRef = useRef(null);
+
+  // Log unique du format choisi par useCameraFormat. Permet de verifier en
+  // Metro/Xcode quelles dimensions photo/video iOS a effectivement
+  // selectionnees, et si supportsPhotoHdr est true (indicateur indirect
+  // que le format est "photo-oriente" et eligible Deep Fusion).
+  useEffect(() => {
+    if (!format) return;
+    console.log('[camera-format]', JSON.stringify({
+      photoWidth: format.photoWidth,
+      photoHeight: format.photoHeight,
+      videoWidth: format.videoWidth,
+      videoHeight: format.videoHeight,
+      maxFps: format.maxFps,
+      supportsPhotoHdr: format.supportsPhotoHdr,
+      supportsVideoHdr: format.supportsVideoHdr,
+      fieldOfView: format.fieldOfView,
+    }));
+  }, [format]);
 
   // VisionCamera 4.x ne propose pas de prop `enableContinuousAutoFocus` ou
   // equivalent en JS RN : le focus continu est actif par defaut, et seul un
