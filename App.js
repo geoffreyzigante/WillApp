@@ -6626,11 +6626,45 @@ function SelfieViewerModal({ visible, uri, onClose }) {
   );
 }
 
-function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDelete, photoFavoritesSet, onTogglePhotoFavorite }) {
+// Flag fonctionnalite Supprimer dans la visionneuse. Refonte 2026-05 : la
+// suppression est en stand-by, on cable plus tard avec une confirmation
+// adaptee. Garde le code mort pour activer en un flip. allowDelete continue
+// d arriver via les opts du caller (compat) mais est ignore tant que ce flag
+// est false.
+const ENABLE_VIEWER_DELETE = false;
+
+function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDelete, photoFavoritesSet, onTogglePhotoFavorite, onTogglePhotoVisibility }) {
   const [busy, setBusy] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const winWidth = Dimensions.get('window').width;
   const winHeight = Dimensions.get('window').height;
+
+  // ─── Refonte 2026-05 : visionneuse plein ecran style Photos iOS ─────────
+  // Le role est detecte via les props passees par le caller (convention
+  // existante de l app) : onTogglePhotoFavorite => coureur, onTogglePhotoVisibility
+  // => orga. Pas de prop role explicite pour rester aligne avec le reste.
+  const isOrga = !!onTogglePhotoVisibility;
+  const isRunner = !!onTogglePhotoFavorite && !isOrga;
+
+  // Overlays auto-hide : caches par defaut a l ouverture, tap = show + relance
+  // un timer 3s qui les recache. Sert a maximiser le plein ecran de la photo.
+  const [overlaysVisible, setOverlaysVisible] = useState(false);
+  const overlaysVisibleRef = useRef(false);
+  useEffect(() => { overlaysVisibleRef.current = overlaysVisible; }, [overlaysVisible]);
+  const overlaysOpacity = useSharedValue(0);
+  const overlaysStyle = useAnimatedStyle(() => ({ opacity: overlaysOpacity.value }));
+  const autoHideTimer = useRef(null);
+
+  // Override local optimiste du flag hidden de la photo courante. Le worker
+  // est la source de verite ; cette map evite juste un lag visuel le temps
+  // que le caller refetche apres le toggle. Pour eviter une fausse coherence
+  // entre 2 sessions, la map est reset a chaque ouverture du viewer.
+  const [localHiddenMap, setLocalHiddenMap] = useState({});
+  const effectiveHidden = (p) => {
+    if (!p) return false;
+    const ov = localHiddenMap[p.id];
+    return ov === undefined ? p.hidden === true : ov;
+  };
 
   // Animations partagées
   const translateX = useSharedValue(0);  // déplacement horizontal du rail
@@ -6661,7 +6695,47 @@ function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDele
       if (i >= 0) setCurrentIndex(i);
     }
     resetTransforms();
+    // Refonte 2026-05 : overlays caches a l ouverture pour maximiser le
+    // plein ecran. L utilisateur tape pour les reveler.
+    setOverlaysVisible(false);
+    setLocalHiddenMap({});
   }, [visible]);
+
+  // Anime l opacite des overlays selon overlaysVisible + auto-hide 3s.
+  useEffect(() => {
+    overlaysOpacity.value = withTiming(overlaysVisible ? 1 : 0, { duration: 200 });
+    if (autoHideTimer.current) { clearTimeout(autoHideTimer.current); autoHideTimer.current = null; }
+    if (overlaysVisible) {
+      autoHideTimer.current = setTimeout(() => setOverlaysVisible(false), 3000);
+    }
+    return () => {
+      if (autoHideTimer.current) { clearTimeout(autoHideTimer.current); autoHideTimer.current = null; }
+    };
+  }, [overlaysVisible]);
+
+  // Toggle JS appele depuis le worklet du Tap. runOnJS ne supporte pas les
+  // updaters fonctionnels de setState ; on lit la valeur via une ref.
+  const toggleOverlaysJS = () => setOverlaysVisible(!overlaysVisibleRef.current);
+
+  // Bascule visibilite publique de la photo courante (orga uniquement).
+  // Optimistic update local + appel callback worker, revert si echec.
+  const handleToggleVisibility = async () => {
+    if (!onTogglePhotoVisibility || !currentPhoto?.id || busy) return;
+    const wasHidden = effectiveHidden(currentPhoto);
+    setLocalHiddenMap(prev => ({ ...prev, [currentPhoto.id]: !wasHidden }));
+    setBusy(true);
+    try {
+      const ok = await onTogglePhotoVisibility(currentPhoto.id, wasHidden);
+      if (ok === false) {
+        // Caller a fail (erreur reseau, 4xx, etc.). On revert.
+        setLocalHiddenMap(prev => ({ ...prev, [currentPhoto.id]: wasHidden }));
+      }
+    } catch {
+      setLocalHiddenMap(prev => ({ ...prev, [currentPhoto.id]: wasHidden }));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Reset uniquement zoom au changement d'index (pas translateX qui est géré par l'anim)
   useEffect(() => {
@@ -6766,7 +6840,38 @@ function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDele
       }
     });
 
-  const composed = Gesture.Simultaneous(pinchGesture, panGesture);
+  // Double-tap : toggle zoom 1 <-> 2.5x sur la photo courante.
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .maxDelay(280)
+    .onEnd(() => {
+      if (scale.value > 1) {
+        scale.value = withTiming(1, { duration: 180 });
+        savedScale.value = 1;
+        zoomTranslateX.value = withTiming(0, { duration: 180 });
+        savedZoomTranslateX.value = 0;
+        translateY.value = withTiming(0, { duration: 180 });
+        savedTranslateY.value = 0;
+      } else {
+        scale.value = withTiming(2.5, { duration: 180 });
+        savedScale.value = 2.5;
+      }
+    });
+
+  // Single-tap : toggle overlays. Exclusive avec double-tap pour qu un
+  // double-tap rapide ne fire pas aussi le single-tap.
+  const singleTapGesture = Gesture.Tap()
+    .numberOfTaps(1)
+    .maxDelay(280)
+    .onEnd(() => {
+      runOnJS(toggleOverlaysJS)();
+    });
+
+  const composed = Gesture.Simultaneous(
+    pinchGesture,
+    panGesture,
+    Gesture.Exclusive(doubleTapGesture, singleTapGesture),
+  );
 
   // Style du rail entier (3 photos): bouge en X selon swipe, en Y selon close
   const railStyle = useAnimatedStyle(() => ({
@@ -6865,68 +6970,27 @@ function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDele
     );
   };
 
+  const currentHidden = effectiveHidden(currentPhoto);
+  const fav = currentPhoto?.id && photoFavoritesSet?.has(currentPhoto.id);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={{ flex: 1, backgroundColor: '#000', overflow: 'hidden' }}>
-          <TouchableOpacity onPress={onClose} style={{ position: 'absolute', top: 60, right: 20, padding: 10, zIndex: 10 }} hitSlop={20}>
-            <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
-              <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-            </Svg>
-          </TouchableOpacity>
 
-          {onTogglePhotoFavorite && currentPhoto?.id && (() => {
-            const fav = photoFavoritesSet?.has(currentPhoto.id);
-            return (
-              <ReAnimated.View style={[{ position: 'absolute', top: 60, right: 80, zIndex: 10 }, heartStyle]}>
-                <TouchableOpacity
-                  onPress={() => {
-                    heartScale.value = withTiming(0.85, { duration: 90 }, () => {
-                      heartScale.value = withTiming(1, { duration: 140 });
-                    });
-                    onTogglePhotoFavorite(currentPhoto.id);
-                  }}
-                  hitSlop={12}
-                  style={{
-                    width: 44, height: 44,
-                    alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <Svg width={26} height={23} viewBox="-1 -1.5 22.78 20.61"
-                    fill={fav ? '#fff' : 'none'}
-                    stroke="#fff" strokeWidth={1.6}>
-                    <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-                  </Svg>
-                </TouchableOpacity>
-              </ReAnimated.View>
-            );
-          })()}
-
-          {photos && photos.length > 1 && (
-            <View style={{ position: 'absolute', top: 60, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
-              <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 }}>
-                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
-                  {currentIndex + 1} / {photos.length}
-                </Text>
-              </View>
-            </View>
-          )}
-
+          {/* ─── Photo plein ecran + gestes (rail prev/current/next) ─── */}
           <GestureDetector gesture={composed}>
             <ReAnimated.View style={[{ flex: 1, flexDirection: 'row' }, railStyle]}>
-              {/* Précédente : positionnée à gauche du rail */}
               <View style={{ position: 'absolute', top: 0, bottom: 0, left: -winWidth, width: winWidth, alignItems: 'center', justifyContent: 'center' }}>
                 {prevPhoto?.uri ? (
                   <ExpoImage source={{ uri: prevPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
                 ) : null}
               </View>
-              {/* Actuelle */}
               <ReAnimated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, width: winWidth, alignItems: 'center', justifyContent: 'center' }, currentImgStyle]}>
                 {currentPhoto?.uri ? (
                   <ExpoImage source={{ uri: currentPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
                 ) : null}
               </ReAnimated.View>
-              {/* Suivante : positionnée à droite du rail */}
               <View style={{ position: 'absolute', top: 0, bottom: 0, left: winWidth, width: winWidth, alignItems: 'center', justifyContent: 'center' }}>
                 {nextPhoto?.uri ? (
                   <ExpoImage source={{ uri: nextPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
@@ -6935,51 +6999,172 @@ function PhotoViewerModal({ visible, photo, photos, onClose, allowDelete, onDele
             </ReAnimated.View>
           </GestureDetector>
 
-          <View style={{ position: 'absolute', bottom: 40, left: 20, right: 20, flexDirection: 'row', gap: 10 }}>
-            {allowDelete && (
+          {/* ─── Header overlay (degrade noir vers transparent) ─── */}
+          {/* pointerEvents=box-none laisse passer les taps sur la photo,
+              les boutons interceptent seuls. */}
+          <ReAnimated.View
+            pointerEvents="box-none"
+            style={[{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }, overlaysStyle]}
+          >
+            <LinearGradient
+              colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0)']}
+              locations={[0, 1]}
+              pointerEvents="none"
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 130 }}
+            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 56, paddingHorizontal: 16, paddingBottom: 12 }}>
+              <View style={{ flex: 1, alignItems: 'center' }}>
+                {photos && photos.length > 1 ? (
+                  <View style={{ backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 }}>
+                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>
+                      {currentIndex + 1} / {photos.length}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <TouchableOpacity
-                onPress={deleteCurrent}
-                style={{
-                  backgroundColor: 'rgba(220, 38, 38, 0.95)',
-                  paddingVertical: 16,
-                  paddingHorizontal: 18,
-                  borderRadius: 14,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                onPress={onClose}
+                hitSlop={16}
+                style={{ position: 'absolute', right: 12, top: 50, padding: 10 }}
+                accessibilityLabel="Fermer"
               >
-                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                  <Path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+                  <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
                 </Svg>
               </TouchableOpacity>
+            </View>
+          </ReAnimated.View>
+
+          {/* ─── Footer overlay : actions selon le role ─── */}
+          <ReAnimated.View
+            pointerEvents="box-none"
+            style={[{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 }, overlaysStyle]}
+          >
+            <LinearGradient
+              colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.65)']}
+              locations={[0, 1]}
+              pointerEvents="none"
+              style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 160 }}
+            />
+
+            {isOrga ? (
+              // ── ORGA : Publier / Masquer toggle. Supprimer en stand-by (flag). ──
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingBottom: 40, paddingTop: 16 }}>
+                <TouchableOpacity
+                  onPress={handleToggleVisibility}
+                  disabled={busy}
+                  activeOpacity={0.85}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#F4A6FF',           // rose Will pinkPill (orga)
+                    paddingVertical: 15,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'row',
+                    gap: 8,
+                    opacity: busy ? 0.65 : 1,
+                  }}
+                  accessibilityLabel={currentHidden ? 'Publier dans la galerie publique' : 'Masquer de la galerie publique'}
+                >
+                  {busy ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : currentHidden ? (
+                    <>
+                      {/* check : Publier */}
+                      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                        <Path d="m4 12 5 5L20 6" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+                      </Svg>
+                      <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Publier</Text>
+                    </>
+                  ) : (
+                    <>
+                      {/* eye-off : Masquer */}
+                      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                        <Path d="M3 3l18 18M10.6 6.1A10 10 0 0 1 12 6c5.5 0 9.5 5 9.5 6-.3.6-1 1.7-2 2.9M6.6 6.6C4.3 8.1 3 10.5 2.5 12c0 1 4 6 9.5 6 1.7 0 3.2-.4 4.5-1" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+                        <Path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+                      </Svg>
+                      <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Masquer</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {ENABLE_VIEWER_DELETE && allowDelete ? (
+                  <TouchableOpacity
+                    onPress={deleteCurrent}
+                    activeOpacity={0.85}
+                    style={{
+                      width: 56,
+                      paddingVertical: 15,
+                      borderRadius: 14,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: 'rgba(255,255,255,0.12)',
+                    }}
+                    accessibilityLabel="Supprimer"
+                  >
+                    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                      <Path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : (
+              // ── COUREUR : Telecharger (violet primary) + coeur favori a gauche. ──
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingBottom: 40, paddingTop: 16 }}>
+                {isRunner ? (
+                  <ReAnimated.View style={heartStyle}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        heartScale.value = withTiming(0.85, { duration: 90 }, () => {
+                          heartScale.value = withTiming(1, { duration: 140 });
+                        });
+                        onTogglePhotoFavorite(currentPhoto.id);
+                      }}
+                      hitSlop={10}
+                      style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}
+                      accessibilityLabel={fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                    >
+                      <Svg width={28} height={25} viewBox="-1 -1.5 22.78 20.61"
+                        fill={fav ? '#fff' : 'none'}
+                        stroke="#fff" strokeWidth={1.8}>
+                        <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+                      </Svg>
+                    </TouchableOpacity>
+                  </ReAnimated.View>
+                ) : null}
+
+                <TouchableOpacity
+                  onPress={download}
+                  disabled={busy}
+                  activeOpacity={0.85}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#7B2FFF',           // violet primary (coureur)
+                    paddingVertical: 15,
+                    borderRadius: 14,
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    gap: 8,
+                    opacity: busy ? 0.65 : 1,
+                  }}
+                  accessibilityLabel="Télécharger la photo"
+                >
+                  {busy ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                        <Path d="M12 4v12m0 0l-5-5m5 5l5-5M4 20h16" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                      </Svg>
+                      <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Télécharger</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
             )}
-            <TouchableOpacity
-              onPress={download}
-              disabled={busy}
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.95)',
-                paddingVertical: 16,
-                borderRadius: 14,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-                opacity: busy ? 0.6 : 1,
-                flex: 1,
-              }}
-            >
-              {busy ? (
-                <ActivityIndicator color="#000" />
-              ) : (
-                <>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                    <Path d="M12 4v12m0 0l-5-5m5 5l5-5M4 20h16" stroke="#000" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-                  </Svg>
-                  <Text style={{ color: '#000', fontSize: 15, fontWeight: '700' }}>Télécharger</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
+          </ReAnimated.View>
         </View>
       </GestureHandlerRootView>
     </Modal>
@@ -7625,7 +7810,13 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
     if (selectionMode) {
       toggleSelect(photo.id);
     } else {
-      onOpenPhoto?.(photo, filteredPhotos, { allowDelete: true, onDelete: deleteFromViewer });
+      // onTogglePhotoVisibility est consomme par PhotoViewerModal pour offrir
+      // le bouton Publier/Masquer. Renvoie true/false (cf handleTogglePublish).
+      onOpenPhoto?.(photo, filteredPhotos, {
+        allowDelete: true,
+        onDelete: deleteFromViewer,
+        onTogglePhotoVisibility: handleTogglePublish,
+      });
     }
   };
 
@@ -7785,6 +7976,11 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
 
       <Text style={[s.sectionTitle, { marginVertical: 10 }]}>
         Photos {photos.length > 0 ? `(${filteredPhotos.length})` : ''}
+        {hiddenCount > 0 && (
+          <Text style={{ color: '#EF4444', fontSize: 13, fontWeight: '600' }}>
+            {'  · '}{hiddenCount} masquée{hiddenCount > 1 ? 's' : ''}
+          </Text>
+        )}
       </Text>
     </>
   );
@@ -7797,9 +7993,44 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
     </View>
   );
 
+  // Toggle visibilite d'une photo masquee -> publication galerie publique.
+  // Action MANUELLE de l'orga, jamais automatique. Refresh complet de la
+  // galerie apres bascule pour re-fetcher le hidden_count.
+  // Renvoie true en cas de succes, false sinon. Le boolean est consomme par
+  // PhotoViewerModal qui maintient un override local optimiste -- si l appel
+  // echoue, le viewer revert son visuel.
+  async function handleTogglePublish(photoKey, currentlyHidden) {
+    if (busyKey) return false;
+    setBusyKey(photoKey);
+    try {
+      const r = await fetch(`${API_URL}/organizer/photo-visibility`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ key: photoKey, visible: currentlyHidden }), // currentlyHidden=true -> visible=true (publier)
+      });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        Alert.alert('Erreur', data?.error || 'Modification impossible');
+        return false;
+      }
+      await loadPhotos();
+      return true;
+    } catch (e) {
+      Alert.alert('Erreur', e?.message || 'Modification impossible');
+      return false;
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   // Cellule grille — extraite en fonction pour clarté et keyExtractor stable.
   const renderItem = ({ item: photo, index }) => {
     const isSelected = selectedKeys.has(photo.id);
+    const isHidden = photo.hidden === true;
+    const isBusy = busyKey === photo.id;
     return (
       <TouchableOpacity
         onPress={() => handlePhotoPress(photo)}
@@ -7813,7 +8044,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
         <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#eee' }}>
           <ExpoImage
             source={{ uri: photo.uri }}
-            style={StyleSheet.absoluteFillObject}
+            style={[StyleSheet.absoluteFillObject, isHidden ? { opacity: 0.55 } : null]}
             contentFit="cover"
             cachePolicy="memory-disk"
             priority="low"
@@ -7837,6 +8068,43 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
           )}
           {isSelected && (
             <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(124, 58, 237, 0.25)' }]} />
+          )}
+          {/* Point rouge en haut a gauche : photo masquee (face_count=0).
+              On evite top-right (conflit avec le cercle de selection). */}
+          {isHidden && !selectionMode && (
+            <View
+              accessibilityLabel="Photo masquée"
+              style={{
+                position: 'absolute', top: 6, left: 6,
+                width: 10, height: 10, borderRadius: 5,
+                backgroundColor: '#EF4444',
+                borderWidth: 2, borderColor: '#fff',
+              }}
+            />
+          )}
+          {/* Bouton "Publier" en overlay : clic explicite de l'orga pour
+              basculer une photo masquee vers la galerie publique. Jamais
+              automatique. Hide en mode selection (le tap doit aller au toggle
+              de selection, pas au publish). */}
+          {isHidden && !selectionMode && (
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation?.();
+                handleTogglePublish(photo.id, true);
+              }}
+              disabled={isBusy}
+              hitSlop={6}
+              style={{
+                position: 'absolute', bottom: 4, right: 4,
+                backgroundColor: isBusy ? 'rgba(0,0,0,0.4)' : C.primary,
+                paddingHorizontal: 8, paddingVertical: 4,
+                borderRadius: 999,
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
+                {isBusy ? '…' : 'Publier'}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
       </TouchableOpacity>
@@ -8868,6 +9136,7 @@ export default function App() {
         photos={openedPhoto?.photos}
         allowDelete={openedPhoto?.allowDelete}
         onDelete={openedPhoto?.onDelete}
+        onTogglePhotoVisibility={openedPhoto?.onTogglePhotoVisibility}
         onClose={() => setOpenedPhoto(null)}
         photoFavoritesSet={photoFavoritesSet}
         onTogglePhotoFavorite={togglePhotoFavorite}
