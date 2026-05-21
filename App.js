@@ -39,6 +39,8 @@ import ReAnimated, {
   useAnimatedStyle,
   withTiming,
   runOnJS,
+  SlideInDown,
+  SlideOutDown,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -9599,17 +9601,23 @@ export default function App() {
       )}
 
       {openedEvent && (
-        <EventDetailScreen
-          event={openedEvent}
-          onClose={() => setOpenedEvent(null)}
-          onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
-          selfieUri={selfieUri}
-          onDeleteSelfie={deleteSelfie}
-          onOpenProfile={() => setProfileMenu(true)}
-          onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
-          isFavorite={favorites.includes(openedEvent.code)}
-          onToggleFavorite={() => requireAuth(() => toggleFavorite(openedEvent.code))}
-        />
+        <ReAnimated.View
+          entering={SlideInDown.duration(280)}
+          exiting={SlideOutDown.duration(260)}
+          style={[StyleSheet.absoluteFill, { backgroundColor: C.bg }]}
+        >
+          <EventDetailScreen
+            event={openedEvent}
+            onClose={() => setOpenedEvent(null)}
+            onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
+            selfieUri={selfieUri}
+            onDeleteSelfie={deleteSelfie}
+            onOpenProfile={() => setProfileMenu(true)}
+            onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
+            isFavorite={favorites.includes(openedEvent.code)}
+            onToggleFavorite={() => requireAuth(() => toggleFavorite(openedEvent.code))}
+          />
+        </ReAnimated.View>
       )}
 
       {organizerEventPhotosTarget && bottomTab === 'events' && organizerSession && (
