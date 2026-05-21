@@ -27,6 +27,10 @@ import ReAnimated, {
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
+// Easing import separe pour ne pas chevaucher le hunk d imports du chantier
+// capture (visionCamera + humanDetectorPlugin), facilite l isolation du diff
+// au commit v2.3.
+import { Easing } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import Svg, { Path, Circle, Ellipse, Defs, Mask, Rect, SvgXml } from 'react-native-svg';
@@ -6722,22 +6726,32 @@ function PhotoViewerModal({
   const targetW = winWidth - photoMargin * 2;
   const targetH = winHeight - topPad - HEADER_H - SLIDER_H - BUTTON_AREA_H - bottomPad - 8;
 
-  // ── Shared values pour la transition shared-element + zoom + swipe ──
-  // Photo container : position + size + radius. Animees au mount depuis
-  // origin (thumb mesuree) vers (targetX/Y/W/H, radius 14).
-  const px = useSharedValue(0);
-  const py = useSharedValue(0);
-  const pw = useSharedValue(0);
-  const ph = useSharedValue(0);
-  const pradius = useSharedValue(0);
-  const bgOpacity = useSharedValue(0);   // fond noir global
-  const uiOpacity = useSharedValue(0);   // titre / date / slider / bouton / icones flottantes
+  // ── v2.3 refonte : Animation shared-element en TRANSFORM-ONLY ─────────
+  // Au lieu d'animer left/top/width/height (re-layout cher → saccades), on
+  // anime UNIQUEMENT translateX/Y + scale via Reanimated worklet (GPU-only).
+  // Le conteneur photo a des dimensions FIXES (target) ; ce qui bouge est
+  // sa transformation. C'est l'approche utilisee par Photos iOS, Instagram,
+  // Twitter et co pour les transitions hero/shared-element fluides.
+  //
+  // entryTx/entryTy/entryScale : transform au mount depuis (thumb origin)
+  // vers (0, 0, 1). Au unmount : transform vers la valeur (thumb origin).
+  const entryTx = useSharedValue(0);
+  const entryTy = useSharedValue(0);
+  const entryScale = useSharedValue(1);
+  const pradius = useSharedValue(18);     // anime de 8 -> 18 (paint-only, pas de re-layout)
+  const bgOpacity = useSharedValue(0);    // fond viewer global
+  const uiOpacity = useSharedValue(0);    // titre / date / slider / bouton / icones
 
-  // Swipe horizontal (rail prev/current/next) + vertical (close)
+  // Easing material standard pour transitions hero -> out-cubic (ease out
+  // doux, pas d'overshoot). 320ms = sweet spot iOS Photos.
+  const HERO_DURATION = 320;
+  const HERO_EASING = Easing.bezier(0.25, 0.1, 0.25, 1);
+
+  // Swipe horizontal du rail (3 cartes) + vertical (close)
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
 
-  // Zoom (pinch + double-tap)
+  // Zoom (pinch + double-tap) sur la card current uniquement
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const zoomTranslateX = useSharedValue(0);
@@ -6758,46 +6772,55 @@ function PhotoViewerModal({
     savedZoomTranslateX.value = 0;
   };
 
-  // ── Animation d'ouverture shared-element ──
+  // Card cible : full winWidth (pour permettre le peek carrousel des voisines).
+  // Centre = (winWidth/2, targetY + targetH/2). photoMargin reste interne a
+  // chaque card pour la marge G/D + radius.
+  const cardW = winWidth;
+  const cardH = targetH;
+  const targetCardCx = winWidth / 2;
+  const targetCardCy = targetY + targetH / 2;
+
+  // ── Animation d'ouverture transform-only ──
   const animateIn = () => {
     if (origin && Number.isFinite(origin.x) && Number.isFinite(origin.y) && origin.w > 0 && origin.h > 0) {
-      // Demarre EXACTEMENT depuis la position/taille de la thumb tapee
-      px.value = origin.x;
-      py.value = origin.y;
-      pw.value = origin.w;
-      ph.value = origin.h;
-      pradius.value = 8;                // radius approximatif de la thumb grille
-      px.value = withTiming(targetX, { duration: 280 });
-      py.value = withTiming(targetY, { duration: 280 });
-      pw.value = withTiming(targetW, { duration: 280 });
-      ph.value = withTiming(targetH, { duration: 280 });
-      pradius.value = withTiming(18, { duration: 280 });
+      // Centre de la thumb dans l'ecran
+      const originCx = origin.x + origin.w / 2;
+      const originCy = origin.y + origin.h / 2;
+      // Transformations initiales pour que la card target apparaisse EXACTEMENT
+      // a la position et taille de la thumb d'origine
+      entryTx.value = originCx - targetCardCx;
+      entryTy.value = originCy - targetCardCy;
+      entryScale.value = origin.w / cardW;
+      pradius.value = 10;                // approx radius grille
+      // Animations transform-only (GPU-accelerated) avec easing iOS-like
+      entryTx.value = withTiming(0, { duration: HERO_DURATION, easing: HERO_EASING });
+      entryTy.value = withTiming(0, { duration: HERO_DURATION, easing: HERO_EASING });
+      entryScale.value = withTiming(1, { duration: HERO_DURATION, easing: HERO_EASING });
+      pradius.value = withTiming(18, { duration: HERO_DURATION, easing: HERO_EASING });
     } else {
-      // Pas d'origin -> photo directement a la cible (sans transition position)
-      px.value = targetX; py.value = targetY;
-      pw.value = targetW; ph.value = targetH;
+      // Pas d'origin -> apparition directe (pas de transition shared-element)
+      entryTx.value = 0; entryTy.value = 0; entryScale.value = 1;
       pradius.value = 18;
     }
-    bgOpacity.value = withTiming(1, { duration: 200 });
-    uiOpacity.value = withTiming(1, { duration: 260 });
+    bgOpacity.value = withTiming(1, { duration: 220, easing: HERO_EASING });
+    uiOpacity.value = withTiming(1, { duration: HERO_DURATION + 40, easing: HERO_EASING });
   };
 
   // ── Animation de fermeture : retrecit vers origin puis onClose ──
-  // Appelable depuis JS thread (handlers Touchable) OU worklet (runOnJS dans les gestes).
   const animateOutAndClose = () => {
-    uiOpacity.value = withTiming(0, { duration: 140 });
-    bgOpacity.value = withTiming(0, { duration: 220 });
+    uiOpacity.value = withTiming(0, { duration: 160, easing: HERO_EASING });
+    bgOpacity.value = withTiming(0, { duration: 260, easing: HERO_EASING });
     if (origin && Number.isFinite(origin.x)) {
-      px.value = withTiming(origin.x, { duration: 240 });
-      py.value = withTiming(origin.y, { duration: 240 });
-      pw.value = withTiming(origin.w, { duration: 240 });
-      pradius.value = withTiming(0, { duration: 240 });
-      ph.value = withTiming(origin.h, { duration: 240 }, (finished) => {
+      const originCx = origin.x + origin.w / 2;
+      const originCy = origin.y + origin.h / 2;
+      entryTx.value = withTiming(originCx - targetCardCx, { duration: 280, easing: HERO_EASING });
+      entryTy.value = withTiming(originCy - targetCardCy, { duration: 280, easing: HERO_EASING });
+      pradius.value = withTiming(10, { duration: 280, easing: HERO_EASING });
+      entryScale.value = withTiming(origin.w / cardW, { duration: 280, easing: HERO_EASING }, (finished) => {
         if (finished) runOnJS(onClose)();
       });
     } else {
-      // Pas d'origin -> close apres le fade
-      setTimeout(onClose, 230);
+      setTimeout(onClose, 260);
     }
   };
 
@@ -6962,29 +6985,6 @@ function PhotoViewerModal({
   // la photo, toujours visibles via uiOpacity (anim du fade in/out global).
   const composed = Gesture.Simultaneous(pinchGesture, panGesture, doubleTapGesture);
 
-  // Style du conteneur de carte courante : translation + rotation legere
-  // (swipe Tinder soft, 6deg max au bord d'ecran). Y pour le close swipe.
-  const cardStyle = useAnimatedStyle(() => {
-    // rotation derivee du translateX : +/- 6deg max
-    const maxRot = 6;
-    const rot = Math.max(-maxRot, Math.min(maxRot, (translateX.value / winWidth) * 18));
-    return {
-      transform: [
-        { translateX: translateX.value },
-        { translateY: translateY.value },
-        { rotate: `${rot}deg` },
-      ],
-    };
-  });
-
-  // Style de la photo current (pour zoom + pan en mode zoom)
-  const currentImgStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: zoomTranslateX.value },
-      { scale: scale.value },
-    ],
-  }));
-
   const currentPhoto = photos?.[currentIndex] || photo;
   const prevPhoto = photos?.[currentIndex - 1];
   const nextPhoto = photos?.[currentIndex + 1];
@@ -7069,14 +7069,14 @@ function PhotoViewerModal({
   const currentHidden = effectiveHidden(currentPhoto);
   const fav = currentPhoto?.id && photoFavoritesSet?.has(currentPhoto.id);
 
-  // Refs FlatList slider miniatures : scroll-to-index sync avec la photo principale.
-  // viewPosition: 0 pour index 0/1 -> la 1re miniature reste collee au padding
-  // gauche (sinon scrollToIndex(0, 0.5) tente de la centrer et la coupe).
+  // Slider pellicule a cadre fixe : on scrolle au multiple de 62
+  // (= largeur thumb + gap). Avec contentContainerStyle paddingHorizontal
+  // = (winWidth - 56) / 2, l'offset `index * 62` place la miniature
+  // active sous le cadre central fixe.
   const sliderRef = useRef(null);
   useEffect(() => {
     if (!sliderRef.current || !photos || currentIndex < 0 || currentIndex >= photos.length) return;
-    const viewPosition = currentIndex <= 1 ? 0 : 0.5;
-    try { sliderRef.current.scrollToIndex({ index: currentIndex, viewPosition, animated: true }); }
+    try { sliderRef.current.scrollToOffset({ offset: currentIndex * 62, animated: true }); }
     catch {}
   }, [currentIndex, photos]);
 
@@ -7095,28 +7095,53 @@ function PhotoViewerModal({
     }
   }, [currentIndex, photos]);
 
-  // Styles animes du conteneur photo (position + size + radius)
-  const photoBoxStyle = useAnimatedStyle(() => ({
-    position: 'absolute',
-    left: px.value,
-    top: py.value,
-    width: pw.value,
-    height: ph.value,
-    borderRadius: pradius.value,
+  // ── Styles animes v2.3 : tout en TRANSFORM, dimensions FIXES ──
+  // entryStyle : transform global de la card target depuis origin
+  // (translation + scale), pas de left/top/width/height anime
+  const entryStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: entryTx.value },
+      { translateY: entryTy.value },
+      { scale: entryScale.value },
+    ],
   }));
+  // radius anime (paint-only, pas de re-layout)
+  const radiusStyle = useAnimatedStyle(() => ({ borderRadius: pradius.value }));
   const bgStyle = useAnimatedStyle(() => ({ opacity: bgOpacity.value }));
   const uiStyle = useAnimatedStyle(() => ({ opacity: uiOpacity.value }));
 
-  // Drop-shadow halo BLANC pour icones sombres : lisibles sur photo claire
-  // (icone sombre se detache) ET sur photo sombre (halo blanc se detache).
-  // iOS uniquement (RN ne supporte pas elevation cross-fond sur Android).
-  const iconShadowStyle = Platform.OS === 'ios'
-    ? { shadowColor: '#fff', shadowOpacity: 0.95, shadowRadius: 3, shadowOffset: { width: 0, height: 0 } }
+  // Drop-shadow NOIR pour icones BLANCHES (coeur favori bas-droite photo) :
+  // lisibles sur photo claire (ombre noire derriere le blanc cree relief)
+  // ET sur photo sombre (icone blanche se detache nettement).
+  const iconShadowWhiteStyle = Platform.OS === 'ios'
+    ? { shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } }
     : null;
-  const iconColor = '#1a1a1a';
 
-  // Couleur du fond viewer : v2.2 -> blanc (l app est globalement blanche).
+  // Couleur du fond viewer : blanc (l'app est globalement blanche)
   const viewerBg = '#fff';
+
+  // Card target : winWidth wide pour permettre le peek carrousel des voisines
+  const PEEK = 24;                                  // px de chaque voisine visibles aux bords
+  const railSpacing = cardW - PEEK;                 // distance horizontale entre 2 cards adjacentes
+  // Style du rail (3 cards prev/current/next) : drag horizontal + close vertical
+  const railStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+    ],
+  }));
+  // Style appliqué uniquement à la card current : zoom + rotation Tinder soft
+  const currentImgStyle = useAnimatedStyle(() => {
+    const maxRot = 5;
+    const rot = Math.max(-maxRot, Math.min(maxRot, (translateX.value / winWidth) * 14));
+    return {
+      transform: [
+        { translateX: zoomTranslateX.value },
+        { rotate: `${rot}deg` },
+        { scale: scale.value },
+      ],
+    };
+  });
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={animateOutAndClose}>
@@ -7146,111 +7171,197 @@ function PhotoViewerModal({
             ) : null}
           </ReAnimated.View>
 
-          {/* Photo principale = carte unique style Tinder, anime depuis origin
-              vers la cible. cardStyle applique translation + rotation au swipe. */}
+          {/* Photo principale : container target fixe (position+taille) anime
+              en TRANSFORM (translate + scale) depuis origin. A l'interieur,
+              un rail de 3 cartes (prev/current/next) avec peek visible des
+              voisines aux bords. */}
           <ReAnimated.View
-            style={[{ overflow: 'hidden', backgroundColor: '#f5f5f5' }, photoBoxStyle, cardStyle]}
+            pointerEvents="box-none"
+            style={[{
+              position: 'absolute',
+              left: 0, top: targetY,
+              width: cardW, height: cardH,
+              overflow: 'visible',         // permet le peek des voisines hors zone
+            }, entryStyle]}
           >
+            {/* Rail des 3 cartes (drag horizontal en bloc) */}
             <GestureDetector gesture={composed}>
-              <ReAnimated.View style={[{ flex: 1 }, currentImgStyle]}>
-                {currentPhoto?.uri ? (
-                  <ExpoImage
-                    source={{ uri: currentPhoto.uri }}
-                    placeholder={{ uri: currentPhoto.uri }}
-                    style={{ width: '100%', height: '100%' }}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={0}
-                    recyclingKey={currentPhoto.id}
-                  />
+              <ReAnimated.View style={[{ flex: 1 }, railStyle]}>
+                {/* Carte previous : on la voit dépasser de PEEK à gauche */}
+                {prevPhoto?.uri ? (
+                  <ReAnimated.View
+                    style={[{
+                      position: 'absolute',
+                      left: -railSpacing, top: 0,
+                      width: cardW, height: cardH,
+                      paddingHorizontal: photoMargin,
+                    }, radiusStyle]}
+                  >
+                    <View style={{ flex: 1, borderRadius: 18, overflow: 'hidden', backgroundColor: '#f5f5f5' }}>
+                      <ExpoImage
+                        source={{ uri: prevPhoto.uri }}
+                        placeholder={{ uri: prevPhoto.uri }}
+                        style={{ flex: 1 }}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={0}
+                        recyclingKey={prevPhoto.id}
+                      />
+                    </View>
+                  </ReAnimated.View>
+                ) : null}
+
+                {/* Carte current : peut zoomer + rotation legere au drag */}
+                <ReAnimated.View
+                  style={[{
+                    position: 'absolute',
+                    left: 0, top: 0,
+                    width: cardW, height: cardH,
+                    paddingHorizontal: photoMargin,
+                  }, currentImgStyle]}
+                >
+                  <ReAnimated.View style={[{ flex: 1, overflow: 'hidden', backgroundColor: '#f5f5f5' }, radiusStyle]}>
+                    {currentPhoto?.uri ? (
+                      <ExpoImage
+                        source={{ uri: currentPhoto.uri }}
+                        placeholder={{ uri: currentPhoto.uri }}
+                        style={{ flex: 1 }}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={0}
+                        recyclingKey={currentPhoto.id}
+                      />
+                    ) : null}
+                    {/* Coeur favori SEUL en bas-droite de la photo current.
+                        Blanc + drop-shadow noir pour lisibilite. */}
+                    {isRunner ? (
+                      <ReAnimated.View
+                        pointerEvents="box-none"
+                        style={[{
+                          position: 'absolute', bottom: 12, right: 12,
+                        }, uiStyle]}
+                      >
+                        <ReAnimated.View style={heartStyle}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              heartScale.value = withTiming(0.85, { duration: 90 }, () => {
+                                heartScale.value = withTiming(1, { duration: 140 });
+                              });
+                              onTogglePhotoFavorite(currentPhoto.id);
+                            }}
+                            hitSlop={12}
+                            style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
+                            accessibilityLabel={fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                          >
+                            <Svg width={26} height={26} viewBox="-1 -1.5 22.78 20.61"
+                              fill={fav ? '#fff' : 'none'} stroke="#fff" strokeWidth={2}
+                              style={iconShadowWhiteStyle}
+                            >
+                              <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+                            </Svg>
+                          </TouchableOpacity>
+                        </ReAnimated.View>
+                      </ReAnimated.View>
+                    ) : null}
+                  </ReAnimated.View>
+                </ReAnimated.View>
+
+                {/* Carte next : on la voit dépasser de PEEK à droite */}
+                {nextPhoto?.uri ? (
+                  <ReAnimated.View
+                    style={[{
+                      position: 'absolute',
+                      left: railSpacing, top: 0,
+                      width: cardW, height: cardH,
+                      paddingHorizontal: photoMargin,
+                    }, radiusStyle]}
+                  >
+                    <View style={{ flex: 1, borderRadius: 18, overflow: 'hidden', backgroundColor: '#f5f5f5' }}>
+                      <ExpoImage
+                        source={{ uri: nextPhoto.uri }}
+                        placeholder={{ uri: nextPhoto.uri }}
+                        style={{ flex: 1 }}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={0}
+                        recyclingKey={nextPhoto.id}
+                      />
+                    </View>
+                  </ReAnimated.View>
                 ) : null}
               </ReAnimated.View>
             </GestureDetector>
-
-            {/* Icones coeur + X en bas-droite de la photo. Couleur #1a1a1a +
-                halo blanc pour lisibilite cross-fond. Taille uniforme 26x26
-                dans wrappers 36x36, gap 18px anti-mistap. */}
-            <ReAnimated.View
-              pointerEvents="box-none"
-              style={[{
-                position: 'absolute', bottom: 10, right: 10,
-                flexDirection: 'row', alignItems: 'center', gap: 18,
-              }, uiStyle]}
-            >
-              {isRunner ? (
-                <ReAnimated.View style={heartStyle}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      heartScale.value = withTiming(0.85, { duration: 90 }, () => {
-                        heartScale.value = withTiming(1, { duration: 140 });
-                      });
-                      onTogglePhotoFavorite(currentPhoto.id);
-                    }}
-                    hitSlop={12}
-                    style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
-                    accessibilityLabel={fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                  >
-                    <Svg width={26} height={26} viewBox="-1 -1.5 22.78 20.61"
-                      fill={fav ? iconColor : 'none'} stroke={iconColor} strokeWidth={1.8}
-                      style={iconShadowStyle}
-                    >
-                      <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-                    </Svg>
-                  </TouchableOpacity>
-                </ReAnimated.View>
-              ) : null}
-              <TouchableOpacity
-                onPress={animateOutAndClose}
-                hitSlop={12}
-                style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
-                accessibilityLabel="Fermer"
-              >
-                <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" style={iconShadowStyle}>
-                  <Path d="m8 8 8 8M16 8l-8 8" stroke={iconColor} strokeWidth={2.4} strokeLinecap="round" />
-                </Svg>
-              </TouchableOpacity>
-            </ReAnimated.View>
           </ReAnimated.View>
 
-          {/* Slider miniatures sous la photo. Sync bidirectionnelle :
-              tap miniature -> setCurrentIndex ; swipe photo -> scrollToIndex. */}
+          {/* X haut-droite de la PAGE, noire (point 6). Toujours visible
+              pendant l'animation hero (fade-in via uiStyle). */}
+          <ReAnimated.View
+            style={[{
+              position: 'absolute', top: topPad + 4, right: 12, zIndex: 20,
+            }, uiStyle]}
+          >
+            <TouchableOpacity
+              onPress={animateOutAndClose}
+              hitSlop={16}
+              style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
+              accessibilityLabel="Fermer"
+            >
+              <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
+                <Path d="m8 8 8 8M16 8l-8 8" stroke="#000" strokeWidth={2.6} strokeLinecap="round" />
+              </Svg>
+            </TouchableOpacity>
+          </ReAnimated.View>
+
+          {/* Slider PELLICULE à cadre central FIXE (style scrubber video iPhone).
+              Les miniatures coulissent ; un cadre rose absolute marque la
+              position centrale. La miniature sous le cadre = photo courante.
+              Sync bidirectionnelle :
+                - tap miniature → setCurrentIndex
+                - scroll slider → onMomentumScrollEnd → setCurrentIndex
+                - swipe carte → useEffect → scrollToOffset */}
           <ReAnimated.View
             style={[{
               position: 'absolute', left: 0, right: 0,
-              top: targetY + targetH + 8, height: SLIDER_H,
+              top: targetY + cardH + 8, height: SLIDER_H,
               justifyContent: 'center',
             }, uiStyle]}
           >
-            {photos && photos.length > 1 ? (
-              <FlatList
-                ref={sliderRef}
-                data={photos}
-                horizontal
-                keyExtractor={(p, i) => p.id || `slider-${i}`}
-                showsHorizontalScrollIndicator={false}
-                initialNumToRender={12}
-                windowSize={5}
-                getItemLayout={(_, index) => ({ length: 62, offset: 62 * index, index })}
-                onScrollToIndexFailed={(info) => {
-                  setTimeout(() => sliderRef.current?.scrollToOffset({
-                    offset: (info.averageItemLength || 62) * info.index, animated: true,
-                  }), 50);
-                }}
-                // paddingHorizontal sur le contentContainerStyle = padding interne
-                // de la FlatList -> la 1re miniature ne touche pas le bord ecran
-                // et n est jamais coupee par un viewPosition de scrollToIndex.
-                contentContainerStyle={{ alignItems: 'center', paddingHorizontal: photoMargin }}
-                renderItem={({ item, index }) => {
-                  const active = index === currentIndex;
-                  return (
+            {photos && photos.length > 0 ? (
+              <>
+                <FlatList
+                  ref={sliderRef}
+                  data={photos}
+                  horizontal
+                  keyExtractor={(p, i) => p.id || `slider-${i}`}
+                  showsHorizontalScrollIndicator={false}
+                  initialNumToRender={12}
+                  windowSize={5}
+                  snapToInterval={62}
+                  decelerationRate="fast"
+                  getItemLayout={(_, index) => ({ length: 62, offset: 62 * index, index })}
+                  onScrollToIndexFailed={(info) => {
+                    setTimeout(() => sliderRef.current?.scrollToOffset({
+                      offset: (info.averageItemLength || 62) * info.index, animated: true,
+                    }), 50);
+                  }}
+                  onMomentumScrollEnd={(e) => {
+                    const offset = e.nativeEvent.contentOffset.x;
+                    const idx = Math.round(offset / 62);
+                    if (idx !== currentIndex && idx >= 0 && idx < photos.length) {
+                      setCurrentIndex(idx);
+                    }
+                  }}
+                  // paddingHorizontal = (winWidth - 56) / 2 : ainsi l'item 0
+                  // (offset 0) tombe sous le cadre central fixe quand le slider
+                  // est tout a gauche. Idem dernier item tout a droite.
+                  contentContainerStyle={{ alignItems: 'center', paddingHorizontal: (winWidth - 56) / 2 }}
+                  renderItem={({ item, index }) => (
                     <TouchableOpacity
                       onPress={() => setCurrentIndex(index)}
                       activeOpacity={0.85}
                       style={{
                         width: 56, height: 56, marginRight: 6,
                         borderRadius: 8, overflow: 'hidden',
-                        borderWidth: active ? 2 : 0,
-                        borderColor: '#F4A6FF',
                       }}
                     >
                       <ExpoImage
@@ -7263,9 +7374,22 @@ function PhotoViewerModal({
                         recyclingKey={item.id}
                       />
                     </TouchableOpacity>
-                  );
-                }}
-              />
+                  )}
+                />
+                {/* Cadre rose central FIXE (overlay pointer-events:none) */}
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    left: (winWidth - 56) / 2 - 2, // -2 pour centrer le cadre sur la thumb
+                    top: (SLIDER_H - 56) / 2 - 2,
+                    width: 60, height: 60,
+                    borderRadius: 10,
+                    borderWidth: 2,
+                    borderColor: '#F4A6FF',
+                  }}
+                />
+              </>
             ) : null}
           </ReAnimated.View>
 
