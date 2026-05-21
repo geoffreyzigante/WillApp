@@ -9446,6 +9446,20 @@ export default function App() {
 
   const tabsTranslateX = useRef(new Animated.Value(0)).current;
 
+  // ─── Fade-in doux a l ouverture de l app ─────────────────────────────
+  // L accueil etait deja affiche direct (navTranslateX init -SCREEN_W).
+  // On ajoute juste un fade opacity 0 -> 1 sur 500ms pour adoucir
+  // l apparition, eviter l effet "saut" au demarrage.
+  const appOpacity = useSharedValue(0);
+  const appOpacityStyle = useAnimatedStyle(() => ({ opacity: appOpacity.value }));
+  useEffect(() => {
+    appOpacity.value = withTiming(1, {
+      duration: 500,
+      easing: (t) => { 'worklet'; return 1 - Math.pow(1 - t, 3); },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ─── Nav meta-rail Accueil <-> Event (carrousel horizontal 2 panneaux) ───
   // Layout : EVENT (left=0) | ACCUEIL (left=SCREEN_W). Le rail entier translate.
   //   navTranslateX = -SCREEN_W -> rail decale d une largeur vers la gauche
@@ -9581,6 +9595,8 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+
+      <ReAnimated.View style={[{ flex: 1 }, appOpacityStyle]}>
 
       {!organizerEventPhotosTarget && (
       <ReAnimated.View style={[
@@ -9899,6 +9915,8 @@ export default function App() {
         onUpdate={updateOrganizerProfile}
         onDeleteAccount={() => { setOrganizerProfileMenu(false); deleteOrganizerAccount(); }}
       />
+
+      </ReAnimated.View>
     </SafeAreaView>
     </GestureHandlerRootView>
   );
