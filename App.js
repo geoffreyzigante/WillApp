@@ -38,6 +38,8 @@ import ReAnimated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withRepeat,
+  withSequence,
   runOnJS,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9123,14 +9125,42 @@ export default function App() {
     }).then(() => setFontsLoaded(true)).catch(() => setFontsLoaded(true));
   }, []);
 
-  // Splash overlay JS : un ecran blanc avec l avatar en haut (couleur
-  // violet light #c9beed, meme que dans HomeScreen) qui prend le relais
-  // du splash iOS natif. Reste visible 1 seconde minimum puis fade out
+  // Splash overlay JS : ecran blanc avec icone fleur Will centree
+  // (LoadingIcon, meme que pull-to-refresh) qui prend le relais du
+  // splash iOS natif. Reste visible 1 seconde minimum puis fade out
   // 400ms. L overlay est demonte a la fin du fade pour ne pas bloquer
   // les interactions.
   const splashOverlayOpacity = useSharedValue(1);
   const splashOverlayStyle = useAnimatedStyle(() => ({ opacity: splashOverlayOpacity.value }));
   const [splashOverlayVisible, setSplashOverlayVisible] = useState(true);
+
+  // Animation idle de l icone fleur : rotation lente continue + pulse
+  // scale 1->1.1->1 en boucle. Lancees une fois au mount, stoppees
+  // implicitement au demontage de l overlay.
+  const splashIconRotate = useSharedValue(0);
+  const splashIconScale = useSharedValue(1);
+  const splashIconStyle = useAnimatedStyle(() => ({
+    transform: [
+      { rotate: `${splashIconRotate.value}deg` },
+      { scale: splashIconScale.value },
+    ],
+  }));
+  useEffect(() => {
+    splashIconRotate.value = withRepeat(
+      withTiming(360, { duration: 2400, easing: (t) => { 'worklet'; return t; } }),
+      -1,
+      false
+    );
+    splashIconScale.value = withRepeat(
+      withSequence(
+        withTiming(1.1, { duration: 700, easing: (t) => { 'worklet'; return 1 - Math.pow(1 - t, 3); } }),
+        withTiming(1, { duration: 700, easing: (t) => { 'worklet'; return 1 - Math.pow(1 - t, 3); } })
+      ),
+      -1,
+      false
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!fontsLoaded) return;
@@ -9998,7 +10028,9 @@ export default function App() {
           splashOverlayStyle,
         ]}
       >
-        <LoadingIcon size={48} color="#c9beed" />
+        <ReAnimated.View style={splashIconStyle}>
+          <LoadingIcon size={48} color="#c9beed" />
+        </ReAnimated.View>
       </ReAnimated.View>
     )}
     </GestureHandlerRootView>
