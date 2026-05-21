@@ -9984,27 +9984,29 @@ export default function App() {
         onDeleteAccount={() => { setOrganizerProfileMenu(false); deleteOrganizerAccount(); }}
       />
 
-      {/* Splash overlay : ecran blanc + avatar violet light en haut.
-          Prend le relais du splash iOS natif (hideAsync immediat) pour 1
-          seconde minimum, puis fade out 400ms vers le contenu. Demonte
-          a la fin pour ne pas bloquer les interactions. */}
-      {splashOverlayVisible && (
-        <ReAnimated.View
-          style={[
-            StyleSheet.absoluteFillObject,
-            { backgroundColor: '#fff', zIndex: 9999 },
-            splashOverlayStyle,
-          ]}
-        >
-          <SafeAreaView style={{ flex: 1 }}>
-            <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
-              <Icon.User size={30} color="#c9beed" />
-            </View>
-          </SafeAreaView>
-        </ReAnimated.View>
-      )}
-
     </SafeAreaView>
+
+    {/* Splash overlay : ecran blanc + avatar violet light en haut.
+        Pose dans GestureHandlerRootView (hors SafeAreaView) pour couvrir
+        TOUT l ecran (zone notch incluse). Prend le relais du splash iOS
+        natif (hideAsync immediat) pour 1 seconde minimum, puis fade out
+        400ms vers le contenu. Demonte a la fin pour ne pas bloquer les
+        interactions. */}
+    {splashOverlayVisible && (
+      <ReAnimated.View
+        style={[
+          StyleSheet.absoluteFillObject,
+          { backgroundColor: '#fff', zIndex: 9999 },
+          splashOverlayStyle,
+        ]}
+      >
+        <SafeAreaView style={{ flex: 1 }}>
+          <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
+            <Icon.User size={30} color="#c9beed" />
+          </View>
+        </SafeAreaView>
+      </ReAnimated.View>
+    )}
     </GestureHandlerRootView>
   );
 }
