@@ -7734,6 +7734,9 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  // Compteur "X masquées" en tête de galerie + busy state pour le toggle.
+  const [hiddenCount, setHiddenCount] = useState(0);
+  const [busyKey, setBusyKey] = useState(null);
   const tint = colorForType(event.event_type);
 
   const loadPhotos = useCallback(async () => {
@@ -7743,7 +7746,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
       const r = await fetch(`${API_URL}/organizer/event-photos/${event.code}`, {
         headers: { Authorization: `Bearer ${session.token}` },
       });
-      const data = r.ok ? await r.json() : { before_event: [], during_event: [] };
+      const data = r.ok ? await r.json() : { before_event: [], during_event: [], hidden_count: 0 };
       // Le worker separe les photos en before_event (setup/test avant l'heure
       // de depart) et during_event (course). Cote mobile on les fusionne et
       // on trie par burstTs DESC : les plus recentes en haut, ce qui revient
@@ -7760,8 +7763,15 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
           tint,
           race: p.race,
           km: p.km,
+          hidden: p.hidden === true,   // propagation du flag worker
         }));
-      list.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
+      setHiddenCount(typeof data.hidden_count === 'number' ? data.hidden_count : 0);
+      // Tri : burstTs DESC puis idx DESC au sein d'une rafale.
+      list.sort((a, b) => {
+        const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
+        if (dt !== 0) return dt;
+        return extractIdx(b.id) - extractIdx(a.id);
+      });
       setPhotos(list.slice(0, 500));
     } catch (e) {
       console.warn('loadPhotos failed:', e?.message || e);
