@@ -39,11 +39,6 @@ import ReAnimated, {
   useAnimatedStyle,
   withTiming,
   runOnJS,
-  SlideInLeft,
-  SlideInRight,
-  SlideOutLeft,
-  SlideOutRight,
-  LayoutAnimationConfig,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -9036,12 +9031,6 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
 
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
-  // Flag pour skipper les Reanimated layout animations au mount initial de l app.
-  // Sans ce flag, HomeScreen jouerait son entering=SlideInRight au premier render
-  // -> apparition parasite a chaque demarrage. didMount passe a true apres la
-  // premiere frame, debloquant les animations pour tous les remounts suivants.
-  const [didMount, setDidMount] = useState(false);
-  useEffect(() => { setDidMount(true); }, []);
   const [tab, setTab] = useState('upcoming');
   const [bottomTab, setBottomTab] = useState('home');
   const [events, setEvents] = useState([]);
@@ -9451,6 +9440,57 @@ export default function App() {
 
   const tabsTranslateX = useRef(new Animated.Value(0)).current;
 
+  // ─── Nav meta-rail Accueil <-> Event (carrousel horizontal 2 panneaux) ───
+  // Layout : EVENT (left=0) | ACCUEIL (left=SCREEN_W). Le rail entier translate.
+  //   navTranslateX = -SCREEN_W -> rail decale d une largeur vers la gauche
+  //                              -> panneau ACCUEIL aligne au viewport
+  //   navTranslateX =  0        -> rail a origine
+  //                              -> panneau EVENT aligne au viewport
+  // Init -SCREEN_W : pas d animation au mount (l accueil est deja en place).
+  const navTranslateX = useSharedValue(-SCREEN_W);
+  const navStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: navTranslateX.value }],
+  }));
+  // Easing iOS-like (cubic out doux). Worklet pour UI thread.
+  const navEasing = (t) => {
+    'worklet';
+    return 1 - Math.pow(1 - t, 3);
+  };
+  // Anime translateX quand openedEvent change. Pas d anim au mount (init OK).
+  useEffect(() => {
+    navTranslateX.value = withTiming(
+      openedEvent ? 0 : -SCREEN_W,
+      { duration: 380, easing: navEasing }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedEvent]);
+  // Swipe back : drag horizontal sur le panneau Event pour ramener l accueil.
+  // activeOffsetX([-15, 15]) -> active uniquement sur drag horizontal > 15px.
+  // failOffsetY([-25, 25])    -> fail si scroll vertical > 25px (laisse passer
+  //                              les scrolls de la galerie FlatList).
+  const closeEventJS = useCallback(() => setOpenedEvent(null), []);
+  const navPan = useMemo(() => Gesture.Pan()
+    .activeOffsetX([-15, 15])
+    .failOffsetY([-25, 25])
+    .onUpdate((e) => {
+      // translateX = 0 (event affiche) + e.translationX (negatif si drag gauche)
+      // Clamp [-SCREEN_W, 0] : empeche d aller au-dela des limites.
+      const t = Math.max(-SCREEN_W, Math.min(0, e.translationX));
+      navTranslateX.value = t;
+    })
+    .onEnd((e) => {
+      const closeThreshold = -SCREEN_W / 3;
+      const velocityThreshold = -500;
+      const shouldClose = e.translationX < closeThreshold || e.velocityX < velocityThreshold;
+      if (shouldClose) {
+        navTranslateX.value = withTiming(-SCREEN_W, { duration: 280, easing: navEasing }, (finished) => {
+          if (finished) runOnJS(closeEventJS)();
+        });
+      } else {
+        navTranslateX.value = withTiming(0, { duration: 280, easing: navEasing });
+      }
+    }), [closeEventJS]);
+
   useEffect(() => {
     const idx = tabs.indexOf(bottomTab);
     if (idx === -1) return;
@@ -9536,14 +9576,37 @@ export default function App() {
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
 
-      <LayoutAnimationConfig skipEntering={!didMount}>
-      {!openedEvent && !organizerEventPhotosTarget && (
-        <ReAnimated.View
-          entering={SlideInRight.duration(380)}
-          exiting={SlideOutRight.duration(380)}
-          style={[StyleSheet.absoluteFill, { backgroundColor: C.bg }]}
-        >
-        <SafeAreaView style={{ flex: 1 }}>
+      {!organizerEventPhotosTarget && (
+      <ReAnimated.View style={[
+        { flex: 1, flexDirection: 'row', width: SCREEN_W * 2 },
+        navStyle,
+      ]}>
+        {/* PANNEAU GAUCHE : EVENT (visible si openedEvent truthy, vide sinon) */}
+        <View style={{ width: SCREEN_W, height: '100%', backgroundColor: C.bg }}>
+          <SafeAreaView style={{ flex: 1 }}>
+            {openedEvent && (
+              <GestureDetector gesture={navPan}>
+                <View style={{ flex: 1 }}>
+                  <EventDetailScreen
+                    event={openedEvent}
+                    onClose={() => setOpenedEvent(null)}
+                    onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
+                    selfieUri={selfieUri}
+                    onDeleteSelfie={deleteSelfie}
+                    onOpenProfile={() => setProfileMenu(true)}
+                    onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
+                    isFavorite={favorites.includes(openedEvent.code)}
+                    onToggleFavorite={() => requireAuth(() => toggleFavorite(openedEvent.code))}
+                  />
+                </View>
+              </GestureDetector>
+            )}
+          </SafeAreaView>
+        </View>
+
+        {/* PANNEAU DROIT : ACCUEIL (HomeScreen + tabs internes) */}
+        <View style={{ width: SCREEN_W, height: '100%' }}>
+          <SafeAreaView style={{ flex: 1 }}>
         <GestureDetector gesture={swipeNav}>
           <View style={{ flex: 1, overflow: 'hidden' }}>
             <Animated.View style={{
@@ -9614,35 +9677,10 @@ export default function App() {
             </Animated.View>
           </View>
         </GestureDetector>
-        </SafeAreaView>
-        </ReAnimated.View>
-      )}
-
-      {openedEvent && (
-        <ReAnimated.View
-          entering={SlideInLeft.duration(380)}
-          exiting={SlideOutLeft.duration(380)}
-          style={[StyleSheet.absoluteFill, { backgroundColor: C.bg }]}
-        >
-          {/* SafeAreaView pour respecter le notch/status bar (sinon le header
-              du detail passe derriere l'heure/reseau/batterie). flex:1
-              uniquement, le backgroundColor reste sur le wrapper anime. */}
-          <SafeAreaView style={{ flex: 1 }}>
-            <EventDetailScreen
-              event={openedEvent}
-              onClose={() => setOpenedEvent(null)}
-              onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
-              selfieUri={selfieUri}
-              onDeleteSelfie={deleteSelfie}
-              onOpenProfile={() => setProfileMenu(true)}
-              onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
-              isFavorite={favorites.includes(openedEvent.code)}
-              onToggleFavorite={() => requireAuth(() => toggleFavorite(openedEvent.code))}
-            />
           </SafeAreaView>
-        </ReAnimated.View>
+        </View>
+      </ReAnimated.View>
       )}
-      </LayoutAnimationConfig>
 
       {organizerEventPhotosTarget && bottomTab === 'events' && organizerSession && (
         <OrganizerEventPhotosScreen
