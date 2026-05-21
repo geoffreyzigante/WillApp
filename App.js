@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  AppState, Share, Vibration,
+  AppState, Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -7321,11 +7321,11 @@ function PhotoViewerModal({
                     const offset = e.nativeEvent.contentOffset.x;
                     const idx = Math.round(offset / 50);
                     if (idx !== currentIndex && idx >= 0 && idx < photos.length) {
-                      // v2.5 point 4 : petit buzz haptique au snap sur une
-                      // nouvelle miniature, style galerie iPhone. Vibration RN
-                      // = workaround OTA-safe (vraie haptic = expo-haptics
-                      // + rebuild EAS).
-                      try { Vibration.vibrate(10); } catch {}
+                      // Vibration desactivee : Vibration.vibrate(10) de RN core
+                      // ignore le 10ms sur iOS et declenche une vibration longue
+                      // ~1000ms (limitation systeme). Pour avoir le vrai tactile
+                      // feedback fin de la galerie iPhone, installer expo-haptics
+                      // et rebuilder EAS (Haptics.selectionAsync).
                       setCurrentIndex(idx);
                     }
                   }}
