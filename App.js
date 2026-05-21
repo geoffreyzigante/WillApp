@@ -9124,15 +9124,23 @@ export default function App() {
     }).then(() => setFontsLoaded(true)).catch(() => setFontsLoaded(true));
   }, []);
 
-  // Hide du splash quand les fonts sont chargees -> evite le saut entre
-  // splash natif iOS et contenu app (qui aurait sinon apparu avec font
-  // systeme avant que la font custom soit prete).
-  // OTA-safe : si SplashScreen non charge (rebuild EAS pas encore fait),
-  // le call ne fait rien.
+  // Hide du splash quand les fonts sont chargees ET apres que React ait
+  // commit le layout du 1er render reel.
+  // requestAnimationFrame + setTimeout(100) :
+  //   - rAF : attend la prochaine frame apres le commit React
+  //   - setTimeout : laisse le layout se stabiliser (useEffects async,
+  //     SafeAreaView insets, etc.)
+  // -> le splash hide une fois que le contenu est completement pose,
+  // pas de saut perceptible entre splash et contenu.
+  // OTA-safe : si SplashScreen non charge (build sans natif linke), no-op.
   useEffect(() => {
-    if (fontsLoaded) {
-      try { SplashScreen?.hideAsync?.(); } catch {}
-    }
+    if (!fontsLoaded) return;
+    const raf = requestAnimationFrame(() => {
+      setTimeout(() => {
+        try { SplashScreen?.hideAsync?.(); } catch {}
+      }, 100);
+    });
+    return () => cancelAnimationFrame(raf);
   }, [fontsLoaded]);
 
   useEffect(() => {
@@ -9605,9 +9613,13 @@ export default function App() {
       });
   }, [tabs, bottomTab, runnerSession, requireAuth]);
 
-  if (!fontsLoaded) {
-    return <View style={[s.root, { justifyContent: 'center', alignItems: 'center' }]}><ActivityIndicator color={C.primary} /></View>;
-  }
+  // Pas de spinner fallback : on rend directement le contenu reel meme
+  // si fontsLoaded est encore false. Le splash iOS (controle par
+  // expo-splash-screen) reste visible pendant ce temps via
+  // preventAutoHideAsync, donc l utilisateur ne voit pas le contenu avec
+  // font systeme. Le hideAsync est differe via requestAnimationFrame +
+  // setTimeout pour laisser React stabiliser le layout apres le 1er
+  // render reel.
 
   // Mode photographe (full screen caméra)
   if (inPhotographerMode && (session?.role === 'photographer' || session?.role === 'organizer')) {
