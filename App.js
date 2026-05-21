@@ -9643,6 +9643,23 @@ export default function App() {
         />
       )}
 
+      {/* Degrade blanc qui fond le contenu vers le menu footer (au lieu d'une
+          ligne nette + marche des coins arrondis). pointerEvents=none pour ne
+          pas bloquer les taps. Hauteur 50 = suffisant pour effacer la
+          discontinuite visuelle sans couper le contenu utile. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(255,255,255,0)', 'rgba(255,255,255,1)']}
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 80,        // pile au-dessus de la bottomNav (height 80)
+          height: 50,
+          zIndex: 5,
+        }}
+      />
+
       {/* Bottom Nav */}
       <View style={s.bottomNav}>
         <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('home'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
