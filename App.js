@@ -1461,6 +1461,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         const photographerId = parts.length >= 2 ? parts[1] : null;
         return {
           uri: p.url || `${R2_PUBLIC}/${p.key}`,
+          // thumbUri : version 400px JPEG (~15-25 KB) servie par /photo-thumb
+          // worker avec cache R2. Utilisee pour la grille ; le viewer plein
+          // ecran continue d utiliser `uri` (haute resolution).
+          thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
           id: p.key,
           tint,
           race: p.race,
@@ -1828,7 +1832,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // eviter tout decalage horizontal cause par s.scroll paddingHorizontal: 20).
   const renderItem = ({ item }) => (
     <PhotoCell
-      photo={item}
+      // Pour la grille on utilise thumbUri (~25 KB) au lieu de uri (~2-5 MB).
+      // Le viewer plein ecran recoit item entier (avec uri haute resolution).
+      photo={{ ...item, uri: item.thumbUri || item.uri }}
       onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
         origin,
         eventTitle: event?.name,
