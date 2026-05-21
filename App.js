@@ -10015,7 +10015,8 @@ export default function App() {
         ]}
       >
         <ReAnimated.View style={splashIconStyle}>
-          <LoadingIcon size={48} color="#c9beed" />
+          {/* Logo Will (meme icone que derriere "Bienvenue sur" sur l accueil) */}
+          <Icon.Logo width={100} color="#c9beed" />
         </ReAnimated.View>
       </ReAnimated.View>
     )}
