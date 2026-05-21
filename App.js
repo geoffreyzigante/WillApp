@@ -40,7 +40,7 @@ import ReAnimated, {
   withTiming,
   runOnJS,
   SlideInRight,
-  SlideOutRight,
+  SlideOutLeft,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -9602,8 +9602,8 @@ export default function App() {
 
       {openedEvent && (
         <ReAnimated.View
-          entering={SlideInRight.duration(280)}
-          exiting={SlideOutRight.duration(260)}
+          entering={SlideInRight.duration(320)}
+          exiting={SlideOutLeft.duration(320)}
           style={[StyleSheet.absoluteFill, { backgroundColor: C.bg }]}
         >
           {/* SafeAreaView pour respecter le notch/status bar (sinon le header
