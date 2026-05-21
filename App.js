@@ -1676,7 +1676,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const renderItem = ({ item }) => (
     <PhotoCell
       photo={item}
-      onPress={() => onOpenPhoto?.(item, filteredPhotos)}
+      onPress={() => onOpenPhoto?.(item, filteredPhotos, {
+        eventTitle: event?.name,
+        eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+      })}
     />
   );
 
@@ -6674,7 +6677,7 @@ function PhotoViewerModal({
   const HEADER_H = 56;          // titre + date
   const SLIDER_H = 64;          // slider 56px + padding
   const BUTTON_AREA_H = 78;     // bouton + paddings
-  const photoMargin = 5;
+  const photoMargin = 20;       // marge G/D autour de la photo principale
   const targetX = photoMargin;
   const targetY = topPad + HEADER_H;
   const targetW = winWidth - photoMargin * 2;
@@ -6729,12 +6732,12 @@ function PhotoViewerModal({
       py.value = withTiming(targetY, { duration: 280 });
       pw.value = withTiming(targetW, { duration: 280 });
       ph.value = withTiming(targetH, { duration: 280 });
-      pradius.value = withTiming(14, { duration: 280 });
+      pradius.value = withTiming(18, { duration: 280 });
     } else {
       // Pas d'origin -> photo directement a la cible (sans transition position)
       px.value = targetX; py.value = targetY;
       pw.value = targetW; ph.value = targetH;
-      pradius.value = 14;
+      pradius.value = 18;
     }
     bgOpacity.value = withTiming(1, { duration: 200 });
     uiOpacity.value = withTiming(1, { duration: 260 });
@@ -7080,19 +7083,19 @@ function PhotoViewerModal({
           >
             <GestureDetector gesture={composed}>
               <ReAnimated.View style={[{ flex: 1, flexDirection: 'row' }, railStyle]}>
-                <View style={{ position: 'absolute', top: 0, bottom: 0, left: -targetW, width: targetW, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ position: 'absolute', top: 0, bottom: 0, left: -targetW, width: targetW }}>
                   {prevPhoto?.uri ? (
-                    <ExpoImage source={{ uri: prevPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
+                    <ExpoImage source={{ uri: prevPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                   ) : null}
                 </View>
-                <ReAnimated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, width: targetW, alignItems: 'center', justifyContent: 'center' }, currentImgStyle]}>
+                <ReAnimated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, width: targetW }, currentImgStyle]}>
                   {currentPhoto?.uri ? (
-                    <ExpoImage source={{ uri: currentPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
+                    <ExpoImage source={{ uri: currentPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                   ) : null}
                 </ReAnimated.View>
-                <View style={{ position: 'absolute', top: 0, bottom: 0, left: targetW, width: targetW, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ position: 'absolute', top: 0, bottom: 0, left: targetW, width: targetW }}>
                   {nextPhoto?.uri ? (
-                    <ExpoImage source={{ uri: nextPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="contain" />
+                    <ExpoImage source={{ uri: nextPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                   ) : null}
                 </View>
               </ReAnimated.View>
@@ -7149,7 +7152,7 @@ function PhotoViewerModal({
             style={[{
               position: 'absolute', left: 0, right: 0,
               top: targetY + targetH + 8, height: SLIDER_H,
-              paddingHorizontal: photoMargin, justifyContent: 'center',
+              justifyContent: 'center',
             }, uiStyle]}
           >
             {photos && photos.length > 1 ? (
@@ -7167,7 +7170,10 @@ function PhotoViewerModal({
                     offset: (info.averageItemLength || 62) * info.index, animated: true,
                   }), 50);
                 }}
-                contentContainerStyle={{ alignItems: 'center' }}
+                // paddingHorizontal sur le contentContainerStyle = padding interne
+                // de la FlatList -> la 1re miniature ne touche pas le bord ecran
+                // et n est jamais coupee par un viewPosition de scrollToIndex.
+                contentContainerStyle={{ alignItems: 'center', paddingHorizontal: photoMargin }}
                 renderItem={({ item, index }) => {
                   const active = index === currentIndex;
                   return (
