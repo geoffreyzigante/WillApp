@@ -1327,7 +1327,10 @@ function SkeletonCell({ size }) {
   return (
     <Animated.View style={{
       width: size, height: size,
-      borderRadius: 12, backgroundColor: '#E5E7EB',
+      borderRadius: 12,
+      // Violet leger brand (C.primaryLight) au lieu du gris #E5E7EB
+      // -> placeholder coherent avec l identite, page jamais blanche.
+      backgroundColor: C.primaryLight,
       opacity: op,
     }} />
   );
@@ -1771,8 +1774,24 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </View>
       ) : (
         <>
-          {/* Onglets de filtre (course / photographe / combiné) */}
-          {tabs.length > 0 && photos.length > 0 && (
+          {/* Onglets de filtre (course / photographe / combine).
+              Pendant le fetch initial (loading=true), on affiche des chips
+              skeleton pour reserver la hauteur -> evite le sursaut du
+              header quand les vrais tabs apparaissent. */}
+          {loading ? (
+            <ScrollView
+              horizontal showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 4 }}
+              style={{ marginVertical: 8 }}
+            >
+              {[80, 64, 96].map((w, i) => (
+                <View key={`skchip-${i}`} style={{
+                  width: w, height: 32, borderRadius: 999,
+                  backgroundColor: C.primaryLight,
+                }} />
+              ))}
+            </ScrollView>
+          ) : tabs.length > 0 && photos.length > 0 && (
             <ScrollView
               horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 4 }}
@@ -9449,22 +9468,11 @@ export default function App() {
 
   const tabsTranslateX = useRef(new Animated.Value(0)).current;
 
-  // ─── Apparition douce a l ouverture de l app (snappy) ─────────────────
-  // Fade opacity 0 -> 1 + translateY 6 -> 0 en parallele. Duree 280ms
-  // (etait 450, jugee laggante). translateY court (6px) absorbe le layout
-  // shift residuel sans donner l impression de mouvement perceptible.
-  const appOpacity = useSharedValue(0);
-  const appTranslateY = useSharedValue(6);
-  const appAnimStyle = useAnimatedStyle(() => ({
-    opacity: appOpacity.value,
-    transform: [{ translateY: appTranslateY.value }],
-  }));
-  useEffect(() => {
-    const ease = (t) => { 'worklet'; return 1 - Math.pow(1 - t, 3); };
-    appOpacity.value = withTiming(1, { duration: 280, easing: ease });
-    appTranslateY.value = withTiming(0, { duration: 280, easing: ease });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Pas de fade-in JS au mount : le splash screen iOS natif se hide tout
+  // seul, ajouter un fade par dessus etait percu comme un lag. On accepte
+  // le saut splash->contenu natif (geste OS standard, l utilisateur s y
+  // attend). Pour eliminer ce saut completement il faut installer
+  // expo-splash-screen + rebuild EAS (pas OTA).
 
   // ─── Nav meta-rail Accueil <-> Event (carrousel horizontal 2 panneaux) ───
   // Layout : EVENT (left=0) | ACCUEIL (left=SCREEN_W). Le rail entier translate.
@@ -9617,8 +9625,6 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
-
-      <ReAnimated.View style={[{ flex: 1 }, appAnimStyle]}>
 
       {!organizerEventPhotosTarget && (
       <ReAnimated.View style={[
@@ -9941,7 +9947,6 @@ export default function App() {
         onDeleteAccount={() => { setOrganizerProfileMenu(false); deleteOrganizerAccount(); }}
       />
 
-      </ReAnimated.View>
     </SafeAreaView>
     </GestureHandlerRootView>
   );
