@@ -9123,23 +9123,34 @@ export default function App() {
     }).then(() => setFontsLoaded(true)).catch(() => setFontsLoaded(true));
   }, []);
 
-  // Hide du splash quand les fonts sont chargees ET apres que React ait
-  // commit le layout du 1er render reel.
-  // requestAnimationFrame + setTimeout(100) :
-  //   - rAF : attend la prochaine frame apres le commit React
-  //   - setTimeout : laisse le layout se stabiliser (useEffects async,
-  //     SafeAreaView insets, etc.)
-  // -> le splash hide une fois que le contenu est completement pose,
-  // pas de saut perceptible entre splash et contenu.
-  // OTA-safe : si SplashScreen non charge (build sans natif linke), no-op.
+  // Splash overlay JS : un ecran blanc avec l avatar en haut (couleur
+  // violet light #c9beed, meme que dans HomeScreen) qui prend le relais
+  // du splash iOS natif. Reste visible 1 seconde minimum puis fade out
+  // 400ms. L overlay est demonte a la fin du fade pour ne pas bloquer
+  // les interactions.
+  const splashOverlayOpacity = useSharedValue(1);
+  const splashOverlayStyle = useAnimatedStyle(() => ({ opacity: splashOverlayOpacity.value }));
+  const [splashOverlayVisible, setSplashOverlayVisible] = useState(true);
+
   useEffect(() => {
     if (!fontsLoaded) return;
-    const raf = requestAnimationFrame(() => {
-      setTimeout(() => {
-        try { SplashScreen?.hideAsync?.(); } catch {}
-      }, 100);
-    });
-    return () => cancelAnimationFrame(raf);
+    // 1. Hide splash iOS immediatement : l overlay JS (blanc + avatar)
+    // prend le relais visuel, donc pas de saut.
+    try { SplashScreen?.hideAsync?.(); } catch {}
+    // 2. Attendre 1 seconde minimum d affichage puis fade out.
+    const t = setTimeout(() => {
+      splashOverlayOpacity.value = withTiming(
+        0,
+        {
+          duration: 400,
+          easing: (v) => { 'worklet'; return 1 - Math.pow(1 - v, 3); },
+        },
+        (finished) => {
+          if (finished) runOnJS(setSplashOverlayVisible)(false);
+        }
+      );
+    }, 1000);
+    return () => clearTimeout(t);
   }, [fontsLoaded]);
 
   useEffect(() => {
@@ -9972,6 +9983,26 @@ export default function App() {
         onUpdate={updateOrganizerProfile}
         onDeleteAccount={() => { setOrganizerProfileMenu(false); deleteOrganizerAccount(); }}
       />
+
+      {/* Splash overlay : ecran blanc + avatar violet light en haut.
+          Prend le relais du splash iOS natif (hideAsync immediat) pour 1
+          seconde minimum, puis fade out 400ms vers le contenu. Demonte
+          a la fin pour ne pas bloquer les interactions. */}
+      {splashOverlayVisible && (
+        <ReAnimated.View
+          style={[
+            StyleSheet.absoluteFillObject,
+            { backgroundColor: '#fff', zIndex: 9999 },
+            splashOverlayStyle,
+          ]}
+        >
+          <SafeAreaView style={{ flex: 1 }}>
+            <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
+              <Icon.User size={30} color="#c9beed" />
+            </View>
+          </SafeAreaView>
+        </ReAnimated.View>
+      )}
 
     </SafeAreaView>
     </GestureHandlerRootView>
