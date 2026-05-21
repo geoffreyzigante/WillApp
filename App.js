@@ -9655,7 +9655,7 @@ export default function App() {
           left: 0,
           right: 0,
           bottom: 80,        // pile au-dessus de la bottomNav (height 80)
-          height: 50,
+          height: 100,
           zIndex: 5,
         }}
       />
