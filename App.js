@@ -9132,21 +9132,10 @@ export default function App() {
   const splashOverlayStyle = useAnimatedStyle(() => ({ opacity: splashOverlayOpacity.value }));
   const [splashOverlayVisible, setSplashOverlayVisible] = useState(true);
 
-  // Logo Will violet light statique : juste fade-in opacity au mount.
-  // Pas de rotation ni pulse. L icone est dans le parent splashOverlay
-  // qui fade out a la fin (fontsLoaded + 1s), donc disparait EN MEME
-  // TEMPS que le fond sans gerer son opacity a la sortie.
-  const splashIconOpacity = useSharedValue(0);
-  const splashIconStyle = useAnimatedStyle(() => ({
-    opacity: splashIconOpacity.value,
-  }));
-  useEffect(() => {
-    splashIconOpacity.value = withTiming(1, {
-      duration: 300,
-      easing: (t) => { 'worklet'; return 1 - Math.pow(1 - t, 3); },
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Logo Will violet primary statique. Pas de fade-in (l opacity
+  // partielle sur fond blanc faisait paraitre le logo plus clair au
+  // debut). Apparait direct a 100%. Disparait avec le fond via le
+  // parent splashOverlay qui fade out a la fin (fontsLoaded + 1s).
 
   useEffect(() => {
     if (!fontsLoaded) return;
@@ -10014,10 +10003,8 @@ export default function App() {
           splashOverlayStyle,
         ]}
       >
-        <ReAnimated.View style={splashIconStyle}>
-          {/* Logo Will violet primary charte (#7B2FFF) */}
-          <Icon.Logo width={100} color={C.primary} />
-        </ReAnimated.View>
+        {/* Logo Will violet primary charte (#7B2FFF), static. */}
+        <Icon.Logo width={100} color={C.primary} />
       </ReAnimated.View>
     )}
     </GestureHandlerRootView>
