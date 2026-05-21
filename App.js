@@ -1775,9 +1775,12 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       ) : (
         <>
           {/* Onglets de filtre (course / photographe / combine).
-              Pas de skeleton chips pendant loading : trop visibles, on
-              tolere le shift discret quand les vrais tabs apparaissent. */}
-          {tabs.length > 0 && photos.length > 0 && (
+              Pendant loading : placeholder INVISIBLE (juste hauteur reservee)
+              -> evite le shift vertical quand les vrais tabs apparaissent.
+              Pas de chips visibles, donc page propre. */}
+          {loading ? (
+            <View style={{ height: 52 }} />
+          ) : tabs.length > 0 && photos.length > 0 && (
             <ScrollView
               horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 4 }}
@@ -6970,6 +6973,19 @@ function SelfieViewerModal({ visible, uri, onClose }) {
 let Haptics;
 try { Haptics = require('expo-haptics'); } catch {}
 
+// expo-splash-screen : controle manuel du hide du splash iOS natif.
+// Sans ce module, iOS hide le splash automatiquement des que le bundle JS
+// est charge -> contenu app apparait avant que les fonts (Font.loadAsync
+// ~100-500ms) et le state initial soient prets -> saut visuel.
+// preventAutoHideAsync() empeche le hide auto au load du bundle ; on appelle
+// hideAsync() apres fontsLoaded (cf App() useEffect).
+// Require optional pour OTA-safety : sans module natif linke, les appels
+// echouent silencieusement -> aucun crash. Au prochain rebuild EAS, le
+// natif sera inclus et le splash restera visible jusqu au hide explicite.
+let SplashScreen;
+try { SplashScreen = require('expo-splash-screen'); } catch {}
+try { SplashScreen?.preventAutoHideAsync?.(); } catch {}
+
 // Flag fonctionnalite Supprimer dans la visionneuse. Refonte 2026-05 : la
 // suppression est en stand-by, on cable plus tard avec une confirmation
 // adaptee. Garde le code mort pour activer en un flip. allowDelete continue
@@ -9107,6 +9123,17 @@ export default function App() {
       AVEstiana: require('./assets/fonts/AV_Estiana-VF.ttf'),
     }).then(() => setFontsLoaded(true)).catch(() => setFontsLoaded(true));
   }, []);
+
+  // Hide du splash quand les fonts sont chargees -> evite le saut entre
+  // splash natif iOS et contenu app (qui aurait sinon apparu avec font
+  // systeme avant que la font custom soit prete).
+  // OTA-safe : si SplashScreen non charge (rebuild EAS pas encore fait),
+  // le call ne fait rien.
+  useEffect(() => {
+    if (fontsLoaded) {
+      try { SplashScreen?.hideAsync?.(); } catch {}
+    }
+  }, [fontsLoaded]);
 
   useEffect(() => {
     // Précharge la liste events depuis le cache pour que le LoginModal soit
