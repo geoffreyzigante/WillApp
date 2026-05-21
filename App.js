@@ -9541,8 +9541,9 @@ export default function App() {
         <ReAnimated.View
           entering={SlideInRight.duration(380)}
           exiting={SlideOutRight.duration(380)}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { backgroundColor: C.bg }]}
         >
+        <SafeAreaView style={{ flex: 1 }}>
         <GestureDetector gesture={swipeNav}>
           <View style={{ flex: 1, overflow: 'hidden' }}>
             <Animated.View style={{
@@ -9613,6 +9614,7 @@ export default function App() {
             </Animated.View>
           </View>
         </GestureDetector>
+        </SafeAreaView>
         </ReAnimated.View>
       )}
 
