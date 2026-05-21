@@ -26,11 +26,8 @@ import ReAnimated, {
   useAnimatedStyle,
   withTiming,
   runOnJS,
+  Easing,
 } from 'react-native-reanimated';
-// Easing import separe pour ne pas chevaucher le hunk d imports du chantier
-// capture (visionCamera + humanDetectorPlugin), facilite l isolation du diff
-// au commit v2.3.
-import { Easing } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import Svg, { Path, Circle, Ellipse, Defs, Mask, Rect, SvgXml } from 'react-native-svg';
