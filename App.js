@@ -1829,7 +1829,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   );
 
   // Mode "a venir, 0 photo" : on n'affiche pas de grille, juste le header.
-  const showEmptyMessage = upcoming && photos.length === 0;
+  // !loading sinon les skeletons ne s affichent pas pour un event upcoming
+  // (renderListEmpty return null si showEmptyMessage=true).
+  const showEmptyMessage = upcoming && photos.length === 0 && !loading;
 
   // Empty state de la FlatList : skeletons pendant le chargement, ou message.
   const renderListEmpty = () => {
