@@ -7343,6 +7343,10 @@ function PhotoViewerModal({
   // - useEffect ci-dessous propage a la fois au slider et a la FlatList photo
   // L'animation native FlatList est doucement amortie (decelerationRate normal).
   const sliderRef = useRef(null);
+  // Index de la derniere miniature qui a declenche un haptic. Evite de
+  // re-tapper sur le meme idx quand onScroll fire plusieurs fois pour la
+  // meme position. Initialise au currentIndex courant.
+  const lastHapticIdxRef = useRef(currentIndex);
   useEffect(() => {
     if (!photos || currentIndex < 0 || currentIndex >= photos.length) return;
     try { sliderRef.current?.scrollToOffset({ offset: currentIndex * 50, animated: true }); }
@@ -7603,15 +7607,26 @@ function PhotoViewerModal({
                       offset: (info.averageItemLength || 50) * info.index, animated: true,
                     }), 50);
                   }}
+                  // Haptic tap iOS (UISelectionFeedbackGenerator) sur CHAQUE
+                  // miniature qui passe sous le cadre central pendant le scroll
+                  // -- pas seulement au snap final. Style galerie iPhone.
+                  // lastHapticIdxRef evite de re-tapper sur la meme miniature
+                  // si onScroll fire plusieurs fois pour le meme index.
+                  scrollEventThrottle={16}
+                  onScroll={(e) => {
+                    const offset = e.nativeEvent.contentOffset.x;
+                    const idx = Math.round(offset / 50);
+                    if (idx !== lastHapticIdxRef.current && idx >= 0 && idx < photos.length) {
+                      lastHapticIdxRef.current = idx;
+                      try { Haptics?.selectionAsync?.(); } catch {}
+                    }
+                  }}
                   onMomentumScrollEnd={(e) => {
+                    // Commit du currentIndex UNIQUEMENT au snap final (sinon la
+                    // grande photo en haut sauterait a chaque miniature passee).
                     const offset = e.nativeEvent.contentOffset.x;
                     const idx = Math.round(offset / 50);
                     if (idx !== currentIndex && idx >= 0 && idx < photos.length) {
-                      // Haptic tap court iOS style (UISelectionFeedbackGenerator).
-                      // OTA-safe : Haptics est require() en optional ; sur le
-                      // build actuel sans natif linke, l'appel echoue silencieusement.
-                      // Sera actif automatiquement au prochain rebuild EAS.
-                      try { Haptics?.selectionAsync?.(); } catch {}
                       setCurrentIndex(idx);
                     }
                   }}
