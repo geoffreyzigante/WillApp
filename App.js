@@ -1775,23 +1775,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       ) : (
         <>
           {/* Onglets de filtre (course / photographe / combine).
-              Pendant le fetch initial (loading=true), on affiche des chips
-              skeleton pour reserver la hauteur -> evite le sursaut du
-              header quand les vrais tabs apparaissent. */}
-          {loading ? (
-            <ScrollView
-              horizontal showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 4 }}
-              style={{ marginVertical: 8 }}
-            >
-              {[80, 64, 96].map((w, i) => (
-                <View key={`skchip-${i}`} style={{
-                  width: w, height: 32, borderRadius: 999,
-                  backgroundColor: C.primaryLight,
-                }} />
-              ))}
-            </ScrollView>
-          ) : tabs.length > 0 && photos.length > 0 && (
+              Pas de skeleton chips pendant loading : trop visibles, on
+              tolere le shift discret quand les vrais tabs apparaissent. */}
+          {tabs.length > 0 && photos.length > 0 && (
             <ScrollView
               horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 4 }}
