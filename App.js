@@ -1706,8 +1706,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </TouchableOpacity>
       ) : null}
 
-      {/* Courses : un seul bloc avec header de labels + lignes de valeurs */}
-      {distances.length > 0 && photos.length === 0 && (
+      {/* Courses : un seul bloc avec header de labels + lignes de valeurs.
+          !loading sinon le bloc distances flashe pendant le fetch initial. */}
+      {distances.length > 0 && photos.length === 0 && !loading && (
         <View style={{
           marginBottom: 8,
           backgroundColor: `${tint}1A`,
@@ -1755,8 +1756,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </View>
       )}
 
-      {/* Galerie ou message à venir */}
-      {upcoming && photos.length === 0 ? (
+      {/* Galerie ou message a venir. On AJOUTE !loading sinon le block "a
+          venir" flashe pendant le fetch initial (etat photos=[] + loading=true
+          puis photos remplit). */}
+      {upcoming && photos.length === 0 && !loading ? (
         <View style={{ paddingVertical: 30, alignItems: 'center', backgroundColor: `${tint}1A`, borderRadius: 16 }}>
           <Icon.PhotoCam size={40} color={tint} />
           <Text style={{ color: tint, fontSize: 14, fontWeight: '700', marginTop: 12, textAlign: 'center' }}>
@@ -9446,21 +9449,20 @@ export default function App() {
 
   const tabsTranslateX = useRef(new Animated.Value(0)).current;
 
-  // ─── Apparition douce a l ouverture de l app ──────────────────────────
-  // Fade opacity 0 -> 1 + translateY 12 -> 0 en parallele pour adoucir
-  // l apparition. translateY absorbe le saut bas->haut residuel (layout
-  // shift au moment ou la splash screen Expo se hide / SafeAreaView calcule
-  // ses insets). Duree 450ms, easing cubic-out worklet (style iOS).
+  // ─── Apparition douce a l ouverture de l app (snappy) ─────────────────
+  // Fade opacity 0 -> 1 + translateY 6 -> 0 en parallele. Duree 280ms
+  // (etait 450, jugee laggante). translateY court (6px) absorbe le layout
+  // shift residuel sans donner l impression de mouvement perceptible.
   const appOpacity = useSharedValue(0);
-  const appTranslateY = useSharedValue(12);
+  const appTranslateY = useSharedValue(6);
   const appAnimStyle = useAnimatedStyle(() => ({
     opacity: appOpacity.value,
     transform: [{ translateY: appTranslateY.value }],
   }));
   useEffect(() => {
     const ease = (t) => { 'worklet'; return 1 - Math.pow(1 - t, 3); };
-    appOpacity.value = withTiming(1, { duration: 450, easing: ease });
-    appTranslateY.value = withTiming(0, { duration: 450, easing: ease });
+    appOpacity.value = withTiming(1, { duration: 280, easing: ease });
+    appTranslateY.value = withTiming(0, { duration: 280, easing: ease });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
