@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  AppState, Share,
+  AppState, Share, Vibration,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -7059,14 +7059,39 @@ function PhotoViewerModal({
   const sliderRef = useRef(null);
   useEffect(() => {
     if (!photos || currentIndex < 0 || currentIndex >= photos.length) return;
-    try { sliderRef.current?.scrollToOffset({ offset: currentIndex * 62, animated: true }); }
+    try { sliderRef.current?.scrollToOffset({ offset: currentIndex * 50, animated: true }); }
     catch {}
     // Photo principale : scroll-to-index avec animation. Pas necessaire si
     // l'index vient d'un onMomentumScrollEnd de cette meme FlatList (deja a
     // jour), mais inoffensif (animated:true ne re-scroll pas si deja en place).
-    try { photoListRef.current?.scrollToOffset({ offset: currentIndex * cardW, animated: true }); }
+    // v2.5 point 3 : animation grande photo SUPPRIMEE quand le slider change.
+    // Snap instantane (animated:false) -> l'image en haut apparait directement,
+    // pas de glissement parasite. Le swipe horizontal sur la grande photo
+    // reste anime nativement par FlatList pagingEnabled (geste direct user).
+    try { photoListRef.current?.scrollToOffset({ offset: currentIndex * cardW, animated: false }); }
     catch {}
   }, [currentIndex, photos]);
+
+  // v2.5 point 1 : re-prefetch des photos au retour foreground pour eviter
+  // le grisage. iOS purge le cache memoire d ExpoImage en background ;
+  // au retour, declencher prefetch sur (current, next, prev) anticipe la
+  // decompression et evite le placeholder gris.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || !photos || !visible) return;
+      const urls = [];
+      const cur = photos[currentIndex];
+      const next = photos[currentIndex + 1];
+      const prev = photos[currentIndex - 1];
+      if (cur?.uri) urls.push(cur.uri);
+      if (next?.uri) urls.push(next.uri);
+      if (prev?.uri) urls.push(prev.uri);
+      if (urls.length && ExpoImage.prefetch) {
+        ExpoImage.prefetch(urls).catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, [currentIndex, photos, visible]);
 
   // Progressive loading : precharge la photo suivante et precedente pour que
   // les swipes Tinder enchainent sans latence. ExpoImage cache memory-disk
@@ -7195,6 +7220,7 @@ function PhotoViewerModal({
                             style={{ flex: 1 }}
                             contentFit="cover"
                             cachePolicy="memory-disk"
+                            priority="high"
                             transition={0}
                             recyclingKey={item.id}
                           />
@@ -7283,36 +7309,51 @@ function PhotoViewerModal({
                   showsHorizontalScrollIndicator={false}
                   initialNumToRender={12}
                   windowSize={5}
-                  snapToInterval={62}
+                  snapToInterval={50}
                   decelerationRate="fast"
-                  getItemLayout={(_, index) => ({ length: 62, offset: 62 * index, index })}
+                  getItemLayout={(_, index) => ({ length: 50, offset: 50 * index, index })}
                   onScrollToIndexFailed={(info) => {
                     setTimeout(() => sliderRef.current?.scrollToOffset({
-                      offset: (info.averageItemLength || 62) * info.index, animated: true,
+                      offset: (info.averageItemLength || 50) * info.index, animated: true,
                     }), 50);
                   }}
                   onMomentumScrollEnd={(e) => {
                     const offset = e.nativeEvent.contentOffset.x;
-                    const idx = Math.round(offset / 62);
+                    const idx = Math.round(offset / 50);
                     if (idx !== currentIndex && idx >= 0 && idx < photos.length) {
+                      // v2.5 point 4 : petit buzz haptique au snap sur une
+                      // nouvelle miniature, style galerie iPhone. Vibration RN
+                      // = workaround OTA-safe (vraie haptic = expo-haptics
+                      // + rebuild EAS).
+                      try { Vibration.vibrate(10); } catch {}
                       setCurrentIndex(idx);
                     }
                   }}
-                  // paddingHorizontal = (winWidth - 56) / 2 : ainsi l'item 0
-                  // (offset 0) tombe sous le cadre central fixe quand le slider
-                  // est tout a gauche. Idem dernier item tout a droite.
-                  contentContainerStyle={{ alignItems: 'center', paddingHorizontal: (winWidth - 56) / 2 }}
+                  // v2.5 point 4 : padding extra a la FIN pour permettre de
+                  // slider un peu plus que la derniere miniature (effet
+                  // over-scroll iPhone Photos). Le padding gauche reste pile
+                  // pour que l item 0 tombe sous le cadre central.
+                  contentContainerStyle={{
+                    alignItems: 'center',
+                    paddingLeft: (winWidth - 44) / 2,
+                    paddingRight: (winWidth - 44) / 2 + 60,   // +60 = over-scroll droit
+                  }}
                   renderItem={({ item, index }) => (
                     <TouchableOpacity
                       onPress={() => setCurrentIndex(index)}
                       activeOpacity={0.85}
                       style={{
-                        width: 56, height: 56, marginRight: 6,
-                        borderRadius: 8, overflow: 'hidden',
+                        // v2.5 point 4 : thumb 44x44 (etait 56x56) -> plus de
+                        // miniatures visibles a la fois, slider plus aere.
+                        width: 44, height: 44, marginRight: 6,
+                        borderRadius: 6, overflow: 'hidden',
                       }}
                     >
+                      {/* v2.5 point 2 : hint de taille au decodeur (downsample
+                          si supporte). Reduit la conso memoire + le temps de
+                          decompression au retour foreground. */}
                       <ExpoImage
-                        source={{ uri: item.uri }}
+                        source={{ uri: item.uri, width: 88, height: 88 }}
                         style={{ flex: 1 }}
                         contentFit="cover"
                         cachePolicy="memory-disk"
@@ -7328,10 +7369,10 @@ function PhotoViewerModal({
                   pointerEvents="none"
                   style={{
                     position: 'absolute',
-                    left: (winWidth - 56) / 2 - 2, // -2 pour centrer le cadre sur la thumb
-                    top: (SLIDER_H - 56) / 2 - 2,
-                    width: 60, height: 60,
-                    borderRadius: 10,
+                    left: (winWidth - 44) / 2 - 2, // -2 pour centrer le cadre sur la thumb 44
+                    top: (SLIDER_H - 44) / 2 - 2,
+                    width: 48, height: 48,
+                    borderRadius: 8,
                     borderWidth: 2,
                     borderColor: '#F4A6FF',
                   }}
