@@ -39,8 +39,8 @@ import ReAnimated, {
   useAnimatedStyle,
   withTiming,
   runOnJS,
-  SlideInDown,
-  SlideOutDown,
+  SlideInRight,
+  SlideOutRight,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -9602,21 +9602,26 @@ export default function App() {
 
       {openedEvent && (
         <ReAnimated.View
-          entering={SlideInDown.duration(280)}
-          exiting={SlideOutDown.duration(260)}
+          entering={SlideInRight.duration(280)}
+          exiting={SlideOutRight.duration(260)}
           style={[StyleSheet.absoluteFill, { backgroundColor: C.bg }]}
         >
-          <EventDetailScreen
-            event={openedEvent}
-            onClose={() => setOpenedEvent(null)}
-            onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
-            selfieUri={selfieUri}
-            onDeleteSelfie={deleteSelfie}
-            onOpenProfile={() => setProfileMenu(true)}
-            onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
-            isFavorite={favorites.includes(openedEvent.code)}
-            onToggleFavorite={() => requireAuth(() => toggleFavorite(openedEvent.code))}
-          />
+          {/* SafeAreaView pour respecter le notch/status bar (sinon le header
+              du detail passe derriere l'heure/reseau/batterie). flex:1
+              uniquement, le backgroundColor reste sur le wrapper anime. */}
+          <SafeAreaView style={{ flex: 1 }}>
+            <EventDetailScreen
+              event={openedEvent}
+              onClose={() => setOpenedEvent(null)}
+              onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
+              selfieUri={selfieUri}
+              onDeleteSelfie={deleteSelfie}
+              onOpenProfile={() => setProfileMenu(true)}
+              onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
+              isFavorite={favorites.includes(openedEvent.code)}
+              onToggleFavorite={() => requireAuth(() => toggleFavorite(openedEvent.code))}
+            />
+          </SafeAreaView>
         </ReAnimated.View>
       )}
 
