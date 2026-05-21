@@ -1124,7 +1124,7 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
       ) : (
         <PhotoGrid
           photos={photos.slice(0, visibleCount)}
-          onPress={(p) => onOpenPhoto?.(p, photos)}
+          onPress={(p, _i, _photos, origin) => onOpenPhoto?.(p, photos, { origin })}
           photoFavoritesSet={photoFavoritesSet}
           onToggleFavorite={onTogglePhotoFavorite}
         />
@@ -1137,14 +1137,27 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
 // pour pouvoir s'adapter au numColumns du parent.
 const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav }) {
   const [errored, setErrored] = React.useState(false);
+  const cellRef = React.useRef(null);
   // size optionnel : si fourni, on fixe la taille (skeletons / autres usages) ;
   // sinon flex: 1 + aspectRatio: 1 pour remplir la rangee FlatList et garder le carre.
   const sizeStyle = size ? { width: size, height: size } : { flex: 1, aspectRatio: 1 };
+  // Wrapping ref + measureInWindow pour shared-element : le caller recoit
+  // { x, y, w, h } de la thumb tapee et anime la photo viewer depuis cette
+  // position vers le plein ecran.
+  const handlePress = () => {
+    if (!onPress) return;
+    if (cellRef.current?.measureInWindow) {
+      cellRef.current.measureInWindow((x, y, w, h) => onPress({ x, y, w, h }));
+    } else {
+      onPress(null);
+    }
+  };
   return (
     <TouchableOpacity
+      ref={cellRef}
       style={sizeStyle}
       activeOpacity={0.85}
-      onPress={onPress}
+      onPress={handlePress}
     >
       {/* Bg gris affiche pendant le chargement et en cas d'erreur (fallback) */}
       <View style={{ flex: 1, borderRadius: 12, backgroundColor: C.primaryLight, overflow: 'hidden' }}>
@@ -1228,41 +1241,66 @@ function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite }
 
   return (
     <View style={s.grid}>
-      {photos.map((p, i) => {
-        const fav = showHearts && photoFavoritesSet.has(p.id);
-        return (
-          <TouchableOpacity
-            key={p.id || `p-${i}`}
-            style={s.gridItem}
-            activeOpacity={0.85}
-            onPress={() => onPress?.(p, i, photos)}
-          >
-            <ExpoImage
-              source={{ uri: p.uri }}
-              style={s.gridImg}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              priority="low"
-              transition={100}
-              recyclingKey={p.id}
-            />
-            {showHearts && (
-              <TouchableOpacity
-                onPress={(e) => { e.stopPropagation?.(); onToggleFavorite(p.id); }}
-                hitSlop={12}
-                style={{ position: 'absolute', top: 6, right: 6 }}
-              >
-                <Svg width={20} height={18} viewBox="-1 -1.5 22.78 20.61"
-                  fill={fav ? '#fff' : 'none'}
-                  stroke="#fff" strokeWidth={1.6}>
-                  <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-                </Svg>
-              </TouchableOpacity>
-            )}
-          </TouchableOpacity>
-        );
-      })}
+      {photos.map((p, i) => (
+        <PhotoGridItem
+          key={p.id || `p-${i}`}
+          p={p}
+          i={i}
+          photos={photos}
+          onPress={onPress}
+          showHearts={showHearts}
+          fav={showHearts && photoFavoritesSet.has(p.id)}
+          onToggleFavorite={onToggleFavorite}
+        />
+      ))}
     </View>
+  );
+}
+
+// Sous-composant : chaque thumb a sa propre ref pour permettre
+// measureInWindow (shared-element transition viewer). Le caller recoit
+// onPress(photo, index, photosList, origin) ou origin = {x,y,w,h} de la
+// thumb tapee, ou null si la mesure echoue.
+function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorite }) {
+  const itemRef = React.useRef(null);
+  const handlePress = () => {
+    if (!onPress) return;
+    if (itemRef.current?.measureInWindow) {
+      itemRef.current.measureInWindow((x, y, w, h) => onPress(p, i, photos, { x, y, w, h }));
+    } else {
+      onPress(p, i, photos, null);
+    }
+  };
+  return (
+    <TouchableOpacity
+      ref={itemRef}
+      style={s.gridItem}
+      activeOpacity={0.85}
+      onPress={handlePress}
+    >
+      <ExpoImage
+        source={{ uri: p.uri }}
+        style={s.gridImg}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority="low"
+        transition={100}
+        recyclingKey={p.id}
+      />
+      {showHearts && (
+        <TouchableOpacity
+          onPress={(e) => { e.stopPropagation?.(); onToggleFavorite(p.id); }}
+          hitSlop={12}
+          style={{ position: 'absolute', top: 6, right: 6 }}
+        >
+          <Svg width={20} height={18} viewBox="-1 -1.5 22.78 20.61"
+            fill={fav ? '#fff' : 'none'}
+            stroke="#fff" strokeWidth={1.6}>
+            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+          </Svg>
+        </TouchableOpacity>
+      )}
+    </TouchableOpacity>
   );
 }
 
@@ -1676,7 +1714,8 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const renderItem = ({ item }) => (
     <PhotoCell
       photo={item}
-      onPress={() => onOpenPhoto?.(item, filteredPhotos, {
+      onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
+        origin,
         eventTitle: event?.name,
         eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
       })}
@@ -6830,14 +6869,17 @@ function PhotoViewerModal({
     }
   };
 
+  // Refonte v2.2 : swipe type carte Tinder. Chaque photo = carte independante.
+  // Drag horizontal -> translation + rotation legere (4-6deg max). Swipe
+  // valide -> sortie franche + changement de currentIndex. Drag vertical bas
+  // -> animateOutAndClose. Pinch zoom desactive le swipe horizontal.
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {
       if (scale.value > 1) {
-        // Zoom actif : pan déplace l'image (sur les axes X et Y)
+        // Zoom actif : pan deplace l'image (X + Y), pas de rotation carte
         zoomTranslateX.value = savedZoomTranslateX.value + e.translationX;
         translateY.value = savedTranslateY.value + e.translationY;
       } else {
-        // Mode normal : swipe horizontal du rail OU swipe vertical pour fermer
         if (Math.abs(e.translationY) > Math.abs(e.translationX)) {
           translateY.value = e.translationY;
           translateX.value = 0;
@@ -6855,17 +6897,16 @@ function PhotoViewerModal({
       }
       const dx = e.translationX;
       const dy = e.translationY;
-      // Swipe vertical (fermeture) : amplitude > 100px
-      // Refonte v2 : utilise animateOutAndClose pour anim shared-element inverse.
+      // Swipe vertical bas -> fermeture (animation inverse vers origin)
       if (Math.abs(dy) > 100 && Math.abs(dy) > Math.abs(dx)) {
         runOnJS(animateOutAndClose)();
         return;
       }
-      // Swipe horizontal : changer photo (animation continue jusqu'à ±winWidth)
-      if (Math.abs(dx) > 80) {
+      // Swipe horizontal : sortie franche carte si seuil ou velocity OK
+      const passed = Math.abs(dx) > 100 || Math.abs(e.velocityX) > 700;
+      if (passed) {
         const direction = dx < 0 ? -1 : 1;
-        const targetX = direction * winWidth;
-        translateX.value = withTiming(targetX, { duration: 220 }, (finished) => {
+        translateX.value = withTiming(direction * winWidth * 1.4, { duration: 240 }, (finished) => {
           if (finished) {
             if (direction < 0) {
               runOnJS(goToNext)();
@@ -6876,9 +6917,9 @@ function PhotoViewerModal({
         });
         return;
       }
-      // Swipe pas assez ample : retour à 0
-      translateX.value = withTiming(0, { duration: 200 });
-      translateY.value = withTiming(0, { duration: 200 });
+      // Swipe insuffisant : retour spring-like vers 0
+      translateX.value = withTiming(0, { duration: 220 });
+      translateY.value = withTiming(0, { duration: 220 });
     });
 
   const pinchGesture = Gesture.Pinch()
@@ -6921,13 +6962,20 @@ function PhotoViewerModal({
   // la photo, toujours visibles via uiOpacity (anim du fade in/out global).
   const composed = Gesture.Simultaneous(pinchGesture, panGesture, doubleTapGesture);
 
-  // Style du rail entier (3 photos): bouge en X selon swipe, en Y selon close
-  const railStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-    ],
-  }));
+  // Style du conteneur de carte courante : translation + rotation legere
+  // (swipe Tinder soft, 6deg max au bord d'ecran). Y pour le close swipe.
+  const cardStyle = useAnimatedStyle(() => {
+    // rotation derivee du translateX : +/- 6deg max
+    const maxRot = 6;
+    const rot = Math.max(-maxRot, Math.min(maxRot, (translateX.value / winWidth) * 18));
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { rotate: `${rot}deg` },
+      ],
+    };
+  });
 
   // Style de la photo current (pour zoom + pan en mode zoom)
   const currentImgStyle = useAnimatedStyle(() => ({
@@ -7022,11 +7070,29 @@ function PhotoViewerModal({
   const fav = currentPhoto?.id && photoFavoritesSet?.has(currentPhoto.id);
 
   // Refs FlatList slider miniatures : scroll-to-index sync avec la photo principale.
+  // viewPosition: 0 pour index 0/1 -> la 1re miniature reste collee au padding
+  // gauche (sinon scrollToIndex(0, 0.5) tente de la centrer et la coupe).
   const sliderRef = useRef(null);
   useEffect(() => {
     if (!sliderRef.current || !photos || currentIndex < 0 || currentIndex >= photos.length) return;
-    try { sliderRef.current.scrollToIndex({ index: currentIndex, viewPosition: 0.5, animated: true }); }
+    const viewPosition = currentIndex <= 1 ? 0 : 0.5;
+    try { sliderRef.current.scrollToIndex({ index: currentIndex, viewPosition, animated: true }); }
     catch {}
+  }, [currentIndex, photos]);
+
+  // Progressive loading : precharge la photo suivante et precedente pour que
+  // les swipes Tinder enchainent sans latence. ExpoImage cache memory-disk
+  // -> les prefetches restent en cache pour le swap instantane.
+  useEffect(() => {
+    if (!photos) return;
+    const urls = [];
+    const next = photos[currentIndex + 1];
+    const prev = photos[currentIndex - 1];
+    if (next?.uri) urls.push(next.uri);
+    if (prev?.uri) urls.push(prev.uri);
+    if (urls.length && ExpoImage.prefetch) {
+      ExpoImage.prefetch(urls).catch(() => {});
+    }
   }, [currentIndex, photos]);
 
   // Styles animes du conteneur photo (position + size + radius)
@@ -7041,21 +7107,25 @@ function PhotoViewerModal({
   const bgStyle = useAnimatedStyle(() => ({ opacity: bgOpacity.value }));
   const uiStyle = useAnimatedStyle(() => ({ opacity: uiOpacity.value }));
 
-  // Drop-shadow pour les icones coeur + X qui flottent sur la photo (lisibilite
-  // sur fond clair). iOS uniquement (RN ne supporte pas elevation cross-fond
-  // sur Android sans truc fragile).
+  // Drop-shadow halo BLANC pour icones sombres : lisibles sur photo claire
+  // (icone sombre se detache) ET sur photo sombre (halo blanc se detache).
+  // iOS uniquement (RN ne supporte pas elevation cross-fond sur Android).
   const iconShadowStyle = Platform.OS === 'ios'
-    ? { shadowColor: '#000', shadowOpacity: 0.65, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } }
+    ? { shadowColor: '#fff', shadowOpacity: 0.95, shadowRadius: 3, shadowOffset: { width: 0, height: 0 } }
     : null;
+  const iconColor = '#1a1a1a';
+
+  // Couleur du fond viewer : v2.2 -> blanc (l app est globalement blanche).
+  const viewerBg = '#fff';
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={animateOutAndClose}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={{ flex: 1 }}>
-          {/* Fond noir anime (fade in au mount, fade out a la fermeture) */}
+          {/* Fond blanc anime (fade in au mount, fade out a la fermeture) */}
           <ReAnimated.View
             pointerEvents="none"
-            style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }, bgStyle]}
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: viewerBg }, bgStyle]}
           />
 
           {/* Header : titre event + date (fade in apres l'anim shared-element) */}
@@ -7067,7 +7137,7 @@ function PhotoViewerModal({
             }, uiStyle]}
           >
             {eventTitle ? (
-              <Text numberOfLines={1} style={{ color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: -0.2 }}>
+              <Text numberOfLines={1} style={{ color: '#1a1a1a', fontSize: 18, fontWeight: '700', letterSpacing: -0.2 }}>
                 {eventTitle}
               </Text>
             ) : null}
@@ -7076,34 +7146,30 @@ function PhotoViewerModal({
             ) : null}
           </ReAnimated.View>
 
-          {/* Photo principale : container anime (origin -> target), avec rail
-              prev/current/next et gestures (swipe, pinch, double-tap). */}
+          {/* Photo principale = carte unique style Tinder, anime depuis origin
+              vers la cible. cardStyle applique translation + rotation au swipe. */}
           <ReAnimated.View
-            style={[{ overflow: 'hidden', backgroundColor: '#0a0a0a' }, photoBoxStyle]}
+            style={[{ overflow: 'hidden', backgroundColor: '#f5f5f5' }, photoBoxStyle, cardStyle]}
           >
             <GestureDetector gesture={composed}>
-              <ReAnimated.View style={[{ flex: 1, flexDirection: 'row' }, railStyle]}>
-                <View style={{ position: 'absolute', top: 0, bottom: 0, left: -targetW, width: targetW }}>
-                  {prevPhoto?.uri ? (
-                    <ExpoImage source={{ uri: prevPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                  ) : null}
-                </View>
-                <ReAnimated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, width: targetW }, currentImgStyle]}>
-                  {currentPhoto?.uri ? (
-                    <ExpoImage source={{ uri: currentPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                  ) : null}
-                </ReAnimated.View>
-                <View style={{ position: 'absolute', top: 0, bottom: 0, left: targetW, width: targetW }}>
-                  {nextPhoto?.uri ? (
-                    <ExpoImage source={{ uri: nextPhoto.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                  ) : null}
-                </View>
+              <ReAnimated.View style={[{ flex: 1 }, currentImgStyle]}>
+                {currentPhoto?.uri ? (
+                  <ExpoImage
+                    source={{ uri: currentPhoto.uri }}
+                    placeholder={{ uri: currentPhoto.uri }}
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={0}
+                    recyclingKey={currentPhoto.id}
+                  />
+                ) : null}
               </ReAnimated.View>
             </GestureDetector>
 
-            {/* Icones coeur + X en bas-droite de la photo (sans pastille,
-                drop-shadow pour lisibilite sur fond clair OU sombre).
-                Espacement 18px entre les deux pour eviter le mistap. */}
+            {/* Icones coeur + X en bas-droite de la photo. Couleur #1a1a1a +
+                halo blanc pour lisibilite cross-fond. Taille uniforme 26x26
+                dans wrappers 36x36, gap 18px anti-mistap. */}
             <ReAnimated.View
               pointerEvents="box-none"
               style={[{
@@ -7124,8 +7190,8 @@ function PhotoViewerModal({
                     style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
                     accessibilityLabel={fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                   >
-                    <Svg width={26} height={23} viewBox="-1 -1.5 22.78 20.61"
-                      fill={fav ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}
+                    <Svg width={26} height={26} viewBox="-1 -1.5 22.78 20.61"
+                      fill={fav ? iconColor : 'none'} stroke={iconColor} strokeWidth={1.8}
                       style={iconShadowStyle}
                     >
                       <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
@@ -7140,7 +7206,7 @@ function PhotoViewerModal({
                 accessibilityLabel="Fermer"
               >
                 <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" style={iconShadowStyle}>
-                  <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+                  <Path d="m8 8 8 8M16 8l-8 8" stroke={iconColor} strokeWidth={2.4} strokeLinecap="round" />
                 </Svg>
               </TouchableOpacity>
             </ReAnimated.View>
