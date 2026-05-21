@@ -43,6 +43,7 @@ import ReAnimated, {
   SlideInRight,
   SlideOutLeft,
   SlideOutRight,
+  LayoutAnimationConfig,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -9035,6 +9036,12 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
 
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
+  // Flag pour skipper les Reanimated layout animations au mount initial de l app.
+  // Sans ce flag, HomeScreen jouerait son entering=SlideInRight au premier render
+  // -> apparition parasite a chaque demarrage. didMount passe a true apres la
+  // premiere frame, debloquant les animations pour tous les remounts suivants.
+  const [didMount, setDidMount] = useState(false);
+  useEffect(() => { setDidMount(true); }, []);
   const [tab, setTab] = useState('upcoming');
   const [bottomTab, setBottomTab] = useState('home');
   const [events, setEvents] = useState([]);
@@ -9529,10 +9536,11 @@ export default function App() {
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
 
+      <LayoutAnimationConfig skipEntering={!didMount}>
       {!openedEvent && !organizerEventPhotosTarget && (
         <ReAnimated.View
-          entering={SlideInRight.duration(320)}
-          exiting={SlideOutRight.duration(320)}
+          entering={SlideInRight.duration(380)}
+          exiting={SlideOutRight.duration(380)}
           style={StyleSheet.absoluteFill}
         >
         <GestureDetector gesture={swipeNav}>
@@ -9610,8 +9618,8 @@ export default function App() {
 
       {openedEvent && (
         <ReAnimated.View
-          entering={SlideInLeft.duration(320)}
-          exiting={SlideOutLeft.duration(320)}
+          entering={SlideInLeft.duration(380)}
+          exiting={SlideOutLeft.duration(380)}
           style={[StyleSheet.absoluteFill, { backgroundColor: C.bg }]}
         >
           {/* SafeAreaView pour respecter le notch/status bar (sinon le header
@@ -9632,6 +9640,7 @@ export default function App() {
           </SafeAreaView>
         </ReAnimated.View>
       )}
+      </LayoutAnimationConfig>
 
       {organizerEventPhotosTarget && bottomTab === 'events' && organizerSession && (
         <OrganizerEventPhotosScreen
