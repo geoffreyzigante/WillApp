@@ -9446,17 +9446,21 @@ export default function App() {
 
   const tabsTranslateX = useRef(new Animated.Value(0)).current;
 
-  // ─── Fade-in doux a l ouverture de l app ─────────────────────────────
-  // L accueil etait deja affiche direct (navTranslateX init -SCREEN_W).
-  // On ajoute juste un fade opacity 0 -> 1 sur 500ms pour adoucir
-  // l apparition, eviter l effet "saut" au demarrage.
+  // ─── Apparition douce a l ouverture de l app ──────────────────────────
+  // Fade opacity 0 -> 1 + translateY 12 -> 0 en parallele pour adoucir
+  // l apparition. translateY absorbe le saut bas->haut residuel (layout
+  // shift au moment ou la splash screen Expo se hide / SafeAreaView calcule
+  // ses insets). Duree 450ms, easing cubic-out worklet (style iOS).
   const appOpacity = useSharedValue(0);
-  const appOpacityStyle = useAnimatedStyle(() => ({ opacity: appOpacity.value }));
+  const appTranslateY = useSharedValue(12);
+  const appAnimStyle = useAnimatedStyle(() => ({
+    opacity: appOpacity.value,
+    transform: [{ translateY: appTranslateY.value }],
+  }));
   useEffect(() => {
-    appOpacity.value = withTiming(1, {
-      duration: 500,
-      easing: (t) => { 'worklet'; return 1 - Math.pow(1 - t, 3); },
-    });
+    const ease = (t) => { 'worklet'; return 1 - Math.pow(1 - t, 3); };
+    appOpacity.value = withTiming(1, { duration: 450, easing: ease });
+    appTranslateY.value = withTiming(0, { duration: 450, easing: ease });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -9476,11 +9480,27 @@ export default function App() {
     'worklet';
     return 1 - Math.pow(1 - t, 3);
   };
+  // L event reste rendu dans le panneau gauche PENDANT l anim de close
+  // (sinon React le demonte instantanement au setOpenedEvent(null) et on
+  // voit l accueil glisser tout seul avec un panneau gauche vide). Cleared
+  // au callback de fin d animation.
+  const [eventInPanel, setEventInPanel] = useState(null);
+
   // Anime translateX quand openedEvent change. Pas d anim au mount (init OK).
   useEffect(() => {
+    if (openedEvent) {
+      // Ouverture : monte EventDetailScreen immediatement puis anime.
+      setEventInPanel(openedEvent);
+    }
     navTranslateX.value = withTiming(
       openedEvent ? 0 : -SCREEN_W,
-      { duration: 380, easing: navEasing }
+      { duration: 380, easing: navEasing },
+      (finished) => {
+        // Fin de l anim close -> on peut maintenant demonter EventDetailScreen.
+        if (finished && !openedEvent) {
+          runOnJS(setEventInPanel)(null);
+        }
+      }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openedEvent]);
@@ -9596,29 +9616,32 @@ export default function App() {
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
 
-      <ReAnimated.View style={[{ flex: 1 }, appOpacityStyle]}>
+      <ReAnimated.View style={[{ flex: 1 }, appAnimStyle]}>
 
       {!organizerEventPhotosTarget && (
       <ReAnimated.View style={[
         { flex: 1, flexDirection: 'row', width: SCREEN_W * 2 },
         navStyle,
       ]}>
-        {/* PANNEAU GAUCHE : EVENT (visible si openedEvent truthy, vide sinon) */}
+        {/* PANNEAU GAUCHE : EVENT. eventInPanel reste set PENDANT l anim
+            close (cf useEffect [openedEvent] qui clear au callback de fin
+            d anim), permettant a EventDetailScreen de glisser vers la
+            gauche au lieu de disparaitre instantanement. */}
         <View style={{ width: SCREEN_W, height: '100%', backgroundColor: C.bg }}>
           <SafeAreaView style={{ flex: 1 }}>
-            {openedEvent && (
+            {eventInPanel && (
               <GestureDetector gesture={navPan}>
                 <View style={{ flex: 1 }}>
                   <EventDetailScreen
-                    event={openedEvent}
+                    event={eventInPanel}
                     onClose={() => setOpenedEvent(null)}
                     onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
                     onOpenProfile={() => setProfileMenu(true)}
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
-                    isFavorite={favorites.includes(openedEvent.code)}
-                    onToggleFavorite={() => requireAuth(() => toggleFavorite(openedEvent.code))}
+                    isFavorite={favorites.includes(eventInPanel.code)}
+                    onToggleFavorite={() => requireAuth(() => toggleFavorite(eventInPanel.code))}
                   />
                 </View>
               </GestureDetector>
