@@ -26,7 +26,6 @@ import ReAnimated, {
   useAnimatedStyle,
   withTiming,
   runOnJS,
-  Easing,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -6739,10 +6738,14 @@ function PhotoViewerModal({
   const bgOpacity = useSharedValue(0);    // fond viewer global
   const uiOpacity = useSharedValue(0);    // titre / date / slider / bouton / icones
 
-  // Easing material standard pour transitions hero -> out-cubic (ease out
-  // doux, pas d'overshoot). 320ms = sweet spot iOS Photos.
+  // Easing worklet inline pour transitions hero -> cubic ease-out
+  // (ease out doux, pas d'overshoot). 320ms = sweet spot iOS Photos.
+  // Worklet pour pouvoir etre invoque depuis le UI thread Reanimated.
   const HERO_DURATION = 320;
-  const HERO_EASING = Easing.bezier(0.25, 0.1, 0.25, 1);
+  const HERO_EASING = (t) => {
+    'worklet';
+    return 1 - Math.pow(1 - t, 3);
+  };
 
   // Swipe horizontal du rail (3 cartes) + vertical (close)
   const translateX = useSharedValue(0);
@@ -6893,20 +6896,22 @@ function PhotoViewerModal({
   // Drag horizontal -> translation + rotation legere (4-6deg max). Swipe
   // valide -> sortie franche + changement de currentIndex. Drag vertical bas
   // -> animateOutAndClose. Pinch zoom desactive le swipe horizontal.
+  // v2.4 : panGesture VERTICAL UNIQUEMENT (swipe bas = close). Le swipe
+  // horizontal est delegue au FlatList natif (pagingEnabled) pour eviter
+  // le flash de l'ancienne carte au commit du swipe (bug v2.3 : race
+  // entre translateX.value=0 sync et setCurrentIndex async React).
+  // - activeOffsetY([-15,15]) : pan devient actif si drag vertical > 15px
+  // - failOffsetX([-30,30]) : pan fail si drag horizontal > 30px (FlatList prend)
+  // Pinch zoom + double-tap zoom restent intacts.
   const panGesture = Gesture.Pan()
+    .activeOffsetY([-15, 15])
+    .failOffsetX([-30, 30])
     .onUpdate((e) => {
       if (scale.value > 1) {
-        // Zoom actif : pan deplace l'image (X + Y), pas de rotation carte
         zoomTranslateX.value = savedZoomTranslateX.value + e.translationX;
         translateY.value = savedTranslateY.value + e.translationY;
       } else {
-        if (Math.abs(e.translationY) > Math.abs(e.translationX)) {
-          translateY.value = e.translationY;
-          translateX.value = 0;
-        } else {
-          translateX.value = e.translationX;
-          translateY.value = 0;
-        }
+        translateY.value = e.translationY;
       }
     })
     .onEnd((e) => {
@@ -6915,30 +6920,11 @@ function PhotoViewerModal({
         savedTranslateY.value = translateY.value;
         return;
       }
-      const dx = e.translationX;
-      const dy = e.translationY;
-      // Swipe vertical bas -> fermeture (animation inverse vers origin)
-      if (Math.abs(dy) > 100 && Math.abs(dy) > Math.abs(dx)) {
+      // Swipe vertical bas -> fermeture
+      if (translateY.value > 100 || e.velocityY > 800) {
         runOnJS(animateOutAndClose)();
         return;
       }
-      // Swipe horizontal : sortie franche carte si seuil ou velocity OK
-      const passed = Math.abs(dx) > 100 || Math.abs(e.velocityX) > 700;
-      if (passed) {
-        const direction = dx < 0 ? -1 : 1;
-        translateX.value = withTiming(direction * winWidth * 1.4, { duration: 240 }, (finished) => {
-          if (finished) {
-            if (direction < 0) {
-              runOnJS(goToNext)();
-            } else {
-              runOnJS(goToPrev)();
-            }
-          }
-        });
-        return;
-      }
-      // Swipe insuffisant : retour spring-like vers 0
-      translateX.value = withTiming(0, { duration: 220 });
       translateY.value = withTiming(0, { duration: 220 });
     });
 
@@ -7066,14 +7052,19 @@ function PhotoViewerModal({
   const currentHidden = effectiveHidden(currentPhoto);
   const fav = currentPhoto?.id && photoFavoritesSet?.has(currentPhoto.id);
 
-  // Slider pellicule a cadre fixe : on scrolle au multiple de 62
-  // (= largeur thumb + gap). Avec contentContainerStyle paddingHorizontal
-  // = (winWidth - 56) / 2, l'offset `index * 62` place la miniature
-  // active sous le cadre central fixe.
+  // Sync bidirectionnel slider <-> photo principale via currentIndex :
+  // - tap miniature OU scroll slider -> setCurrentIndex
+  // - useEffect ci-dessous propage a la fois au slider et a la FlatList photo
+  // L'animation native FlatList est doucement amortie (decelerationRate normal).
   const sliderRef = useRef(null);
   useEffect(() => {
-    if (!sliderRef.current || !photos || currentIndex < 0 || currentIndex >= photos.length) return;
-    try { sliderRef.current.scrollToOffset({ offset: currentIndex * 62, animated: true }); }
+    if (!photos || currentIndex < 0 || currentIndex >= photos.length) return;
+    try { sliderRef.current?.scrollToOffset({ offset: currentIndex * 62, animated: true }); }
+    catch {}
+    // Photo principale : scroll-to-index avec animation. Pas necessaire si
+    // l'index vient d'un onMomentumScrollEnd de cette meme FlatList (deja a
+    // jour), mais inoffensif (animated:true ne re-scroll pas si deja en place).
+    try { photoListRef.current?.scrollToOffset({ offset: currentIndex * cardW, animated: true }); }
     catch {}
   }, [currentIndex, photos]);
 
@@ -7117,28 +7108,15 @@ function PhotoViewerModal({
   // Couleur du fond viewer : blanc (l'app est globalement blanche)
   const viewerBg = '#fff';
 
-  // Card target : winWidth wide pour permettre le peek carrousel des voisines
-  const PEEK = 24;                                  // px de chaque voisine visibles aux bords
-  const railSpacing = cardW - PEEK;                 // distance horizontale entre 2 cards adjacentes
-  // Style du rail (3 cards prev/current/next) : drag horizontal + close vertical
-  const railStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-    ],
+  // v2.4 : FlatList horizontal pagingEnabled gere le swipe horizontal nativement
+  // (plus de rail manuel 3 cartes -> elimine le bug flash v2.3). Le vertStyle
+  // n applique que translateY pour le close-swipe vertical.
+  const vertStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
   }));
-  // Style appliqué uniquement à la card current : zoom + rotation Tinder soft
-  const currentImgStyle = useAnimatedStyle(() => {
-    const maxRot = 5;
-    const rot = Math.max(-maxRot, Math.min(maxRot, (translateX.value / winWidth) * 14));
-    return {
-      transform: [
-        { translateX: zoomTranslateX.value },
-        { rotate: `${rot}deg` },
-        { scale: scale.value },
-      ],
-    };
-  });
+  // Ref FlatList photo principale : permet le sync depuis le slider
+  // (tap miniature -> scrollToIndex).
+  const photoListRef = useRef(null);
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={animateOutAndClose}>
@@ -7172,122 +7150,94 @@ function PhotoViewerModal({
               en TRANSFORM (translate + scale) depuis origin. A l'interieur,
               un rail de 3 cartes (prev/current/next) avec peek visible des
               voisines aux bords. */}
+          {/* v2.4 : photo principale en FlatList horizontal pagingEnabled.
+              Le scroll natif elimine le flash bug v2.3 (race race translateX
+              reset / setCurrentIndex). Le wrapper entryStyle anime depuis
+              origin (shared-element) en transform-only. */}
           <ReAnimated.View
             pointerEvents="box-none"
             style={[{
               position: 'absolute',
               left: 0, top: targetY,
               width: cardW, height: cardH,
-              overflow: 'visible',         // permet le peek des voisines hors zone
             }, entryStyle]}
           >
-            {/* Rail des 3 cartes (drag horizontal en bloc) */}
             <GestureDetector gesture={composed}>
-              <ReAnimated.View style={[{ flex: 1 }, railStyle]}>
-                {/* Carte previous : on la voit dépasser de PEEK à gauche */}
-                {prevPhoto?.uri ? (
-                  <ReAnimated.View
-                    style={[{
-                      position: 'absolute',
-                      left: -railSpacing, top: 0,
-                      width: cardW, height: cardH,
-                      paddingHorizontal: photoMargin,
-                    }, radiusStyle]}
-                  >
-                    <View style={{ flex: 1, borderRadius: 18, overflow: 'hidden', backgroundColor: '#f5f5f5' }}>
-                      <ExpoImage
-                        source={{ uri: prevPhoto.uri }}
-                        placeholder={{ uri: prevPhoto.uri }}
-                        style={{ flex: 1 }}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={0}
-                        recyclingKey={prevPhoto.id}
-                      />
-                    </View>
-                  </ReAnimated.View>
-                ) : null}
-
-                {/* Carte current : peut zoomer + rotation legere au drag */}
-                <ReAnimated.View
-                  style={[{
-                    position: 'absolute',
-                    left: 0, top: 0,
-                    width: cardW, height: cardH,
-                    paddingHorizontal: photoMargin,
-                  }, currentImgStyle]}
-                >
-                  <ReAnimated.View style={[{ flex: 1, overflow: 'hidden', backgroundColor: '#f5f5f5' }, radiusStyle]}>
-                    {currentPhoto?.uri ? (
-                      <ExpoImage
-                        source={{ uri: currentPhoto.uri }}
-                        placeholder={{ uri: currentPhoto.uri }}
-                        style={{ flex: 1 }}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={0}
-                        recyclingKey={currentPhoto.id}
-                      />
-                    ) : null}
-                    {/* Coeur favori SEUL en bas-droite de la photo current.
-                        Blanc + drop-shadow noir pour lisibilite. */}
-                    {isRunner ? (
-                      <ReAnimated.View
-                        pointerEvents="box-none"
-                        style={[{
-                          position: 'absolute', bottom: 12, right: 12,
-                        }, uiStyle]}
-                      >
-                        <ReAnimated.View style={heartStyle}>
-                          <TouchableOpacity
-                            onPress={() => {
-                              heartScale.value = withTiming(0.85, { duration: 90 }, () => {
-                                heartScale.value = withTiming(1, { duration: 140 });
-                              });
-                              onTogglePhotoFavorite(currentPhoto.id);
-                            }}
-                            hitSlop={12}
-                            style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
-                            accessibilityLabel={fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                          >
-                            <Svg width={26} height={26} viewBox="-1 -1.5 22.78 20.61"
-                              fill={fav ? '#fff' : 'none'} stroke="#fff" strokeWidth={2}
-                              style={iconShadowWhiteStyle}
-                            >
-                              <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-                            </Svg>
-                          </TouchableOpacity>
-                        </ReAnimated.View>
+              <ReAnimated.View style={[{ flex: 1 }, vertStyle]}>
+                <FlatList
+                  ref={photoListRef}
+                  data={photos}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  initialScrollIndex={currentIndex}
+                  keyExtractor={(p, i) => p.id || `photo-${i}`}
+                  getItemLayout={(_, index) => ({ length: cardW, offset: cardW * index, index })}
+                  onScrollToIndexFailed={(info) => {
+                    setTimeout(() => photoListRef.current?.scrollToOffset({
+                      offset: cardW * info.index, animated: false,
+                    }), 50);
+                  }}
+                  onMomentumScrollEnd={(e) => {
+                    const offset = e.nativeEvent.contentOffset.x;
+                    const idx = Math.round(offset / cardW);
+                    if (idx !== currentIndex && idx >= 0 && photos && idx < photos.length) {
+                      setCurrentIndex(idx);
+                    }
+                  }}
+                  renderItem={({ item }) => (
+                    <View style={{ width: cardW, height: cardH, paddingHorizontal: photoMargin }}>
+                      <ReAnimated.View style={[{ flex: 1, overflow: 'hidden', backgroundColor: '#f5f5f5' }, radiusStyle]}>
+                        {item?.uri ? (
+                          <ExpoImage
+                            source={{ uri: item.uri }}
+                            placeholder={{ uri: item.uri }}
+                            style={{ flex: 1 }}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            transition={0}
+                            recyclingKey={item.id}
+                          />
+                        ) : null}
                       </ReAnimated.View>
-                    ) : null}
-                  </ReAnimated.View>
-                </ReAnimated.View>
-
-                {/* Carte next : on la voit dépasser de PEEK à droite */}
-                {nextPhoto?.uri ? (
-                  <ReAnimated.View
-                    style={[{
-                      position: 'absolute',
-                      left: railSpacing, top: 0,
-                      width: cardW, height: cardH,
-                      paddingHorizontal: photoMargin,
-                    }, radiusStyle]}
-                  >
-                    <View style={{ flex: 1, borderRadius: 18, overflow: 'hidden', backgroundColor: '#f5f5f5' }}>
-                      <ExpoImage
-                        source={{ uri: nextPhoto.uri }}
-                        placeholder={{ uri: nextPhoto.uri }}
-                        style={{ flex: 1 }}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={0}
-                        recyclingKey={nextPhoto.id}
-                      />
                     </View>
-                  </ReAnimated.View>
-                ) : null}
+                  )}
+                />
               </ReAnimated.View>
             </GestureDetector>
+
+            {/* Coeur favori en overlay au-dessus de la FlatList photo.
+                Un seul coeur, lie au currentIndex (pas duplique par item).
+                Blanc + drop-shadow noir pour lisibilite cross-fond. */}
+            {isRunner ? (
+              <ReAnimated.View
+                pointerEvents="box-none"
+                style={[{
+                  position: 'absolute', bottom: 12, right: photoMargin + 8,
+                }, uiStyle]}
+              >
+                <ReAnimated.View style={heartStyle}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      heartScale.value = withTiming(0.85, { duration: 90 }, () => {
+                        heartScale.value = withTiming(1, { duration: 140 });
+                      });
+                      onTogglePhotoFavorite(currentPhoto.id);
+                    }}
+                    hitSlop={12}
+                    style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
+                    accessibilityLabel={fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                  >
+                    <Svg width={26} height={26} viewBox="-1 -1.5 22.78 20.61"
+                      fill={fav ? '#fff' : 'none'} stroke="#fff" strokeWidth={2}
+                      style={iconShadowWhiteStyle}
+                    >
+                      <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+                    </Svg>
+                  </TouchableOpacity>
+                </ReAnimated.View>
+              </ReAnimated.View>
+            ) : null}
           </ReAnimated.View>
 
           {/* X haut-droite de la PAGE, noire (point 6). Toujours visible
@@ -7384,6 +7334,28 @@ function PhotoViewerModal({
                     borderRadius: 10,
                     borderWidth: 2,
                     borderColor: '#F4A6FF',
+                  }}
+                />
+                {/* v2.4 point 2 : fade-out blanc aux extremites du slider.
+                    LinearGradient overlay gauche (blanc -> transparent) et
+                    droite (transparent -> blanc), pointerEvents=none pour ne
+                    pas bloquer le scroll. Largeur 40px = ~2/3 d'une miniature. */}
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={['rgba(255,255,255,1)', 'rgba(255,255,255,0)']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={{
+                    position: 'absolute', left: 0, top: 0, bottom: 0, width: 40,
+                  }}
+                />
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={['rgba(255,255,255,0)', 'rgba(255,255,255,1)']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={{
+                    position: 'absolute', right: 0, top: 0, bottom: 0, width: 40,
                   }}
                 />
               </>
