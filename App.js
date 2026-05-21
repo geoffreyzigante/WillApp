@@ -1775,12 +1775,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       ) : (
         <>
           {/* Onglets de filtre (course / photographe / combine).
-              Pendant loading : placeholder INVISIBLE (juste hauteur reservee)
-              -> evite le shift vertical quand les vrais tabs apparaissent.
-              Pas de chips visibles, donc page propre. */}
-          {loading ? (
-            <View style={{ height: 52 }} />
-          ) : tabs.length > 0 && photos.length > 0 && (
+              Pas de placeholder loading (espace vide perceptible meme sans
+              chips visibles). On tolere le shift discret quand les vrais
+              tabs apparaissent, qui ne concerne que les events multi-races
+              / multi-photographes (cas minoritaire). */}
+          {tabs.length > 0 && photos.length > 0 && (
             <ScrollView
               horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 4 }}
