@@ -10015,8 +10015,8 @@ export default function App() {
         ]}
       >
         <ReAnimated.View style={splashIconStyle}>
-          {/* Logo Will (meme icone que derriere "Bienvenue sur" sur l accueil) */}
-          <Icon.Logo width={100} color="#c9beed" />
+          {/* Logo Will violet primary charte (#7B2FFF) */}
+          <Icon.Logo width={100} color={C.primary} />
         </ReAnimated.View>
       </ReAnimated.View>
     )}
