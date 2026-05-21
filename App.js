@@ -9134,23 +9134,36 @@ export default function App() {
   const splashOverlayStyle = useAnimatedStyle(() => ({ opacity: splashOverlayOpacity.value }));
   const [splashOverlayVisible, setSplashOverlayVisible] = useState(true);
 
-  // Animation idle de l icone fleur : rotation lente continue + pulse
-  // scale 1->1.1->1 en boucle. Lancees une fois au mount, stoppees
-  // implicitement au demontage de l overlay.
+  // Animation idle de l icone fleur :
+  //  - opacity 0 -> 1 en 400ms au mount (fade in)
+  //  - rotation lente continue (360deg en 2400ms, en boucle)
+  //  - scale pulse 1 -> 1.1 -> 1 en boucle (respiration)
+  // L icone est dans le parent splashOverlay qui fade out a la fin
+  // (fontsLoaded + 1s), donc disparait EN MEME TEMPS que le fond
+  // sans gerer son opacity explicitement a la sortie.
+  const splashIconOpacity = useSharedValue(0);
   const splashIconRotate = useSharedValue(0);
   const splashIconScale = useSharedValue(1);
   const splashIconStyle = useAnimatedStyle(() => ({
+    opacity: splashIconOpacity.value,
     transform: [
       { rotate: `${splashIconRotate.value}deg` },
       { scale: splashIconScale.value },
     ],
   }));
   useEffect(() => {
+    // Fade in de l icone au mount
+    splashIconOpacity.value = withTiming(1, {
+      duration: 400,
+      easing: (t) => { 'worklet'; return 1 - Math.pow(1 - t, 3); },
+    });
+    // Rotation continue
     splashIconRotate.value = withRepeat(
       withTiming(360, { duration: 2400, easing: (t) => { 'worklet'; return t; } }),
       -1,
       false
     );
+    // Pulse continu
     splashIconScale.value = withRepeat(
       withSequence(
         withTiming(1.1, { duration: 700, easing: (t) => { 'worklet'; return 1 - Math.pow(1 - t, 3); } }),
