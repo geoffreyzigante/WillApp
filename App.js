@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  AppState, Share,
+  AppState, Share, NativeModules,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -14,12 +14,25 @@ import * as MediaLibrary from 'expo-media-library';
 import {
   Camera as VisionCamera,
   useCameraDevice,
+  useCameraDevices,
   useCameraPermission,
   useFrameProcessor,
   useCameraFormat,
+  VisionCameraProxy,
 } from 'react-native-vision-camera';
-import { useFaceDetector } from 'react-native-vision-camera-face-detector';
 import { Worklets } from 'react-native-worklets-core';
+
+// Frame processor plugin natif (Swift) : detection humaine via Apple Vision
+// VNDetectHumanRectanglesRequest. Enregistre par le config plugin
+// with-human-detector au build EAS. Retourne { count: number }.
+const humanDetectorPlugin = VisionCameraProxy.initFrameProcessorPlugin('detectHumans', {});
+function detectHumans(frame, options) {
+  'worklet';
+  if (humanDetectorPlugin == null) {
+    throw new Error('detectHumans plugin not loaded — rebuild required');
+  }
+  return humanDetectorPlugin.call(frame, options);
+}
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import ReAnimated, {
   useSharedValue,
@@ -80,9 +93,24 @@ async function migrateSensitiveKeysToSecureStore() {
 
 // Mode photographe offline-first : queue persistante d'uploads
 // + photos stockées hors-cache pour survivre au kill / nettoyage iOS.
+//
+// Pipeline decouple capture / traitement (refactor mai 2026) :
+//   capture (takePhoto) → will_pending/raw/{id}.heic + sidecar {id}.json
+//                       → queue item { processed:false, status:'pending' }
+//   processQueue worker → enhance + burn EXIF + reencode HEIC (natif, serial)
+//                       → will_pending/processed/{id}.heic
+//                       → queue item { processed:true, status:'pending' }
+//   drainQueue (existant) → PUT R2, gated par NetInfo + backoff exponentiel
+//
+// Le bit `processed` est orthogonal au `status` (pending/uploading/failed).
+// drainQueue ne touche que les items processed=true. processQueue ne touche
+// que les items processed=false. Les deux peuvent tourner en parallele sans
+// se marcher dessus.
 const UPLOAD_QUEUE_KEY = '@will_upload_queue';
 const LAST_CAPTURE_KEY = '@will_last_capture_at';
 const PENDING_DIR_NAME = 'will_pending';
+const RAW_SUBDIR = 'raw';            // capture brute + sidecar JSON
+const PROCESSED_SUBDIR = 'processed'; // post-enhance/burn/encode, pret upload
 const COVERS_DIR_NAME = 'will_event_covers';
 const MAX_RETRIES_DEFAULT = 5;
 const STORAGE_WARN_BYTES = 5 * 1024 * 1024 * 1024; // 5 Go pendingDir
@@ -101,6 +129,14 @@ function pendingDir() {
   return new Directory(Paths.document, PENDING_DIR_NAME);
 }
 
+function rawDir() {
+  return new Directory(Paths.document, PENDING_DIR_NAME, RAW_SUBDIR);
+}
+
+function processedDir() {
+  return new Directory(Paths.document, PENDING_DIR_NAME, PROCESSED_SUBDIR);
+}
+
 function coversDir() {
   return new Directory(Paths.document, COVERS_DIR_NAME);
 }
@@ -109,11 +145,55 @@ function ensurePendingDir() {
   try {
     const d = pendingDir();
     if (!d.exists) d.create({ intermediates: true, idempotent: true });
+    const r = rawDir();
+    if (!r.exists) r.create({ intermediates: true, idempotent: true });
+    const p = processedDir();
+    if (!p.exists) p.create({ intermediates: true, idempotent: true });
     return d;
   } catch (e) {
     console.warn('ensurePendingDir', e?.message);
     return null;
   }
+}
+
+// Sidecar JSON : metadonnees de capture (EXIF + contexte race/km) ecrites
+// a cote du fichier brut. Atomic write via tmp + rename pour eviter une
+// lecture partielle en cas de crash entre write et fsync.
+async function writeSidecar(id, payload) {
+  try {
+    const dir = rawDir();
+    const tmp = new File(dir, `${id}.json.tmp`);
+    const final = new File(dir, `${id}.json`);
+    const json = JSON.stringify(payload);
+    if (tmp.exists) { try { tmp.delete(); } catch {} }
+    tmp.create();
+    tmp.write(json);
+    try { if (final.exists) final.delete(); } catch {}
+    tmp.move(final);
+    return final.uri;
+  } catch (e) {
+    console.warn('writeSidecar', id, e?.message);
+    return null;
+  }
+}
+
+function readSidecar(id) {
+  try {
+    const f = new File(rawDir(), `${id}.json`);
+    if (!f.exists) return null;
+    const raw = f.textSync();
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    console.warn('readSidecar', id, e?.message);
+    return null;
+  }
+}
+
+function deleteSidecar(id) {
+  try {
+    const f = new File(rawDir(), `${id}.json`);
+    if (f.exists) f.delete();
+  } catch {}
 }
 
 function ensureCoversDir() {
@@ -178,15 +258,21 @@ async function saveUploadQueue(arr) {
 }
 
 function pendingDirSizeBytes() {
-  try {
-    const d = pendingDir();
-    if (!d.exists) return 0;
+  // Recursif : depuis le refactor pipeline, les photos sont reparties entre
+  // pendingDir/raw/{id}.heic + sidecar et pendingDir/processed/{id}.heic.
+  // L'alerte STORAGE_WARN_BYTES doit voir l'ensemble.
+  function walk(dir) {
+    if (!dir.exists) return 0;
     let total = 0;
-    for (const node of d.list()) {
-      if (node instanceof File) total += node.size || 0;
-    }
+    try {
+      for (const node of dir.list()) {
+        if (node instanceof File) total += node.size || 0;
+        else if (node instanceof Directory) total += walk(node);
+      }
+    } catch {}
     return total;
-  } catch { return 0; }
+  }
+  try { return walk(pendingDir()); } catch { return 0; }
 }
 
 function generateItemId() {
@@ -577,11 +663,23 @@ const isUpcoming = (iso, isoEnd) => {
 // Format: {event}/{photographer}/{date}/{time}_{burstTs}_{idx}.jpg
 const extractBurstTs = (key) => {
   if (!key) return 0;
-  const filename = key.split('/').pop().replace('.jpg', '');
+  const filename = key.split('/').pop().replace(/\.(jpg|jpeg|png|heic|dng)$/i, '');
   const parts = filename.split('_');
   if (parts.length < 3) return 0;
   const ts = parseInt(parts[parts.length - 2], 10);
   return isNaN(ts) ? 0 : ts;
+};
+
+// Index dans le burst (0..N). Cle de tri secondaire au sein d'une rafale
+// (idx DESC -> derniere photo prise en tete de groupe, coherent avec le
+// tri principal "newest first" entre rafales).
+const extractIdx = (key) => {
+  if (!key) return 0;
+  const filename = key.split('/').pop().replace(/\.(jpg|jpeg|png|heic|dng)$/i, '');
+  const parts = filename.split('_');
+  if (parts.length < 3) return 0;
+  const idx = parseInt(parts[parts.length - 1], 10);
+  return isNaN(idx) ? 0 : idx;
 };
 
 const cityLabel = (location) => {
@@ -777,9 +875,15 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         </View>
       </View>
 
-      {/* Carte selfie : uniquement si pas encore pris */}
+      {/* Carte selfie : uniquement si pas encore pris.
+          Marge verticale 14px alignee sur le bouton "+ Creer un evenement"
+          de la page Mes events (meme position Y sous le header pour les deux
+          CTA de premiere page). */}
       {!selfieUri && (
-        <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
+        <>
+          <View style={{ height: 14 }} />
+          <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
+        </>
       )}
 
       {/* Champ recherche : filtre la liste juste en dessous */}
@@ -956,7 +1060,7 @@ function PhotosUnauthScreen({ onSignup, onLogin }) {
             fontFamily: 'AVEstiana',
           }}
         >
-          Toutes tes photos en un selfie
+          Toutes tes photos{'\n'}en un selfie
         </Text>
         <Text
           style={{
@@ -1027,7 +1131,13 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
         }
       } catch (e) { console.warn('fetch perso', code, e); }
     }
-    all.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
+    // Tri : burstTs DESC (rafale la plus recente en haut) puis idx DESC
+    // (derniere photo prise du burst en tete : N, ..., 2, 1, 0).
+    all.sort((a, b) => {
+      const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
+      if (dt !== 0) return dt;
+      return extractIdx(b.id) - extractIdx(a.id);
+    });
     setPhotos(all);
     setLoading(false);
   }, [favorites, selfieUri, userId, runnerToken]);
@@ -1358,7 +1468,12 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           photographer: photographerId,
         };
       });
-      list.sort((a, b) => extractBurstTs(b.id) - extractBurstTs(a.id));
+      // Tri : burstTs DESC puis idx DESC au sein d'une rafale.
+      list.sort((a, b) => {
+        const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
+        if (dt !== 0) return dt;
+        return extractIdx(b.id) - extractIdx(a.id);
+      });
       // Limite removed: la virtualisation FlatList tient les milliers de
       // photos sans probleme (~15-30 cellules montees a la fois).
       setPhotos(list);
@@ -1839,7 +1954,22 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
 
 function PhotographerScreen({ session, onLogout, onExit }) {
   const { hasPermission, requestPermission } = useCameraPermission();
-  const device = useCameraDevice('back');
+  // Capteur principal = .builtInWideAngleCamera singleton physique. On
+  // utilise useCameraDevices() (liste exhaustive) + filtre strict pour
+  // garantir le singleton et exclure les virtuels multi-cam
+  // (.builtInDualWideCamera, .builtInTripleCamera) qui pourraient scorer
+  // "acceptable" avec useCameraDevice() et causer un fallback sur
+  // l'ultra-wide via bascule auto AVCapture interne.
+  const allDevices = useCameraDevices();
+  const device = useMemo(() => {
+    if (!allDevices) return undefined;
+    return allDevices.find(d =>
+      d.position === 'back' &&
+      Array.isArray(d.physicalDevices) &&
+      d.physicalDevices.length === 1 &&
+      d.physicalDevices[0] === 'wide-angle-camera'
+    );
+  }, [allDevices]);
 
   // Configuration globale (chargée au mount, défauts si offline / nouveau schéma 6 sections)
   const [eventConfig, setEventConfig] = useState({
@@ -1859,14 +1989,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       aperture: "auto",
       focus: "continuous",
       exposureCompensation: 0, // -2..+2 EV par pas de 0.5
-    },
-    faceDetection: {
-      confidenceThreshold: 0.7,
-      minFaceSizePercent: 5,
-      maxFaceSizePercent: 80,
-      triggerZoneWidthPercent: 33,
-      triggerZonePosition: "center", // left / center / right
-      minFacesToTrigger: 1,
     },
     rekognition: { similarityThreshold: 80, maxMatchesPerPhoto: 5, collectionTtlDays: 14 },
     imageProcessing: {
@@ -1888,46 +2010,74 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     debug: {
       verboseLogs: true, skipRekognition: false, saveUnmatchedFrames: false,
     },
+    // Pipeline mobile 2026-05 : iPhone gere TOUT en natif (AE/AF continus,
+    // Deep Fusion, Smart HDR, reduction de bruit). Plus de shutter custom.
+    // shutterSpeed garde dans le config par retro-compatibilite (back-end
+    // peut continuer a le servir) mais ignore cote app -- le natif n'en
+    // depend plus. zone = bande verticale de capture (filtrage bbox face).
+    camera: {
+      captureZoneWidthPercent: 30,
+      shutterSpeed: 1000,
+    },
   });
 
   useEffect(() => {
     fetch(`${API_URL}/config`)
       .then(r => r.ok ? r.json() : null)
-      .then(cfg => { if (cfg) setEventConfig(prev => ({ ...prev, ...cfg })); })
+      .then(cfg => {
+        if (!cfg) return;
+        setEventConfig(prev => ({ ...prev, ...cfg }));
+        // Note : will_shutter.json n'est plus ecrit -> WillShutterController
+        // a ete neutralise 2026-05 (rendu iPhone natif, exposition auto
+        // continue, plus de shutter custom).
+      })
       .catch(() => {});
   }, []);
 
-  // Format photo-prioritaire : photoResolution:'max' force iOS a selectionner
-  // un AVCaptureDeviceFormat photo-oriente (haute resolution capteur, Deep
-  // Fusion + Smart HDR eligibles via photoQualityBalance="quality" cote prop
-  // Camera). Tradeoff : la frame video du format choisi sera typiquement
-  // 1920x1080 (~2 MP) au lieu de 3840x2160 (~8 MP), donc takeSnapshot (mode
-  // peloton) perd en resolution. A re-evaluer si la reco visage a distance
-  // souffre en peloton.
-  const format = useCameraFormat(device, [
-    { photoResolution: 'max' },
-    { videoAspectRatio: 4 / 3 },
-    { fps: 30 },
-  ]);
+  // Format 4:3 binne du capteur principal. Heuristique ratio-moitie : sur
+  // un capteur 48 MP (iPhone 14 Pro+/15/16), la photoWidth max 4:3 est
+  // 8064 et le format binne expose 4032 = max/2 (binning 2x2 quad-Bayer).
+  // Sur un capteur 12 MP natif (iPhone 12/13 non-Pro), pas de moitie ->
+  // fallback sur le max 4032. Resultat : 4032x3024 sur tous les iPhones
+  // modernes, qui est exactement ce que l'app Camera native utilise par
+  // defaut. AUCUNE dimension hardcodee.
+  //
+  // FRAGILITE : l'heuristique suppose binning 2x2 (ratio 1/2). Si un futur
+  // capteur utilise binning 3x3 ou 4x4 (ratio 1/3 ou 1/4), il faudra
+  // elargir la tolerance ou cross-checker avec un signal natif
+  // (isVideoBinned sur AVCaptureDeviceFormat, non expose en JS).
+  const format = useMemo(() => {
+    if (!device || !device.formats?.length) return undefined;
+
+    const fmts4_3 = device.formats.filter(f => {
+      if (!f.photoWidth || !f.photoHeight) return false;
+      return Math.abs(f.photoWidth / f.photoHeight - 4 / 3) < 0.01;
+    });
+    if (!fmts4_3.length) return undefined;
+
+    const maxPhotoW = Math.max(...fmts4_3.map(f => f.photoWidth));
+    const HALF_TOL = 0.05; // ±5%
+    const binned = fmts4_3.filter(f => {
+      const ratio = f.photoWidth / maxPhotoW;
+      return Math.abs(ratio - 0.5) < HALF_TOL;
+    });
+    const pool = binned.length > 0
+      ? binned
+      : fmts4_3.filter(f => f.photoWidth === maxPhotoW);
+
+    // Disambig : max video buffer dans le pool -> meilleure preview +
+    // meilleure detection face sur le frame processor.
+    return pool.reduce((best, f) =>
+      !best || (f.videoWidth * f.videoHeight) > (best.videoWidth * best.videoHeight)
+        ? f
+        : best
+    , null);
+  }, [device]);
   const cameraRef = useRef(null);
 
-  // Log unique du format choisi par useCameraFormat. Permet de verifier en
-  // Metro/Xcode quelles dimensions photo/video iOS a effectivement
-  // selectionnees, et si supportsPhotoHdr est true (indicateur indirect
-  // que le format est "photo-oriente" et eligible Deep Fusion).
-  useEffect(() => {
-    if (!format) return;
-    console.log('[camera-format]', JSON.stringify({
-      photoWidth: format.photoWidth,
-      photoHeight: format.photoHeight,
-      videoWidth: format.videoWidth,
-      videoHeight: format.videoHeight,
-      maxFps: format.maxFps,
-      supportsPhotoHdr: format.supportsPhotoHdr,
-      supportsVideoHdr: format.supportsVideoHdr,
-      fieldOfView: format.fieldOfView,
-    }));
-  }, [format]);
+  // Log device + format -> deplaces cote Swift NSLog [WILL-CAM] (hook
+  // WillShutterController.attachDevice). console.log JS n'apparait pas
+  // dans Console.app sur build EAS preview ; NSLog est lui visible.
 
   // VisionCamera 4.x ne propose pas de prop `enableContinuousAutoFocus` ou
   // equivalent en JS RN : le focus continu est actif par defaut, et seul un
@@ -1964,93 +2114,74 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   }, [device, eventConfig.capture?.exposureCompensation]);
 
   const isCapturingRef = useRef(false);
-
-  // Tracker par trackingId pour le mode continu : { firstSeenAt, lastCaptureAt }
-  // - firstSeenAt : timestamp d'entree du visage dans la zone (debounce 200ms
-  //   avant capture, pour eviter de tirer sur un faux positif MLKit transitoire).
-  // - lastCaptureAt : timestamp de la derniere photo prise pour ce visage
-  //   (cooldown 800ms entre 2 captures du meme visage, pour eviter le spam
-  //   sur un coureur statique).
-  // Cleanup automatique quand un id ne reapparait plus dans validInZone.
-  const faceTrackingRef = useRef(new Map());
-
-  // ─── Mode densite : 'normal' (peu de coureurs) ↔ 'peloton' (>=3 visages) ──
-  // Pilote le pipeline capture : normal = burst 3x takePhoto HQ (~900ms),
-  // peloton = 1x takeSnapshot 4K (~100ms). Bascule auto via hysteresis :
-  // normal→peloton si >=3 visages stable 200ms ; peloton→normal si <3 visages
-  // stable 500ms.
-  const densityModeRef = useRef('normal');
-  const densityHistoryRef = useRef([]);  // [{t, count}, ...] sur 600ms glissants
-  const [densityModeState, setDensityModeState] = useState('normal');
-  // Timestamp de la derniere frame MLKit avec visage dans la zone (mode 3 lignes
-  // legacy, ne sert plus en mode continu apres le refactor settle+cooldown).
-  const lastFaceSeenAtRef = useRef(0);
-  // Timestamp de la derniere photo prise. La capture continue tire une nouvelle
-  // photo des que (now - lastPhotoTime) >= MIN_INTERVAL_MS et qu'un visage est
-  // present (avec tolerance). Permet une cadence stable independante du framerate.
-  const lastPhotoTimeRef = useRef(0);
-  // Une "session" de capture continue regroupe les photos consecutives d'un
-  // meme passage de coureur (visage reste en zone). burstTs = timestamp de la
-  // premiere photo, idx = compteur incremente a chaque photo. Reset a null des
-  // que la tolerance expire. Le worker (personal-gallery) utilise burstTs pour
-  // grouper les photos d'un meme passage lors du match selfie.
-  const currentBurstTsRef = useRef(null);
-  const currentBurstIndexRef = useRef(0);
+  // True dès qu'une frame analysée détecte ≥1 humain dans la zone. Mis à
+  // jour à CHAQUE frame (count>0 OU count=0) -- sert de condition d'arrêt
+  // à la boucle de capture (visage sorti = stop immédiat).
+  const faceInZoneRef = useRef(false);
+  // Incrémenté à chaque dispatch onHumansDetectedJS (count=0 OU >0). Permet
+  // à la boucle d'attendre une analyse FRAÎCHE post-capture avant de
+  // décider de relancer (le frame processor peut se figer ~100-400ms
+  // pendant Deep Fusion : sans cette attente, on relit un ref stale).
+  const frameSeqRef = useRef(0);
+  // True pendant qu'une boucle de capture est en cours. Empêche un 2e
+  // démarrage concurrent si plusieurs frames "face détecté" arrivent rapprochées.
+  const burstLoopRef = useRef(false);
   const isMountedRef = useRef(true);
   const isDetectionEnabledRef = useRef(false);
-  // Mode auto-capture arme par le bouton Go/Stop. Quand true, une detection
-  // dans la zone declenche captureOne. Quand false, rien ne se passe meme
-  // si MLKit detecte des visages. Lu via ref dans le worklet/runOnJS pour
-  // eviter tout closure stale ; mirroe en state pour le rendu du bouton.
+  // Auto-capture arme par Go/Stop. Quand true, une frame avec >=1 humain
+  // declenche captureOne. Quand false, le frame processor logue mais ne
+  // tire pas. Ref pour le worklet, state pour le rendu du bouton.
   const isAutoArmedRef = useRef(false);
-  // Mirror du facesInZoneCount lu via ref (pas via state) au moment du tap Go.
-  // Évite tout problème de closure stale entre le worklet runOnJS et onPress.
-  const facesInZoneCountRef = useRef(0);
-  // Mirrors pour eviter spam setState a chaque frame : on ne push dans React
-  // que si la valeur a vraiment change. 30 setState/s sinon, qui inondent la
-  // queue de re-render et ralentissent captureOne.
-  const lastFacesCountSeenRef = useRef(0);
-  const lastInZoneCountSeenRef = useRef(0);
-  // Timestamp de la derniere detection dans la zone (pour mesurer la latence
-  // detection -> 1ere photo). En ms (Date.now()).
-  const lastFaceInZoneAtRef = useRef(0);
 
-  const [facesCount, setFacesCount] = useState(0);
-  const [facesInZoneCount, setFacesInZoneCount] = useState(0);
   const [isShooting, setIsShooting] = useState(false);
-  // Stub no-op : remplace l'ancien overlay debug pour eviter de toucher les
-  // ~20 call sites disséminés dans le pipeline capture.
-  const addDebugLog = () => {};
-
-  // === Instrumentation cadence (compteurs worklet/capture conservés) ===
-  // mlkitFrameCountSV / mlkitWindowStartSV / captureWindowStartRef /
-  // captureWindowCountRef sont referencés par le frame processor et captureOne
-  // - on garde la mécanique de comptage (utile pour logs console), mais les
-  // setters d'affichage sont des no-ops puisque l'UI debug a été retirée.
-  const mlkitCountersRef = useRef(null);
-  if (mlkitCountersRef.current === null) {
-    mlkitCountersRef.current = {
-      frameCount: Worklets.createSharedValue(0),
-      windowStart: Worklets.createSharedValue(0),
-    };
-  }
-  const mlkitFrameCountSV = mlkitCountersRef.current.frameCount;
-  const mlkitWindowStartSV = mlkitCountersRef.current.windowStart;
-  const captureWindowStartRef = useRef(0);
-  const captureWindowCountRef = useRef(0);
-  // Push MLKit fps depuis le worklet (toutes les 30 frames).
-  const onMlkitWindowJS = useMemo(
-    () => Worklets.createRunOnJS((frames, elapsedMs) => {
-      const fps = elapsedMs > 0 ? Math.round((frames * 1000) / elapsedMs) : 0;
-      const m = `[mlkit] ${frames} frames in ${elapsedMs}ms (${fps} fps)`;
-      console.log(m);
-    }),
-    [],
-  );
-  // Mode auto-capture pour le rendu du bouton. true => label "Stop", bg rouge.
-  // Mirror state du isAutoArmedRef pour declencher les re-render.
   const [isAutoArmed, setIsAutoArmed] = useState(false);
   const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
+  // Compteur de session "Capturees" -- incremente a chaque enqueue (succes
+  // takePhoto + write disque). Reset au mount du screen (session photographe).
+  // Ref pour l'increment cote captureOne, state pour le rendu du badge UI.
+  const capturedCountRef = useRef(0);
+  const [capturedCount, setCapturedCount] = useState(0);
+  // "Uploadees" -- incremente UNIQUEMENT a la confirmation PUT 200 OK cote
+  // worker dans drainQueue. Verite R2 cote app (modulo le delete LLaVA
+  // desormais neutralise cote worker). Si capturedCount > uploadedCount
+  // longtemps, le photographe sait qu'il y a un decalage capture vs upload.
+  const uploadedCountRef = useRef(0);
+  const [uploadedCount, setUploadedCount] = useState(0);
+  // "Perdues" -- incremente sur tout chemin DESTRUCTIF du pipeline :
+  //   - enqueueBurstItems throw (move/copy ou writeSidecar fail)
+  //   - processQueue drop d'un item dont le raw a disparu sur disque
+  // Pas incremente pour les retries 'failed' (recuperable manuellement).
+  // Affiche au photographe pour qu'il sache combien de photos sont VRAIMENT
+  // perdues (vs simplement en queue). Toute perte = log loud + bump ici.
+  const lostCountRef = useRef(0);
+  const [lostCount, setLostCount] = useState(0);
+  // "En vol" -- Set de Promises captureOne en cours d'execution (mode burst
+  // pipeline). Le burst loop attend (Promise.race) si la taille atteint
+  // MAX_IN_FLIGHT. RAM borne, parasites de sortie bornes (max = MAX_IN_FLIGHT).
+  const inFlightSetRef = useRef(new Set());
+  const [inFlight, setInFlight] = useState(0);
+
+  // Synchronise les states UI depuis inFlightSetRef. Centralise setIsShooting
+  // (true ssi >=1 capture en vol) + setInFlight pour le compteur.
+  function updateInFlight() {
+    const n = inFlightSetRef.current.size;
+    if (!isMountedRef.current) return;
+    setInFlight(n);
+    setIsShooting(n > 0);
+  }
+
+  // Stub no-op : conserve les call sites addDebugLog dispersés (sera retire
+  // si plus aucun reste apres simplification).
+  const addDebugLog = () => {};
+
+  // Compteur frames pour throttle ~10 fps d'analyse (1 frame sur 3 a 30 fps).
+  // VNDetectHumanRectangles est ~3-5x plus lourd que MLKit face : 30 fps
+  // d'analyse charge thermal + batterie pour rien. 10 fps suffit largement
+  // pour qu'un coureur traversant la zone soit detecte.
+  const frameSkipSV = useMemo(() => Worklets.createSharedValue(0), []);
+  // Largeur zone de capture (fraction 0..1) lue par le plugin Swift pour
+  // filtrer les humains hors-bande. Mise a jour quand eventConfig change.
+  const zoneSV = useMemo(() => Worklets.createSharedValue(0.3), []);
 
   // Caméra ancrée juste sous le header (au lieu de absoluteFill + letterbox 4:3
   // qui laissait un grand vide noir entre le header et l'image visible sur les
@@ -2076,169 +2207,29 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
   const badgePulse = useRef(new Animated.Value(1)).current;
   const badgeOpacity = useRef(new Animated.Value(1)).current;
-  const edgePulse = useRef(new Animated.Value(0.6)).current;
 
   // Flash blanc full-screen au début d'une rafale + animations de l'UI.
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const captureScale = useRef(new Animated.Value(1)).current;
   const headerSlideY = useRef(new Animated.Value(-120)).current;
   const footerSlideY = useRef(new Animated.Value(300)).current;
-  // Pulse opacity du bouton Stop quand on capture activement (arme + visage en zone)
-  const recPulse = useRef(new Animated.Value(1)).current;
 
-  // MLKit ne supporte pas confidenceThreshold (face *detection*); on garde
-  // minFaceSize comme pré-filtre côté natif et on filtre maxFaceSize côté JS.
-  const minFaceSizeMlkit = (eventConfig.faceDetection?.minFaceSizePercent ?? 5) / 100;
-  const faceDetectionOptions = useMemo(() => ({
-    performanceMode: 'fast',
-    landmarkMode: 'none',
-    contourMode: 'none',
-    classificationMode: 'none',
-    minFaceSize: minFaceSizeMlkit,
-    trackingEnabled: true,
-  }), [minFaceSizeMlkit]);
-
-  const { detectFaces } = useFaceDetector(faceDetectionOptions);
-
-  // Defauts capture continue : 1 photo / 200ms tant que visage en zone, avec
-  // 500ms de tolerance sur la perte momentanee de detection. Surchargeable
-  // via eventConfig.capture.intervalMs et eventConfig.capture.toleranceMs
-  // (dashboard admin).
-  const MIN_INTERVAL_MS_DEFAULT = 150;
-  const TOLERANCE_MS_DEFAULT = 500;
-
-  const onFacesDetectedJS = useMemo(
-    () => Worklets.createRunOnJS((facesData) => {
-      // Push setState UNIQUEMENT si la valeur change. Avant : 30 setState/s
-      // saturaient la queue React et retardaient les captures.
-      if (facesData.length !== lastFacesCountSeenRef.current) {
-        lastFacesCountSeenRef.current = facesData.length;
-        setFacesCount(facesData.length);
-      }
-      if (!isDetectionEnabledRef.current) {
-        if (lastInZoneCountSeenRef.current !== 0) {
-          lastInZoneCountSeenRef.current = 0;
-          setFacesInZoneCount(0);
-        }
-        facesInZoneCountRef.current = 0;
-        return;
-      }
-      const now = Date.now();
-
-      // ─── MODE "CONTINU" : settle 200ms + cooldown 800ms per-face ─────
-      // Logique : chaque visage qui entre dans la zone declenche UNE photo
-      // apres 200ms de stabilite (anti-faux-positif MLKit), puis au plus une
-      // photo toutes les 800ms tant qu'il reste dans la zone. Quand il sort,
-      // son entree disparait du tracker. Garantit une capture systematique
-      // meme a distance, sans dependre d'un toleranceMs global qui pouvait
-      // tuer la session avant qu'on tire.
-      const SETTLE_MS = 200;
-      const COOLDOWN_MS = 800;
-      const settleEnabled = true;
-      const cooldownEnabled = true;
-      const maxSize = (eventConfig.faceDetection?.maxFaceSizePercent ?? 80) / 100;
-
-      // Filtre les visages dans la zone (trop gros = trop pres = exclu).
-      const validInZone = facesData.filter(f =>
-        f.inZone && (f.sizeFraction == null || f.sizeFraction <= maxSize)
-      );
-      if (validInZone.length !== lastInZoneCountSeenRef.current) {
-        lastInZoneCountSeenRef.current = validInZone.length;
-        setFacesInZoneCount(validInZone.length);
-      }
-      facesInZoneCountRef.current = validInZone.length;
-
-      // ─── BASCULE DENSITE normal ↔ peloton (hysteresis) ───────────────
-      // Push (t, count) dans l'historique glissant 600ms. Le seuil c'est
-      // "TOUTES les frames de la fenetre verifient la condition" : evite
-      // qu'une frame isolee fasse clignoter le mode.
-      // - normal→peloton : >=3 visages stable sur 200ms (reaction rapide)
-      // - peloton→normal : <3 visages stable sur 500ms (sortie prudente)
-      densityHistoryRef.current.push({ t: now, count: validInZone.length });
-      densityHistoryRef.current = densityHistoryRef.current.filter(
-        e => now - e.t < 600
-      );
-      const dh = densityHistoryRef.current;
-      const last200 = dh.filter(e => now - e.t < 200);
-      const last500 = dh.filter(e => now - e.t < 500);
-      let newMode = densityModeRef.current;
-      if (
-        densityModeRef.current === 'normal'
-        && last200.length > 0
-        && last200.every(e => e.count >= 3)
-      ) {
-        newMode = 'peloton';
-      } else if (
-        densityModeRef.current === 'peloton'
-        && last500.length > 0
-        && last500.every(e => e.count < 3)
-      ) {
-        newMode = 'normal';
-      }
-      if (newMode !== densityModeRef.current) {
-        densityModeRef.current = newMode;
-        setDensityModeState(newMode);
-        const m = `[MODE] → ${newMode} (faces=${validInZone.length})`;
-        console.log(m); addDebugLog(m);
-      }
-
-      // Pas arme : tout reset (tracker + session burst), aucune capture.
-      if (!isAutoArmedRef.current) {
-        if (currentBurstTsRef.current !== null || faceTrackingRef.current.size > 0) {
-          const m = `[capture] stop (armed=false)`;
-          console.log(m); addDebugLog(m);
-          currentBurstTsRef.current = null;
-          currentBurstIndexRef.current = 0;
-          faceTrackingRef.current.clear();
-        }
-        return;
-      }
-
-      // Cleanup : retire du tracker les visages qui ne sont plus dans la zone
-      // (sortis du cadre, perdus par MLKit, ou trackingId reattribue).
-      const liveIds = new Set(validInZone.map(f => f.id));
-      for (const id of [...faceTrackingRef.current.keys()]) {
-        if (!liveIds.has(id)) faceTrackingRef.current.delete(id);
-      }
-
-      // Aucun visage en zone : on cloture le burst courant et on attend.
-      if (validInZone.length === 0) {
-        if (currentBurstTsRef.current !== null) {
-          const m = `[capture] burst ended (zone empty)`;
-          console.log(m); addDebugLog(m);
-          currentBurstTsRef.current = null;
-          currentBurstIndexRef.current = 0;
-          lastFaceInZoneAtRef.current = 0;
-        }
-        return;
-      }
-
-      // Un capture deja en cours : on attend qu'il se termine pour evaluer.
-      if (isCapturingRef.current) return;
-
-      // Pour chaque visage en zone, decide s'il est temps de tirer. On stoppe
-      // au premier visage eligible (1 capture par frame max). Les autres
-      // visages se feront capturer aux frames suivantes selon leur cooldown.
-      for (const f of validInZone) {
-        let entry = faceTrackingRef.current.get(f.id);
-        if (!entry) {
-          entry = { firstSeenAt: now, lastCaptureAt: 0 };
-          faceTrackingRef.current.set(f.id, entry);
-          if (lastFaceInZoneAtRef.current === 0) lastFaceInZoneAtRef.current = now;
-        }
-        // Settle : pas encore reste assez longtemps dans la zone.
-        if (settleEnabled && now - entry.firstSeenAt < SETTLE_MS) continue;
-        // Cooldown : on a deja tire sur ce visage il y a peu.
-        if (cooldownEnabled && entry.lastCaptureAt > 0 && now - entry.lastCaptureAt < COOLDOWN_MS) continue;
-        // Tir : mode normal = burst 3x takePhoto HQ, mode peloton = 1x snapshot 4K.
-        entry.lastCaptureAt = now;
-        captureOne(densityModeRef.current);
-        return;
-      }
+  const onHumansDetectedJS = useMemo(
+    () => Worklets.createRunOnJS((count) => {
+      // Met à jour faceInZoneRef à CHAQUE frame analysée (count>=1 OU 0) et
+      // incrémente frameSeqRef pour que la boucle puisse détecter l'arrivée
+      // d'une analyse fraîche post-capture. Si armé + visage en zone +
+      // aucune boucle en cours -> démarre captureBurstLoop (séquentiel strict,
+      // s'arrête dès que faceInZoneRef repasse à false).
+      if (!isDetectionEnabledRef.current) return;
+      frameSeqRef.current += 1;
+      faceInZoneRef.current = count > 0;
+      if (!isAutoArmedRef.current) return;
+      if (!faceInZoneRef.current) return;
+      if (burstLoopRef.current) return;
+      captureBurstLoop();
     }),
-    [
-      eventConfig.faceDetection?.maxFaceSizePercent,
-    ]
+    [],
   );
 
   useEffect(() => {
@@ -2274,102 +2265,37 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       Animated.timing(badgeOpacity, { toValue: 0.5, duration: 120, useNativeDriver: true }),
       Animated.timing(badgeOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
     ]).start();
-  }, [facesCount > 0, isShooting, isDetectionEnabled]);
+  }, [isShooting, isDetectionEnabled]);
 
-  // Pulse "REC" sur le bouton Stop quand on capture activement
-  // (arme + visage dans la zone). Indique au photographe que le systeme
-  // tire en continu. Stop des qu'une des deux conditions tombe.
+  // Sync de la zone vers le worklet a chaque change config.
   useEffect(() => {
-    const active = isAutoArmed && facesInZoneCount > 0;
-    if (active) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(recPulse, { toValue: 0.6, duration: 250, useNativeDriver: true }),
-          Animated.timing(recPulse, { toValue: 1, duration: 250, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      recPulse.stopAnimation();
-      Animated.timing(recPulse, { toValue: 1, duration: 120, useNativeDriver: true }).start();
-    }
-  }, [isAutoArmed, facesInZoneCount, recPulse]);
+    const pct = eventConfig.camera?.captureZoneWidthPercent ?? 30;
+    zoneSV.value = Math.max(0.1, Math.min(1, pct / 100));
+  }, [eventConfig.camera?.captureZoneWidthPercent, zoneSV]);
 
-  // Zone de déclenchement : bande verticale, position gauche / centre / droite.
-  const zonePct = (eventConfig.faceDetection?.triggerZoneWidthPercent ?? 33) / 100;
-  const zonePosition = eventConfig.faceDetection?.triggerZonePosition || 'center';
-  // Fraction VERTICALE de la preview où la détection est valide. Doit rester
-  // synchro avec la hauteur du cadre de visée visuel ci-dessous (qui utilise
-  // height: previewH * TRIGGER_VPCT, top: CAMERA_TOP + previewH * (1 - TRIGGER_VPCT) / 2).
-  const TRIGGER_VPCT = 0.8;
+  // Axe de filtrage detection wide 1x : hypothese theorique midX (Vision
+  // avec frame.orientation=.right rotate l'image en portrait -> midX =
+  // axe gauche-droite sur ecran = matche la bande visuelle dessinee par
+  // les lignes verticales leftPct/rightPct). A valider via log
+  // [FaceDetector] axis=midX bboxes=(x=,y=) : coureur visuellement centre
+  // doit donner x~0.5. Si le log montre que y varie quand le coureur
+  // bouge horizontalement, on swap vers midY au build suivant.
+  // Le plugin native dump TOUJOURS x ET y dans les logs pour ce diag.
 
+  // Frame processor : ~30 fps appel worklet, throttle 1/3 -> ~10 fps d'analyse
+  // Vision (economie batterie + thermal). Apple Vision tourne sur la queue
+  // VisionCamera (background) ; le runOnJS ne bloque pas le rendu.
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
-    // Compteur cadence MLKit : on incremente sur chaque frame, on logue toutes
-    // les 30 frames via runOnJS. Utilise des SharedValues pour persister entre
-    // executions du worklet (les `let` locaux seraient reset a chaque call).
-    const nowMs = Date.now();
-    if (mlkitWindowStartSV.value === 0) {
-      mlkitWindowStartSV.value = nowMs;
-    }
-    mlkitFrameCountSV.value = mlkitFrameCountSV.value + 1;
-    if (mlkitFrameCountSV.value >= 30) {
-      const elapsed = nowMs - mlkitWindowStartSV.value;
-      onMlkitWindowJS(mlkitFrameCountSV.value, elapsed);
-      mlkitFrameCountSV.value = 0;
-      mlkitWindowStartSV.value = nowMs;
-    }
-
-    const faces = detectFaces(frame);
-    const fW = frame.width;
-    const fH = frame.height;
-    // MLKit retourne les bounds dans le repère du capteur landscape natif.
-    // En orientation portrait + landscape-right : axe Y du frame = axe horizontal écran
-    // (gauche écran = grand Y, droite écran = petit Y) ; axe X du frame = axe vertical écran.
-    const bandWidth = fH * zonePct;
-    let testMin = 0, testMax = 0;
-    if (zonePosition === 'left') {
-      testMin = fH - bandWidth; testMax = fH;
-    } else if (zonePosition === 'right') {
-      testMin = 0; testMax = bandWidth;
-    } else {
-      testMin = fH / 2 - bandWidth / 2;
-      testMax = fH / 2 + bandWidth / 2;
-    }
-    // Bande VERTICALE écran = axe X du frame. On exige que le visage soit dans
-    // les TRIGGER_VPCT centrés (= dans le cadre de visée visuel).
-    const vMargin = fW * (1 - TRIGGER_VPCT) / 2;
-    const vMin = vMargin;
-    const vMax = fW - vMargin;
-
-    const facesData = faces.map(f => {
-      const bounds = f.bounds || f.frame || {};
-      const cx = (bounds.x || 0) + (bounds.width || 0) / 2;
-      const cy = (bounds.y || 0) + (bounds.height || 0) / 2;
-      const sizeFraction = Math.max(
-        (bounds.width || 0) / fW,
-        (bounds.height || 0) / fH,
-      );
-      const inside = (cy >= testMin && cy <= testMax) && (cx >= vMin && cx <= vMax);
-      // cyFraction = position horizontale ecran (0=droite, 1=gauche en
-      // orientation portrait + landscape-right). Utilise par le mode "3 lignes"
-      // pour detecter la traversee.
-      const cyFraction = fH > 0 ? cy / fH : 0;
-      // verticalOk = visage dans le band TRIGGER_VPCT centre verticalement.
-      // Sert au mode 3 lignes : on ignore les visages aux extremites top/bottom.
-      const verticalOk = cx >= vMin && cx <= vMax;
-      return {
-        id: f.trackingId != null ? String(f.trackingId) : `${Math.round(cx)}_${Math.round(cy)}`,
-        inZone: inside,
-        sizeFraction,
-        cyFraction,
-        verticalOk,
-      };
+    frameSkipSV.value = (frameSkipSV.value + 1) % 3;
+    if (frameSkipSV.value !== 0) return;
+    const result = detectHumans(frame, {
+      zoneWidthPercent: zoneSV.value,
+      axis: 'midX',
     });
-    onFacesDetectedJS(facesData);
-  }, [detectFaces, onFacesDetectedJS, zonePct, zonePosition, TRIGGER_VPCT, onMlkitWindowJS, mlkitFrameCountSV, mlkitWindowStartSV]);
-
-  const NO_FACE_TIMEOUT_MS = 500;
-  const INTER_PHOTO_MS = 100; // ~5 photos/sec, optimum vitesse/utilité
+    const count = result?.count ?? 0;
+    onHumansDetectedJS(count);
+  }, [onHumansDetectedJS, frameSkipSV, zoneSV]);
 
   // === Mode offline-first : queue persistante ===
   // - Photos copiées dans Paths.document/will_pending/ (survit au kill app)
@@ -2398,16 +2324,36 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     return stats;
   }
 
+  // Chaîne de sérialisation des writes AsyncStorage. queueRef.current est
+  // toujours mis à jour synchrone (pas de race en mémoire), mais les
+  // AsyncStorage.setItem peuvent partir dans le désordre si on n'attend pas
+  // -- en cadence rafale (jusqu'à MAX_IN_FLIGHT captureOne en parallèle,
+  // chacun appelant enqueueBurstItems puis commitQueue), ça garantit que les
+  // écritures disque s'enchaînent dans l'ordre des appels et que la dernière
+  // setItem écrit toujours l'état le plus récent.
+  const commitChainRef = useRef(Promise.resolve());
+
   async function commitQueue(arr) {
-    queueRef.current = arr;
-    await saveUploadQueue(arr);
+    queueRef.current = arr;     // SYNC : état mémoire à jour immédiatement
     if (isMountedRef.current) {
       setQueueStats(recomputeStats(arr));
     }
+    // SERIAL : chain le setItem derrière le précédent. saveUploadQueue lit
+    // queueRef.current AU MOMENT DE L'EXÉCUTION du setItem (après await prev),
+    // donc on persiste toujours l'état le plus à jour, jamais un snapshot
+    // stale.
+    const prev = commitChainRef.current;
+    commitChainRef.current = (async () => {
+      try { await prev; } catch {}
+      await saveUploadQueue(queueRef.current);
+    })();
+    await commitChainRef.current;
   }
 
   // Charge la queue au démarrage du screen + reconcile fichiers manquants
-  // + reset des items 'uploading' (interrompus par crash/kill).
+  // + reset des items 'uploading' / 'processing' (interrompus par crash/kill).
+  // Migration legacy : items sans champ `processed` -> processed:true (ils
+  // sont passes par l'ancien pipeline qui faisait enhance/burn/encode inline).
   // Si queue non vide, propose à l'utilisateur de reprendre l'upload.
   useEffect(() => {
     let alive = true;
@@ -2419,7 +2365,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       const currentEvent = session?.event?.code;
       const cleaned = [];
       const orphans = [];
-      for (const it of arr) {
+      for (const rawIt of arr) {
+        // Migration : items legacy sans `processed` ont deja ete enhance/burn
+        // par l'ancien pipeline -> on les marque processed:true.
+        const it = rawIt.processed === undefined
+          ? { ...rawIt, processed: true }
+          : rawIt;
         if (it.eventCode !== currentEvent) {
           orphans.push(it);
           continue;
@@ -2427,20 +2378,32 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         const fileExists = (() => {
           try { return new File(it.localUri).exists; } catch { return false; }
         })();
-        if (!fileExists) continue; // drop silencieusement
-        // recovery: tout 'uploading' redevient 'pending'
-        if (it.status === 'uploading') cleaned.push({ ...it, status: 'pending' });
-        else cleaned.push(it);
+        if (!fileExists) {
+          // raw orphan : si sidecar present, on pourrait reconstruire mais
+          // sans le brut HEIC c'est inutile -> drop silencieux + cleanup sidecar.
+          if (it.processed === false && it.id) deleteSidecar(it.id);
+          continue;
+        }
+        // recovery: 'uploading' (drain interrompu) -> 'pending', cooldown reset
+        // pour partir au prochain tick. Idem 'processing' (worker burn interrompu).
+        if (it.status === 'uploading' || it.status === 'processing') {
+          cleaned.push({ ...it, status: 'pending', nextAttemptAt: null });
+        } else {
+          cleaned.push(it);
+        }
       }
-      // Suppression des fichiers physiques des orphelins (espace disque).
+      // Suppression des fichiers physiques des orphelins (espace disque) +
+      // sidecar associe si processed:false.
       for (const o of orphans) {
         try { new File(o.localUri).delete(); } catch {}
+        if (o.processed === false && o.id) deleteSidecar(o.id);
       }
       if (!alive) return;
       await commitQueue(cleaned);
       if (cleaned.length === 0) return;
-      // Drain immédiat si online — l'alerte sert juste à informer l'utilisateur,
-      // l'upload démarre en parallèle sans attendre son tap.
+      // Demarrage immediat des workers : process pour les brut, drain pour les
+      // processed. Si online, les deux partent en parallele (workers separes).
+      processQueue();
       const state = await NetInfo.fetch().catch(() => null);
       const online = state ? (!!state.isConnected && state.isInternetReachable !== false) : true;
       if (online) drainQueue();
@@ -2461,79 +2424,137 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     return () => { alive = false; };
   }, []);
 
-  // NetInfo: relance le drain au retour du réseau, met à jour l'indicateur
+  // NetInfo: relance le drain au retour du réseau, met à jour l'indicateur.
+  // processQueue est offline-safe (pas d'upload) donc on le pousse aussi :
+  // si on etait au repos pendant offline, autant rattraper le retard de burn.
   useEffect(() => {
     const unsub = NetInfo.addEventListener(state => {
       const online = !!state.isConnected && state.isInternetReachable !== false;
       if (isMountedRef.current) setIsOnline(online);
+      processQueue();
       if (online) drainQueue();
     });
     return () => unsub();
   }, []);
 
-  // Heartbeat 30s : filet de sécurité au cas où NetInfo manquerait un évènement
+  // Heartbeat 30s : filet de sécurité au cas où NetInfo manquerait un évènement,
+  // et reveil periodique du worker process si jamais un item reste 'raw' (rare,
+  // mais ceinture+bretelles : un worker mort silencieusement serait relance).
   useEffect(() => {
-    const t = setInterval(() => drainQueue(), 30000);
+    const t = setInterval(() => { processQueue(); drainQueue(); }, 30000);
     return () => clearInterval(t);
   }, []);
 
-  // AppState : retour foreground → drain silencieux (au cas où la connexion
-  // soit revenue pendant que l'app était en background).
+  // AppState : retour foreground → kick les deux workers (au cas où la
+  // connexion soit revenue pendant que l'app était en background, ou que des
+  // brut n'aient pas eu le temps d'etre traites avant la mise en background).
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active') drainQueue();
+      if (next === 'active') { processQueue(); drainQueue(); }
     });
     return () => sub.remove();
   }, []);
 
-  // Enqueue: copie le fichier capturé vers le dossier persistant et ajoute à la queue
+  // Enqueue: deplace le fichier brut capture vers will_pending/raw/{id}.heic,
+  // ecrit son sidecar JSON, et ajoute l'item a la queue en `processed:false`
+  // pour que processQueue le prenne en charge. Le move (vs copy) est volontaire :
+  // le tmp VisionCamera n'est pas persistant, et un move atomique sur meme
+  // volume est l'operation la moins couteuse possible cote latence capture.
   async function enqueueBurstItems(rawItems) {
     if (rawItems.length === 0) return;
     ensurePendingDir();
-    const dir = pendingDir();
+    const dir = rawDir();
     const newQueueItems = [];
+    // Garde-fou défensif : tripwire pour détecter une collision de clé R2.
+    // Avec le schéma {burstTs}_{idx} (idx monotone par burst), la collision
+    // est impossible par construction. Mais si une régression future réintroduit
+    // le bug (idx hardcodé, burstTs per-photo, etc.), on ne perd PAS la photo :
+    // on renomme la clé avec un suffixe random et on log loudly pour alerter.
+    const existingKeys = new Set(queueRef.current.map(it => it.key));
+    // Politique : tout échec ici (move/copy, writeSidecar, autre) THROW au
+    // caller. Caller (captureOne) catch, incrémente "Perdues" et n'incrémente
+    // PAS "Capturées" -- compteur reste honnête. Aucun `continue` silencieux.
     for (const r of rawItems) {
-      try {
-        const ext = r.isRaw ? 'dng' : 'jpg';
-        const id = generateItemId();
-        const dest = new File(dir, `${id}.${ext}`);
-        const src = new File(r.tempPath.startsWith('file://') ? r.tempPath : `file://${r.tempPath}`);
+      let finalKey = r.key;
+      if (existingKeys.has(finalKey)) {
+        const suffix = Math.random().toString(36).slice(2, 8);
+        const dotIdx = finalKey.lastIndexOf('.');
+        finalKey = dotIdx > -1
+          ? `${finalKey.slice(0, dotIdx)}-dup${suffix}${finalKey.slice(dotIdx)}`
+          : `${finalKey}-dup${suffix}`;
+        console.error(`[enqueue] KEY COLLISION (régression !) : ${r.key} → renommé ${finalKey}`);
+      }
+      existingKeys.add(finalKey);
+      // Capture HEIC garantie par with-heic-capture plugin (AVCapturePhotoOutput
+      // bascule sur codec HEVC). On etiquette le brut en .heic pour eviter
+      // l'extension menteuse .jpg qui trainait avant le refactor.
+      const ext = r.isRaw ? 'dng' : 'heic';
+      const id = generateItemId();
+      const dest = new File(dir, `${id}.${ext}`);
+      const src = new File(r.tempPath.startsWith('file://') ? r.tempPath : `file://${r.tempPath}`);
+      // Move atomique (meme volume Documents/...). Fallback copy si move
+      // echoue (cross-device, permission). Si LES DEUX echouent -> throw
+      // explicite avec les 2 raisons : on ne perd PAS la photo en silence.
+      try { src.move(dest); }
+      catch (eMove) {
         try { src.copy(dest); }
-        catch (e) {
-          // Si copy échoue (ex. fichier source déjà déplacé), on essaie move pour éviter de perdre la photo
-          try { src.move(dest); } catch { console.warn('copy/move failed', e?.message); continue; }
+        catch (eCopy) {
+          throw new Error(`enqueue move/copy failed for ${finalKey}: move="${eMove?.message || eMove}" copy="${eCopy?.message || eCopy}"`);
         }
-        newQueueItems.push({
+      }
+      // Sidecar : EXIF de capture + contexte race/km. Si l'ecriture echoue,
+      // on throw : le HEIC est deja dans raw/ (orphelin sur disque), mais
+      // l'item n'est PAS en queue -- on prefere ce trade-off (un fichier
+      // orphelin a sweep plus tard) plutot qu'un item queue sans sidecar
+      // (processQueue calerait au burn sans label, dans un etat ambigu).
+      try {
+        await writeSidecar(id, {
           id,
-          localUri: dest.uri,
+          exif: r.exif || null,
+          race: r.race ?? null,
+          km: r.km ?? null,
           eventCode: session?.event?.code || 'unknown',
-          photographerName: session?.photographer_name || session?.photographer_id || 'unknown',
+          photographerId: session?.photographer_id || null,
+          key: finalKey,
           burstTs: r.burstTs,
           idx: r.idx,
-          createdAt: Date.now(),
-          retries: 0,
-          status: 'pending',
-          // métadonnées pour upload
-          key: r.key,
-          isRaw: !!r.isRaw,
-          race: r.race,
-          km: r.km,
+          capturedAt: Date.now(),
         });
-      } catch (e) { console.warn('enqueueBurstItems', e?.message); }
+      } catch (eSidecar) {
+        throw new Error(`enqueue writeSidecar failed for ${finalKey} id=${id}: ${eSidecar?.message || eSidecar}`);
+      }
+      newQueueItems.push({
+        id,
+        localUri: dest.uri,             // pointe sur raw/{id}.heic en phase brut
+        eventCode: session?.event?.code || 'unknown',
+        photographerName: session?.photographer_name || session?.photographer_id || 'unknown',
+        burstTs: r.burstTs,
+        idx: r.idx,
+        createdAt: Date.now(),
+        retries: 0,
+        status: 'pending',
+        processed: false,               // sera flip a true par processQueue
+        // métadonnées pour upload
+        key: finalKey,
+        isRaw: !!r.isRaw,
+        race: r.race,
+        km: r.km,
+      });
     }
     let next = [...queueRef.current, ...newQueueItems];
 
     // FIFO eviction : si la queue depasse MAX_QUEUE_SIZE (200), on vire les
-    // plus anciens items 'pending' ou 'failed' (jamais 'uploading' pour ne
-    // pas casser une requete en cours). Delete les fichiers locaux pour
-    // liberer le stockage. Warning unique pour notifier le photographe.
+    // plus anciens items 'pending' ou 'failed' (jamais 'uploading' ni
+    // 'processing' pour ne pas casser un worker en cours). Delete les
+    // fichiers locaux + sidecar (si brut) pour liberer le stockage.
     if (next.length > MAX_QUEUE_SIZE) {
       const excess = next.length - MAX_QUEUE_SIZE;
       const dropped = [];
       const kept = [];
       let droppedCount = 0;
       for (const it of next) {
-        if (droppedCount < excess && it.status !== 'uploading') {
+        const inFlight = it.status === 'uploading' || it.status === 'processing';
+        if (droppedCount < excess && !inFlight) {
           dropped.push(it);
           droppedCount++;
         } else {
@@ -2542,6 +2563,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       }
       for (const it of dropped) {
         try { new File(it.localUri).delete(); } catch {}
+        if (it.processed === false && it.id) deleteSidecar(it.id);
       }
       if (dropped.length > 0) {
         console.warn(`[upload] FIFO drop ${dropped.length} oldest items (queue at max ${MAX_QUEUE_SIZE})`);
@@ -2590,16 +2612,20 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       }
     } catch {}
 
-    drainQueue();
+    // Les nouveaux items sont processed:false -> ils sortent par processQueue
+    // d'abord (enhance/burn/encode), qui kickera drainQueue quand le brut est
+    // prêt. On evite donc de tenter un upload sur un brut non traite.
+    processQueue();
   }
 
   // setTimeout id pour le re-trigger de drain apres un cooldown de backoff.
   // Reset/replace dans scheduleRetryTick pour ne pas accumuler les callbacks.
   const retryTickTimeoutRef = useRef(null);
 
-  // Programme un re-trigger de drainQueue au plus proche nextAttemptAt parmi
-  // les items 'pending'. Si rien n'est en cooldown, no-op. Appele a la fin
-  // de chaque drain pour reprendre les retries 2/4/8s sans attendre le
+  // Programme un re-trigger des workers au plus proche nextAttemptAt parmi
+  // les items 'pending' (que ce soit pour burn -> processQueue, ou pour upload
+  // -> drainQueue). Si rien n'est en cooldown, no-op. Appele a la fin de
+  // chaque drain/process pour reprendre les retries 2/4/8s sans attendre le
   // heartbeat 30s.
   function scheduleRetryTick() {
     if (retryTickTimeoutRef.current) {
@@ -2619,6 +2645,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     const delay = Math.max(50, nextAt - now);
     retryTickTimeoutRef.current = setTimeout(() => {
       retryTickTimeoutRef.current = null;
+      // On reveille les deux workers : ils filtrent eux-memes sur processed.
+      processQueue();
       drainQueue();
     }, delay);
   }
@@ -2640,6 +2668,133 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     };
   }
 
+  // === Worker process : enhance + burn EXIF + encode HEIC ===
+  // Boucle sequentielle (single-flight via processingRef). Prend le plus
+  // ancien item processed:false, lit son sidecar, appelle le natif
+  // PhotoMetadataBurner (lui-meme serial DispatchQueue cote iOS pour borner
+  // la memoire), deplace raw/ -> processed/, flip processed:true, kicke
+  // drainQueue. Offline-safe : ne touche jamais le reseau.
+  //
+  // Sur erreur : bump retries, backoff exponentiel (meme barreme que upload).
+  // Au-dela de MAX_RETRIES_DEFAULT, marque l'item 'failed' (l'admin peut
+  // force-retry via le sous-ecran admin -> reset retries -> picked up here).
+  const processingRef = useRef(false);
+  async function processQueue() {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    try {
+      while (true) {
+        const arr = [...queueRef.current];
+        const now = Date.now();
+        const idx = arr.findIndex(it =>
+          it && it.processed === false
+            && it.status !== 'failed'
+            && it.status !== 'processing'  // garde-fou
+            && (!it.nextAttemptAt || it.nextAttemptAt <= now)
+        );
+        if (idx === -1) break;
+        const item = arr[idx];
+
+        // Sanity : brut present sur disque ?
+        let srcExists = false;
+        try { srcExists = new File(item.localUri).exists; } catch {}
+        if (!srcExists) {
+          // Brut manquant entre enqueue et passage de processQueue (purge iOS
+          // sous pression stockage, crash partiel, race). On ne peut PAS
+          // recuperer cette photo -> log loud + bump lostCount + drop. Avant
+          // le fix on droppait en silence -> l'utilisateur croyait que la
+          // photo avait ete envoyee.
+          console.error(`[process] LOST: id=${item.id} key=${item.key} (raw missing on disk at ${item.localUri})`);
+          lostCountRef.current += 1;
+          if (isMountedRef.current) setLostCount(lostCountRef.current);
+          deleteSidecar(item.id);
+          const cleaned = queueRef.current.filter(it => it.id !== item.id);
+          await commitQueue(cleaned);
+          continue;
+        }
+
+        // Mark processing pour que la boucle ne reprenne pas le meme item
+        // au prochain tour (ceinture+bretelles avec processingRef).
+        const beforeProcess = queueRef.current.map(it =>
+          it.id === item.id ? { ...it, status: 'processing' } : it
+        );
+        await commitQueue(beforeProcess);
+
+        // Calcule le label EXIF depuis sidecar (shutter / ISO / aperture).
+        const sidecar = readSidecar(item.id);
+        const exif = sidecar?.exif || {};
+        const exposureSeconds = Number(exif.ExposureTime);
+        const iso = Array.isArray(exif.ISOSpeedRatings) ? exif.ISOSpeedRatings[0] : exif.ISOSpeedRatings;
+        const fnum = Number(exif.FNumber);
+        const parts = [];
+        if (Number.isFinite(exposureSeconds) && exposureSeconds > 0) {
+          parts.push(`1/${Math.round(1 / exposureSeconds)}s`);
+        }
+        if (Number.isFinite(iso) && iso > 0) parts.push(`ISO ${iso}`);
+        if (Number.isFinite(fnum) && fnum > 0) parts.push(`f/${fnum.toFixed(1)}`);
+        const label = parts.join(' · ');
+
+        // Burn natif vers processed/{id}.heic. Le natif gere sa propre serial
+        // DispatchQueue : pas de pic memoire meme en cas d'enchainement rapide.
+        ensurePendingDir();
+        const dstFile = new File(processedDir(), `${item.id}.heic`);
+        const srcPath = item.localUri.startsWith('file://') ? item.localUri.slice(7) : item.localUri;
+        const dstPath = dstFile.uri.startsWith('file://') ? dstFile.uri.slice(7) : dstFile.uri;
+
+        // exifJson = serialisation du sidecar EXIF (capture photo.metadata
+        // au takePhoto). Passe au natif pour injection dans la EXIF box
+        // HEIF sans recompression image, via CGImageDestinationAddImageFromSource
+        // + Finalize (cf PhotoMetadataBurner.swift fast path). Si vide /
+        // "{}" cote Swift -> fallback copie byte-pour-byte.
+        const exifJson = JSON.stringify(exif || {});
+        // Diag taille exifJson -> deplace cote Swift NSLog [WILL-CAM]
+        // (debut de burnMetadata). console.log JS invisible en prod.
+        try {
+          if (label && NativeModules.PhotoMetadataBurner?.burnMetadata) {
+            await NativeModules.PhotoMetadataBurner.burnMetadata(srcPath, dstPath, label, exifJson);
+          } else if (NativeModules.PhotoMetadataBurner?.burnMetadata) {
+            // Sidecar absent / EXIF vide : on burn quand meme (le natif tolere
+            // un label vide -> juste enhance + reencode, badge omis).
+            await NativeModules.PhotoMetadataBurner.burnMetadata(srcPath, dstPath, '', exifJson);
+          } else {
+            // Module natif absent (cas degrade dev / Expo Go) : on copie le
+            // brut tel quel vers processed/ pour que drainQueue puisse l'envoyer.
+            new File(item.localUri).copy(dstFile);
+          }
+
+          // Succes : delete brut + sidecar, flip processed=true, retries reset
+          // (le compteur d'upload repart de zero), localUri pointe sur processed/.
+          try { new File(item.localUri).delete(); } catch {}
+          deleteSidecar(item.id);
+          const afterProcess = queueRef.current.map(it =>
+            it.id === item.id
+              ? { ...it, processed: true, status: 'pending', retries: 0, nextAttemptAt: null, localUri: dstFile.uri }
+              : it
+          );
+          await commitQueue(afterProcess);
+        } catch (e) {
+          // Echec burn : on traite comme un retry, backoff exponentiel via
+          // nextRetryState (meme barreme que upload, MAX_RETRIES_DEFAULT).
+          console.warn(`[process] burn failed ${item.id}: ${e?.message || e}`);
+          addDebugLog(`[process] err ${item.id}: ${e?.message || e}`);
+          const updated = nextRetryState(item, MAX_RETRIES_DEFAULT);
+          const onErr = queueRef.current.map(it =>
+            it.id === item.id ? { ...updated, processed: false } : it
+          );
+          await commitQueue(onErr);
+        }
+      }
+    } catch (e) {
+      console.warn('processQueue', e?.message);
+    } finally {
+      processingRef.current = false;
+      // Si on a flip des items en processed:true, ils sont prets pour upload.
+      drainQueue();
+      // Reschedule un tick si un brut est en cooldown (retry burn).
+      scheduleRetryTick();
+    }
+  }
+
   async function drainQueue() {
     if (drainingRef.current) return;
     if (!session?.token) return;
@@ -2657,9 +2812,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       // 'failed' = max retries atteint -> on n'essaie plus automatiquement
       // (l'utilisateur peut retry manuellement). Pour 'pending', on respecte
       // le cooldown nextAttemptAt (backoff exponentiel).
+      // processed===true uniquement : les bruts non traites sont gerees par
+      // processQueue, jamais uploades tels quels.
       const uploadable = arr
         .map((it, i) => ({ it, i }))
-        .filter(({ it }) => it.status === 'pending'
+        .filter(({ it }) => it.processed === true
+          && it.status === 'pending'
           && (!it.nextAttemptAt || it.nextAttemptAt <= now));
       if (uploadable.length === 0) {
         drainingRef.current = false;
@@ -2697,20 +2855,37 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       // chauffent le NPU/CPU plus vite). Conforme au brief Phase 2.
       const CONCURRENCY = 3;
       let cursor = 0;
-      // mark all as uploading upfront so UI reflète
+      // mark all as uploading upfront so UI reflète. MERGE-COMMIT (pas
+      // overwrite) : on lit queueRef.current AU MOMENT DU COMMIT et on
+      // patche uniquement les items qu'on traite par id -- jamais d'ecrasement
+      // d'items ajoutes entre la prise du snapshot et ce commit (race window
+      // microsecondes mais bulletproofing).
       for (const { i } of uploadable) arr[i] = { ...arr[i], status: 'uploading', nextAttemptAt: null };
-      await commitQueue(arr);
+      const uploadingIds = new Set(uploadable.map(({ it }) => it.id));
+      const initialCommit = queueRef.current.map(it =>
+        uploadingIds.has(it.id) ? { ...it, status: 'uploading', nextAttemptAt: null } : it
+      );
+      await commitQueue(initialCommit);
 
       async function worker() {
         while (cursor < uploadable.length) {
           const { i } = uploadable[cursor++];
           const item = arr[i];
           if (!item) continue;
-          // sanity: file still there?
+          // sanity: file still there ?
+          // Si le fichier processed (burned EXIF) a disparu entre
+          // processQueue success commit et drainQueue, on ne peut PAS
+          // uploader. Avant le fix on droppait en silence (warn gate par
+          // verbose, off en prod) -> photo perdue invisible. Maintenant :
+          // log loud + bump lostCount. La cause racine (burn natif qui
+          // resout sans ecrire ? purge iOS ?) reste a investiguer mais
+          // au moins le photographe la voit.
           let fileExists = false;
           try { fileExists = new File(item.localUri).exists; } catch {}
           if (!fileExists) {
-            if (verbose) console.warn('[upload] file missing, drop', item.id);
+            console.error(`[upload] LOST: id=${item.id} key=${item.key} (processed file missing at ${item.localUri})`);
+            lostCountRef.current += 1;
+            if (isMountedRef.current) setLostCount(lostCountRef.current);
             arr[i] = null;
             continue;
           }
@@ -2724,9 +2899,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             if (item.km) headers['X-Will-Km'] = String(item.km);
             const res = await fetch(`${API_URL}/${item.key}`, { method: 'PUT', headers, body: blob });
             if (res.ok) {
-              // succès → delete fichier local + drop item
+              // succès → delete fichier local + drop item + bump "Uploadees"
+              // (verite R2 cote app : on n'incremente QUE sur PUT 200 OK).
               try { new File(item.localUri).delete(); } catch {}
               arr[i] = null;
+              uploadedCountRef.current += 1;
+              if (isMountedRef.current) setUploadedCount(uploadedCountRef.current);
               if (verbose) {
                 const m = `[upload] OK ${item.id} (key=${item.key})`;
                 console.log(m); addDebugLog(m);
@@ -2749,8 +2927,34 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       }
 
       await Promise.all(Array.from({ length: CONCURRENCY }).map(() => worker()));
-      const cleaned = arr.filter(Boolean);
-      await commitQueue(cleaned);
+      // MERGE-COMMIT critique (la race destructive qu'on a chasse 5 fois) :
+      // les workers ont awaited fetch pendant 500ms-2s. PENDANT ce temps,
+      // captureBurstLoop a pu enqueuer de nouveaux items via commitQueue.
+      // Si on ecrasait queueRef.current avec notre snapshot local `arr`
+      // (post-workers), ces nouveaux items seraient WIPED silencieusement
+      // -- AUCUN compteur ne le verrait. Le symptome 2-1-0-0 (Capt 2, Upload
+      // 1, Attente 0, Perdues 0) etait exactement ca.
+      //
+      // Fix : on construit un delta {droppedIds, updatedById} depuis `arr`,
+      // puis on l'applique sur queueRef.current LU MAINTENANT (qui peut
+      // avoir grossi). Items ajoutes pendant le drain = preserves.
+      const droppedIds = new Set();
+      const updatedById = new Map();
+      for (const { it: origItem, i: arrIdx } of uploadable) {
+        const cur = arr[arrIdx];
+        if (cur === null) {
+          // Worker a uploaded OK (PUT 200) ou marque LOST (file missing).
+          // Dans les deux cas le compteur a deja bumpe -> on retire de la queue.
+          droppedIds.add(origItem.id);
+        } else if (cur && cur !== origItem) {
+          // Worker a update l'item (retry state 'pending' ou 'failed').
+          updatedById.set(origItem.id, cur);
+        }
+      }
+      const finalCommit = queueRef.current
+        .filter(it => !droppedIds.has(it.id))
+        .map(it => updatedById.has(it.id) ? updatedById.get(it.id) : it);
+      await commitQueue(finalCommit);
     } catch (e) {
       console.warn('drainQueue', e?.message);
     } finally {
@@ -2805,7 +3009,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   function stopSession() {
     isDetectionEnabledRef.current = false;
     setIsDetectionEnabled(false);
-    lastFaceSeenAtRef.current = 0;
   }
 
   // Détection activée par défaut dès l'ouverture de l'écran photographe — la
@@ -2821,22 +3024,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Feedback visuel au lancement d'une rafale.
-  function triggerBurstFeedback() {
-    // Flash blanc 120ms
-    flashOpacity.setValue(0);
-    Animated.sequence([
-      Animated.timing(flashOpacity, { toValue: 0.55, duration: 40, useNativeDriver: true }),
-      Animated.timing(flashOpacity, { toValue: 0, duration: 120, useNativeDriver: true }),
-    ]).start();
-  }
-
   // Bouton Go/Stop : toggle de l'auto-capture.
-  // - Go (off) → tap arme : isAutoArmedRef=true, state isAutoArmed=true, label "Stop", bg rouge.
-  // - Stop (on) → tap desarme : isAutoArmedRef=false, isAutoArmed=false, label "Go", bg rose.
-  //   Si captureOne() est en cours au moment du desarmage, on la laisse finir
-  //   (pas d'abort en plein takePhoto, pour ne pas corrompre le fichier).
-  // Ref + state mis a jour synchroniquement (ref pour le worklet, state pour le rendu).
   function onCapturePress() {
     const next = !isAutoArmedRef.current;
     isAutoArmedRef.current = next;
@@ -2846,140 +3034,195 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       Animated.timing(captureScale, { toValue: 0.96, duration: 80, useNativeDriver: true }),
       Animated.spring(captureScale, { toValue: 1, tension: 180, friction: 7, useNativeDriver: true }),
     ]).start();
-    if (!next) {
-      // Reset session en cours et compteurs de session
-      currentBurstTsRef.current = null;
-      currentBurstIndexRef.current = 0;
-      lastFaceInZoneAtRef.current = 0;
-      lastFaceSeenAtRef.current = 0;
+  }
+
+  // Plafond max de photos par passage de coureur. Sécurité anti-boucle si un
+  // visage reste planté dans la zone (photographe qui teste la caméra, ou
+  // détection figée sans qu'on l'ait remarqué).
+  const MAX_BURST_SHOTS = 15;
+
+  // Cadence rafale pipelinée : on lance takePhoto SANS attendre la resolution
+  // de la precedente. MAX_IN_FLIGHT borne le nombre de takePhoto AVFoundation
+  // en vol simultanement. Avec speed mode, AVFoundation processe les captures
+  // a ~5-7 ph/s sequentiellement sur le capteur quoi qu'il arrive : MAX_IN_FLIGHT
+  // ne change PAS la cadence stable, il borne juste la RAM (~30 Mo par photo
+  // en vol) et le nombre de captures deja engagees au moment ou le visage
+  // sort (= parasites max). 3 est l'optimum : meme cadence qu'a 5, moitie
+  // moins de parasites possibles a la sortie.
+  const MAX_IN_FLIGHT = 3;
+
+  // Cap dur du pipeline (queue persistante + in-flight). Au-dela, le burst
+  // loop break -- on PREFERE rater 1 coureur a saturer la memoire. Le drain
+  // ramene le total sous le seuil avant la rafale suivante.
+  const MAX_TOTAL_IN_PIPELINE = 50;
+
+  // Boucle de capture pipelinée (Palier 1, cf échange 2026-05-20).
+  // Lance takePhoto SANS attendre la résolution : MAX_IN_FLIGHT captures
+  // peuvent être engagées en parallèle côté AVFoundation. Le hardware traite
+  // sérialement sur le capteur à ~5-7 ph/s en speed mode.
+  //
+  // Conditions d'arrêt :
+  //   - faceInZoneRef passe à false (visage sorti de la zone)
+  //   - plafond MAX_BURST_SHOTS atteint
+  //   - backpressure : queue + in-flight >= MAX_TOTAL_IN_PIPELINE
+  //   - démontage / désarmement / détection désactivée
+  //
+  // Défense anti-photo-parasite :
+  //   - pre-shot guard : re-check faceInZoneRef juste avant chaque lancement
+  //   - MAX_IN_FLIGHT borne le nombre de captures déjà engagées au moment
+  //     d'une sortie (parasites max = MAX_IN_FLIGHT, irréductible car
+  //     takePhoto n'est PAS annulable côté iOS)
+  // Pire cas : MAX_IN_FLIGHT photos "parasites" si visage sort pile au
+  // moment où on a saturé le pipeline.
+  async function captureBurstLoop() {
+    if (burstLoopRef.current) return;
+    burstLoopRef.current = true;
+    let shotsInBurst = 0;
+    const burstStartedAt = Date.now();
+    // burstTs partage par toutes les photos du burst (cf historique :
+    // garantit unicite des cles R2 via {burstTs}_{idx}, et permet au
+    // worker /personal-gallery de regrouper les freres d'un match Rekognition).
+    const burstTs = burstStartedAt;
+    try {
+      while (
+        faceInZoneRef.current &&
+        shotsInBurst < MAX_BURST_SHOTS &&
+        isMountedRef.current &&
+        isAutoArmedRef.current &&
+        isDetectionEnabledRef.current
+      ) {
+        // Pre-shot guard : re-check juste avant chaque lancement.
+        if (!faceInZoneRef.current) break;
+
+        // Backpressure dur : si le pipeline total (queue + in-flight) atteint
+        // MAX_TOTAL_IN_PIPELINE, on stoppe la rafale -- on PREFERE rater 1
+        // coureur a saturer la memoire. Le drain ramene le total sous le
+        // seuil naturellement.
+        const pipelineLoad = queueRef.current.length + inFlightSetRef.current.size;
+        if (pipelineLoad >= MAX_TOTAL_IN_PIPELINE) {
+          console.warn(`[burst] backpressure: pipeline=${pipelineLoad}/${MAX_TOTAL_IN_PIPELINE} — pause burst`);
+          break;
+        }
+
+        // Throttle : si MAX_IN_FLIGHT takePhoto deja en vol, attendre qu'au
+        // moins UN resolve avant d'en lancer un nouveau. AVFoundation processe
+        // les captures sequentiellement sur le capteur, donc le wait est de
+        // ~150-200 ms en speed mode.
+        while (
+          inFlightSetRef.current.size >= MAX_IN_FLIGHT &&
+          faceInZoneRef.current &&
+          isMountedRef.current
+        ) {
+          await Promise.race([...inFlightSetRef.current]);
+        }
+        if (!faceInZoneRef.current || !isMountedRef.current) break;
+
+        // Launch SANS await : capture part en parallele. On enregistre la
+        // promesse dans le set pour le suivi. updateInFlight bump le compteur
+        // UI. Le .finally retire la promesse a la resolution (succes OU echec),
+        // ce qui libere le slot in-flight pour la prochaine iteration.
+        const p = captureOne({ burstTs, idx: shotsInBurst });
+        inFlightSetRef.current.add(p);
+        updateInFlight();
+        p.finally(() => {
+          inFlightSetRef.current.delete(p);
+          updateInFlight();
+        });
+        shotsInBurst += 1;
+      }
+      const dt = Date.now() - burstStartedAt;
+      const reason = !faceInZoneRef.current ? 'face-left-zone'
+                   : shotsInBurst >= MAX_BURST_SHOTS ? 'max-burst-cap'
+                   : (queueRef.current.length + inFlightSetRef.current.size) >= MAX_TOTAL_IN_PIPELINE ? 'backpressure'
+                   : 'disarmed';
+      console.log(`[burst] launched ${shotsInBurst} shots in ${dt}ms (${reason}), inFlight=${inFlightSetRef.current.size}`);
+    } finally {
+      burstLoopRef.current = false;
     }
   }
 
-  // Capture des photos pour un visage eligible.
+  // Capture single shot. Pipeline decouple (mai 2026) :
+  //   takePhoto -> move vers raw/{id}.heic + sidecar JSON + enqueue
+  //                  (gate isCapturingRef libere ici)
+  //   processQueue (worker fond, serial)  -> enhance + burn + encode HEIC
+  //   drainQueue (worker fond, online)    -> upload R2
   //
-  // mode='normal' (defaut)   : 3x takePhoto HQ enchaines (Deep Fusion + Smart
-  //                            HDR), ~900ms total, latence par photo ~300-800ms.
-  // mode='peloton'           : 1x takeSnapshot 4K depuis le flux video, ~100ms.
-  //                            Pas de Deep Fusion, mais 1 photo / face / 800ms
-  //                            de cooldown au lieu de 3 -> tient en peloton dense.
-  // mode='normal-single'     : 1x takePhoto HQ (legacy mode 3 lignes, ou test).
+  // Sur le fil de capture on ne fait QUE le strict minimum pour libérer
+  // le shutter le plus vite possible. Tout le traitement lourd est defere
+  // a processQueue (PhotoMetadataBurner natif, serial DispatchQueue) pour
+  // ne plus empiler plusieurs UIImage 4032x3024 en memoire en parallele
+  // (cause du crash OOM constate lorsqu'un visage restait longtemps en zone).
+  // burstCtx (optionnel) : { burstTs, idx } passé par captureBurstLoop pour
+  // garantir des clés R2 uniques au sein du burst. Si null (appel hors burst,
+  // e.g. shutter manuel futur), on retombe sur un "burst de 1" : burstTs = t0
+  // frais, idx = 0. Compatible avec le schéma legacy.
   //
-  // Les photos consecutives partagent le meme burstTs (groupe d'un passage de
-  // coureur) tant que la session n'est pas reset (cf. onFacesDetectedJS).
-  // isCapturingRef est tenu pendant TOUTE la sequence (3 photos en normal) pour
-  // empecher un 2e captureOne de se declencher au milieu d'un burst. Le post-
-  // processing (Will-Filter + enqueue) se fait apres relachement du lock.
-  async function captureOne(mode = 'normal') {
-    if (isCapturingRef.current) return;
+  // PAS DE GATE isCapturingRef ici : en mode burst pipeline, plusieurs
+  // captureOne tournent en parallele jusqu'a MAX_IN_FLIGHT, la concurrency
+  // est managee par captureBurstLoop. setIsShooting est centralise dans
+  // updateInFlight (true ssi >=1 capture en vol).
+  async function captureOne(burstCtx = null) {
     if (!cameraRef.current || !isMountedRef.current) return;
     if (!isDetectionEnabledRef.current) return;
 
-    const useSnapshot = mode === 'peloton';
-    const count = mode === 'normal' ? 3 : 1;
-
-    isCapturingRef.current = true;
-    setIsShooting(true);
     const t0 = Date.now();
+    const burstTs = burstCtx?.burstTs ?? t0;
+    const idx = burstCtx?.idx ?? 0;
 
-    // Ouverture d'une nouvelle session si necessaire (1ere photo apres un
-    // passage de coureur). burstTs = timestamp de la 1ere photo.
-    const isFirstOfSession = currentBurstTsRef.current === null;
-    if (isFirstOfSession) {
-      currentBurstTsRef.current = t0;
-      currentBurstIndexRef.current = 0;
-      const detectAt = lastFaceInZoneAtRef.current;
-      const m = `[capture] start (armed=true, mode=${mode}, faceInZone=true)` +
-        (detectAt > 0 && detectAt !== t0 ? ` +${t0 - detectAt}ms apres detection` : '');
-      console.log(m); addDebugLog(m);
-      // Flash + pop compteur seulement sur la 1ere photo de la session
-      triggerBurstFeedback();
-    }
-    const burstTs = currentBurstTsRef.current;
-    lastPhotoTimeRef.current = t0;
-
-    // Capture HQ via AVCapturePhotoOutput (Deep Fusion + Smart HDR quand iOS
-    // les juge utiles). Latence reelle ~300-800ms (vs ~100-150ms pour
-    // takeSnapshot), compensee par photoQualityBalance="quality" cote camera
-    // et photoOutput.isResponsiveCaptureEnabled cote natif (iOS 17+).
-    // Le rate limit naturel via isCapturingRef evite l'empilement : tant que
-    // takePhoto est en cours, les frame processor calls return immediatement.
-    const captured = []; // [{ photo, idx }, ...]
-    for (let k = 0; k < count; k++) {
-      if (!isMountedRef.current || !isDetectionEnabledRef.current) break;
-      const idx = currentBurstIndexRef.current;
-      currentBurstIndexRef.current += 1;
-
-      let photo = null;
+    let photo = null;
+    try {
+      photo = await cameraRef.current.takePhoto({
+        flash: 'off',
+        enableShutterSound: false,
+      });
+      const dt = Date.now() - t0;
+      let sizeKb = '?';
       try {
-        const photoStart = Date.now();
-        const apiLabel = useSnapshot ? 'takeSnapshot' : 'takePhoto';
-        const m0 = `[capture] ${apiLabel} called (#${idx + 1} of session, mode=${mode}, k=${k + 1}/${count})`;
-        console.log(m0); addDebugLog(m0);
-        photo = await (useSnapshot
-          ? cameraRef.current.takeSnapshot({ quality: 90 })
-          : cameraRef.current.takePhoto({
-              flash: 'off',
-              enableShutterSound: false,
-            }));
-        const photoEnd = Date.now();
-        // Lit la taille du fichier pour diagnostiquer un capture qui resout
-        // mais sans contenu reel (rare, mais arrive si AVCapture echoue
-        // silencieusement apres callback Apple).
-        let sizeKb = '?';
-        try {
-          const fpath = photo?.path?.startsWith('file://') ? photo.path : `file://${photo?.path}`;
-          const sz = new File(fpath).size;
-          if (typeof sz === 'number') sizeKb = Math.round(sz / 1024);
-        } catch {}
-        const m = `[capture] ${apiLabel} resolved size=${sizeKb}kb @ +${photoEnd - burstTs}ms (#${idx + 1} of session, ${photoEnd - photoStart}ms)`;
-        console.log(m); addDebugLog(m);
-
-        // Compteur cadence : log toutes les 30 photos prises. Permet de mesurer
-        // la cadence reelle de la chaine de capture (la cadence varie selon
-        // thermal/cpu/zoom + maintenant selon le pipeline Deep Fusion choisi).
-        if (captureWindowStartRef.current === 0) {
-          captureWindowStartRef.current = photoEnd;
-        }
-        captureWindowCountRef.current += 1;
-        if (captureWindowCountRef.current >= 30) {
-          const elapsed = photoEnd - captureWindowStartRef.current;
-          const fps = elapsed > 0
-            ? Math.round((captureWindowCountRef.current * 1000) / elapsed * 10) / 10
-            : 0;
-          const cm = `[cadence] ${captureWindowCountRef.current} photos en ${elapsed}ms (${fps} photos/s)`;
-          console.log(cm); addDebugLog(cm);
-          captureWindowCountRef.current = 0;
-          captureWindowStartRef.current = photoEnd;
-        }
-      } catch (e) {
-        const apiLabel = useSnapshot ? 'takeSnapshot' : 'takePhoto';
-        const m = `[capture] ${apiLabel} FAILED: ${e?.message || e?.code || String(e)}`;
-        console.warn(m); addDebugLog(m);
-      }
-
-      if (photo) captured.push({ photo, idx });
+        const fpath = photo?.path?.startsWith('file://') ? photo.path : `file://${photo?.path}`;
+        const sz = new File(fpath).size;
+        if (typeof sz === 'number') sizeKb = Math.round(sz / 1024);
+      } catch {}
+      console.log(`[capture] takePhoto resolved ${sizeKb}kb in ${dt}ms`);
+    } catch (e) {
+      console.warn(`[capture] takePhoto FAILED: ${e?.message || String(e)}`);
     }
 
-    isCapturingRef.current = false;
-    setIsShooting(false);
+    if (!photo) return;
 
-    // Enqueue, pour chaque photo capturee.
-    for (const { photo, idx } of captured) {
-      const d = new Date();
-      const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
-      const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
-      const item = {
-        key: `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${idx}.jpg`,
+    let exif = null;
+    try { exif = photo?.metadata?.['{Exif}'] || null; } catch {}
+
+    const d = new Date();
+    const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
+    // photoKey hoisted HORS du try : sinon le catch (qui doit logger la cle
+    // pour le LOST) n'y aurait pas acces (block-scoped const).
+    const photoKey = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${idx}.jpg`;
+    try {
+      await enqueueBurstItems([{
+        key: photoKey,
         tempPath: photo.path,
         isRaw: false,
         burstTs,
         idx,
         race: selectedRace ? String(selectedRace.km) : null,
         km: selectedKm ? String(selectedKm) : null,
-      };
-      // copie persistante + enqueue (non bloquant) — drain au prochain online
-      enqueueBurstItems([item]);
+        exif,
+      }]);
+      capturedCountRef.current += 1;
+      if (isMountedRef.current) setCapturedCount(capturedCountRef.current);
+    } catch (e) {
+      // Echec dans le chemin enqueue (move/copy/writeSidecar) -> photo
+      // PERDUE entre takePhoto et la queue. Log loud + bump lostCount
+      // pour que le photographe la voie. capturedCount n'est PAS
+      // incremente (le compteur ne ment pas).
+      console.error(`[capture] LOST: ${photoKey} reason="${e?.message || String(e)}"`);
+      lostCountRef.current += 1;
+      if (isMountedRef.current) setLostCount(lostCountRef.current);
     }
+    // Pas de finally setIsShooting : centralise dans updateInFlight via
+    // le .finally attache cote captureBurstLoop quand le slot in-flight
+    // est retire du set. isCapturingRef supprime (mode burst pipeline).
   }
 
   if (!hasPermission) {
@@ -3000,22 +3243,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       </View>
     );
   }
-
-  const badgeColor = !isDetectionEnabled
-    ? 'rgba(255, 255, 255, 0.18)'
-    : isShooting
-      ? 'rgba(16, 185, 129, 0.92)'
-      : facesCount > 0
-        ? 'rgba(16, 185, 129, 0.72)'
-        : 'rgba(255, 255, 255, 0.22)';
-
-  const badgeText = !isDetectionEnabled
-    ? 'En attente'
-    : isShooting
-      ? `Capture · ${facesCount} visage${facesCount > 1 ? 's' : ''}`
-      : facesCount > 0
-        ? `${facesCount} visage${facesCount > 1 ? 's' : ''} détecté${facesCount > 1 ? 's' : ''}`
-        : 'Prêt';
 
   // Label statut affiché dans le header flottant.
   // État neutre / par défaut : PRÊT vert dès que la caméra est ouverte et online.
@@ -3051,13 +3278,24 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         device={device}
         format={format}
         isActive={true}
-        // video=true pour le frame processor (detection MLKit live).
-        // photo=true + photoQualityBalance="quality" pour AVCapturePhotoOutput
-        // HQ (Deep Fusion eligible quand iOS estime les conditions reunies).
+        // video=true pour le frame processor (detection humains Apple Vision).
+        // photo=true + photoQualityBalance="speed" : AVCapturePhotoOutput skip
+        // Deep Fusion + Night mode -> capture en 80-200 ms au lieu de 300-800 ms.
+        // Trade-off : qualite legerement degradee en faible lumiere, mais
+        // excellente en plein jour (capteur 12 MP + ISP basique). Choix global
+        // pour soutenir la cadence rafale pipelinee (5-7 photos/s).
         // Les 2 outputs coexistent sur la meme AVCaptureSession.
         video={true}
         photo={true}
-        photoQualityBalance="quality"
+        photoQualityBalance="speed"
+        // HDR active si le format wide actif le supporte. Restaure les
+        // contrastes ecrases dans la preview (contre-jour sportif) +
+        // ameliore la photo HEIC/HDR-10 a la capture.
+        photoHdr={!!format?.supportsPhotoHdr}
+        videoHdr={!!format?.supportsVideoHdr}
+        // Low-light boost iOS : gros gain en faible lumiere sans monter
+        // le bruit ISO.
+        lowLightBoost={!!device?.supportsLowLightBoost}
         frameProcessor={frameProcessor}
         pixelFormat="yuv"
         zoom={device.minZoom}
@@ -3066,6 +3304,23 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         exposure={cameraExposure}
         enableLocation={false}
       />
+
+      {/* Guides zone de capture (lignes verticales discretes au centre).
+          Caches a 100% (toute la frame est active). */}
+      {(eventConfig.camera?.captureZoneWidthPercent ?? 30) < 100 && (() => {
+        const zoneW = (eventConfig.camera?.captureZoneWidthPercent ?? 30) / 100;
+        const leftPct = (1 - zoneW) / 2 * 100;
+        const rightPct = (1 + zoneW) / 2 * 100;
+        return (
+          <View
+            pointerEvents="none"
+            style={{ position: 'absolute', top: CAMERA_TOP, height: previewH, left: 0, right: 0 }}
+          >
+            <View style={{ position: 'absolute', top: 0, bottom: 0, left: `${leftPct}%`, width: 1, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+            <View style={{ position: 'absolute', top: 0, bottom: 0, left: `${rightPct}%`, width: 1, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+          </View>
+        );
+      })()}
 
       {/* ─── FLASH RAFALE (full-screen, blanc, 120ms) ─── */}
       <Animated.View
@@ -3161,6 +3416,29 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           </View>
         </View>
 
+        {/* Compteur discret sous le header. 4 valeurs distinctes pour
+            transparence totale du pipeline capture -> queue -> upload :
+              - Capturées : enqueue OK (HEIC sur disque app + item en queue)
+              - Uploadées : PUT 200 OK confirme cote worker (verite R2)
+              - En attente : items en queue (raw a traiter + processed a uploader + failed)
+              - Perdues : photos disparues silencieusement (move/copy fail,
+                          writeSidecar fail, raw missing in processQueue).
+                          Cliquer-pour-debrief plus tard ; pour l'instant
+                          un compteur >0 = signal d'alerte pour le photographe.
+            Affiche rien tant que zero activite (pas d'ecran neutre pollue). */}
+        {(capturedCount > 0 || lostCount > 0) && (
+          <View style={{ marginTop: 6, alignItems: 'center' }}>
+            <Text style={{
+              color: lostCount > 0 ? '#FCA5A5' : 'rgba(255,255,255,0.7)',
+              fontSize: 11, fontWeight: '600',
+              letterSpacing: 0.3,
+              textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
+            }}>
+              Capturées : {capturedCount} · Uploadées : {uploadedCount} · En vol : {inFlight} · En attente : {queueStats.total}{lostCount > 0 ? ` · Perdues : ${lostCount}` : ''}
+            </Text>
+          </View>
+        )}
+
         {/* Progress bar : visible quand un drain en cours porte sur > 5 photos. */}
         {drainShowBar && (
           <View style={{ marginTop: 8, paddingHorizontal: 40 }}>
@@ -3223,15 +3501,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <Animated.Text style={{
+            <Text style={{
               color: '#fff',
               fontSize: 22,
               fontStyle: 'italic',
               fontWeight: '800',
               fontFamily: 'AVEstiana',
               letterSpacing: 1,
-              opacity: isAutoArmed ? recPulse : 1,
-            }}>{isAutoArmed ? 'Stop' : 'Go!'}</Animated.Text>
+            }}>{isAutoArmed ? 'Stop' : 'Go!'}</Text>
           </TouchableOpacity>
 
           {/* Row 2 : bandeau 2 sections (COURSE / KM) collé au Go!, edge-to-edge.
