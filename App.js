@@ -9986,25 +9986,19 @@ export default function App() {
 
     </SafeAreaView>
 
-    {/* Splash overlay : ecran blanc + avatar violet light en haut.
-        Pose dans GestureHandlerRootView (hors SafeAreaView) pour couvrir
-        TOUT l ecran (zone notch incluse). Prend le relais du splash iOS
-        natif (hideAsync immediat) pour 1 seconde minimum, puis fade out
-        400ms vers le contenu. Demonte a la fin pour ne pas bloquer les
-        interactions. */}
+    {/* Splash overlay : ecran blanc + LoadingIcon (fleur Will) violet light
+        centre. Meme icone que le pull-to-refresh des galeries -> ressenti
+        coherent. Hors SafeAreaView pour couvrir notch + status bar.
+        Visible 1s minimum apres splash iOS natif, puis fade out 400ms. */}
     {splashOverlayVisible && (
       <ReAnimated.View
         style={[
           StyleSheet.absoluteFillObject,
-          { backgroundColor: '#fff', zIndex: 9999 },
+          { backgroundColor: '#fff', zIndex: 9999, alignItems: 'center', justifyContent: 'center' },
           splashOverlayStyle,
         ]}
       >
-        <SafeAreaView style={{ flex: 1 }}>
-          <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
-            <Icon.User size={30} color="#c9beed" />
-          </View>
-        </SafeAreaView>
+        <LoadingIcon size={48} color="#c9beed" />
       </ReAnimated.View>
     )}
     </GestureHandlerRootView>
