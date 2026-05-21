@@ -39,8 +39,10 @@ import ReAnimated, {
   useAnimatedStyle,
   withTiming,
   runOnJS,
+  SlideInLeft,
   SlideInRight,
   SlideOutLeft,
+  SlideOutRight,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -9528,6 +9530,11 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
 
       {!openedEvent && !organizerEventPhotosTarget && (
+        <ReAnimated.View
+          entering={SlideInRight.duration(320)}
+          exiting={SlideOutRight.duration(320)}
+          style={StyleSheet.absoluteFill}
+        >
         <GestureDetector gesture={swipeNav}>
           <View style={{ flex: 1, overflow: 'hidden' }}>
             <Animated.View style={{
@@ -9598,11 +9605,12 @@ export default function App() {
             </Animated.View>
           </View>
         </GestureDetector>
+        </ReAnimated.View>
       )}
 
       {openedEvent && (
         <ReAnimated.View
-          entering={SlideInRight.duration(320)}
+          entering={SlideInLeft.duration(320)}
           exiting={SlideOutLeft.duration(320)}
           style={[StyleSheet.absoluteFill, { backgroundColor: C.bg }]}
         >
