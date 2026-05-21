@@ -6668,6 +6668,15 @@ function SelfieViewerModal({ visible, uri, onClose }) {
   );
 }
 
+// expo-haptics : require optional pour rester OTA-safe.
+// - Sur le build actuel (sans module natif expo-haptics linke) : les appels
+//   selectionAsync echouent silencieusement via le catch (pas de crash).
+// - Apres rebuild EAS (qui inclura le natif suite a la commande
+//   `npx expo install expo-haptics`), les appels fonctionnent automatiquement
+//   et declenchent UISelectionFeedbackGenerator (= tap court galerie iPhone).
+let Haptics;
+try { Haptics = require('expo-haptics'); } catch {}
+
 // Flag fonctionnalite Supprimer dans la visionneuse. Refonte 2026-05 : la
 // suppression est en stand-by, on cable plus tard avec une confirmation
 // adaptee. Garde le code mort pour activer en un flip. allowDelete continue
@@ -7321,11 +7330,11 @@ function PhotoViewerModal({
                     const offset = e.nativeEvent.contentOffset.x;
                     const idx = Math.round(offset / 50);
                     if (idx !== currentIndex && idx >= 0 && idx < photos.length) {
-                      // Vibration desactivee : Vibration.vibrate(10) de RN core
-                      // ignore le 10ms sur iOS et declenche une vibration longue
-                      // ~1000ms (limitation systeme). Pour avoir le vrai tactile
-                      // feedback fin de la galerie iPhone, installer expo-haptics
-                      // et rebuilder EAS (Haptics.selectionAsync).
+                      // Haptic tap court iOS style (UISelectionFeedbackGenerator).
+                      // OTA-safe : Haptics est require() en optional ; sur le
+                      // build actuel sans natif linke, l'appel echoue silencieusement.
+                      // Sera actif automatiquement au prochain rebuild EAS.
+                      try { Haptics?.selectionAsync?.(); } catch {}
                       setCurrentIndex(idx);
                     }
                   }}
