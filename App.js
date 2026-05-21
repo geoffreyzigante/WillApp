@@ -9650,12 +9650,13 @@ export default function App() {
       <LinearGradient
         pointerEvents="none"
         colors={['rgba(255,255,255,0)', 'rgba(255,255,255,1)']}
+        locations={[0, 0.6]}
         style={{
           position: 'absolute',
           left: 0,
           right: 0,
-          bottom: 80,        // pile au-dessus de la bottomNav (height 80)
-          height: 100,
+          bottom: 0,         // jusqu en bas (couvre la zone navbar = blanc opaque)
+          height: 180,       // 100 fondu + 80 zone navbar
           zIndex: 5,
         }}
       />
@@ -9889,7 +9890,7 @@ const s = StyleSheet.create({
   gridPlaceholder: { flex: 1, backgroundColor: C.primaryLight, borderRadius: 12 },
   gridImg: { flex: 1, borderRadius: 12 },
 
-  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: C.white, flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 28, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingHorizontal: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: -4 } },
+  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'transparent', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 28, paddingTop: 12, paddingHorizontal: 16, zIndex: 6 },
   navBtn: { alignItems: 'center', justifyContent: 'flex-start', gap: 4, minWidth: 80 },
   navIconWrap: { height: 26, alignItems: 'center', justifyContent: 'center' },
   navLabel: { fontSize: 12, color: C.text, marginTop: 2 },
