@@ -3407,20 +3407,36 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     ? Math.max(0, Math.min(1, 1 - (queueStats.pending + queueStats.uploading) / drainStartTotal))
     : 0;
 
-  // Voyant lumière : médiane des derniers samples ISO LIVE lus depuis le
-  // frame processor natif (lissage ~quelques secondes). Seuils provisoires
-  // à recalibrer terrain : ≤ 400 vert, 400-1000 jaune, > 1000 rouge.
-  // Etat neutre (gris, "Lumière —") si le natif n'a encore rien renvoye
-  // (camera qui ouvre, ou edge case). Pas de fallback post-capture : on
-  // prefere un voyant neutre a un voyant base sur de vieilles donnees.
+  // Voyant netteté : pilote la couleur via le SHUTTER live, pas l'ISO.
+  // Justification terrain (test 2026-05-26) : l'ISO reste a son plancher (50)
+  // en interieur clair comme en exterieur, ne bouge qu'en vraie penombre —
+  // inutile comme predicteur du flou. Le shutter est la donnee directe qui
+  // determine si un sujet en mouvement sera fige.
+  //
+  // Attention sens des durees : shutter est en SECONDES, plus court = plus
+  // rapide = mieux. 1/2000s (0.0005s) < 1/500s (0.002s) : 1/2000 est plus
+  // rapide. Comparer les durees, pas les denominateurs.
+  //
+  // Seuils (a affiner terrain) :
+  //   Vert  : <= 1/1000s (<= 0.001s) -> fige coureurs ET cyclistes
+  //   Jaune : 1/1000 -- 1/500s       -> ok coureurs a pied, limite velos/rapides
+  //   Rouge : >  1/500s  (>  0.002s) -> risque de flou de bouge
+  //
+  // Source : frame processor natif (ExposureReaderPlugin), ~1 Hz, mediane
+  // sur ring buffer (~quelques secondes) pour eviter le clignotement.
+  // Etat neutre (gris, "Nettete —") tant que le natif n'a pas remonte de
+  // shutter exploitable (camera qui ouvre, ou EXIF.ExposureTime absent).
   let lightDot = 'rgba(255,255,255,0.45)';
-  let lightLabel = 'Lumière —';
-  if (liveExposureSamples.length > 0) {
-    const sorted = liveExposureSamples.map(s => s.iso).sort((a, b) => a - b);
+  let lightLabel = 'Netteté —';
+  const shutterSamples = liveExposureSamples
+    .map(s => s.shutter)
+    .filter(v => Number.isFinite(v) && v > 0);
+  if (shutterSamples.length > 0) {
+    const sorted = shutterSamples.sort((a, b) => a - b);
     const mid = sorted[Math.floor(sorted.length / 2)];
-    if (mid <= 400) { lightDot = '#22C55E'; lightLabel = 'Lumière OK'; }
-    else if (mid <= 1000) { lightDot = '#FBBF24'; lightLabel = 'Lumière moyenne'; }
-    else { lightDot = '#F43F5E'; lightLabel = 'Lumière faible'; }
+    if (mid <= 0.001) { lightDot = '#22C55E'; lightLabel = 'Netteté OK'; }
+    else if (mid <= 0.002) { lightDot = '#FBBF24'; lightLabel = 'Netteté moyenne'; }
+    else { lightDot = '#F43F5E'; lightLabel = 'Netteté faible'; }
   }
 
   // "En attente" = photos pas encore confirmees R2 PUT 200 mais qui vont
