@@ -4656,7 +4656,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
 
     // Previews valeurs courantes pour la home
     const previewDate = eventDate
-      ? eventDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+      ? formatDateForForm(
+          eventDate.toISOString().slice(0, 10),
+          eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : null,
+        )
       : 'Non définie';
     const previewLocation = city
       ? (postalCode ? `${city} (${postalCode})` : city)
@@ -4892,41 +4895,25 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
             </View>
           </Modal>
 
-          {/* ─── Sub-modal: Date ─── */}
-          <Modal visible={editingField === 'date'} animationType="slide" onRequestClose={() => setEditingField(null)} presentationStyle="formSheet">
-            <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
-              <View style={subModalHeader}>
-                <View style={{ width: 60 }} />
-                <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>Date</Text>
-                <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
-                  <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={{ flex: 1, alignItems: 'center', paddingTop: 16 }}>
-                <DateTimePicker
-                  value={eventDate || new Date()}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  minimumDate={new Date()}
-                  onChange={(_e, selected) => { if (selected) setEventDate(selected); }}
-                  locale="fr-FR"
-                  style={{ width: 320 }}
-                />
-              </View>
-              <TouchableOpacity
-                onPress={async () => {
-                  const date_str = eventDate ? eventDate.toISOString().slice(0, 10) : '';
-                  if (!date_str) { Alert.alert('Date requise'); return; }
-                  const ok = await savePartial({ event_date: date_str });
-                  if (ok) setEditingField(null);
-                }}
-                disabled={partialBusy}
-                style={[saveBtnStyle, { opacity: partialBusy ? 0.6 : 1 }]}
-              >
-                {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
-              </TouchableOpacity>
-            </View>
-          </Modal>
+          {/* ─── Sub-modal: Date (plage start + end) ─── */}
+          {/* Réutilise le CalendarRangeModal de la création : tap 2x le même jour
+              pour un event 1 jour, sinon plage. Sauvegarde directe via savePartial
+              à la confirmation (PUT { event_date, event_date_end }). */}
+          <CalendarRangeModal
+            visible={editingField === 'date'}
+            onClose={() => setEditingField(null)}
+            initialStart={eventDate}
+            initialEnd={eventDateEnd}
+            minDate={null}
+            onConfirm={async (start, end) => {
+              setEventDate(start);
+              setEventDateEnd(end);
+              const startStr = start ? start.toISOString().slice(0, 10) : '';
+              const endStr = end ? end.toISOString().slice(0, 10) : '';
+              if (!startStr) { Alert.alert('Date requise'); return; }
+              await savePartial({ event_date: startStr, event_date_end: endStr });
+            }}
+          />
 
           {/* ─── Sub-modal: Heure de départ (time picker) ─── */}
           <Modal visible={editingField === 'start_time'} animationType="slide" onRequestClose={() => setEditingField(null)} presentationStyle="formSheet">
