@@ -33,6 +33,39 @@ function detectHumans(frame, options) {
   }
   return humanDetectorPlugin.call(frame, options);
 }
+
+// Frame processor plugin natif (Swift) : lit l'ISO/shutter/brightness live
+// depuis les attachments EXIF du CMSampleBuffer de preview, en lecture seule
+// (n'altere PAS l'exposition auto). Sert au voyant lumiere dans la vue
+// photographe : actif des l'ouverture de la camera, avant toute capture.
+// Enregistre par le config plugin with-exposure-reader au build EAS.
+// Retourne { iso, shutter, brightness } ou null.
+const exposureReaderPlugin = VisionCameraProxy.initFrameProcessorPlugin('readExposure', {});
+function readExposure(frame) {
+  'worklet';
+  if (exposureReaderPlugin == null) {
+    throw new Error('readExposure plugin not loaded — rebuild required');
+  }
+  return exposureReaderPlugin.call(frame);
+}
+
+// Format shutter EXIF (secondes -> fraction lisible) pour debug overlay.
+// Sur preview iOS, le shutter est cape par l'intervalle frame (1/30s a
+// 30 fps) : on ne descend jamais sous quelques 1/30s, l'auto-expo monte
+// l'ISO a la place. Donc tjrs format "1/N" en pratique, mais on garde
+// le cas >= 1s par securite (jamais vu sur preview video).
+function formatShutter(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
+  if (seconds >= 1) return `${seconds.toFixed(1)}s`;
+  return `1/${Math.round(1 / seconds)}`;
+}
+// EV BrightnessValue : peut etre negatif (faible lumiere) ou positif
+// (plein jour). Affichage avec signe explicite pour lecture rapide.
+function formatEV(ev) {
+  if (!Number.isFinite(ev)) return '—';
+  const sign = ev >= 0 ? '+' : '−';
+  return `EV ${sign}${Math.abs(ev).toFixed(1)}`;
+}
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import ReAnimated, {
   useSharedValue,
@@ -999,6 +1032,26 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite, style }) {
         <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
         <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
       </View>
+      {/* Pastille type de course (bas droite) */}
+      {event.event_type ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            right: 8,
+            backgroundColor: '#fff',
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+            borderRadius: 999,
+            zIndex: 3,
+          }}
+        >
+          <Text style={{ color: tint, fontSize: 10, fontWeight: '700' }}>
+            {displayEventType(event.event_type)}
+          </Text>
+        </View>
+      ) : null}
       {/* Bouton favori (sa propre zone tactile, au-dessus de tout). Wrapper
           glassmorphique semi-transparent pour la lisibilité sur les photos
           claires/sombres. */}
@@ -1641,22 +1694,28 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               pointerEvents="none"
             />
           ) : null}
-          {/* paddingRight reserve l'espace du countdown (38pt italic, bottom-right)
-              pour eviter que le pill type/nom long chevauche "J-12" / "GO !". */}
-          <View style={[s.eventCardCenter, { paddingRight: 100 }]}>
-            <Text style={s.eventDate}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={[s.eventName, { flexShrink: 1 }]} numberOfLines={1}>{event.name}</Text>
+          {/* Stack vertical : Date > Nom (header) > Lieu + type.
+              paddingRight réserve l'espace du décompte bottom-right. */}
+          <View style={[s.eventCardCenter, { paddingRight: 84 }]}>
+            <Text style={s.eventDate} numberOfLines={1}>
+              {formatDateLong(event.event_date, event.event_date_end)}
+            </Text>
+            <Text style={[s.eventName, { fontSize: 22 }]} numberOfLines={1}>{event.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'nowrap' }}>
+              {cityLabel(event.location) ? (
+                <Text style={[s.eventLocation, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
+                  {cityLabel(event.location)}
+                </Text>
+              ) : null}
               {event.event_type ? (
                 <View style={{
-                  backgroundColor: 'rgba(255,255,255,0.25)',
-                  paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999,
+                  backgroundColor: 'rgba(255,255,255,0.22)',
+                  paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
                 }}>
-                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{displayEventType(event.event_type)}</Text>
+                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{displayEventType(event.event_type)}</Text>
                 </View>
               ) : null}
             </View>
-            <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
           </View>
         </View>
 
@@ -1679,10 +1738,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           </TouchableOpacity>
         )}
 
-        {/* Décompte en bas droite : J-X / GO ! / J+X (multi-jours supporté) */}
+        {/* Décompte en bas droite : J-X / GO ! / J+X (multi-jours supporté).
+            Taille réduite pour laisser le nom dominer la hiérarchie visuelle. */}
         {countdown ? (
-          <View style={{ position: 'absolute', bottom: 16, right: 16 }}>
-            <Text style={{ color: '#fff', fontSize: 38, fontWeight: '700', fontStyle: 'italic', letterSpacing: -1 }}>
+          <View style={{ position: 'absolute', bottom: 14, right: 16 }}>
+            <Text style={{ color: '#fff', fontSize: 28, fontWeight: '700', fontStyle: 'italic', letterSpacing: -0.8 }}>
               {countdown}
             </Text>
           </View>
@@ -2195,6 +2255,38 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     setIsShooting(n > 0);
   }
 
+  // Voyant lumière : ISO+shutter+brightness LIVE lus via frame processor
+  // natif (ExposureReaderPlugin) depuis les attachments EXIF du CMSampleBuffer
+  // de preview, AVANT toute capture. Permet au bénévole de vérifier que
+  // l'emplacement est bien éclairé dès l'ouverture de la caméra. Lissage
+  // médiane sur les N derniers samples (à ~1 Hz natif => ~N secondes de
+  // mémoire) pour éviter le clignotement du voyant. Lecture seule : ne
+  // change rien à l'exposition (mode natif auto inchangé).
+  //
+  // shutter/brightness ne sont pas utilises par le voyant (calcule sur l'ISO
+  // seul) mais affiches dans le readout debug IS_PREVIEW_OR_DEV : objectif
+  // diagnostic terrain — voir en direct la vitesse d'obturation effective
+  // (cap a 1/30s en preview 30 fps, donc indicateur "shutter sature + ISO qui
+  // grimpe = flou imminent").
+  const ISO_SAMPLE_SIZE = 4;
+  const liveExposureRef = useRef([]);
+  const [liveExposureSamples, setLiveExposureSamples] = useState([]);
+  function pushLiveExposureSample(sample) {
+    if (!sample) return;
+    const iso = Number(sample.iso);
+    if (!Number.isFinite(iso) || iso <= 0) return;
+    const shutter = Number(sample.shutter);
+    const brightness = Number(sample.brightness);
+    const clean = {
+      iso,
+      shutter: Number.isFinite(shutter) && shutter > 0 ? shutter : null,
+      brightness: Number.isFinite(brightness) ? brightness : null,
+    };
+    const next = [...liveExposureRef.current, clean].slice(-ISO_SAMPLE_SIZE);
+    liveExposureRef.current = next;
+    if (isMountedRef.current) setLiveExposureSamples(next);
+  }
+
   // Stub no-op : conserve les call sites addDebugLog dispersés (sera retire
   // si plus aucun reste apres simplification).
   const addDebugLog = () => {};
@@ -2204,6 +2296,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // d'analyse charge thermal + batterie pour rien. 10 fps suffit largement
   // pour qu'un coureur traversant la zone soit detecte.
   const frameSkipSV = useMemo(() => Worklets.createSharedValue(0), []);
+  // Throttle ISO live : compteur tournant ~1 Hz a 30 fps (lecture toutes les
+  // 30 frames). Le dict lookup EXIF est presque gratuit cote natif, on
+  // pourrait lire a chaque frame, mais le bridge worklet -> JS reste a 1 Hz
+  // suffit largement pour un voyant et evite des renders inutiles.
+  const isoTickSV = useMemo(() => Worklets.createSharedValue(0), []);
   // Largeur zone de capture (fraction 0..1) lue par le plugin Swift pour
   // filtrer les humains hors-bande. Mise a jour quand eventConfig change.
   const zoneSV = useMemo(() => Worklets.createSharedValue(0.3), []);
@@ -2238,6 +2335,16 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const captureScale = useRef(new Animated.Value(1)).current;
   const headerSlideY = useRef(new Animated.Value(-120)).current;
   const footerSlideY = useRef(new Animated.Value(300)).current;
+
+  // Callback JS bindee depuis le worklet du frame processor : recoit la
+  // mesure d'exposition live {iso, shutter, brightness} lue cote natif
+  // (~1 Hz). pushLiveExposureSample applique le lissage et la validation.
+  const onExposureSampleJS = useMemo(
+    () => Worklets.createRunOnJS((sample) => {
+      pushLiveExposureSample(sample);
+    }),
+    [],
+  );
 
   const onHumansDetectedJS = useMemo(
     () => Worklets.createRunOnJS((count) => {
@@ -2312,6 +2419,15 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // VisionCamera (background) ; le runOnJS ne bloque pas le rendu.
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
+    // ISO live : tick ~1 Hz a 30 fps (independant du throttle Vision pour
+    // que le voyant lumiere reste reactif meme quand detectHumans skip).
+    // Lecture seule de la metadata EXIF du buffer, ~qq us, ne bloque rien.
+    isoTickSV.value = (isoTickSV.value + 1) % 30;
+    if (isoTickSV.value === 0) {
+      const exp = readExposure(frame);
+      if (exp && exp.iso) onExposureSampleJS(exp);
+    }
+
     frameSkipSV.value = (frameSkipSV.value + 1) % 3;
     if (frameSkipSV.value !== 0) return;
     const result = detectHumans(frame, {
@@ -2320,7 +2436,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     });
     const count = result?.count ?? 0;
     onHumansDetectedJS(count);
-  }, [onHumansDetectedJS, frameSkipSV, zoneSV]);
+  }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV]);
 
   // === Mode offline-first : queue persistante ===
   // - Photos copiées dans Paths.document/will_pending/ (survit au kill app)
@@ -3216,6 +3332,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
     let exif = null;
     try { exif = photo?.metadata?.['{Exif}'] || null; } catch {}
+    // ISO post-capture supprime : la source de verite du voyant lumiere est
+    // desormais le frame processor live (ExposureReaderPlugin), alimente en
+    // continu des l'ouverture de la camera.
 
     const d = new Date();
     const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
@@ -3287,6 +3406,30 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const drainProgress = drainStartTotal > 0
     ? Math.max(0, Math.min(1, 1 - (queueStats.pending + queueStats.uploading) / drainStartTotal))
     : 0;
+
+  // Voyant lumière : médiane des derniers samples ISO LIVE lus depuis le
+  // frame processor natif (lissage ~quelques secondes). Seuils provisoires
+  // à recalibrer terrain : ≤ 400 vert, 400-1000 jaune, > 1000 rouge.
+  // Etat neutre (gris, "Lumière —") si le natif n'a encore rien renvoye
+  // (camera qui ouvre, ou edge case). Pas de fallback post-capture : on
+  // prefere un voyant neutre a un voyant base sur de vieilles donnees.
+  let lightDot = 'rgba(255,255,255,0.45)';
+  let lightLabel = 'Lumière —';
+  if (liveExposureSamples.length > 0) {
+    const sorted = liveExposureSamples.map(s => s.iso).sort((a, b) => a - b);
+    const mid = sorted[Math.floor(sorted.length / 2)];
+    if (mid <= 400) { lightDot = '#22C55E'; lightLabel = 'Lumière OK'; }
+    else if (mid <= 1000) { lightDot = '#FBBF24'; lightLabel = 'Lumière moyenne'; }
+    else { lightDot = '#F43F5E'; lightLabel = 'Lumière faible'; }
+  }
+
+  // "En attente" = photos pas encore confirmees R2 PUT 200 mais qui vont
+  // partir : captures en vol + items pending/uploading en queue. EXCLUT
+  // les failed (qui apparaissent sur la ligne "X a renvoyer" si > 0 — c'est
+  // une anomalie qui demande une action, pas un transit normal).
+  const pendingCount = inFlight + queueStats.pending + queueStats.uploading;
+  const cloudActive = pendingCount > 0;
+  const cloudColor = cloudActive ? '#3B82F6' : 'rgba(255,255,255,0.85)';
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -3441,27 +3584,120 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           </View>
         </View>
 
-        {/* Compteur discret sous le header. 4 valeurs distinctes pour
-            transparence totale du pipeline capture -> queue -> upload :
-              - Capturées : enqueue OK (HEIC sur disque app + item en queue)
-              - Uploadées : PUT 200 OK confirme cote worker (verite R2)
-              - En attente : items en queue (raw a traiter + processed a uploader + failed)
-              - Perdues : photos disparues silencieusement (move/copy fail,
-                          writeSidecar fail, raw missing in processQueue).
-                          Cliquer-pour-debrief plus tard ; pour l'instant
-                          un compteur >0 = signal d'alerte pour le photographe.
-            Affiche rien tant que zero activite (pas d'ecran neutre pollue). */}
-        {(capturedCount > 0 || lostCount > 0) && (
-          <View style={{ marginTop: 6, alignItems: 'center' }}>
+        {/* Status bar refondue (2026-05-26) : 1 seule ligne horizontale,
+            edge-to-edge (marginHorizontal negatif pour casser le padding 20 du
+            parent et s'aligner sur la largeur du bouton Stop ci-dessous).
+            3 infos compactes separees par " · " :
+              [voyant lumiere]  ·  [N sauvegardees]  ·  [N en attente]
+            - Lumiere : voyant ISO live (frame processor natif, source de
+              verite des l'ouverture camera, AVANT toute capture).
+            - Sauvegardees : uploadedCount, incremente UNIQUEMENT sur PUT 200
+              OK confirme par R2.
+            - En attente : captures en vol + queue pending/uploading. EXCLUT
+              les failed (qui restent sur la ligne orange "X a renvoyer" si > 0,
+              car c'est une anomalie qui demande une action — pas un transit).
+            Compteurs internes (capturedCount, inFlight, queueStats, lostCount)
+            restent calcules pour la logique drain/debug, plus affiches ici. */}
+        <View style={{
+          marginTop: 8,
+          marginHorizontal: -20,
+          paddingHorizontal: 12,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          {/* Voyant lumiere */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{
+              width: 8, height: 8, borderRadius: 4,
+              backgroundColor: lightDot,
+            }} />
             <Text style={{
-              color: lostCount > 0 ? '#FCA5A5' : 'rgba(255,255,255,0.7)',
-              fontSize: 11, fontWeight: '600',
+              color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '600',
               letterSpacing: 0.3,
               textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
             }}>
-              Capturées : {capturedCount} · Uploadées : {uploadedCount} · En vol : {inFlight} · En attente : {queueStats.total}{lostCount > 0 ? ` · Perdues : ${lostCount}` : ''}
+              {lightLabel}
             </Text>
           </View>
+
+          {/* Separateur */}
+          <Text style={{
+            color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '600',
+            marginHorizontal: 10,
+            textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
+          }}>·</Text>
+
+          {/* Sauvegardees (cloud + compteur, toujours visible) */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M17.5 19a4.5 4.5 0 00.5-8.97 6 6 0 00-11.62-1.5A4.5 4.5 0 006.5 19h11z"
+                stroke={cloudColor}
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill={cloudActive ? 'rgba(59,130,246,0.18)' : 'none'}
+              />
+            </Svg>
+            <Text style={{
+              color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '600',
+              letterSpacing: 0.3,
+              textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
+            }}>
+              {uploadedCount} sauvegardée{uploadedCount > 1 ? 's' : ''}
+            </Text>
+          </View>
+
+          {/* Separateur */}
+          <Text style={{
+            color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '600',
+            marginHorizontal: 10,
+            textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
+          }}>·</Text>
+
+          {/* En attente (transit normal, toujours visible) */}
+          <Text style={{
+            color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '600',
+            letterSpacing: 0.3,
+            textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
+          }}>
+            {pendingCount} en attente
+          </Text>
+        </View>
+
+        {/* Debug readout (preview/dev only) : derniere mesure live brute du
+            frame processor — ISO + shutter effectif + EV. Sert au diagnostic
+            terrain "pourquoi cette photo est floue" : shutter cape a 1/30s
+            sur preview 30 fps + ISO qui grimpe = scene trop sombre, flou de
+            mouvement imminent. Aucun affichage en production (gated par
+            IS_PREVIEW_OR_DEV). */}
+        {IS_PREVIEW_OR_DEV && liveExposureSamples.length > 0 && (() => {
+          const last = liveExposureSamples[liveExposureSamples.length - 1];
+          return (
+            <Text style={{
+              color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '600',
+              textAlign: 'center', marginTop: 4, letterSpacing: 0.4,
+              fontVariant: ['tabular-nums'],
+              textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
+            }}>
+              ISO {Math.round(last.iso)}  ·  {formatShutter(last.shutter)}  ·  {formatEV(last.brightness)}
+            </Text>
+          );
+        })()}
+
+        {/* Filet de securite : n'apparait QUE si une photo est bloquee (failed
+            apres retries ou perdue dans le pipeline). Anomalie qui demande
+            une action, garde ce filet rouge orange pour ne pas etre noyee
+            dans la ligne neutre du transit normal. */}
+        {(lostCount + queueStats.failed) > 0 && (
+          <Text style={{
+            color: '#FB923C', fontSize: 11, fontWeight: '700',
+            letterSpacing: 0.3, textAlign: 'center', marginTop: 4,
+            textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
+          }}>
+            {lostCount + queueStats.failed} à renvoyer
+          </Text>
         )}
 
         {/* Progress bar : visible quand un drain en cours porte sur > 5 photos. */}
