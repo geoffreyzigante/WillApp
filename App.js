@@ -1641,10 +1641,12 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               pointerEvents="none"
             />
           ) : null}
-          <View style={s.eventCardCenter}>
+          {/* paddingRight reserve l'espace du countdown (38pt italic, bottom-right)
+              pour eviter que le pill type/nom long chevauche "J-12" / "GO !". */}
+          <View style={[s.eventCardCenter, { paddingRight: 100 }]}>
             <Text style={s.eventDate}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-              <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={[s.eventName, { flexShrink: 1 }]} numberOfLines={1}>{event.name}</Text>
               {event.event_type ? (
                 <View style={{
                   backgroundColor: 'rgba(255,255,255,0.25)',
