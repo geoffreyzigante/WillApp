@@ -1822,8 +1822,13 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const showEmptyMessage = upcoming && photos.length === 0 && !loading;
 
   // Empty state de la FlatList : skeletons pendant le chargement, ou message.
+  // Pour un event upcoming, jamais de skeletons ni de message "aucune photo" :
+  // le header affichera "Photos disponibles le jour J" une fois loading=false.
+  // Sinon les 9 carres violets clairs flashent pendant la fraction de seconde
+  // du fetch initial.
   const renderListEmpty = () => {
     if (showEmptyMessage) return null;
+    if (upcoming) return null;
     if (loading) {
       return (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: GRID_PADDING_H, gap: GRID_GAP }}>
