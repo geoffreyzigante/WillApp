@@ -713,7 +713,7 @@ const isUpcoming = (iso, isoEnd) => {
 };
 
 // Extrait le burstTs (timestamp unix ms) depuis le filename d'une photo
-// Format: {event}/{photographer}/{date}/{time}_{burstTs}_{idx}.jpg
+// Format: {event}/{photographer}/{date}/{time}_{burstTs}_{idx}.heic
 const extractBurstTs = (key) => {
   if (!key) return 0;
   const filename = key.split('/').pop().replace(/\.(jpg|jpeg|png|heic|dng)$/i, '');
@@ -2764,13 +2764,17 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     // duree max d expo SANS quitter le mode auto -> rendu iPhone preserve
     // mais coureur fige meme sous-bois. Cap decide cote JS d apres le
     // voyant luminosite, push au natif via le frame processor.
-    //   - shutterSpeedMaxBright : cap en lumiere OK (denominateur, 1000 = 1/1000s).
-    //   - shutterSpeedMaxDim    : cap en lumiere moyenne / faible.
+    //   - shutterSpeedMaxBright : cap en lumiere OK (denominateur, 0 = no cap).
+    //                             Defaut 0 : iOS choisit librement en pleine
+    //                             lumiere (il pique deja a 1/2000+ tout seul,
+    //                             un cap arbitraire ne servirait a rien).
+    //   - shutterSpeedMaxDim    : cap en lumiere moyenne / faible (defaut 500
+    //                             = 1/500s, 0 = no cap pour debug).
     // captureZoneWidthPercent = bande verticale capture (filtre bbox face).
     camera: {
       captureZoneWidthPercent: 30,
       shutterSpeed: 1000, // legacy, non utilise depuis 2026-05
-      shutterSpeedMaxBright: 1000,
+      shutterSpeedMaxBright: 0,
       shutterSpeedMaxDim: 500,
     },
   });
@@ -3090,10 +3094,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // bouge horizontalement, on swap vers midY au build suivant.
   // Le plugin native dump TOUJOURS x ET y dans les logs pour ce diag.
 
-  // E5 cap shutter adaptatif — derive un cap (1/1000 si lumiere OK, sinon
-  // 1/500) du shutter median des derniers samples, identique au seuil du
-  // voyant luminosite, et push vers les SV. Le worklet picke la valeur au
-  // tick 1Hz suivant et la transmet au natif via readExposure args.
+  // E5 cap shutter adaptatif — en lumiere OK on ne plafonne PAS (iOS choisit
+  // librement, deja a 1/2000+ tout seul) ; en lumiere moyenne / faible on
+  // applique un cap pour figer le coureur. Le shutter median (meme seuil que
+  // le voyant) decide. La SV est lue au tick 1Hz suivant par le worklet et
+  // poussee au natif via readExposure args. Cap = 1.0s = pas de plafond
+  // effectif (la native clampe a activeFormat.maxExposureDuration ~= 1s).
   useEffect(() => {
     const shutters = liveExposureSamples
       .map(s => s.shutter)
@@ -3102,12 +3108,19 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     const sorted = [...shutters].sort((a, b) => a - b);
     const mid = sorted[Math.floor(sorted.length / 2)];
     const camCfg = eventConfig?.camera || {};
-    const denBright = Number(camCfg.shutterSpeedMaxBright) || 1000;
+    const denBright = Number(camCfg.shutterSpeedMaxBright) || 0; // 0 = no cap (defaut)
     const denDim = Number(camCfg.shutterSpeedMaxDim) || 500;
     let label, cap;
-    if (mid <= 0.001) { label = 'OK'; cap = 1.0 / denBright; }
-    else if (mid <= 0.002) { label = 'moyenne'; cap = 1.0 / denDim; }
-    else { label = 'faible'; cap = 1.0 / denDim; }
+    if (mid <= 0.001) {
+      label = 'OK';
+      cap = denBright > 0 ? 1.0 / denBright : 1.0; // 1.0s = clamp natif = no cap
+    } else if (mid <= 0.002) {
+      label = 'moyenne';
+      cap = denDim > 0 ? 1.0 / denDim : 1.0;
+    } else {
+      label = 'faible';
+      cap = denDim > 0 ? 1.0 / denDim : 1.0;
+    }
     capSecondsSV.value = cap;
     brightnessLabelSV.value = label;
   }, [liveExposureSamples, eventConfig?.camera?.shutterSpeedMaxBright, eventConfig?.camera?.shutterSpeedMaxDim, capSecondsSV, brightnessLabelSV]);
@@ -3736,7 +3749,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           try {
             const blob = await (await fetch(item.localUri)).blob();
             const headers = {
-              'Content-Type': item.isRaw ? 'image/x-adobe-dng' : 'image/jpeg',
+              'Content-Type': item.isRaw ? 'image/x-adobe-dng' : 'image/heic',
               Authorization: `Bearer ${session.token}`,
             };
             if (item.race) headers['X-Will-Race'] = String(item.race);
@@ -4044,7 +4057,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     const timeStr = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
     // photoKey hoisted HORS du try : sinon le catch (qui doit logger la cle
     // pour le LOST) n'y aurait pas acces (block-scoped const).
-    const photoKey = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${idx}.jpg`;
+    const photoKey = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${idx}.heic`;
     try {
       await enqueueBurstItems([{
         key: photoKey,
