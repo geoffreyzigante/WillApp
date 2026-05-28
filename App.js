@@ -1183,23 +1183,32 @@ function PhotosUnauthScreen({ onSignup, onLogin }) {
   );
 }
 
-function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, userId, onOpenEvent, onFindEvent, onToggleFollow, runnerToken, selfieSkipped = false, isActive = true }) {
+function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerToken, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false, isActive = true }) {
   const hasFollows = follows && follows.length > 0;
-  // Per-event state: { [code]: { count, state: 'searching' | 'ready' | 'empty' } }
-  const [eventData, setEventData] = useState({});
+  // Photos agregees sur tous les follows + flag global "any event still searching"
+  // pour decider d afficher le spinner / le sous-titre "recherche...".
+  const [photos, setPhotos] = useState([]);
+  const [anySearching, setAnySearching] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Pagination progressive cote client (eviter de monter 500 cellules d un coup
+  // au premier render quand un coureur cumule plusieurs events).
+  const [visibleCount, setVisibleCount] = useState(30);
 
-  // followedEvents = full event objects (depuis events array) pour les follows actifs
-  const followedEvents = useMemo(() =>
-    follows.map(code => events.find(e => e.code === code)).filter(Boolean),
-    [follows, events]
-  );
+  // tint par event_code (couleur du type d event) pour ourler la thumb.
+  const eventTintMap = useMemo(() => {
+    const map = {};
+    for (const e of events) map[e.code] = colorForType(e.event_type);
+    return map;
+  }, [events]);
 
-  // Récupère /personal-gallery par event + calcule l'etat (searching/ready/empty)
-  // basé sur le timestamp @will_follow_started_{code} stocké au moment du follow.
+  // Charge /personal-gallery sur tous les follows en parallele, fusionne, trie.
+  // anySearching = au moins un event en moins de 90s avec 0 photos -> polling.
   const refreshAll = useCallback(async () => {
     if (!hasFollows || !runnerToken) {
-      setEventData({});
+      setPhotos([]);
+      setAnySearching(false);
+      setLoading(false);
       return;
     }
     const started = {};
@@ -1212,38 +1221,59 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
         const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}`, {
           headers: { Authorization: `Bearer ${runnerToken}` },
         });
-        if (!r.ok) return { code, count: 0 };
+        if (!r.ok) return { code, photos: [] };
         const data = await r.json();
-        return { code, count: Array.isArray(data.photos) ? data.photos.length : 0 };
-      } catch { return { code, count: 0 }; }
+        return { code, photos: Array.isArray(data.photos) ? data.photos : [] };
+      } catch { return { code, photos: [] }; }
     }));
     const now = Date.now();
-    const next = {};
-    for (const { code, count } of results) {
-      const startedTs = started[code];
-      const elapsed = startedTs ? (now - startedTs) : Infinity;
-      let state;
-      if (count > 0) state = 'ready';
-      else if (elapsed < 90000) state = 'searching';
-      else state = 'empty';
-      next[code] = { count, state };
+    const merged = [];
+    let searching = false;
+    for (const { code, photos: list } of results) {
+      const tint = eventTintMap[code] || TYPE_COLORS.autre;
+      if (list.length === 0) {
+        const startedTs = started[code];
+        const elapsed = startedTs ? (now - startedTs) : Infinity;
+        if (elapsed < 90000) searching = true;
+        continue;
+      }
+      for (const p of list) {
+        merged.push({
+          uri: p.url || `${R2_PUBLIC}/${p.key}`,
+          thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
+          id: p.key,
+          tint,
+        });
+      }
     }
-    setEventData(next);
-  }, [follows, hasFollows, runnerToken]);
+    merged.sort((a, b) => {
+      const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
+      if (dt !== 0) return dt;
+      return extractIdx(b.id) - extractIdx(a.id);
+    });
+    setPhotos(merged);
+    setAnySearching(searching);
+    setLoading(false);
+    setVisibleCount(30);
+  }, [follows, hasFollows, runnerToken, eventTintMap]);
 
   // Initial fetch + re-fetch quand follows change
-  useEffect(() => { refreshAll(); }, [refreshAll]);
+  useEffect(() => { setLoading(true); refreshAll(); }, [refreshAll]);
 
-  // Polling 7s tant qu'au moins un event est en 'searching' ET l'utilisateur
-  // est sur l'écran (isActive=true). Cleanup auto au unmount ou changement
-  // d'état → pas de drain batterie en background.
+  // Polling 7s tant qu au moins un event est en fenetre 90s ET l ecran est focus.
+  // Cleanup auto -> pas de drain batterie en background.
   useEffect(() => {
-    if (!isActive) return;
-    const anySearching = Object.values(eventData).some(d => d?.state === 'searching');
-    if (!anySearching) return;
+    if (!isActive || !anySearching) return;
     const timer = setInterval(refreshAll, 7000);
     return () => clearInterval(timer);
-  }, [isActive, eventData, refreshAll]);
+  }, [isActive, anySearching, refreshAll]);
+
+  // Affichage progressif (eviter freeze sur 500 photos d un coup)
+  useEffect(() => {
+    if (visibleCount >= photos.length) return;
+    const t = setTimeout(() => setVisibleCount(v => Math.min(v + 30, photos.length)), 250);
+    return () => clearTimeout(t);
+  }, [visibleCount, photos.length]);
 
   const onPullRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -1289,42 +1319,51 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
       )}
 
       {!hasFollows ? (
-        // ETAT VIDE : 3 etapes pedagogiques (mockup Phase D)
+        // ETAT VIDE : 3 etapes pedagogiques + CTA "Trouver un event"
         <PhotosEmptyState selfieUri={selfieUri} onFindEvent={onFindEvent} />
-      ) : (
-        // ETAT ACTIF : bandeau info + liste d'events suivis avec count / search
-        <View>
-          <View style={{
-            backgroundColor: '#F5F3FF',
-            borderRadius: 12, padding: 14,
-            flexDirection: 'row', alignItems: 'flex-start', gap: 10,
-            marginBottom: 14,
-          }}>
-            <View style={{ marginTop: 1 }}>
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#7B2FFF" strokeWidth={2}>
-                <Circle cx="12" cy="12" r="10" />
-                <Path d="M12 16v-4M12 8h.01" />
-              </Svg>
-            </View>
-            <Text style={{ flex: 1, color: '#5E1AD6', fontSize: 12, lineHeight: 17 }}>
-              Will ne te reconnaît que sur les events que tu suis. Retire-en un et tes données faciales sont supprimées.
-            </Text>
-          </View>
-
-          {followedEvents.map(event => {
-            const data = eventData[event.code] || { count: 0, state: 'searching' };
-            return (
-              <FollowedEventRow
-                key={event.code}
-                event={event}
-                count={data.count}
-                state={data.state}
-                onPress={() => onOpenEvent?.(event)}
-                onUnfollow={() => onToggleFollow?.(event.code)}
-              />
-            );
-          })}
+      ) : loading ? (
+        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+          <SpinningLoader size={26} color="#c9beed" />
+          <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 10 }}>Chargement…</Text>
         </View>
+      ) : photos.length === 0 && anySearching ? (
+        // Pas encore de photos mais on est dans la fenetre 90s -> spinner explicite.
+        <View style={{ paddingVertical: 40, alignItems: 'center', paddingHorizontal: 24 }}>
+          <SpinningLoader size={26} color="#7B2FFF" />
+          <Text style={{ color: '#5E1AD6', fontSize: 13, marginTop: 12, textAlign: 'center', fontWeight: '600' }}>
+            Will recherche tes photos…
+          </Text>
+          <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 4, textAlign: 'center', lineHeight: 17 }}>
+            Cela peut prendre quelques secondes après l'upload du photographe.
+          </Text>
+        </View>
+      ) : photos.length === 0 ? (
+        <View style={{ paddingVertical: 40, alignItems: 'center', paddingHorizontal: 24 }}>
+          <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+            Aucune photo pour le moment.{'\n'}Reviens après la course !
+          </Text>
+        </View>
+      ) : (
+        <>
+          {anySearching && (
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+              paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10,
+              backgroundColor: '#F5F3FF', borderRadius: 999, alignSelf: 'flex-start',
+            }}>
+              <SpinningLoader size={12} color="#7B2FFF" />
+              <Text style={{ color: '#5E1AD6', fontSize: 12, fontWeight: '600' }}>
+                Will continue de chercher…
+              </Text>
+            </View>
+          )}
+          <PhotoGrid
+            photos={photos.slice(0, visibleCount)}
+            onPress={(p, _i, _photos, origin) => onOpenPhoto?.(p, photos, { origin })}
+            photoFavoritesSet={photoFavoritesSet}
+            onToggleFavorite={onTogglePhotoFavorite}
+          />
+        </>
       )}
     </RefreshableScrollView>
   );
@@ -1413,55 +1452,6 @@ function PhotosStepRow({ num, text, done = false }) {
       </View>
       <Text style={{ flex: 1, color: '#1A1426', fontSize: 14 }}>{text}</Text>
     </View>
-  );
-}
-
-function FollowedEventRow({ event, count, state, onPress, onUnfollow }) {
-  const tint = colorForType(event.event_type);
-  let subtitle;
-  if (state === 'searching') subtitle = 'en recherche…';
-  else if (state === 'empty') subtitle = 'Pas encore de photo. Reviens après la course.';
-  else subtitle = `${count} photo${count > 1 ? 's' : ''} trouvée${count > 1 ? 's' : ''}`;
-
-  const subtitleColor = state === 'ready' ? '#5E1AD6' : '#918BA0';
-
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.85}
-      style={{
-        flexDirection: 'row', alignItems: 'center',
-        padding: 12, marginBottom: 10,
-        backgroundColor: '#fff', borderRadius: 14,
-        borderWidth: 1, borderColor: '#E4E0EC',
-      }}
-    >
-      <View style={{
-        width: 60, height: 60, borderRadius: 12,
-        backgroundColor: tint, overflow: 'hidden',
-      }}>
-        {event.cover_image ? (
-          <ExpoImage source={{ uri: event.cover_image }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-        ) : null}
-      </View>
-      <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
-        <Text style={{ color: '#1A1426', fontSize: 15, fontWeight: '700' }} numberOfLines={1}>
-          {event.name}
-        </Text>
-        <Text style={{ color: subtitleColor, fontSize: 13, marginTop: 2 }} numberOfLines={1}>
-          {subtitle}
-        </Text>
-      </View>
-      <TouchableOpacity
-        onPress={(e) => { e.stopPropagation?.(); onUnfollow?.(); }}
-        hitSlop={8}
-        style={{ padding: 8 }}
-      >
-        <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61" fill="#7B2FFF">
-          <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-        </Svg>
-      </TouchableOpacity>
-    </TouchableOpacity>
   );
 }
 
@@ -1647,7 +1637,7 @@ function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerToken }) {
+function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1680,14 +1670,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const loadPhotos = useCallback(async () => {
     setLoading(true);
     try {
-      // Mode "perso" si le coureur suit cet event : on charge /personal-gallery
-      // (photos matchees sur son visage). Sinon galerie publique. Meme shape
-      // de reponse cote worker ({ photos: [{ key, url, thumb_url, race, km }] }).
-      const personal = isFollowing && runnerToken;
-      const r = await fetch(
-        `${API_URL}/${personal ? 'personal-gallery' : 'list-public'}/${event.code}`,
-        personal ? { headers: { Authorization: `Bearer ${runnerToken}` } } : undefined
-      );
+      const r = await fetch(`${API_URL}/list-public/${event.code}`);
       const data = r.ok ? await r.json() : { photos: [] };
       const list = (data.photos || []).map(p => {
         const parts = (p.key || '').split('/');
@@ -1719,7 +1702,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     } finally {
       setLoading(false);
     }
-  }, [event.code, tint, isFollowing, runnerToken]);
+  }, [event.code, tint]);
 
   useEffect(() => {
     let mounted = true;
@@ -10441,7 +10424,6 @@ export default function App() {
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
                     isFollowing={follows.includes(eventInPanel.code)}
                     onToggleFollow={() => requireAuth(() => toggleFollow(eventInPanel.code))}
-                    runnerToken={runnerSession?.token}
                   />
                 </View>
               </GestureDetector>
@@ -10489,11 +10471,11 @@ export default function App() {
                     onDeleteSelfie={deleteSelfie}
                     onOpenProfile={() => setProfileMenu(true)}
                     follows={follows}
-                    userId={userId}
                     runnerToken={runnerSession?.token}
-                    onOpenEvent={setOpenedEvent}
                     onFindEvent={() => setBottomTab('home')}
-                    onToggleFollow={(code) => requireAuth(() => toggleFollow(code))}
+                    onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
+                    photoFavoritesSet={photoFavoritesSet}
+                    onTogglePhotoFavorite={togglePhotoFavorite}
                     isActive={bottomTab === 'photos'}
                     selfieSkipped={selfieSkipped && !selfieUri}
                   />
