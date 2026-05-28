@@ -2007,7 +2007,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // onEndReached -> +30 jusqu'a couvrir filteredPhotos.length.
   const PAGE_SIZE = 30;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [activeFilter, setActiveFilter] = useState('all'); // 'all' | composite key
+  // Hierarchie 2 niveaux (mirror dashboard EventPage.js V2 2026-05-28) :
+  // niveau 1 race (course), niveau 2 km (position photographe) au sein d une
+  // course. activeKmFilter pertinent uniquement si activeRaceFilter !== "all".
+  const [activeRaceFilter, setActiveRaceFilter] = useState('all');
+  const [activeKmFilter, setActiveKmFilter] = useState('all');
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false); // Phase D3 : confirm "Ne plus suivre"
   const tint = colorForType(event.event_type);
   const upcoming = isUpcoming(event.event_date, event.event_date_end);
@@ -2081,68 +2085,57 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     setRefreshing(false);
   }, [loadPhotos]);
 
-  // Reset la pagination quand on change de filtre (sinon "30 / 25 photos" possible).
+  // Reset la pagination quand un filtre change.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [activeFilter]);
+  }, [activeRaceFilter, activeKmFilter]);
 
-  // Liste des courses et photographes uniques (depuis les photos reçues)
-  const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)));
-  const uniquePhotographers = Array.from(new Set(photos.map(p => p.photographer).filter(Boolean)));
-  const photographerIndex = (id) => uniquePhotographers.indexOf(id) + 1; // 1-based
+  // Reset le filtre km quand la course change (revient a "Tous" naturellement).
+  useEffect(() => { setActiveKmFilter('all'); }, [activeRaceFilter]);
 
-  // Construction des onglets selon le nombre de courses x photographes
-  const nRaces = uniqueRaces.length;
-  const nPhotographers = uniquePhotographers.length;
+  // Niveau 1 — courses uniques presentes dans les photos. Trie numerique asc.
+  const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)))
+    .sort((a, b) => Number(a) - Number(b));
 
-  const tabs = (() => {
-    if (nRaces <= 1 && nPhotographers <= 1) return []; // pas d'onglets
-    if (nRaces <= 1 && nPhotographers > 1) {
-      // 1 course / N photographes : "Toutes" + "{km} km｜km{i}"
-      const kmLabel = uniqueRaces[0] ? `${uniqueRaces[0]} km` : 'Course';
-      return [
-        { key: 'all', label: 'Toutes' },
-        ...uniquePhotographers.map((ph, i) => ({
-          key: `ph:${ph}`,
-          label: `${kmLabel}｜km${i + 1}`,
-        })),
-      ];
-    }
-    if (nRaces > 1 && nPhotographers <= 1) {
-      // N courses / 1 photographe : "{km} km"
-      return uniqueRaces.map(km => ({
-        key: `race:${km}`,
-        label: `${km} km`,
-      }));
-    }
-    // N courses / N photographes : "Toutes" + combinaisons "{km} km｜km{i}"
-    const combos = [];
-    for (const km of uniqueRaces) {
-      for (const ph of uniquePhotographers) {
-        combos.push({
-          key: `combo:${km}:${ph}`,
-          label: `${km} km｜km${photographerIndex(ph)}`,
-        });
-      }
-    }
-    return [{ key: 'all', label: 'Toutes' }, ...combos];
+  // Niveau 2 — positions km presentes pour la course active. Exclut les
+  // photos sans km (cran "-" cote photographe) -> elles ne creent pas
+  // d onglet, on les retrouve uniquement dans le sous-onglet "Tous".
+  const kmsForActiveRace = (() => {
+    if (activeRaceFilter === 'all') return [];
+    const kms = photos
+      .filter(p => String(p.race) === activeRaceFilter)
+      .map(p => p.km)
+      .filter(k => k !== null && k !== undefined && k !== '');
+    return Array.from(new Set(kms.map(String))).sort((a, b) => Number(a) - Number(b));
   })();
 
+  // Tabs course (Toutes + 1 par race). Vide si aucune photo n a de race.
+  const raceTabs = uniqueRaces.length === 0
+    ? []
+    : [
+        { key: 'all', label: 'Toutes' },
+        ...uniqueRaces.map(km => ({ key: String(km), label: `${km} km` })),
+      ];
+
+  // Tabs km (apparaissent uniquement si course specifique selectionnee ET
+  // > 1 position km distincte pour cette course — sinon pas de choix utile).
+  const kmTabs = (activeRaceFilter === 'all' || kmsForActiveRace.length <= 1)
+    ? []
+    : [
+        { key: 'all', label: 'Tous' },
+        ...kmsForActiveRace.map(k => ({
+          key: k,
+          label: k === '0' ? 'Départ' : `km ${k}`,
+        })),
+      ];
+
   const filteredPhotos = (() => {
-    if (activeFilter === 'all') return photos;
-    if (activeFilter.startsWith('race:')) {
-      const km = activeFilter.slice(5);
-      return photos.filter(p => String(p.race) === String(km));
+    if (activeRaceFilter === 'all') return photos;
+    let list = photos.filter(p => String(p.race) === activeRaceFilter);
+    if (activeKmFilter !== 'all') {
+      list = list.filter(p => String(p.km) === activeKmFilter);
     }
-    if (activeFilter.startsWith('ph:')) {
-      const ph = activeFilter.slice(3);
-      return photos.filter(p => p.photographer === ph);
-    }
-    if (activeFilter.startsWith('combo:')) {
-      const [, km, ph] = activeFilter.split(':');
-      return photos.filter(p => String(p.race) === String(km) && p.photographer === ph);
-    }
-    return photos;
+    return list;
   })();
 
   const distances = Array.isArray(event.distances) ? event.distances : [];
@@ -2444,29 +2437,55 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </View>
       ) : (
         <>
-          {/* Onglets de filtre (course / photographe / combine).
-              Pas de placeholder loading (espace vide perceptible meme sans
-              chips visibles). On tolere le shift discret quand les vrais
-              tabs apparaissent, qui ne concerne que les events multi-races
-              / multi-photographes (cas minoritaire). */}
-          {tabs.length > 0 && photos.length > 0 && (
+          {/* Niveau 1 — onglets course. N apparait pas s il n y a aucune
+              race dans les photos (uniqueRaces.length === 0). */}
+          {raceTabs.length > 0 && photos.length > 0 && (
             <ScrollView
               horizontal showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 4 }}
-              style={{ marginVertical: 8 }}
+              style={{ marginTop: 8, marginBottom: 2 }}
             >
-              {tabs.map((t) => {
-                const active = activeFilter === t.key;
+              {raceTabs.map((t) => {
+                const active = activeRaceFilter === t.key;
                 return (
                   <TouchableOpacity
                     key={t.key}
-                    onPress={() => setActiveFilter(t.key)}
+                    onPress={() => setActiveRaceFilter(t.key)}
                     style={{
                       paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
                       backgroundColor: active ? C.primary : '#f5f3ff',
                     }}
                   >
                     <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>{t.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+
+          {/* Niveau 2 — onglets km (Tous + Départ + km N). Apparait uniquement
+              si une course specifique est selectionnee ET > 1 position km
+              distincte. Pill plus petite, fond plus discret (subordonne au N1). */}
+          {kmTabs.length > 0 && (
+            <ScrollView
+              horizontal showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 6, paddingVertical: 2, marginBottom: 4 }}
+              style={{ marginBottom: 4 }}
+            >
+              {kmTabs.map((t) => {
+                const active = activeKmFilter === t.key;
+                return (
+                  <TouchableOpacity
+                    key={t.key}
+                    onPress={() => setActiveKmFilter(t.key)}
+                    style={{
+                      paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+                      backgroundColor: active ? C.primary : 'transparent',
+                      borderWidth: active ? 0 : 1,
+                      borderColor: '#EDE4FF',
+                    }}
+                  >
+                    <Text style={{ color: active ? '#fff' : C.textSoft, fontSize: 12, fontWeight: '600' }}>{t.label}</Text>
                   </TouchableOpacity>
                 );
               })}
