@@ -1252,6 +1252,9 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   const hasFollows = follows && follows.length > 0;
   // Photos agregees sur tous les follows + flag global "any event still searching"
   // pour decider d afficher le spinner / le sous-titre "recherche...".
+  // loading demarre a false : si on a un cache local @will_photos_cache, on
+  // l hydrate immediatement -> grille visible des le cold start, refresh
+  // tourne en background.
   const [photos, setPhotos] = useState([]);
   const [anySearching, setAnySearching] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1266,10 +1269,13 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   const lastSeenRef = useRef(0);
   const lastSeenLoadedRef = useRef(false);
   const baselineSetRef = useRef(false);
-  // Toast minimaliste : fade-in fleur+"Recherche..." pendant le fetch, puis
-  // transition vers le message resultat en violet leger, puis fade-out.
+  // Toast cross-fade avec le titre "Mes photos" : pendant un refresh on
+  // affiche fleur+"Recherche...", apres on affiche le message resultat,
+  // toast disparait -> titre revient. Aucun shift de la grille (le toast
+  // ne pousse rien).
   const [toastPhase, setToastPhase] = useState('idle'); // 'idle' | 'searching' | 'result'
   const [refreshToast, setRefreshToast] = useState(null);
+  const titleOpacity = useRef(new Animated.Value(1)).current;
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTimerRef = useRef(null);
 
@@ -1278,6 +1284,18 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
       lastSeenRef.current = v ? parseInt(v, 10) : 0;
       lastSeenLoadedRef.current = true;
     }).catch(() => { lastSeenLoadedRef.current = true; });
+    // Hydrate la galerie depuis le cache local pour affichage immediat au
+    // cold start. Le refresh API tourne en parallele et remplace si besoin.
+    AsyncStorage.getItem('@will_photos_cache').then(s => {
+      if (!s) { setLoading(true); return; }
+      try {
+        const cached = JSON.parse(s);
+        if (Array.isArray(cached) && cached.length > 0) {
+          setPhotos(cached);
+          setLoading(false); // grille immediatement visible
+        }
+      } catch {}
+    }).catch(() => {});
     return () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); };
   }, []);
 
@@ -1343,6 +1361,10 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     setAnySearching(searching);
     setLoading(false);
     setVisibleCount(30);
+    // Persiste pour hydratation au prochain cold start (V1 simple : tout le
+    // tableau merge serialise en JSON, suffisant tant que < quelques centaines
+    // de photos).
+    AsyncStorage.setItem('@will_photos_cache', JSON.stringify(merged)).catch(() => {});
     return merged;
   }, [follows, hasFollows, runnerToken, eventTintMap]);
 
@@ -1365,8 +1387,11 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     }
   }, [loading, photos]);
 
-  // Initial fetch + re-fetch quand follows change
-  useEffect(() => { setLoading(true); refreshAll(); }, [refreshAll]);
+  // Initial fetch + re-fetch quand follows change. Pas de setLoading(true)
+  // ici : si la cache locale a deja hydrate, la galerie reste visible
+  // pendant le refresh background. Si pas de cache, useState(true) initial
+  // garde le spinner jusqu a la fin du fetch.
+  useEffect(() => { refreshAll(); }, [refreshAll]);
 
   // Polling 7s tant qu au moins un event est en fenetre 90s ET l ecran est focus.
   // Cleanup auto -> pas de drain batterie en background.
@@ -1386,21 +1411,28 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   const onPullRefresh = useCallback(async () => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setRefreshing(true);
-    // Fade-in fleur "Recherche…"
+    // Cross-fade : titre "Mes photos" sort, toast "Recherche…" entre.
     setToastPhase('searching');
-    toastOpacity.setValue(0);
-    Animated.timing(toastOpacity, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    Animated.parallel([
+      Animated.timing(titleOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
+      Animated.timing(toastOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+    ]).start();
 
     const merged = await refreshAll();
     setRefreshing(false);
 
+    // Phase resultat : on garde le toast a opacity 1, on change juste le
+    // contenu (de "Recherche…" -> message). Pas de re-fade pour eviter le
+    // clignotement.
     if (!lastSeenLoadedRef.current) {
-      Animated.timing(toastOpacity, { toValue: 0, duration: 280, useNativeDriver: true })
-        .start(() => setToastPhase('idle'));
+      // Cross-fade retour : titre revient.
+      Animated.parallel([
+        Animated.timing(toastOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
+        Animated.timing(titleOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ]).start(() => setToastPhase('idle'));
       return;
     }
-    // E4 — calcul du delta vs marqueur lastSeenRef (baseline pose au boot
-    // pour eviter "47 nouvelles" alors que le coureur vient de tout voir).
+    // E4 — calcul du delta vs marqueur lastSeenRef.
     const prev = lastSeenRef.current;
     let maxTs = 0, newCount = 0;
     for (const p of merged) {
@@ -1419,15 +1451,17 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
         : `Bonne nouvelle, ${newCount} nouvelles photos de toi 📸`;
     setRefreshToast(msg);
     setToastPhase('result');
-    // Reste 2s en visible puis fade-out (opacity passe en 350ms a 0).
+    // Reste 2s puis cross-fade inverse : toast sort, titre revient.
     toastTimerRef.current = setTimeout(() => {
-      Animated.timing(toastOpacity, { toValue: 0, duration: 350, useNativeDriver: true })
-        .start(() => {
-          setToastPhase('idle');
-          setRefreshToast(null);
-        });
+      Animated.parallel([
+        Animated.timing(toastOpacity, { toValue: 0, duration: 500, useNativeDriver: true }),
+        Animated.timing(titleOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ]).start(() => {
+        setToastPhase('idle');
+        setRefreshToast(null);
+      });
     }, 2000);
-  }, [refreshAll, toastOpacity]);
+  }, [refreshAll, titleOpacity, toastOpacity]);
 
   return (
     <RefreshableScrollView
@@ -1455,39 +1489,32 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
             )}
           </TouchableOpacity>
         </View>
-        <Text style={[s.welcome, { color: C.primary, fontSize: 17 }]}>Mes photos</Text>
+        {/* E4 — cross-fade titre "Mes photos" <-> toast "Recherche…" /
+            message resultat. Container relative + 2 enfants absolus
+            superposes pour que la galerie ne bouge JAMAIS. */}
+        <View style={{ flex: 1, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+          <Animated.View style={{ position: 'absolute', opacity: titleOpacity }}>
+            <Text style={[s.welcome, { color: C.primary, fontSize: 17 }]}>Mes photos</Text>
+          </Animated.View>
+          {toastPhase !== 'idle' && (
+            <Animated.View style={{
+              position: 'absolute',
+              opacity: toastOpacity,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+            }}>
+              {toastPhase === 'searching' && <SpinningLoader size={14} color="#c9beed" />}
+              <Text style={{ color: '#c9beed', fontSize: 14, fontWeight: '500' }}>
+                {toastPhase === 'searching' ? 'Recherche…' : (refreshToast || '')}
+              </Text>
+            </Animated.View>
+          )}
+        </View>
         <View style={{ width: 40, height: 40 }} />
       </View>
 
       <View style={{ height: 14 }} />
-
-      {/* E4 — Toast pull-to-refresh : fade-in fleur "Recherche…" pendant le
-          fetch, puis transition vers le message resultat en violet leger,
-          puis fade-out. Minimaliste : pas de fond ni d ombre. */}
-      {toastPhase !== 'idle' && (
-        <Animated.View style={{
-          opacity: toastOpacity,
-          alignSelf: 'center',
-          paddingVertical: 6,
-          marginBottom: 8,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-        }}>
-          {toastPhase === 'searching' ? (
-            <>
-              <SpinningLoader size={14} color="#c9beed" />
-              <Text style={{ color: '#7B2FFF', opacity: 0.6, fontSize: 13, fontWeight: '500' }}>
-                Recherche…
-              </Text>
-            </>
-          ) : refreshToast ? (
-            <Text style={{ color: '#7B2FFF', opacity: 0.6, fontSize: 13, fontWeight: '500', textAlign: 'center' }}>
-              {refreshToast}
-            </Text>
-          ) : null}
-        </Animated.View>
-      )}
 
       {/* Carte selfie si pas encore depose */}
       {!selfieUri && (
@@ -10180,6 +10207,8 @@ export default function App() {
     setSelfieUri(null);
     Secure.removeItem('@will_runner').catch(() => {});
     AsyncStorage.removeItem('@will_selfie').catch(() => {});
+    AsyncStorage.removeItem('@will_photos_cache').catch(() => {});
+    AsyncStorage.removeItem('@will_last_seen_burst_ts').catch(() => {});
   }, [runnerSession]);
 
   const handleOrganizerAuthSuccess = useCallback((session) => {
@@ -10215,6 +10244,8 @@ export default function App() {
             setFollows([]);
             await AsyncStorage.removeItem('@will_selfie').catch(() => {});
             await AsyncStorage.removeItem('@will_follows').catch(() => {});
+            await AsyncStorage.removeItem('@will_photos_cache').catch(() => {});
+            await AsyncStorage.removeItem('@will_last_seen_burst_ts').catch(() => {});
             // Purge tous les @will_follow_started_* presents
             try {
               const allKeys = await AsyncStorage.getAllKeys();
