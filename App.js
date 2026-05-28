@@ -41,12 +41,16 @@ function detectHumans(frame, options) {
 // Enregistre par le config plugin with-exposure-reader au build EAS.
 // Retourne { iso, shutter, brightness } ou null.
 const exposureReaderPlugin = VisionCameraProxy.initFrameProcessorPlugin('readExposure', {});
-function readExposure(frame) {
+function readExposure(frame, options) {
   'worklet';
   if (exposureReaderPlugin == null) {
     throw new Error('readExposure plugin not loaded — rebuild required');
   }
-  return exposureReaderPlugin.call(frame);
+  // options optionnel : { setCapSeconds, brightnessLabel } -> le plugin
+  // applique device.activeMaxExposureDuration via WillShutterController.
+  return options
+    ? exposureReaderPlugin.call(frame, options)
+    : exposureReaderPlugin.call(frame);
 }
 
 // Format shutter EXIF (secondes -> fraction lisible) pour debug overlay.
@@ -2754,14 +2758,20 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     debug: {
       verboseLogs: true, skipRekognition: false, saveUnmatchedFrames: false,
     },
-    // Pipeline mobile 2026-05 : iPhone gere TOUT en natif (AE/AF continus,
-    // Deep Fusion, Smart HDR, reduction de bruit). Plus de shutter custom.
-    // shutterSpeed garde dans le config par retro-compatibilite (back-end
-    // peut continuer a le servir) mais ignore cote app -- le natif n'en
-    // depend plus. zone = bande verticale de capture (filtrage bbox face).
+    // Pipeline mobile 2026-05 : iPhone gere AE/AF continus + Deep Fusion +
+    // Smart HDR. shutterSpeed (v1) ignore. v2 = shutter cap adaptatif via
+    // activeMaxExposureDuration (cf with-shutter-lock v2) : on plafonne la
+    // duree max d expo SANS quitter le mode auto -> rendu iPhone preserve
+    // mais coureur fige meme sous-bois. Cap decide cote JS d apres le
+    // voyant luminosite, push au natif via le frame processor.
+    //   - shutterSpeedMaxBright : cap en lumiere OK (denominateur, 1000 = 1/1000s).
+    //   - shutterSpeedMaxDim    : cap en lumiere moyenne / faible.
+    // captureZoneWidthPercent = bande verticale capture (filtre bbox face).
     camera: {
       captureZoneWidthPercent: 30,
-      shutterSpeed: 1000,
+      shutterSpeed: 1000, // legacy, non utilise depuis 2026-05
+      shutterSpeedMaxBright: 1000,
+      shutterSpeedMaxDim: 500,
     },
   });
 
@@ -2963,6 +2973,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // Largeur zone de capture (fraction 0..1) lue par le plugin Swift pour
   // filtrer les humains hors-bande. Mise a jour quand eventConfig change.
   const zoneSV = useMemo(() => Worklets.createSharedValue(0.3), []);
+  // Shutter cap adaptatif (v2) : pousse vers le natif via readExposure args.
+  // Default 1/500 + label "init" avant que le voyant luminosite ait stabilise.
+  // Note : ces SV ne servent QUE de bridge JS->worklet->native. Le calcul du
+  // cap se fait dans le useEffect [liveExposureSamples, eventConfig.camera.*]
+  // plus bas, base sur le meme shutter median que le voyant.
+  const capSecondsSV = useMemo(() => Worklets.createSharedValue(0.002), []);
+  const brightnessLabelSV = useMemo(() => Worklets.createSharedValue('init'), []);
 
   // Caméra ancrée juste sous le header (au lieu de absoluteFill + letterbox 4:3
   // qui laissait un grand vide noir entre le header et l'image visible sur les
@@ -3073,6 +3090,28 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // bouge horizontalement, on swap vers midY au build suivant.
   // Le plugin native dump TOUJOURS x ET y dans les logs pour ce diag.
 
+  // E5 cap shutter adaptatif — derive un cap (1/1000 si lumiere OK, sinon
+  // 1/500) du shutter median des derniers samples, identique au seuil du
+  // voyant luminosite, et push vers les SV. Le worklet picke la valeur au
+  // tick 1Hz suivant et la transmet au natif via readExposure args.
+  useEffect(() => {
+    const shutters = liveExposureSamples
+      .map(s => s.shutter)
+      .filter(v => Number.isFinite(v) && v > 0);
+    if (shutters.length === 0) return;
+    const sorted = [...shutters].sort((a, b) => a - b);
+    const mid = sorted[Math.floor(sorted.length / 2)];
+    const camCfg = eventConfig?.camera || {};
+    const denBright = Number(camCfg.shutterSpeedMaxBright) || 1000;
+    const denDim = Number(camCfg.shutterSpeedMaxDim) || 500;
+    let label, cap;
+    if (mid <= 0.001) { label = 'OK'; cap = 1.0 / denBright; }
+    else if (mid <= 0.002) { label = 'moyenne'; cap = 1.0 / denDim; }
+    else { label = 'faible'; cap = 1.0 / denDim; }
+    capSecondsSV.value = cap;
+    brightnessLabelSV.value = label;
+  }, [liveExposureSamples, eventConfig?.camera?.shutterSpeedMaxBright, eventConfig?.camera?.shutterSpeedMaxDim, capSecondsSV, brightnessLabelSV]);
+
   // Frame processor : ~30 fps appel worklet, throttle 1/3 -> ~10 fps d'analyse
   // Vision (economie batterie + thermal). Apple Vision tourne sur la queue
   // VisionCamera (background) ; le runOnJS ne bloque pas le rendu.
@@ -3081,9 +3120,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     // ISO live : tick ~1 Hz a 30 fps (independant du throttle Vision pour
     // que le voyant lumiere reste reactif meme quand detectHumans skip).
     // Lecture seule de la metadata EXIF du buffer, ~qq us, ne bloque rien.
+    // En meme temps : push du cap shutter adaptatif au natif (no-op si meme
+    // cap+label que precedent, dedupe interne au WillShutterController).
     isoTickSV.value = (isoTickSV.value + 1) % 30;
     if (isoTickSV.value === 0) {
-      const exp = readExposure(frame);
+      const exp = readExposure(frame, {
+        setCapSeconds: capSecondsSV.value,
+        brightnessLabel: brightnessLabelSV.value,
+      });
       if (exp && exp.iso) onExposureSampleJS(exp);
     }
 
@@ -3095,7 +3139,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     });
     const count = result?.count ?? 0;
     onHumansDetectedJS(count);
-  }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV]);
+  }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV]);
 
   // === Mode offline-first : queue persistante ===
   // - Photos copiées dans Paths.document/will_pending/ (survit au kill app)

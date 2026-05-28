@@ -40,7 +40,18 @@ public class ExposureReaderPlugin: FrameProcessorPlugin {
     super.init(proxy: proxy, options: options)
   }
 
-  public override func callback(_ frame: Frame, withArguments _: [AnyHashable: Any]?) -> Any? {
+  public override func callback(_ frame: Frame, withArguments args: [AnyHashable: Any]?) -> Any? {
+    // SETTER PATH : si l app pousse un cap shutter dynamique (decide cote JS
+    // d apres le voyant luminosite), applique-le sur le device en passant
+    // par WillShutterController (helper public exposé par le plugin Expo
+    // with-shutter-lock). Operation no-op si meme (cap, label) que le dernier
+    // appel — dedupe interne au controller.
+    if let args = args,
+       let capSec = (args["setCapSeconds"] as? NSNumber)?.doubleValue,
+       let label = args["brightnessLabel"] as? String {
+      WillShutterController.shared.setMaxExposureDuration(capSec, brightness: label)
+    }
+
     let buffer = frame.buffer
     guard CMSampleBufferIsValid(buffer) else { return nil }
 

@@ -1,22 +1,35 @@
 /**
  * Expo Config Plugin: with-shutter-lock
  *
- * 2026-05 : NEUTRALISE. Historiquement ce plugin forcait un shutter fixe
- * via setExposureModeCustom + metering loop ISO (mode S/Tv). Strategie
- * abandonnee : on laisse iOS gerer expo + Deep Fusion + Smart HDR +
- * reduction de bruit en mode .continuousAutoExposure natif, pour obtenir
- * le rendu iPhone propre sans bruit. La classe WillShutterController est
- * conservee et reduite a un simple logger NSLog [WILL-CAM] qui trace le
- * device attache (capteur principal/secondaire/virtuel) au demarrage de
- * session.
+ * 2026-05 v2 — Réactive un cap shutter ADAPTATIF en gardant le mode natif
+ * .continuousAutoExposure (donc Deep Fusion + Smart HDR preservés). La
+ * difference avec le v1 : on ne sort PAS du mode auto. On set juste
+ * device.activeMaxExposureDuration depuis JS via le frame processor.
+ *
+ *   - Pleine lumiere (voyant OK)   -> cap 1/1000s
+ *   - Lumiere moyenne / faible     -> cap 1/500s
+ *
+ * Si la scene est trop sombre, iOS pousse l'ISO (jusqu'a activeMaxISO) ;
+ * passe ce plafond la photo est sous-exposee mais nette (compromis assume
+ * pour un sujet rapide comme un coureur).
  *
  * Architecture :
- *   1. Hook dans CameraSession+Configuration.swift inchange : appelle
- *      WillShutterController.shared.attachDevice apres setup exposure.
- *   2. Helper WillShutterController : NSLog [WILL-CAM] only, plus de
- *      timer ni de setExposureModeCustom.
+ *   1. Hook dans CameraSession+Configuration.swift : appelle
+ *      WillShutterController.shared.attachDevice(device) apres setup
+ *      exposure -> garde le ref AVCaptureDevice.
+ *   2. Helper `public final class WillShutterController` (singleton)
+ *      expose `setMaxExposureDuration(_:brightness:)` callable depuis
+ *      l'app target (ExposureReaderPlugin) via `import VisionCamera`.
+ *      Cache last-applied (cap + label) -> NSLog [WILL-CAM] sur change
+ *      uniquement, pas de spam au tick 1Hz du worklet.
  *
- * Idempotent : marqueurs sur hook + helper, fail-loud si upstream bouge.
+ * Marqueurs :
+ *   - HOOK_MARKER inline pour le call attachDevice (inchange depuis v1).
+ *   - HELPER_BEGIN / HELPER_END encadrent le bloc helper -> rewriting
+ *     idempotent sur builds successifs (le bloc est purge + re-injecte
+ *     a chaque prebuild iOS, donc plus de v1 a stripper).
+ *
+ * Fail-loud : throws si le bloc exposure VisionCamera est modifie upstream.
  */
 
 const { withDangerousMod } = require('@expo/config-plugins');
@@ -27,7 +40,9 @@ const SWIFT_REL_PATH =
   'node_modules/react-native-vision-camera/ios/Core/CameraSession+Configuration.swift';
 
 const HOOK_MARKER = '[will-shutter-lock-hook]';
-const HELPER_MARKER = '// [will-shutter-lock-helper]';
+const HELPER_BEGIN = '// [will-shutter-lock-helper-v2] BEGIN';
+const HELPER_END = '// [will-shutter-lock-helper-v2] END';
+const HELPER_OLD_MARKER = '// [will-shutter-lock-helper]'; // v1 single-line marker
 
 const HOOK_SEARCH = `    if device.isExposureModeSupported(.continuousAutoExposure) {
       if device.isExposurePointOfInterestSupported {
@@ -42,28 +57,63 @@ const HOOK_REPLACE = `    if device.isExposureModeSupported(.continuousAutoExpos
       }
       device.exposureMode = .continuousAutoExposure
     }
-    // ${HOOK_MARKER} Attache le device au logger qui NSLog [WILL-CAM] le
-    // capteur reel (principal/secondaire/virtuel) + son format actif. AUCUNE
-    // modification d'exposition : .continuousAutoExposure ci-dessus reste
-    // actif -> rendu iPhone natif Deep Fusion + Smart HDR.
+    // ${HOOK_MARKER} Attache le device au controller WillShutterController.
+    // Le mode reste .continuousAutoExposure -> Deep Fusion + Smart HDR
+    // preserves. Le cap shutter eventuellement applique apres via
+    // setMaxExposureDuration n'altere PAS le mode (juste un plafond max).
     WillShutterController.shared.attachDevice(device)`;
 
-const HELPER = `
+const HELPER_BODY = `// Hook NSLog [WILL-CAM] + setter shutter cap adaptatif. Public pour etre
+// appelable depuis l app target (ExposureReaderPlugin -> import VisionCamera
+// -> WillShutterController.shared.setMaxExposureDuration(...)). Le mode
+// d exposition reste .continuousAutoExposure : on plafonne juste la duree
+// d expo max, iOS reste libre de choisir une duree plus rapide.
 
-${HELPER_MARKER}
-// Hook NSLog [WILL-CAM] : logge le device (capteur principal/secondaire/
-// virtuel) et son format actif au moment ou la session AVCapture est
-// configuree. Permet de tracer dans Console.app quel AVCaptureDevice est
-// effectivement attache. AUCUNE modification d'exposition : on laisse iOS
-// gerer en .continuousAutoExposure natif (Deep Fusion + Smart HDR + AE/AF
-// continus). Historique : cette classe forcait setExposureModeCustom +
-// metering loop pour shutter fixe -- abandonne 2026-05.
+public final class WillShutterController {
+  public static let shared = WillShutterController()
 
-fileprivate final class WillShutterController {
-  static let shared = WillShutterController()
+  private weak var device: AVCaptureDevice?
+  private var lastAppliedCapSec: Double = -1
+  private var lastAppliedLabel: String = ""
+  private let lock = NSLock()
 
-  func attachDevice(_ d: AVCaptureDevice) {
+  private init() {}
+
+  public func attachDevice(_ d: AVCaptureDevice) {
     Self.logCameraInfo(d)
+    lock.lock()
+    self.device = d
+    // Reset cache au reattach (nouvelle session = nouveau device).
+    self.lastAppliedCapSec = -1
+    self.lastAppliedLabel = ""
+    lock.unlock()
+  }
+
+  public func setMaxExposureDuration(_ durationSec: Double, brightness label: String) {
+    guard durationSec > 0 && durationSec.isFinite else { return }
+    lock.lock()
+    defer { lock.unlock() }
+    guard let d = device else { return }
+    // Dedupe : meme cap + meme label -> no-op (evite spam NSLog + lockForConfig
+    // alors qu on call ce setter 1 fois par seconde depuis le worklet).
+    if abs(durationSec - lastAppliedCapSec) < 1e-7 && label == lastAppliedLabel { return }
+    let requested = CMTimeMakeWithSeconds(durationSec, preferredTimescale: 1_000_000)
+    let fmtMax = d.activeFormat.maxExposureDuration
+    let fmtMin = d.activeFormat.minExposureDuration
+    // Borne le cap aux limites du format actif pour eviter une erreur AVCapture.
+    let bounded = CMTimeMaximum(fmtMin, CMTimeMinimum(requested, fmtMax))
+    do {
+      try d.lockForConfiguration()
+      d.activeMaxExposureDuration = bounded
+      d.unlockForConfiguration()
+      let appliedSec = CMTimeGetSeconds(bounded)
+      lastAppliedCapSec = durationSec
+      lastAppliedLabel = label
+      NSLog("[WILL-CAM] shutter cap applied: requested=1/%.0fs effective=1/%.0fs brightness=%@",
+            1.0 / durationSec, 1.0 / max(appliedSec, 1e-7), label)
+    } catch {
+      NSLog("[WILL-CAM] shutter cap lockForConfiguration failed: %@", error.localizedDescription)
+    }
   }
 
   private static func logCameraInfo(_ d: AVCaptureDevice) {
@@ -88,8 +138,7 @@ fileprivate final class WillShutterController {
     NSLog("[WILL-CAM] capteur='%@' type=%@ photoMax=[%@] video=%dx%d maxFps=%.0f",
           d.localizedName, typeStr, photoStr, videoDim.width, videoDim.height, fps)
   }
-}
-`;
+}`;
 
 function patchSwift(projectRoot) {
   const filePath = path.join(projectRoot, SWIFT_REL_PATH);
@@ -102,7 +151,7 @@ function patchSwift(projectRoot) {
   let content = fs.readFileSync(filePath, 'utf8');
   let changed = false;
 
-  // Patch hook
+  // 1. Hook inline (attachDevice call) — identique a v1, sans modification.
   if (content.includes(HOOK_MARKER)) {
     console.log('[with-shutter-lock] hook patch already applied, skipping');
   } else if (!content.includes(HOOK_SEARCH)) {
@@ -116,12 +165,33 @@ function patchSwift(projectRoot) {
     changed = true;
   }
 
-  // Helper (append en fin de fichier)
-  if (!content.includes(HELPER_MARKER)) {
-    content = content + HELPER;
-    console.log('[with-shutter-lock] WillShutterController helper appended');
-    changed = true;
+  // 2. Strip ancien helper v1 si present (single-line marker, body jusqu a EOF).
+  if (!content.includes(HELPER_BEGIN)) {
+    const oldIdx = content.indexOf(HELPER_OLD_MARKER);
+    if (oldIdx !== -1) {
+      content = content.slice(0, oldIdx).trimEnd() + '\n';
+      console.log('[with-shutter-lock] stripped v1 helper block (body to EOF)');
+      changed = true;
+    }
   }
+
+  // 3. v2 helper : strip ancien bloc v2 (BEGIN..END) puis re-injecte.
+  const v2Start = content.indexOf(HELPER_BEGIN);
+  if (v2Start !== -1) {
+    const v2End = content.indexOf(HELPER_END, v2Start);
+    if (v2End !== -1) {
+      content = content.slice(0, v2Start) + content.slice(v2End + HELPER_END.length);
+      console.log('[with-shutter-lock] replaced existing v2 helper block');
+      changed = true;
+    } else {
+      throw new Error(
+        '[with-shutter-lock] HELPER_BEGIN present mais HELPER_END manquant — fichier corrompu, vider node_modules.'
+      );
+    }
+  }
+  content = content.trimEnd() + '\n\n' + HELPER_BEGIN + '\n' + HELPER_BODY + '\n' + HELPER_END + '\n';
+  changed = true;
+  console.log('[with-shutter-lock] v2 helper injected (public WillShutterController + setter)');
 
   if (changed) {
     fs.writeFileSync(filePath, content, 'utf8');
