@@ -867,12 +867,12 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, favorites, onToggleFavorite, onRefresh, runnerFirstName, selfieSkipped = false }) {
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false }) {
   const [searchQuery, setSearchQuery] = useState('');
   const tabFiltered = events.filter(e => {
     if (tab === 'upcoming') return isUpcoming(e.event_date, e.event_date_end);
     if (tab === 'past') return !isUpcoming(e.event_date, e.event_date_end);
-    if (tab === 'favorites') return favorites.includes(e.code);
+    if (tab === 'follows') return follows.includes(e.code);
     return true;
   });
   const q = searchQuery.trim().toLowerCase();
@@ -996,8 +996,8 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         <TouchableOpacity onPress={() => setTab('past')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'past' && s.pillActive]}>
           <Text style={[s.pillText, tab === 'past' && s.pillTextActive]}>Passés</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setTab('favorites')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'favorites' && s.pillActive]}>
-          <Text style={[s.pillText, tab === 'favorites' && s.pillTextActive]}>Favoris</Text>
+        <TouchableOpacity onPress={() => setTab('follows')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'follows' && s.pillActive]}>
+          <Text style={[s.pillText, tab === 'follows' && s.pillTextActive]}>Suivis</Text>
         </TouchableOpacity>
       </View>
 
@@ -1008,7 +1008,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             <Icon.Calendar size={36} color={C.textSoft} />
           </View>
           <Text style={{ color: C.textSoft, fontSize: 14 }}>
-            {tab === 'favorites' ? 'Aucun favori' : tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
+            {tab === 'follows' ? 'Aucun event suivi' : tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
           </Text>
         </View>
       ) : (
@@ -1017,8 +1017,8 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             key={event.code}
             event={event}
             onPress={() => onOpenEvent(event)}
-            isFavorite={favorites.includes(event.code)}
-            onToggleFavorite={() => onToggleFavorite(event.code)}
+            isFollowing={follows.includes(event.code)}
+            onToggleFollow={() => onToggleFollow(event.code)}
             style={{ marginBottom: 8 }}
           />
         ))
@@ -1027,7 +1027,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
   );
 }
 
-function EventCard({ event, onPress, isFavorite, onToggleFavorite, style }) {
+function EventCard({ event, onPress, isFollowing, onToggleFollow, style }) {
   const tint = colorForType(event.event_type);
 
   return (
@@ -1087,12 +1087,11 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite, style }) {
           </Text>
         </View>
       ) : null}
-      {/* Bouton favori (sa propre zone tactile, au-dessus de tout). Wrapper
-          glassmorphique semi-transparent pour la lisibilité sur les photos
-          claires/sombres. */}
-      {onToggleFavorite && (
+      {/* Bouton Suivre (geste de consentement biometrique RGPD).
+          Etoile pleine si suivi, contour si non-suivi. */}
+      {onToggleFollow && (
         <TouchableOpacity
-          onPress={onToggleFavorite}
+          onPress={onToggleFollow}
           hitSlop={10}
           style={{
             position: 'absolute',
@@ -1105,8 +1104,8 @@ function EventCard({ event, onPress, isFavorite, onToggleFavorite, style }) {
             zIndex: 10,
           }}
         >
-          <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61" fill={isFavorite ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}>
-            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+          <Svg width={22} height={22} viewBox="0 0 24 24" fill={isFollowing ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8} strokeLinejoin="round">
+            <Path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6z" />
           </Svg>
         </TouchableOpacity>
       )}
@@ -1184,8 +1183,8 @@ function PhotosUnauthScreen({ onSignup, onLogin }) {
   );
 }
 
-function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, favorites, userId, onOpenPhoto, runnerToken, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false }) {
-  const hasFavorites = favorites && favorites.length > 0;
+function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, follows, userId, onOpenPhoto, runnerToken, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false }) {
+  const hasFollows = follows && follows.length > 0;
   const [photos, setPhotos] = useState([]);
   const [visibleCount, setVisibleCount] = useState(20);
   const [loading, setLoading] = useState(false);
@@ -1198,14 +1197,14 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
 
   const loadPhotos = useCallback(async () => {
     // user_id deduit du Bearer cote worker → besoin du runnerToken
-    if (!hasFavorites || !selfieUri || !userId || !runnerToken) {
+    if (!hasFollows || !selfieUri || !userId || !runnerToken) {
       setPhotos([]);
       return;
     }
     setLoading(true);
     setVisibleCount(20);
     const all = [];
-    for (const code of favorites) {
+    for (const code of follows) {
       const tint = eventTintMap[code] || TYPE_COLORS.Autre;
       try {
         const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}`, {
@@ -1228,7 +1227,7 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
     });
     setPhotos(all);
     setLoading(false);
-  }, [favorites, selfieUri, userId, runnerToken]);
+  }, [follows, selfieUri, userId, runnerToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1291,7 +1290,7 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
         <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
       )}
 
-      {!hasFavorites ? (
+      {!hasFollows ? (
         <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 }}>
           <View style={{ marginBottom: 14, opacity: 0.4 }}>
             <Svg width={40} height={34} viewBox="0 0 20.78 17.61" fill={C.textSoft}>
@@ -1513,7 +1512,7 @@ function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFavorite, onToggleFavorite }) {
+function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1754,10 +1753,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           </View>
         </View>
 
-        {/* Favori en haut à droite */}
-        {onToggleFavorite && (
+        {/* Bouton Suivre en haut a droite (geste de consentement RGPD).
+            Etoile pleine si suivi, contour si non-suivi. */}
+        {onToggleFollow && (
           <TouchableOpacity
-            onPress={onToggleFavorite}
+            onPress={onToggleFollow}
             hitSlop={10}
             style={{
               position: 'absolute', top: 6, right: 6,
@@ -1766,9 +1766,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               zIndex: 10,
             }}
           >
-            <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61"
-              fill={isFavorite ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}>
-              <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+            <Svg width={22} height={22} viewBox="0 0 24 24"
+              fill={isFollowing ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8} strokeLinejoin="round">
+              <Path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6z" />
             </Svg>
           </TouchableOpacity>
         )}
@@ -9419,7 +9419,8 @@ export default function App() {
   const [profileMenu, setProfileMenu] = useState(false);
   const [selfieViewer, setSelfieViewer] = useState(false);
   const [openedPhoto, setOpenedPhoto] = useState(null); // { photo, photos, allowDelete, onDelete }
-  const [favorites, setFavorites] = useState([]);
+  const [follows, setFollows] = useState([]);  // Events suivis (consentement biometrique RGPD)
+  const pendingFollowRef = useRef(null);  // Stocke eventCode si selfie requis → relance follow apres selfie
   const [photoFavorites, setPhotoFavorites] = useState([]); // array d'IDs photo (keys R2)
   const [userId, setUserId] = useState(null);
   const [runnerSession, setRunnerSession] = useState(null); // { token, profile }
@@ -9538,22 +9539,22 @@ export default function App() {
     // plus rien → on les vide une fois, on informe l'utilisateur.
     (async () => {
       const resetDone = await AsyncStorage.getItem('@will_phase_d_reset_done');
-      const stored = await AsyncStorage.getItem('@will_favorites');
-      if (__DEV__) console.log('[Phase D reset] @will_phase_d_reset_done =', resetDone, 'favorites =', stored);
+      const storedOldFavorites = await AsyncStorage.getItem('@will_favorites');
+      if (__DEV__) console.log('[Phase D reset] @will_phase_d_reset_done =', resetDone, 'old @will_favorites =', storedOldFavorites);
       if (resetDone === '1') {
         // Boot normal post-reset : charge follows depuis @will_follows si présent
-        const follows = await AsyncStorage.getItem('@will_follows');
-        if (follows) {
-          try { setFavorites(JSON.parse(follows)); } catch { setFavorites([]); }
+        const storedFollows = await AsyncStorage.getItem('@will_follows');
+        if (storedFollows) {
+          try { setFollows(JSON.parse(storedFollows)); } catch { setFollows([]); }
         }
         return;
       }
       // 1er boot post-Phase D : vide anciens favoris + flag + affiche modale si non-vide
       let hadFavorites = false;
-      if (stored) {
-        try { hadFavorites = Array.isArray(JSON.parse(stored)) && JSON.parse(stored).length > 0; } catch {}
+      if (storedOldFavorites) {
+        try { hadFavorites = Array.isArray(JSON.parse(storedOldFavorites)) && JSON.parse(storedOldFavorites).length > 0; } catch {}
       }
-      setFavorites([]);
+      setFollows([]);
       await AsyncStorage.removeItem('@will_favorites').catch(() => {});
       await AsyncStorage.setItem('@will_phase_d_reset_done', '1');
       if (hadFavorites) setShowResetModal(true);
@@ -9806,15 +9807,58 @@ export default function App() {
     }
   }, [organizerSession]);
 
-  const toggleFavorite = useCallback((eventCode) => {
-    setFavorites(prev => {
-      const next = prev.includes(eventCode)
-        ? prev.filter(c => c !== eventCode)
-        : [...prev, eventCode];
-      AsyncStorage.setItem('@will_favorites', JSON.stringify(next)).catch(() => {});
-      return next;
-    });
-  }, []);
+  // Suivre / ne plus suivre un event = consentement biometrique RGPD.
+  // Pre-requis : runner connecte (requireAuth fait par le caller) + selfie
+  // depose (sinon 400 selfie_required → on ouvre SelfieModal puis on relance
+  // via pendingFollowRef dans le onSaved du modal).
+  const toggleFollow = useCallback(async (eventCode) => {
+    const token = runnerSession?.token;
+    if (!token) {
+      // Garde-fou : appel direct sans auth. Le caller doit utiliser requireAuth.
+      Alert.alert('Connexion requise', 'Connecte-toi a ton compte coureur pour suivre un event.');
+      return;
+    }
+    const isCurrentlyFollowing = follows.includes(eventCode);
+    if (isCurrentlyFollowing) {
+      const r = await api.unfollow(eventCode, token);
+      if (r?.ok || r?.note === 'already_unfollowed') {
+        setFollows(prev => {
+          const next = prev.filter(c => c !== eventCode);
+          AsyncStorage.setItem('@will_follows', JSON.stringify(next)).catch(() => {});
+          return next;
+        });
+        AsyncStorage.removeItem(`@will_follow_started_${eventCode}`).catch(() => {});
+      } else {
+        Alert.alert('Erreur', r?.error || 'Impossible de retirer le suivi. Reessaie.');
+      }
+      return;
+    }
+    // Follow
+    const r = await api.follow(eventCode, token);
+    if (r?.ok || r?.note === 'already_following') {
+      setFollows(prev => {
+        if (prev.includes(eventCode)) return prev;
+        const next = [...prev, eventCode];
+        AsyncStorage.setItem('@will_follows', JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+      AsyncStorage.setItem(`@will_follow_started_${eventCode}`, String(Date.now())).catch(() => {});
+      return;
+    }
+    // 400 "Selfie requis" → ouvre SelfieModal puis relance follow apres save
+    if (r?.status === 400 && r?.error && r.error.toLowerCase().includes('selfie')) {
+      pendingFollowRef.current = eventCode;
+      setSelfieModal(true);
+      return;
+    }
+    // 400 "Aucun visage detecte" → message dedie
+    if (r?.status === 400 && r?.error && r.error.toLowerCase().includes('visage')) {
+      Alert.alert('Selfie a refaire', r.error);
+      return;
+    }
+    // Autre erreur
+    Alert.alert('Erreur', r?.error || 'Impossible de suivre cet event. Reessaie.');
+  }, [follows, runnerSession?.token]);
 
   const photoFavoritesSet = useMemo(() => new Set(photoFavorites), [photoFavorites]);
   const togglePhotoFavorite = useCallback((photoId) => {
@@ -10069,8 +10113,8 @@ export default function App() {
                     onDeleteSelfie={deleteSelfie}
                     onOpenProfile={() => setProfileMenu(true)}
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
-                    isFavorite={favorites.includes(eventInPanel.code)}
-                    onToggleFavorite={() => requireAuth(() => toggleFavorite(eventInPanel.code))}
+                    isFollowing={follows.includes(eventInPanel.code)}
+                    onToggleFollow={() => requireAuth(() => toggleFollow(eventInPanel.code))}
                   />
                 </View>
               </GestureDetector>
@@ -10102,8 +10146,8 @@ export default function App() {
                   selfieUri={selfieUri}
                   onDeleteSelfie={deleteSelfie}
                   onOpenProfile={() => setProfileMenu(true)}
-                  favorites={favorites}
-                  onToggleFavorite={(code) => requireAuth(() => toggleFavorite(code))}
+                  follows={follows}
+                  onToggleFollow={(code) => requireAuth(() => toggleFollow(code))}
                   onRefresh={reloadEvents}
                   runnerFirstName={runnerSession?.profile?.firstName}
                   selfieSkipped={!!runnerSession && selfieSkipped && !selfieUri}
@@ -10118,7 +10162,7 @@ export default function App() {
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
                     onOpenProfile={() => setProfileMenu(true)}
-                    favorites={favorites}
+                    follows={follows}
                     userId={userId}
                     runnerToken={runnerSession?.token}
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
@@ -10249,13 +10293,20 @@ export default function App() {
 
       <SelfieModal
         visible={selfieModal}
-        onClose={() => { setSelfieModal(false); setSignupSelfieStep(false); }}
+        onClose={() => { setSelfieModal(false); setSignupSelfieStep(false); pendingFollowRef.current = null; }}
         onSaved={(uri) => {
           setSelfieUri(uri);
           // Selfie pris → on retire la pastille "selfie manquant" sur l'accueil.
           AsyncStorage.removeItem('@will_selfie_skipped').catch(() => {});
           setSelfieSkipped(false);
           setSignupSelfieStep(false);
+          // Phase D : si un follow attendait le selfie, relance-le maintenant.
+          const pendingEvent = pendingFollowRef.current;
+          if (pendingEvent) {
+            pendingFollowRef.current = null;
+            // setTimeout pour laisser le modal se fermer proprement avant le toast eventuel
+            setTimeout(() => { toggleFollow(pendingEvent); }, 200);
+          }
         }}
         userId={userId}
         runnerToken={runnerSession?.token}
