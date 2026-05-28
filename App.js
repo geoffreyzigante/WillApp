@@ -2269,24 +2269,14 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           SUIVI : pill statut + lien "Ne plus suivre" (avec confirm modal). */}
       {onToggleFollow && (
         isFollowing ? (
+          // L info "tu suis" est deja signalee par le coeur rempli sur la
+          // hero card -> on garde uniquement le lien "Ne plus suivre", la
+          // pill redondante a ete retiree.
           <View style={{ marginTop: 4, marginBottom: 12 }}>
-            <View style={{
-              backgroundColor: '#EDE4FF',
-              borderRadius: 14,
-              paddingVertical: 14, paddingHorizontal: 16,
-              flexDirection: 'row', alignItems: 'center', gap: 10,
-            }}>
-              <Svg width={20} height={18} viewBox="-1 -1.5 22.78 20.61" fill="#7B2FFF">
-                <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-              </Svg>
-              <Text style={{ color: '#5E1AD6', fontSize: 15, fontWeight: '700', flex: 1 }}>
-                Tu suis cet event
-              </Text>
-            </View>
             <TouchableOpacity
               onPress={() => setShowUnfollowConfirm(true)}
               hitSlop={10}
-              style={{ alignSelf: 'center', marginTop: 8, paddingVertical: 6, paddingHorizontal: 12 }}
+              style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 }}
             >
               <Text style={{ color: '#918BA0', fontSize: 13, textDecorationLine: 'underline' }}>
                 Ne plus suivre
@@ -2350,15 +2340,15 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         )
       )}
 
-      {/* CTA Site web : juste sous le header, coloré au type d'épreuve.
-          Pleine largeur (comme les autres blocs), texte centré. Caché si pas
-          de website. */}
+      {/* CTA Site web : action secondaire, donc style discret —
+          fond pale (tint + alpha) + texte couleur tint, label generique
+          "Accéder au site de l event" (sans URL en clair). */}
       {event.website ? (
         <TouchableOpacity
           onPress={openWebsite}
           activeOpacity={0.85}
           style={{
-            backgroundColor: tint,
+            backgroundColor: `${tint}1A`,
             borderRadius: 14,
             paddingVertical: 10,
             paddingHorizontal: 24,
@@ -2366,8 +2356,8 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             marginBottom: 8,
           }}
         >
-          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>
-            {event.website.replace(/^https?:\/\//, '')} →
+          <Text style={{ color: tint, fontSize: 14, fontWeight: '600' }}>
+            Accéder au site de l'event →
           </Text>
         </TouchableOpacity>
       ) : null}
@@ -2437,55 +2427,52 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </View>
       ) : (
         <>
-          {/* Niveau 1 — onglets course. N apparait pas s il n y a aucune
-              race dans les photos (uniqueRaces.length === 0). */}
+          {/* Onglets : race (N1) + km (N2 conditionnel) sur UNE meme ligne
+              scrollable horizontalement. Le N1 est suivi (a droite) d un
+              separateur fin puis du N2 si pertinent. Ensemble pill discrete
+              (pill 12px, height contenue, fond pale) pour ne pas dominer
+              la hero card + lien follow + CTA site qui sont au-dessus. */}
           {raceTabs.length > 0 && photos.length > 0 && (
             <ScrollView
               horizontal showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 8, paddingVertical: 4, marginBottom: 4 }}
+              contentContainerStyle={{ gap: 6, paddingVertical: 2, alignItems: 'center' }}
               style={{ marginTop: 8, marginBottom: 2 }}
             >
               {raceTabs.map((t) => {
                 const active = activeRaceFilter === t.key;
                 return (
                   <TouchableOpacity
-                    key={t.key}
+                    key={`r-${t.key}`}
                     onPress={() => setActiveRaceFilter(t.key)}
                     style={{
-                      paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
+                      paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
                       backgroundColor: active ? C.primary : '#f5f3ff',
                     }}
                   >
-                    <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>{t.label}</Text>
+                    <Text style={{ color: active ? '#fff' : C.text, fontSize: 12, fontWeight: '600' }}>{t.label}</Text>
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
-          )}
 
-          {/* Niveau 2 — onglets km (Tous + Départ + km N). Apparait uniquement
-              si une course specifique est selectionnee ET > 1 position km
-              distincte. Pill plus petite, fond plus discret (subordonne au N1). */}
-          {kmTabs.length > 0 && (
-            <ScrollView
-              horizontal showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 6, paddingVertical: 2, marginBottom: 4 }}
-              style={{ marginBottom: 4 }}
-            >
+              {/* Separateur vertical fin entre N1 et N2 (apparait si N2 actif). */}
+              {kmTabs.length > 0 && (
+                <View style={{ width: 1, height: 16, backgroundColor: '#EDE4FF', marginHorizontal: 4 }} />
+              )}
+
               {kmTabs.map((t) => {
                 const active = activeKmFilter === t.key;
                 return (
                   <TouchableOpacity
-                    key={t.key}
+                    key={`k-${t.key}`}
                     onPress={() => setActiveKmFilter(t.key)}
                     style={{
-                      paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+                      paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
                       backgroundColor: active ? C.primary : 'transparent',
                       borderWidth: active ? 0 : 1,
                       borderColor: '#EDE4FF',
                     }}
                   >
-                    <Text style={{ color: active ? '#fff' : C.textSoft, fontSize: 12, fontWeight: '600' }}>{t.label}</Text>
+                    <Text style={{ color: active ? '#fff' : C.textSoft, fontSize: 11, fontWeight: '600' }}>{t.label}</Text>
                   </TouchableOpacity>
                 );
               })}
