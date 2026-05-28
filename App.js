@@ -4551,14 +4551,18 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             <View style={{ width: 0.5, backgroundColor: 'rgba(255,255,255,0.15)' }} />
 
             {/* Section KM (droite, 50%) — label + roulette 3-items toujours visible.
-                Premier item = "Non posté" (value=null), default. Disambigue le
-                0 km = "Départ" explicite : une photo prise en cran "Non posté"
-                n écrit PAS de km sur customMetadata R2 (header X-Will-Km absent
-                a l upload). */}
+                Premier item = "-" (value=null), default cran vide non posté.
+                Disambigue le 0 km = "Départ" explicite : une photo prise en
+                cran "-" n écrit PAS de km sur customMetadata R2 (header
+                X-Will-Km absent a l upload).
+                Format items : "km N" (et "Départ" pour N=0). */}
             {(() => {
               const kmItems = [
-                { label: 'Non posté', value: null },
-                ...Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k })),
+                { label: '-', value: null },
+                ...Array.from({ length: kmCeiling + 1 }).map((_, k) => ({
+                  label: k === 0 ? 'Départ' : `km ${k}`,
+                  value: k,
+                })),
               ];
               const rawIdx = kmItems.findIndex(it => it.value === selectedKm);
               const kmIdx = rawIdx >= 0 ? rawIdx : 0;
