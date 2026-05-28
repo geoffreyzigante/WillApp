@@ -2265,25 +2265,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       </View>
 
       {/* Phase D3 — geste de consentement biometrique RGPD.
-          NON SUIVI : gros CTA degrade violet + encart consentement.
-          SUIVI : pill statut + lien "Ne plus suivre" (avec confirm modal). */}
-      {onToggleFollow && (
-        isFollowing ? (
-          // L info "tu suis" est deja signalee par le coeur rempli sur la
-          // hero card -> on garde uniquement le lien "Ne plus suivre", la
-          // pill redondante a ete retiree.
-          <View style={{ marginTop: 4, marginBottom: 12 }}>
-            <TouchableOpacity
-              onPress={() => setShowUnfollowConfirm(true)}
-              hitSlop={10}
-              style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 }}
-            >
-              <Text style={{ color: '#918BA0', fontSize: 13, textDecorationLine: 'underline' }}>
-                Ne plus suivre
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
+          NON SUIVI : gros CTA degrade violet + encart consent (ci-dessous).
+          SUIVI : aucun bloc — le coeur rempli sur la hero card signale
+                  "tu suis", et le tap dessus toggle l unfollow direct
+                  (sans modal de confirmation). */}
+      {onToggleFollow && !isFollowing && (
           <View style={{ marginTop: 4, marginBottom: 12 }}>
             <TouchableOpacity onPress={onToggleFollow} activeOpacity={0.88}>
               <LinearGradient
@@ -2337,7 +2323,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               </Text>
             </View>
           </View>
-        )
       )}
 
       {/* CTA Site web : action secondaire, donc style discret —
