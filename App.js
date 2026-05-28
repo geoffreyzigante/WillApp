@@ -2996,6 +2996,15 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // Course + km posté
   const [selectedRace, setSelectedRace] = useState(null); // null = "Toutes les courses"
   const [selectedKm, setSelectedKm] = useState(null); // null = cran "Non posté" (default)
+  // Refs synchrones aux state ci-dessus. captureOne est invoque depuis un
+  // worklet (onHumansDetectedJS via Worklets.createRunOnJS) memoize avec
+  // deps:[] -> la closure est figee au mount. Lire les state directement
+  // donnerait toujours la valeur initiale (null/null). Lecture via ref =
+  // valeur courante a chaque shot.
+  const selectedRaceRef = useRef(null);
+  const selectedKmRef = useRef(null);
+  useEffect(() => { selectedRaceRef.current = selectedRace; }, [selectedRace]);
+  useEffect(() => { selectedKmRef.current = selectedKm; }, [selectedKm]);
   const distances = Array.isArray(session?.event?.distances) ? session.event.distances : [];
   const hasDistances = distances.length > 0;
   // Course "Toutes" : ceiling = plus longue distance de l'event (pas un floor
@@ -4065,9 +4074,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         isRaw: false,
         burstTs,
         idx,
-        race: selectedRace ? String(selectedRace.km) : null,
+        // Lecture via ref (cf selectedRaceRef/selectedKmRef) : captureOne tourne
+        // dans un worklet a closure figee au mount, donc lire les state donnerait
+        // toujours null/null. La ref pointe sur la valeur courante de la roulette.
+        race: selectedRaceRef.current ? String(selectedRaceRef.current.km) : null,
         // selectedKm = null -> non posté ; 0 = "Départ" explicite ; N = km N.
-        km: selectedKm !== null ? String(selectedKm) : null,
+        km: selectedKmRef.current !== null ? String(selectedKmRef.current) : null,
         exif,
       }]);
       capturedCountRef.current += 1;
