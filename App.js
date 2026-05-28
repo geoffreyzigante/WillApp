@@ -1546,29 +1546,21 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
       showsVerticalScrollIndicator={false}
     >
       <View style={s.headerRow}>
-        {/* SLOT GAUCHE : avatar (normal) ou "Annuler" (selection mode).
-            Slot fixe en hauteur pour ne JAMAIS shifter le header. */}
-        <View style={[s.headerLeft, { minWidth: 40, justifyContent: 'flex-start' }]}>
-          {selectionMode ? (
-            <TouchableOpacity onPress={exitSelection} hitSlop={10} disabled={downloading}>
-              <Text style={{ color: C.textSoft, fontSize: 13, fontWeight: '500' }}>Annuler</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              hitSlop={10}
-              onPress={onOpenProfile}
-              style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-            >
-              <Icon.User size={30} color="#c9beed" />
-              {selfieUri && (
-                <View style={{
-                  position: 'absolute', top: 4, right: 4,
-                  width: 10, height: 10, borderRadius: 5,
-                  backgroundColor: '#10B981', borderWidth: 2, borderColor: C.bg,
-                }} />
-              )}
-            </TouchableOpacity>
-          )}
+        <View style={s.headerLeft}>
+          <TouchableOpacity
+            hitSlop={10}
+            onPress={onOpenProfile}
+            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+          >
+            <Icon.User size={30} color="#c9beed" />
+            {selfieUri && (
+              <View style={{
+                position: 'absolute', top: 4, right: 4,
+                width: 10, height: 10, borderRadius: 5,
+                backgroundColor: '#10B981', borderWidth: 2, borderColor: C.bg,
+              }} />
+            )}
+          </TouchableOpacity>
         </View>
         {/* SLOT CENTRE : cross-fade titre <-> toast refresh. */}
         <View style={{ flex: 1, height: 24, alignItems: 'center', justifyContent: 'center' }}>
@@ -1590,32 +1582,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
             </Animated.View>
           )}
         </View>
-        {/* SLOT DROIT : "Sélectionner" (light violet, normal) ou
-            "Télécharger (N)" (primary, selection mode). Apparait des
-            qu il y a > 1 photo. Slot reservé 40 minWidth pour
-            symetrie avec l avatar -> grille ne shift pas. */}
-        <View style={{ minWidth: 40, height: 40, alignItems: 'flex-end', justifyContent: 'center' }}>
-          {photos.length > 1 && (
-            selectionMode ? (
-              <TouchableOpacity
-                onPress={downloadSelected}
-                hitSlop={10}
-                disabled={selectedIds.size === 0 || downloading}
-                style={{ opacity: (selectedIds.size === 0 || downloading) ? 0.35 : 1 }}
-              >
-                <Text style={{ color: C.primary, fontSize: 13, fontWeight: '700' }}>
-                  {downloading
-                    ? 'Téléchargement…'
-                    : `Télécharger${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
-                <Text style={{ color: '#c9beed', fontSize: 13, fontWeight: '500' }}>Sélectionner</Text>
-              </TouchableOpacity>
-            )
-          )}
-        </View>
+        <View style={{ width: 40, height: 40 }} />
       </View>
 
       <View style={{ height: 14 }} />
@@ -1662,6 +1629,42 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
               <Text style={{ color: '#5E1AD6', fontSize: 12, fontWeight: '600' }}>
                 Will continue de chercher…
               </Text>
+            </View>
+          )}
+          {/* Barre selection compacte entre titre et grille. Hauteur fixe
+              24px (toggle Sélectionner <-> Annuler/Télécharger ne shift
+              JAMAIS la grille). */}
+          {photos.length > 1 && (
+            <View style={{
+              flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+              height: 24, marginBottom: 6, paddingHorizontal: 2,
+            }}>
+              {selectionMode ? (
+                <>
+                  <TouchableOpacity onPress={exitSelection} hitSlop={10} disabled={downloading}>
+                    <Text style={{ color: C.textSoft, fontSize: 13, fontWeight: '500' }}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={downloadSelected}
+                    hitSlop={10}
+                    disabled={selectedIds.size === 0 || downloading}
+                    style={{ opacity: (selectedIds.size === 0 || downloading) ? 0.35 : 1 }}
+                  >
+                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '700' }}>
+                      {downloading
+                        ? 'Téléchargement…'
+                        : `Télécharger${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <View />
+                  <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
+                    <Text style={{ color: '#c9beed', fontSize: 13, fontWeight: '500' }}>Sélectionner</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           )}
           <PhotoGrid
