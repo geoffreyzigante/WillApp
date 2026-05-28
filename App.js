@@ -1522,6 +1522,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const PAGE_SIZE = 30;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | composite key
+  const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false); // Phase D3 : confirm "Ne plus suivre"
   const tint = colorForType(event.event_type);
   const upcoming = isUpcoming(event.event_date, event.event_date_end);
 
@@ -1784,6 +1785,92 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         ) : null}
       </View>
 
+      {/* Phase D3 — geste de consentement biometrique RGPD.
+          NON SUIVI : gros CTA degrade violet + encart consentement.
+          SUIVI : pill statut + lien "Ne plus suivre" (avec confirm modal). */}
+      {onToggleFollow && (
+        isFollowing ? (
+          <View style={{ marginTop: 4, marginBottom: 12 }}>
+            <View style={{
+              backgroundColor: '#EDE4FF',
+              borderRadius: 14,
+              paddingVertical: 14, paddingHorizontal: 16,
+              flexDirection: 'row', alignItems: 'center', gap: 10,
+            }}>
+              <Svg width={20} height={18} viewBox="-1 -1.5 22.78 20.61" fill="#7B2FFF">
+                <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+              </Svg>
+              <Text style={{ color: '#5E1AD6', fontSize: 15, fontWeight: '700', flex: 1 }}>
+                Tu suis cet event
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setShowUnfollowConfirm(true)}
+              hitSlop={10}
+              style={{ alignSelf: 'center', marginTop: 8, paddingVertical: 6, paddingHorizontal: 12 }}
+            >
+              <Text style={{ color: '#918BA0', fontSize: 13, textDecorationLine: 'underline' }}>
+                Ne plus suivre
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ marginTop: 4, marginBottom: 12 }}>
+            <TouchableOpacity onPress={onToggleFollow} activeOpacity={0.88}>
+              <LinearGradient
+                colors={['#7B2FFF', '#5E1AD6']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={{
+                  borderRadius: 16,
+                  paddingVertical: 16, paddingHorizontal: 18,
+                  shadowColor: '#7B2FFF', shadowOpacity: 0.35,
+                  shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                  <Svg width={20} height={18} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
+                    <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+                  </Svg>
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+                    Suivre et recevoir mes photos
+                  </Text>
+                </View>
+                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 6, textAlign: 'center' }}>
+                  Tes photos arriveront automatiquement, dès qu'elles sont prises.
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            <View style={{
+              marginTop: 12,
+              backgroundColor: '#fff',
+              borderColor: '#E4E0EC', borderWidth: 1,
+              borderRadius: 14, padding: 14,
+              flexDirection: 'row', gap: 10, alignItems: 'flex-start',
+            }}>
+              <View style={{
+                width: 30, height: 30, borderRadius: 9,
+                backgroundColor: '#EDE4FF',
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#7B2FFF" strokeWidth={2}>
+                  <Circle cx="12" cy="8" r="4" />
+                  <Path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
+                </Svg>
+              </View>
+              <Text style={{ flex: 1, fontSize: 12, color: '#5A5468', lineHeight: 17 }}>
+                En suivant cet event, tu autorises Will à analyser ton visage pour y retrouver tes photos. Tu peux arrêter à tout moment.{' '}
+                <Text
+                  style={{ color: '#7B2FFF', textDecorationLine: 'underline' }}
+                  onPress={() => Linking.openURL('https://will-app.com/confidentialite').catch(() => {})}
+                >
+                  En savoir plus
+                </Text>
+              </Text>
+            </View>
+          </View>
+        )
+      )}
+
       {/* CTA Site web : juste sous le header, coloré au type d'épreuve.
           Pleine largeur (comme les autres blocs), texte centré. Caché si pas
           de website. */}
@@ -1967,39 +2054,94 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   };
 
   return (
-    <FlatList
-      style={s.scroll}
-      contentContainerStyle={{ paddingBottom: 120 }}
-      data={showEmptyMessage ? [] : visiblePhotos}
-      keyExtractor={(item) => item.id || item.uri}
-      renderItem={renderItem}
-      numColumns={NUM_COLS}
-      columnWrapperStyle={NUM_COLS > 1 ? {
-        paddingHorizontal: GRID_PADDING_H,
-        gap: GRID_GAP,
-        marginBottom: GRID_GAP,
-      } : undefined}
-      initialNumToRender={12}
-      maxToRenderPerBatch={9}
-      windowSize={5}
-      removeClippedSubviews={true}
-      onEndReached={() => {
-        if (hasMore) setVisibleCount(c => Math.min(c + PAGE_SIZE, filteredPhotos.length));
-      }}
-      onEndReachedThreshold={0.5}
-      ListHeaderComponent={renderHeader}
-      ListEmptyComponent={renderListEmpty}
-      ListFooterComponent={renderFooter}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onPullRefresh}
-          tintColor={C.primary}
-          colors={[C.primary]}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    />
+    <>
+      <FlatList
+        style={s.scroll}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        data={showEmptyMessage ? [] : visiblePhotos}
+        keyExtractor={(item) => item.id || item.uri}
+        renderItem={renderItem}
+        numColumns={NUM_COLS}
+        columnWrapperStyle={NUM_COLS > 1 ? {
+          paddingHorizontal: GRID_PADDING_H,
+          gap: GRID_GAP,
+          marginBottom: GRID_GAP,
+        } : undefined}
+        initialNumToRender={12}
+        maxToRenderPerBatch={9}
+        windowSize={5}
+        removeClippedSubviews={true}
+        onEndReached={() => {
+          if (hasMore) setVisibleCount(c => Math.min(c + PAGE_SIZE, filteredPhotos.length));
+        }}
+        onEndReachedThreshold={0.5}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderListEmpty}
+        ListFooterComponent={renderFooter}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onPullRefresh}
+            tintColor={C.primary}
+            colors={[C.primary]}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      />
+
+      {/* Confirm modal "Ne plus suivre" (Phase D3). Le toggle via le coeur
+          top-right reste instantane (gestures rapides), seule la voie
+          deliberee via le lien sous le hero passe par cette confirmation. */}
+      <Modal
+        visible={showUnfollowConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowUnfollowConfirm(false)}
+      >
+        <View style={{
+          flex: 1, backgroundColor: 'rgba(26,20,38,0.5)',
+          justifyContent: 'center', padding: 24,
+        }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 22 }}>
+            <Text style={{
+              fontSize: 17, fontWeight: '800', color: '#1A1426',
+              marginBottom: 10, textAlign: 'center',
+            }}>
+              Ne plus suivre cet event ?
+            </Text>
+            <Text style={{
+              fontSize: 14, color: '#5A5468', lineHeight: 20,
+              marginBottom: 20, textAlign: 'center',
+            }}>
+              Tes données faciales sur cet event seront supprimées. Tu ne recevras plus tes photos.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setShowUnfollowConfirm(false)}
+                style={{
+                  flex: 1, paddingVertical: 13, borderRadius: 999,
+                  borderWidth: 1.5, borderColor: '#E4E0EC',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ color: '#5A5468', fontSize: 14, fontWeight: '600' }}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => { setShowUnfollowConfirm(false); onToggleFollow(); }}
+                style={{
+                  flex: 1, paddingVertical: 13, borderRadius: 999,
+                  backgroundColor: '#EF4444',
+                  alignItems: 'center',
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Ne plus suivre</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
