@@ -75,6 +75,9 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import Svg, { Path, Circle, Ellipse, Defs, Mask, Rect, SvgXml } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import NetInfo from '@react-native-community/netinfo';
@@ -89,6 +92,19 @@ const IS_PREVIEW_OR_DEV = __DEV__ || Updates.channel === 'preview';
 const API_URL = 'https://will-api.geoffreyzigante.workers.dev';
 const R2_PUBLIC = 'https://pub-f9a5894e66a44f8cbb34582302930449.r2.dev';
 const { width: SCREEN_W } = Dimensions.get('window');
+
+// ─── E2 — PUSH NOTIFS ────────────────────────────────────────────────────
+// Foreground handler : quand une notif arrive avec l app au premier plan,
+// on affiche tout de meme la banniere + son (sinon iOS la "consomme" en
+// silence). Le badge applicatif est gere ailleurs (E3 — pastille onglet).
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 // ─── SecureStore : stockage chiffre des sessions/consentement (M-S08) ─────
 // Cles a migrer d AsyncStorage → SecureStore : sessions runner/organizer/
@@ -796,7 +812,56 @@ const api = {
     try { error = (await r.json())?.error || ''; } catch {}
     return { status: r.status, error };
   },
+  // E2 — enregistre le token Expo push cote worker.
+  async registerPushToken(runnerToken, expoToken, platform) {
+    try {
+      const r = await fetch(`${API_URL}/runner/push-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${runnerToken}` },
+        body: JSON.stringify({ token: expoToken, platform }),
+      });
+      return r.ok;
+    } catch { return false; }
+  },
+  async deletePushToken(runnerToken) {
+    try {
+      await fetch(`${API_URL}/runner/push-token`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${runnerToken}` },
+      });
+    } catch {}
+  },
 };
+
+// E2 — wrapper unique pour (a) silent re-register au boot si deja autorise,
+// (b) ask + register apres premier follow. Idempotent : iOS ne re-affiche
+// pas le prompt une fois denied (Notifications.requestPermissionsAsync
+// retourne la decision existante).
+async function ensurePushRegistered(runnerToken, { ask = false } = {}) {
+  if (!Device.isDevice) return; // simulator -> rien a faire
+  if (!runnerToken) return;
+  let { status } = await Notifications.getPermissionsAsync();
+  if (status !== 'granted') {
+    if (!ask) return; // boot silencieux : on n'embete pas le user
+    const req = await Notifications.requestPermissionsAsync();
+    status = req.status;
+    if (status !== 'granted') return;
+  }
+  const projectId = Constants?.expoConfig?.extra?.eas?.projectId
+    || Constants?.easConfig?.projectId;
+  if (!projectId) {
+    console.warn('[push] projectId introuvable dans expo.extra.eas');
+    return;
+  }
+  try {
+    const tokenObj = await Notifications.getExpoPushTokenAsync({ projectId });
+    const expoToken = tokenObj?.data;
+    if (!expoToken) return;
+    await api.registerPushToken(runnerToken, expoToken, Platform.OS);
+  } catch (e) {
+    console.warn('[push] getExpoPushTokenAsync', e?.message || e);
+  }
+}
 
 // ---------- SCREENS ----------
 
@@ -9935,6 +10000,16 @@ export default function App() {
     return () => { cancelled = true; };
   }, [runnerSession?.token, selfieUri]);
 
+  // E2 — register silencieux du token push au boot si l utilisateur a
+  // deja accorde la permission (ex. reinstall, nouveau token Expo apres
+  // build). Aucun prompt ici ; le prompt est gere par toggleFollow au
+  // premier follow.
+  useEffect(() => {
+    const token = runnerSession?.token;
+    if (!token) return;
+    ensurePushRegistered(token, { ask: false });
+  }, [runnerSession?.token]);
+
   const requireAuth = useCallback((action) => {
     if (runnerSession) {
       action();
@@ -9947,6 +10022,10 @@ export default function App() {
   const logoutRunner = useCallback(() => {
     const lastEmail = runnerSession?.profile?.email;
     if (lastEmail) AsyncStorage.setItem('@will_last_email_runner', lastEmail).catch(() => {});
+    // E2 — best-effort : decroche le token push avant de perdre le bearer.
+    // Sinon ce device continuerait de recevoir des notifs apres logout.
+    const tk = runnerSession?.token;
+    if (tk) { api.deletePushToken(tk); }
     setRunnerSession(null);
     setSelfieUri(null);
     Secure.removeItem('@will_runner').catch(() => {});
@@ -10145,6 +10224,7 @@ export default function App() {
     // Follow
     const r = await api.follow(eventCode, token);
     if (r?.ok || r?.note === 'already_following') {
+      const wasEmpty = follows.length === 0;
       setFollows(prev => {
         if (prev.includes(eventCode)) return prev;
         const next = [...prev, eventCode];
@@ -10152,6 +10232,10 @@ export default function App() {
         return next;
       });
       AsyncStorage.setItem(`@will_follow_started_${eventCode}`, String(Date.now())).catch(() => {});
+      // E2 — premier follow du coureur = bon moment pour demander la
+      // permission notif. Sinon (deja des follows), on tente un register
+      // silencieux au cas ou le token n a pas encore ete envoye.
+      ensurePushRegistered(token, { ask: wasEmpty });
       return;
     }
     // 400 "Selfie requis" → ouvre SelfieModal puis relance follow apres save
