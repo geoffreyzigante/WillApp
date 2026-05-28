@@ -1263,6 +1263,27 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   // au premier render quand un coureur cumule plusieurs events).
   const [visibleCount, setVisibleCount] = useState(30);
 
+  // Sélection multi + download batch : "Sélectionner" en haut a droite de
+  // la grille des qu il y a > 1 photo. Permet d en cocher plusieurs et de
+  // les sauver d un coup dans la pellicule iOS.
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [downloading, setDownloading] = useState(false);
+
+  const togglePhotoSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+  // Sort la selection auto quand on quitte l onglet Photos -> retour propre.
+  useEffect(() => { if (!isActive) exitSelection(); }, [isActive, exitSelection]);
+
   // E4 — marqueur "derniere photo vue" par burstTs (max global tous events).
   // Sert au pull-to-refresh pour afficher "X nouvelles photos" / "Rien de
   // nouveau". Persiste dans AsyncStorage. Cote client uniquement pour V1.
@@ -1463,6 +1484,58 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     }, 2000);
   }, [refreshAll, titleOpacity, toastOpacity]);
 
+  const downloadSelected = useCallback(async () => {
+    if (selectedIds.size === 0 || downloading) return;
+    setDownloading(true);
+    try {
+      const perm = await MediaLibrary.requestPermissionsAsync(true);
+      if (!perm.granted) {
+        Alert.alert('Permission refusée', 'Autorise l\'accès aux photos pour sauvegarder dans la pellicule.');
+        return;
+      }
+      const net = await NetInfo.fetch().catch(() => null);
+      if (net && net.isConnected === false) {
+        Alert.alert('Hors ligne', 'Pas de connexion internet — impossible de télécharger.');
+        return;
+      }
+      let saved = 0, failed = 0;
+      let i = 0;
+      for (const id of selectedIds) {
+        const photo = photos.find(p => p.id === id);
+        if (!photo?.uri) { failed++; continue; }
+        let staged = null;
+        try {
+          const ext = await detectPhotoExtension(photo.uri);
+          const filename = `will_${Date.now()}_${i}.${ext}`;
+          staged = new File(Paths.cache, filename);
+          const downloaded = await File.downloadFileAsync(photo.uri, staged, { idempotent: true });
+          const localUri = downloaded?.uri || staged.uri;
+          await MediaLibrary.saveToLibraryAsync(localUri);
+          saved++;
+        } catch (e) {
+          failed++;
+          console.warn('[multi-download]', id, e?.message || e);
+        } finally {
+          try { if (staged?.exists) staged.delete(); } catch {}
+          i++;
+        }
+      }
+      const savedMsg = saved === 1 ? '1 photo' : `${saved} photos`;
+      const failedSuffix = failed > 0 ? ` (${failed} échec${failed > 1 ? 's' : ''})` : '';
+      Alert.alert(
+        saved > 0 ? 'Enregistré' : 'Erreur',
+        saved > 0
+          ? `${savedMsg} dans ta pellicule${failedSuffix}.`
+          : 'Aucune photo n a pu etre sauvegardee. Verifie ta connexion et reessaie.'
+      );
+      if (saved > 0) exitSelection();
+    } catch (e) {
+      Alert.alert('Erreur', e?.message || 'Impossible de télécharger les photos.');
+    } finally {
+      setDownloading(false);
+    }
+  }, [selectedIds, photos, downloading, exitSelection]);
+
   return (
     <RefreshableScrollView
       hideTopRefresh
@@ -1560,11 +1633,49 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
               </Text>
             </View>
           )}
+          {/* Barre selection (apparait des > 1 photo). Hauteur fixe : toggle
+              Sélectionner <-> Annuler/Télécharger ne shift JAMAIS la grille. */}
+          {photos.length > 1 && (
+            <View style={{
+              flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+              height: 32, marginBottom: 6, paddingHorizontal: 2,
+            }}>
+              {selectionMode ? (
+                <>
+                  <TouchableOpacity onPress={exitSelection} hitSlop={10} disabled={downloading}>
+                    <Text style={{ color: C.textSoft, fontSize: 14, fontWeight: '500' }}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={downloadSelected}
+                    hitSlop={10}
+                    disabled={selectedIds.size === 0 || downloading}
+                    style={{ opacity: (selectedIds.size === 0 || downloading) ? 0.35 : 1 }}
+                  >
+                    <Text style={{ color: C.primary, fontSize: 14, fontWeight: '700' }}>
+                      {downloading
+                        ? 'Téléchargement…'
+                        : `Télécharger${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <View />
+                  <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
+                    <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Sélectionner</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          )}
           <PhotoGrid
             photos={photos.slice(0, visibleCount)}
             onPress={(p, _i, _photos, origin) => onOpenPhoto?.(p, photos, { origin })}
             photoFavoritesSet={photoFavoritesSet}
             onToggleFavorite={onTogglePhotoFavorite}
+            selectionMode={selectionMode}
+            selectedIds={selectedIds}
+            onTogglePhotoSelect={togglePhotoSelect}
           />
         </>
       )}
@@ -1751,7 +1862,7 @@ function SkeletonCell({ size }) {
   );
 }
 
-function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite }) {
+function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite, selectionMode = false, selectedIds, onTogglePhotoSelect }) {
   // Si pas de photos : grille de placeholders
   if (photos.length === 0) {
     return (
@@ -1776,9 +1887,12 @@ function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite }
           i={i}
           photos={photos}
           onPress={onPress}
-          showHearts={showHearts}
+          showHearts={showHearts && !selectionMode}
           fav={showHearts && photoFavoritesSet.has(p.id)}
           onToggleFavorite={onToggleFavorite}
+          selectionMode={selectionMode}
+          selected={!!(selectedIds && selectedIds.has(p.id))}
+          onToggleSelect={onTogglePhotoSelect}
         />
       ))}
     </View>
@@ -1789,9 +1903,14 @@ function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite }
 // measureInWindow (shared-element transition viewer). Le caller recoit
 // onPress(photo, index, photosList, origin) ou origin = {x,y,w,h} de la
 // thumb tapee, ou null si la mesure echoue.
-function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorite }) {
+function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorite, selectionMode = false, selected = false, onToggleSelect }) {
   const itemRef = React.useRef(null);
   const handlePress = () => {
+    // En mode selection : tap toggle l etat selected (pas d ouverture viewer).
+    if (selectionMode) {
+      onToggleSelect?.(p.id);
+      return;
+    }
     if (!onPress) return;
     if (itemRef.current?.measureInWindow) {
       itemRef.current.measureInWindow((x, y, w, h) => onPress(p, i, photos, { x, y, w, h }));
@@ -1827,6 +1946,34 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
             <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
           </Svg>
         </TouchableOpacity>
+      )}
+      {/* Mode selection : pastille check en haut-droite + voile violet leger
+          si selected. La photo non-selectionnee est legerement attenuee
+          (opacity 0.7 du voile invisible) pour aider la lecture du set. */}
+      {selectionMode && (
+        <>
+          {selected && (
+            <View pointerEvents="none" style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              borderRadius: 12,
+              backgroundColor: 'rgba(123,47,255,0.18)',
+              borderWidth: 2, borderColor: C.primary,
+            }} />
+          )}
+          <View pointerEvents="none" style={{
+            position: 'absolute', top: 6, right: 6,
+            width: 22, height: 22, borderRadius: 11,
+            alignItems: 'center', justifyContent: 'center',
+            backgroundColor: selected ? C.primary : 'rgba(255,255,255,0.7)',
+            borderWidth: selected ? 0 : 1.5, borderColor: '#fff',
+          }}>
+            {selected && (
+              <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M20 6L9 17l-5-5" />
+              </Svg>
+            )}
+          </View>
+        </>
       )}
     </TouchableOpacity>
   );
