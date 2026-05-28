@@ -9742,6 +9742,7 @@ export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [tab, setTab] = useState('upcoming');
   const [bottomTab, setBottomTab] = useState('home');
+  const [photosUnread, setPhotosUnread] = useState(0); // E3 — pastille rouge onglet Photos
   const [events, setEvents] = useState([]);
   const [openedEvent, setOpenedEvent] = useState(null);
   const [orgModal, setOrgModal] = useState(false);
@@ -10009,6 +10010,44 @@ export default function App() {
     if (!token) return;
     ensurePushRegistered(token, { ask: false });
   }, [runnerSession?.token]);
+
+  // E3 — Pastille onglet Photos : compte les notifs "new_photos" recues
+  // pendant que l onglet Photos n est pas focus. Reset a 0 quand le user
+  // ouvre l onglet (cf useEffect [bottomTab] plus bas).
+  // 3 sources d update :
+  //  a) Notif arrivee app ouverte/background -> addNotificationReceivedListener
+  //  b) Tap sur notif app ouverte/background -> addNotificationResponseReceivedListener
+  //     (bascule sur l onglet Photos automatiquement)
+  //  c) Cold start via tap notif -> getLastNotificationResponseAsync
+  useEffect(() => {
+    const sub1 = Notifications.addNotificationReceivedListener(notif => {
+      const data = notif?.request?.content?.data;
+      if (data?.type === 'new_photos') {
+        const c = typeof data.count === 'number' ? data.count : 1;
+        setPhotosUnread(prev => prev + c);
+      }
+    });
+    const sub2 = Notifications.addNotificationResponseReceivedListener(resp => {
+      const data = resp?.notification?.request?.content?.data;
+      if (data?.type === 'new_photos') {
+        setBottomTab('photos');
+        setOpenedEvent(null);
+        setOrganizerEventPhotosTarget(null);
+      }
+    });
+    Notifications.getLastNotificationResponseAsync().then(resp => {
+      const data = resp?.notification?.request?.content?.data;
+      if (data?.type === 'new_photos') {
+        setBottomTab('photos');
+      }
+    }).catch(() => {});
+    return () => { sub1.remove(); sub2.remove(); };
+  }, []);
+
+  // E3 — reset pastille a l ouverture de l onglet Photos.
+  useEffect(() => {
+    if (bottomTab === 'photos') setPhotosUnread(0);
+  }, [bottomTab]);
 
   const requireAuth = useCallback((action) => {
     if (runnerSession) {
@@ -10653,6 +10692,22 @@ export default function App() {
         <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('photos'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
           <View style={s.navIconWrap}>
             <Icon.Photos size={22} filled={bottomTab === 'photos'} color={bottomTab === 'photos' ? C.primary : C.text} />
+            {/* E3 — pastille rouge unread. Affichee si photosUnread > 0 et
+                qu on n est pas deja sur l onglet Photos (reset sinon). */}
+            {photosUnread > 0 && bottomTab !== 'photos' && (
+              <View style={{
+                position: 'absolute', top: -3, right: -8,
+                minWidth: 16, height: 16, borderRadius: 8,
+                paddingHorizontal: 4,
+                backgroundColor: '#EF4444',
+                alignItems: 'center', justifyContent: 'center',
+                borderWidth: 1.5, borderColor: C.bg,
+              }}>
+                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', lineHeight: 11 }}>
+                  {photosUnread > 99 ? '99+' : photosUnread}
+                </Text>
+              </View>
+            )}
           </View>
           <Text style={[s.navLabel, bottomTab === 'photos' && { color: C.primary, fontWeight: '700' }]}>Photos</Text>
         </TouchableOpacity>
