@@ -90,27 +90,36 @@ public final class WillShutterController {
   }
 
   public func setMaxExposureDuration(_ durationSec: Double, brightness label: String) {
-    guard durationSec > 0 && durationSec.isFinite else { return }
+    guard durationSec.isFinite else { return }
     lock.lock()
     defer { lock.unlock() }
     guard let d = device else { return }
     // Dedupe : meme cap + meme label -> no-op (evite spam NSLog + lockForConfig
     // alors qu on call ce setter 1 fois par seconde depuis le worklet).
     if abs(durationSec - lastAppliedCapSec) < 1e-7 && label == lastAppliedLabel { return }
-    let requested = CMTimeMakeWithSeconds(durationSec, preferredTimescale: 1_000_000)
+
+    // durationSec <= 0 = RELEASE : pas de plafond, iOS choisit librement
+    // (utilise en lumiere OK ou pour desactiver tout cap).
+    let release = (durationSec <= 0)
     let fmtMax = d.activeFormat.maxExposureDuration
     let fmtMin = d.activeFormat.minExposureDuration
-    // Borne le cap aux limites du format actif pour eviter une erreur AVCapture.
-    let bounded = CMTimeMaximum(fmtMin, CMTimeMinimum(requested, fmtMax))
+    let bounded: CMTime = release
+      ? fmtMax
+      : CMTimeMaximum(fmtMin, CMTimeMinimum(CMTimeMakeWithSeconds(durationSec, preferredTimescale: 1_000_000), fmtMax))
+
     do {
       try d.lockForConfiguration()
       d.activeMaxExposureDuration = bounded
       d.unlockForConfiguration()
-      let appliedSec = CMTimeGetSeconds(bounded)
       lastAppliedCapSec = durationSec
       lastAppliedLabel = label
-      NSLog("[WILL-CAM] shutter cap applied: requested=1/%.0fs effective=1/%.0fs brightness=%@",
-            1.0 / durationSec, 1.0 / max(appliedSec, 1e-7), label)
+      if release {
+        NSLog("[WILL-CAM] shutter cap RELEASED (no plafond, iOS libre) brightness=%@", label)
+      } else {
+        let appliedSec = CMTimeGetSeconds(bounded)
+        NSLog("[WILL-CAM] shutter cap applied: requested=1/%.0fs effective=1/%.0fs brightness=%@",
+              1.0 / durationSec, 1.0 / max(appliedSec, 1e-7), label)
+      }
     } catch {
       NSLog("[WILL-CAM] shutter cap lockForConfiguration failed: %@", error.localizedDescription)
     }

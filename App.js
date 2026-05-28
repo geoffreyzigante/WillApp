@@ -3113,13 +3113,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     let label, cap;
     if (mid <= 0.001) {
       label = 'OK';
-      cap = denBright > 0 ? 1.0 / denBright : 1.0; // 1.0s = clamp natif = no cap
+      cap = denBright > 0 ? 1.0 / denBright : 0; // 0 = RELEASE (no cap)
     } else if (mid <= 0.002) {
       label = 'moyenne';
-      cap = denDim > 0 ? 1.0 / denDim : 1.0;
+      cap = denDim > 0 ? 1.0 / denDim : 0;
     } else {
       label = 'faible';
-      cap = denDim > 0 ? 1.0 / denDim : 1.0;
+      cap = denDim > 0 ? 1.0 / denDim : 0;
     }
     capSecondsSV.value = cap;
     brightnessLabelSV.value = label;
