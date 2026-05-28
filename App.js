@@ -1260,6 +1260,23 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   // au premier render quand un coureur cumule plusieurs events).
   const [visibleCount, setVisibleCount] = useState(30);
 
+  // E4 — marqueur "derniere photo vue" par burstTs (max global tous events).
+  // Sert au pull-to-refresh pour afficher "X nouvelles photos" / "Rien de
+  // nouveau". Persiste dans AsyncStorage. Cote client uniquement pour V1.
+  const lastSeenRef = useRef(0);
+  const lastSeenLoadedRef = useRef(false);
+  const baselineSetRef = useRef(false);
+  const [refreshToast, setRefreshToast] = useState(null);
+  const toastTimerRef = useRef(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem('@will_last_seen_burst_ts').then(v => {
+      lastSeenRef.current = v ? parseInt(v, 10) : 0;
+      lastSeenLoadedRef.current = true;
+    }).catch(() => { lastSeenLoadedRef.current = true; });
+    return () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); };
+  }, []);
+
   // tint par event_code (couleur du type d event) pour ourler la thumb.
   const eventTintMap = useMemo(() => {
     const map = {};
@@ -1269,12 +1286,14 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
 
   // Charge /personal-gallery sur tous les follows en parallele, fusionne, trie.
   // anySearching = au moins un event en moins de 90s avec 0 photos -> polling.
+  // Retourne le tableau fusionne (utilise par onPullRefresh pour calculer le
+  // delta "X nouvelles photos" — E4).
   const refreshAll = useCallback(async () => {
     if (!hasFollows || !runnerToken) {
       setPhotos([]);
       setAnySearching(false);
       setLoading(false);
-      return;
+      return [];
     }
     const started = {};
     for (const code of follows) {
@@ -1320,7 +1339,27 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     setAnySearching(searching);
     setLoading(false);
     setVisibleCount(30);
+    return merged;
   }, [follows, hasFollows, runnerToken, eventTintMap]);
+
+  // E4 — baseline last_seen au premier load reussi : on aligne le marqueur
+  // sur le max actuel pour que le 1er pull-to-refresh apres cold start
+  // affiche "Rien de nouveau" si rien n a bouge (sinon le coureur aurait
+  // un faux positif "N nouvelles" alors qu il vient de tout voir s afficher).
+  useEffect(() => {
+    if (baselineSetRef.current || !lastSeenLoadedRef.current || loading) return;
+    if (photos.length === 0) return;
+    baselineSetRef.current = true;
+    let maxTs = 0;
+    for (const p of photos) {
+      const ts = extractBurstTs(p.id);
+      if (ts > maxTs) maxTs = ts;
+    }
+    if (maxTs > lastSeenRef.current) {
+      lastSeenRef.current = maxTs;
+      AsyncStorage.setItem('@will_last_seen_burst_ts', String(maxTs)).catch(() => {});
+    }
+  }, [loading, photos]);
 
   // Initial fetch + re-fetch quand follows change
   useEffect(() => { setLoading(true); refreshAll(); }, [refreshAll]);
@@ -1342,8 +1381,32 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
 
   const onPullRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshAll();
+    const merged = await refreshAll();
     setRefreshing(false);
+    // E4 — calcul du delta + toast "X nouvelles photos" / "Rien de nouveau".
+    // baselineSetRef garantit qu on a deja seedge lastSeenRef au boot, donc
+    // le premier pull dit "Rien de nouveau" si rien n a change depuis cold
+    // start (et pas "47 nouvelles" alors que le coureur vient de tout voir).
+    if (!lastSeenLoadedRef.current) return;
+    const prev = lastSeenRef.current;
+    let maxTs = 0, newCount = 0;
+    for (const p of merged) {
+      const ts = extractBurstTs(p.id);
+      if (ts > maxTs) maxTs = ts;
+      if (ts > prev) newCount++;
+    }
+    if (maxTs > prev) {
+      lastSeenRef.current = maxTs;
+      AsyncStorage.setItem('@will_last_seen_burst_ts', String(maxTs)).catch(() => {});
+    }
+    const msg = newCount === 0
+      ? 'Rien de nouveau pour toi'
+      : newCount === 1
+        ? 'Bonne nouvelle, 1 nouvelle photo de toi 📸'
+        : `Bonne nouvelle, ${newCount} nouvelles photos de toi 📸`;
+    setRefreshToast(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setRefreshToast(null), 3000);
   }, [refreshAll]);
 
   return (
@@ -1377,6 +1440,24 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
       </View>
 
       <View style={{ height: 14 }} />
+
+      {/* E4 — Toast 3s "X nouvelles photos" / "Rien de nouveau pour toi"
+          declenche par le pull-to-refresh. */}
+      {refreshToast && (
+        <View style={{
+          backgroundColor: '#5E1AD6',
+          borderRadius: 999,
+          paddingVertical: 10,
+          paddingHorizontal: 16,
+          marginBottom: 12,
+          alignSelf: 'center',
+          shadowColor: '#5E1AD6', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
+        }}>
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
+            {refreshToast}
+          </Text>
+        </View>
+      )}
 
       {/* Carte selfie si pas encore depose */}
       {!selfieUri && (
