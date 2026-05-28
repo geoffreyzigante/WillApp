@@ -1104,8 +1104,8 @@ function EventCard({ event, onPress, isFollowing, onToggleFollow, style }) {
             zIndex: 10,
           }}
         >
-          <Svg width={22} height={22} viewBox="0 0 24 24" fill={isFollowing ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8} strokeLinejoin="round">
-            <Path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6z" />
+          <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61" fill={isFollowing ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}>
+            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
           </Svg>
         </TouchableOpacity>
       )}
@@ -1766,9 +1766,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               zIndex: 10,
             }}
           >
-            <Svg width={22} height={22} viewBox="0 0 24 24"
-              fill={isFollowing ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8} strokeLinejoin="round">
-              <Path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6z" />
+            <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61"
+              fill={isFollowing ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}>
+              <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
             </Svg>
           </TouchableOpacity>
         )}
@@ -6200,8 +6200,8 @@ function PhaseDResetModal({ visible, onClose }) {
             alignItems: 'center', justifyContent: 'center',
             alignSelf: 'center', marginBottom: 14,
           }}>
-            <Svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="#7B2FFF" strokeWidth={2}>
-              <Path d="M12 1l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" />
+            <Svg width={28} height={26} viewBox="-1 -1.5 22.78 20.61" fill="#7B2FFF">
+              <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
             </Svg>
           </View>
           <Text style={{
