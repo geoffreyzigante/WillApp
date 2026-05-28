@@ -1647,7 +1647,7 @@ function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow }) {
+function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerToken }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1680,7 +1680,14 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const loadPhotos = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API_URL}/list-public/${event.code}`);
+      // Mode "perso" si le coureur suit cet event : on charge /personal-gallery
+      // (photos matchees sur son visage). Sinon galerie publique. Meme shape
+      // de reponse cote worker ({ photos: [{ key, url, thumb_url, race, km }] }).
+      const personal = isFollowing && runnerToken;
+      const r = await fetch(
+        `${API_URL}/${personal ? 'personal-gallery' : 'list-public'}/${event.code}`,
+        personal ? { headers: { Authorization: `Bearer ${runnerToken}` } } : undefined
+      );
       const data = r.ok ? await r.json() : { photos: [] };
       const list = (data.photos || []).map(p => {
         const parts = (p.key || '').split('/');
@@ -1712,7 +1719,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     } finally {
       setLoading(false);
     }
-  }, [event.code, tint]);
+  }, [event.code, tint, isFollowing, runnerToken]);
 
   useEffect(() => {
     let mounted = true;
@@ -10434,6 +10441,7 @@ export default function App() {
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
                     isFollowing={follows.includes(eventInPanel.code)}
                     onToggleFollow={() => requireAuth(() => toggleFollow(eventInPanel.code))}
+                    runnerToken={runnerSession?.token}
                   />
                 </View>
               </GestureDetector>
