@@ -2995,7 +2995,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
   // Course + km posté
   const [selectedRace, setSelectedRace] = useState(null); // null = "Toutes les courses"
-  const [selectedKm, setSelectedKm] = useState(0);
+  const [selectedKm, setSelectedKm] = useState(null); // null = cran "Non posté" (default)
   const distances = Array.isArray(session?.event?.distances) ? session.event.distances : [];
   const hasDistances = distances.length > 0;
   // Course "Toutes" : ceiling = plus longue distance de l'event (pas un floor
@@ -4066,7 +4066,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         burstTs,
         idx,
         race: selectedRace ? String(selectedRace.km) : null,
-        km: selectedKm ? String(selectedKm) : null,
+        // selectedKm = null -> non posté ; 0 = "Départ" explicite ; N = km N.
+        km: selectedKm !== null ? String(selectedKm) : null,
         exif,
       }]);
       capturedCountRef.current += 1;
@@ -4527,7 +4528,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               const setCourseIdx = (idx) => {
                 const v = courseItems[idx].value;
                 setSelectedRace(v);
-                if (v && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(0);
+                if (v && selectedKm !== null && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(null);
               };
               return (
                 <View style={{ flex: 1, paddingTop: 6, paddingBottom: 8, paddingHorizontal: 10, alignItems: 'center' }}>
@@ -4549,12 +4550,22 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             {/* Separator vertical entre les 2 sections */}
             <View style={{ width: 0.5, backgroundColor: 'rgba(255,255,255,0.15)' }} />
 
-            {/* Section KM (droite, 50%) — label + roulette 3-items toujours visible */}
+            {/* Section KM (droite, 50%) — label + roulette 3-items toujours visible.
+                Premier item = "Non posté" (value=null), default. Disambigue le
+                0 km = "Départ" explicite : une photo prise en cran "Non posté"
+                n écrit PAS de km sur customMetadata R2 (header X-Will-Km absent
+                a l upload). */}
             {(() => {
-              const kmItems = Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k }));
+              const kmItems = [
+                { label: 'Non posté', value: null },
+                ...Array.from({ length: kmCeiling + 1 }).map((_, k) => ({ label: `${k} km`, value: k })),
+              ];
+              const rawIdx = kmItems.findIndex(it => it.value === selectedKm);
+              const kmIdx = rawIdx >= 0 ? rawIdx : 0;
+              const setKmIdx = (idx) => setSelectedKm(kmItems[idx].value);
               return (
                 <View style={{ flex: 1, paddingTop: 6, paddingBottom: 8, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedKm(0)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: -16 }}>
+                  <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: -16 }}>
                     <Text style={{
                       color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
                       fontFamily: 'AVEstiana', fontStyle: 'normal',
@@ -4562,8 +4573,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                   </TouchableOpacity>
                   <OverlayWheel
                     items={kmItems}
-                    selectedIndex={selectedKm}
-                    onChange={setSelectedKm}
+                    selectedIndex={kmIdx}
+                    onChange={setKmIdx}
                   />
                 </View>
               );
