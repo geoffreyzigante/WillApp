@@ -1266,7 +1266,11 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   const lastSeenRef = useRef(0);
   const lastSeenLoadedRef = useRef(false);
   const baselineSetRef = useRef(false);
+  // Toast minimaliste : fade-in fleur+"Recherche..." pendant le fetch, puis
+  // transition vers le message resultat en violet leger, puis fade-out.
+  const [toastPhase, setToastPhase] = useState('idle'); // 'idle' | 'searching' | 'result'
   const [refreshToast, setRefreshToast] = useState(null);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTimerRef = useRef(null);
 
   useEffect(() => {
@@ -1380,14 +1384,23 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   }, [visibleCount, photos.length]);
 
   const onPullRefresh = useCallback(async () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setRefreshing(true);
+    // Fade-in fleur "Recherche…"
+    setToastPhase('searching');
+    toastOpacity.setValue(0);
+    Animated.timing(toastOpacity, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+
     const merged = await refreshAll();
     setRefreshing(false);
-    // E4 — calcul du delta + toast "X nouvelles photos" / "Rien de nouveau".
-    // baselineSetRef garantit qu on a deja seedge lastSeenRef au boot, donc
-    // le premier pull dit "Rien de nouveau" si rien n a change depuis cold
-    // start (et pas "47 nouvelles" alors que le coureur vient de tout voir).
-    if (!lastSeenLoadedRef.current) return;
+
+    if (!lastSeenLoadedRef.current) {
+      Animated.timing(toastOpacity, { toValue: 0, duration: 280, useNativeDriver: true })
+        .start(() => setToastPhase('idle'));
+      return;
+    }
+    // E4 — calcul du delta vs marqueur lastSeenRef (baseline pose au boot
+    // pour eviter "47 nouvelles" alors que le coureur vient de tout voir).
     const prev = lastSeenRef.current;
     let maxTs = 0, newCount = 0;
     for (const p of merged) {
@@ -1405,9 +1418,16 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
         ? 'Bonne nouvelle, 1 nouvelle photo de toi 📸'
         : `Bonne nouvelle, ${newCount} nouvelles photos de toi 📸`;
     setRefreshToast(msg);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setRefreshToast(null), 3000);
-  }, [refreshAll]);
+    setToastPhase('result');
+    // Reste 2s en visible puis fade-out (opacity passe en 350ms a 0).
+    toastTimerRef.current = setTimeout(() => {
+      Animated.timing(toastOpacity, { toValue: 0, duration: 350, useNativeDriver: true })
+        .start(() => {
+          setToastPhase('idle');
+          setRefreshToast(null);
+        });
+    }, 2000);
+  }, [refreshAll, toastOpacity]);
 
   return (
     <RefreshableScrollView
@@ -1441,22 +1461,32 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
 
       <View style={{ height: 14 }} />
 
-      {/* E4 — Toast 3s "X nouvelles photos" / "Rien de nouveau pour toi"
-          declenche par le pull-to-refresh. */}
-      {refreshToast && (
-        <View style={{
-          backgroundColor: '#5E1AD6',
-          borderRadius: 999,
-          paddingVertical: 10,
-          paddingHorizontal: 16,
-          marginBottom: 12,
+      {/* E4 — Toast pull-to-refresh : fade-in fleur "Recherche…" pendant le
+          fetch, puis transition vers le message resultat en violet leger,
+          puis fade-out. Minimaliste : pas de fond ni d ombre. */}
+      {toastPhase !== 'idle' && (
+        <Animated.View style={{
+          opacity: toastOpacity,
           alignSelf: 'center',
-          shadowColor: '#5E1AD6', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
+          paddingVertical: 6,
+          marginBottom: 8,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
         }}>
-          <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
-            {refreshToast}
-          </Text>
-        </View>
+          {toastPhase === 'searching' ? (
+            <>
+              <SpinningLoader size={14} color="#c9beed" />
+              <Text style={{ color: '#7B2FFF', opacity: 0.6, fontSize: 13, fontWeight: '500' }}>
+                Recherche…
+              </Text>
+            </>
+          ) : refreshToast ? (
+            <Text style={{ color: '#7B2FFF', opacity: 0.6, fontSize: 13, fontWeight: '500', textAlign: 'center' }}>
+              {refreshToast}
+            </Text>
+          ) : null}
+        </Animated.View>
       )}
 
       {/* Carte selfie si pas encore depose */}
