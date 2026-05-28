@@ -761,6 +761,41 @@ const api = {
     try { error = (await r.json())?.error || ''; } catch {}
     return { status: r.status, error };
   },
+
+  // RGPD biométrie — Suivre un event = geste de consentement explicite.
+  // 400 'selfie_required' si pas de selfie deposé → l'UI ouvre SelfieModal puis relance.
+  async follow(eventCode, token) {
+    const r = await fetch(`${API_URL}/runner/follow/${encodeURIComponent(eventCode)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ consent: true }),
+    });
+    if (r.ok) return r.json();
+    let error = '';
+    try { error = (await r.json())?.error || ''; } catch {}
+    return { status: r.status, error };
+  },
+  async unfollow(eventCode, token) {
+    const r = await fetch(`${API_URL}/runner/follow/${encodeURIComponent(eventCode)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (r.ok) return r.json();
+    let error = '';
+    try { error = (await r.json())?.error || ''; } catch {}
+    return { status: r.status, error };
+  },
+  // Wipe biometrique chirurgical : supprime selfie + empreintes sans toucher au compte.
+  async deleteFaceData(token) {
+    const r = await fetch(`${API_URL}/runner/face-data`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (r.ok) return r.json();
+    let error = '';
+    try { error = (await r.json())?.error || ''; } catch {}
+    return { status: r.status, error };
+  },
 };
 
 // ---------- SCREENS ----------
@@ -6142,6 +6177,57 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
   );
 }
 
+// Modale d'information au 1er boot post-Phase D RGPD. Affichee une seule
+// fois si l'utilisateur avait des favoris (vidés a ce moment). Pour la
+// re-tester en dev : depuis la console React Native, appeler
+//   await global.__resetPhaseD()
+// (re-supprime le flag + recharge l'app via DevSettings.reload).
+function PhaseDResetModal({ visible, onClose }) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{
+        flex: 1, backgroundColor: 'rgba(26,20,38,0.45)',
+        justifyContent: 'center', padding: 24,
+      }}>
+        <View style={{
+          backgroundColor: '#fff', borderRadius: 20, padding: 24,
+          shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20,
+          shadowOffset: { width: 0, height: 8 },
+        }}>
+          <View style={{
+            width: 56, height: 56, borderRadius: 28,
+            backgroundColor: '#EDE4FF',
+            alignItems: 'center', justifyContent: 'center',
+            alignSelf: 'center', marginBottom: 14,
+          }}>
+            <Svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="#7B2FFF" strokeWidth={2}>
+              <Path d="M12 1l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" />
+            </Svg>
+          </View>
+          <Text style={{
+            fontSize: 18, fontWeight: '800', color: '#1A1426',
+            textAlign: 'center', marginBottom: 10, letterSpacing: -0.3,
+          }}>
+            Will respecte mieux ta vie privée
+          </Text>
+          <Text style={{
+            fontSize: 14, color: '#5A5468', lineHeight: 20,
+            textAlign: 'center', marginBottom: 22,
+          }}>
+            Tu dois maintenant <Text style={{ fontWeight: '700', color: '#1A1426' }}>Suivre</Text> explicitement chaque event pour recevoir tes photos. Tes anciens favoris ont été retirés. Tu peux les Suivre à nouveau pour réactiver l'envoi automatique.
+          </Text>
+          <TouchableOpacity onPress={onClose} style={{
+            backgroundColor: '#7B2FFF', borderRadius: 999,
+            paddingVertical: 13, alignItems: 'center',
+          }} activeOpacity={0.85}>
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>J'ai compris</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function SelfieModal({ visible, onClose, onSaved, userId, runnerToken, signupMode = false, onSkip }) {
   const [uri, setUri] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -9350,6 +9436,7 @@ export default function App() {
   // Persistance "selfie skippe a l'inscription" → l'accueil affiche un etat
   // renforce sur la carte selfie tant que le coureur n'aura pas pris son selfie.
   const [selfieSkipped, setSelfieSkipped] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);  // Phase D reset modal au 1er boot
   const pendingActionRef = useRef(null); // action à exécuter après login
 
   const reloadEvents = useCallback(async () => {
@@ -9358,6 +9445,25 @@ export default function App() {
       if (Array.isArray(data) && data.length > 0) setEvents(data);
     } catch {
       // offline : on garde la liste cachée (préchargée au boot)
+    }
+  }, []);
+
+  // Dev-only helper pour re-tester la modale Phase D : depuis la console
+  // RN (Hermes debugger / Expo dev menu → Open JS Debugger), taper :
+  //   await global.__resetPhaseD()
+  // → supprime le flag, recharge l'app, modale reapparait au prochain boot.
+  useEffect(() => {
+    if (__DEV__) {
+      global.__resetPhaseD = async () => {
+        await AsyncStorage.removeItem('@will_phase_d_reset_done');
+        // Restaure un favori fictif pour que la modale s'affiche (sinon vidage silencieux)
+        await AsyncStorage.setItem('@will_favorites', JSON.stringify(['__test-reset__']));
+        console.log('[Phase D reset] Flag cleared + 1 fake favorite set. Reload the app (shake → Reload).');
+        try {
+          const DevSettings = require('react-native').DevSettings;
+          DevSettings?.reload?.();
+        } catch {}
+      };
     }
   }, []);
 
@@ -9426,11 +9532,32 @@ export default function App() {
     reloadEvents();
     AsyncStorage.getItem('@will_selfie').then(v => v && setSelfieUri(v));
     AsyncStorage.getItem('@will_selfie_skipped').then(v => setSelfieSkipped(v === '1'));
-    AsyncStorage.getItem('@will_favorites').then(v => {
-      if (v) {
-        try { setFavorites(JSON.parse(v)); } catch { setFavorites([]); }
+    // Phase D RGPD : reset propre des favoris au 1er boot post-deploiement.
+    // Le geste "Favori" devient "Suivre" et exige consentement biometrique
+    // explicite via POST /runner/follow. Les anciens favoris ne declenchent
+    // plus rien → on les vide une fois, on informe l'utilisateur.
+    (async () => {
+      const resetDone = await AsyncStorage.getItem('@will_phase_d_reset_done');
+      const stored = await AsyncStorage.getItem('@will_favorites');
+      if (__DEV__) console.log('[Phase D reset] @will_phase_d_reset_done =', resetDone, 'favorites =', stored);
+      if (resetDone === '1') {
+        // Boot normal post-reset : charge follows depuis @will_follows si présent
+        const follows = await AsyncStorage.getItem('@will_follows');
+        if (follows) {
+          try { setFavorites(JSON.parse(follows)); } catch { setFavorites([]); }
+        }
+        return;
       }
-    });
+      // 1er boot post-Phase D : vide anciens favoris + flag + affiche modale si non-vide
+      let hadFavorites = false;
+      if (stored) {
+        try { hadFavorites = Array.isArray(JSON.parse(stored)) && JSON.parse(stored).length > 0; } catch {}
+      }
+      setFavorites([]);
+      await AsyncStorage.removeItem('@will_favorites').catch(() => {});
+      await AsyncStorage.setItem('@will_phase_d_reset_done', '1');
+      if (hadFavorites) setShowResetModal(true);
+    })();
     // user_id unique généré au premier lancement
     AsyncStorage.getItem('@will_user_id').then(v => {
       if (v) {
@@ -10113,6 +10240,11 @@ export default function App() {
         visible={orgModal}
         onClose={() => setOrgModal(false)}
         onPickRole={handlePickRole}
+      />
+
+      <PhaseDResetModal
+        visible={showResetModal}
+        onClose={() => setShowResetModal(false)}
       />
 
       <SelfieModal
