@@ -1183,74 +1183,83 @@ function PhotosUnauthScreen({ onSignup, onLogin }) {
   );
 }
 
-function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteSelfie, onOpenProfile, follows, userId, onOpenPhoto, runnerToken, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false }) {
+function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, userId, onOpenEvent, onFindEvent, onToggleFollow, runnerToken, selfieSkipped = false, isActive = true }) {
   const hasFollows = follows && follows.length > 0;
-  const [photos, setPhotos] = useState([]);
-  const [visibleCount, setVisibleCount] = useState(20);
-  const [loading, setLoading] = useState(false);
+  // Per-event state: { [code]: { count, state: 'searching' | 'ready' | 'empty' } }
+  const [eventData, setEventData] = useState({});
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Map event_code → couleur
-  const eventTintMap = {};
-  for (const e of events) {
-    eventTintMap[e.code] = colorForType(e.event_type);
-  }
+  // followedEvents = full event objects (depuis events array) pour les follows actifs
+  const followedEvents = useMemo(() =>
+    follows.map(code => events.find(e => e.code === code)).filter(Boolean),
+    [follows, events]
+  );
 
-  const loadPhotos = useCallback(async () => {
-    // user_id deduit du Bearer cote worker → besoin du runnerToken
-    if (!hasFollows || !selfieUri || !userId || !runnerToken) {
-      setPhotos([]);
+  // Récupère /personal-gallery par event + calcule l'etat (searching/ready/empty)
+  // basé sur le timestamp @will_follow_started_{code} stocké au moment du follow.
+  const refreshAll = useCallback(async () => {
+    if (!hasFollows || !runnerToken) {
+      setEventData({});
       return;
     }
-    setLoading(true);
-    setVisibleCount(20);
-    const all = [];
+    const started = {};
     for (const code of follows) {
-      const tint = eventTintMap[code] || TYPE_COLORS.Autre;
+      const s = await AsyncStorage.getItem(`@will_follow_started_${code}`);
+      started[code] = s ? parseInt(s, 10) : 0;
+    }
+    const results = await Promise.all(follows.map(async (code) => {
       try {
         const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}`, {
           headers: { Authorization: `Bearer ${runnerToken}` },
         });
-        if (r.ok) {
-          const data = await r.json();
-          for (const p of (data.photos || [])) {
-            all.push({ uri: p.url, id: p.key, tint });
-          }
-        }
-      } catch (e) { console.warn('fetch perso', code, e); }
+        if (!r.ok) return { code, count: 0 };
+        const data = await r.json();
+        return { code, count: Array.isArray(data.photos) ? data.photos.length : 0 };
+      } catch { return { code, count: 0 }; }
+    }));
+    const now = Date.now();
+    const next = {};
+    for (const { code, count } of results) {
+      const startedTs = started[code];
+      const elapsed = startedTs ? (now - startedTs) : Infinity;
+      let state;
+      if (count > 0) state = 'ready';
+      else if (elapsed < 90000) state = 'searching';
+      else state = 'empty';
+      next[code] = { count, state };
     }
-    // Tri : burstTs DESC (rafale la plus recente en haut) puis idx DESC
-    // (derniere photo prise du burst en tete : N, ..., 2, 1, 0).
-    all.sort((a, b) => {
-      const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
-      if (dt !== 0) return dt;
-      return extractIdx(b.id) - extractIdx(a.id);
-    });
-    setPhotos(all);
-    setLoading(false);
-  }, [follows, selfieUri, userId, runnerToken]);
+    setEventData(next);
+  }, [follows, hasFollows, runnerToken]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await loadPhotos();
-      if (cancelled) return;
-    })();
-    return () => { cancelled = true; };
-  }, [loadPhotos]);
+  // Initial fetch + re-fetch quand follows change
+  useEffect(() => { refreshAll(); }, [refreshAll]);
 
-  // Affichage progressif
+  // Polling 7s tant qu'au moins un event est en 'searching' ET l'utilisateur
+  // est sur l'écran (isActive=true). Cleanup auto au unmount ou changement
+  // d'état → pas de drain batterie en background.
   useEffect(() => {
-    if (visibleCount >= photos.length) return;
-    const timer = setTimeout(() => {
-      setVisibleCount(v => Math.min(v + 20, photos.length));
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [visibleCount, photos.length]);
+    if (!isActive) return;
+    const anySearching = Object.values(eventData).some(d => d?.state === 'searching');
+    if (!anySearching) return;
+    const timer = setInterval(refreshAll, 7000);
+    return () => clearInterval(timer);
+  }, [isActive, eventData, refreshAll]);
+
+  const onPullRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshAll();
+    setRefreshing(false);
+  }, [refreshAll]);
 
   return (
-    <RefreshableScrollView hideTopRefresh onRefresh={loadPhotos} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-      {/* Avatar wrappe dans une boite 40x40 (meme taille que orgToggleBtn)
-          pour aligner visuellement avec le bloc orga/photo des autres pages. */}
+    <RefreshableScrollView
+      hideTopRefresh
+      onRefresh={onPullRefresh}
+      refreshing={refreshing}
+      style={s.scroll}
+      contentContainerStyle={{ paddingBottom: 120 }}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
           <TouchableOpacity
@@ -1261,72 +1270,198 @@ function PhotosScreen({ events = [], onOpenSelfie, gallery, selfieUri, onDeleteS
             <Icon.User size={30} color="#c9beed" />
             {selfieUri && (
               <View style={{
-                position: 'absolute',
-                top: 4,
-                right: 4,
-                width: 10,
-                height: 10,
-                borderRadius: 5,
-                backgroundColor: '#10B981',
-                borderWidth: 2,
-                borderColor: C.bg,
+                position: 'absolute', top: 4, right: 4,
+                width: 10, height: 10, borderRadius: 5,
+                backgroundColor: '#10B981', borderWidth: 2, borderColor: C.bg,
               }} />
             )}
           </TouchableOpacity>
         </View>
         <Text style={[s.welcome, { color: C.primary, fontSize: 17 }]}>Mes photos</Text>
-        {/* Spacer droit (40x40) pour equilibrer l'avatar gauche */}
         <View style={{ width: 40, height: 40 }} />
       </View>
 
-      {/* Marge verticale entre le header et le contenu (selfie / photos).
-          14px = meme marge que la search bar de HomeScreen (marginTop: 14),
-          pour que les contenus de Mes photos / Mes events / Accueil
-          commencent strictement au meme Y. */}
       <View style={{ height: 14 }} />
 
-      {/* Carte ajout selfie : uniquement si pas encore de selfie */}
+      {/* Carte selfie si pas encore depose */}
       {!selfieUri && (
         <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
       )}
 
       {!hasFollows ? (
-        <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 }}>
-          <View style={{ marginBottom: 14, opacity: 0.4 }}>
-            <Svg width={40} height={34} viewBox="0 0 20.78 17.61" fill={C.textSoft}>
-              <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-            </Svg>
-          </View>
-          <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
-            Ajoute tes courses en favoris{'\n'}pour recevoir tes photos
-          </Text>
-        </View>
-      ) : !selfieUri ? (
-        <View style={{ alignItems: 'center', paddingVertical: 24 }}>
-          <Text style={{ color: C.textSoft, fontSize: 13, textAlign: 'center' }}>
-            Prends un selfie pour qu'on te reconnaisse{'\n'}sur les photos.
-          </Text>
-        </View>
-      ) : loading ? (
-        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-          <SpinningLoader size={26} color="#c9beed" />
-          <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 10 }}>Recherche en cours…</Text>
-        </View>
-      ) : photos.length === 0 ? (
-        <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 }}>
-          <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
-            Aucune photo trouvée pour le moment.{'\n'}Reviens après l'événement !
-          </Text>
-        </View>
+        // ETAT VIDE : 3 etapes pedagogiques (mockup Phase D)
+        <PhotosEmptyState selfieUri={selfieUri} onFindEvent={onFindEvent} />
       ) : (
-        <PhotoGrid
-          photos={photos.slice(0, visibleCount)}
-          onPress={(p, _i, _photos, origin) => onOpenPhoto?.(p, photos, { origin })}
-          photoFavoritesSet={photoFavoritesSet}
-          onToggleFavorite={onTogglePhotoFavorite}
-        />
+        // ETAT ACTIF : bandeau info + liste d'events suivis avec count / search
+        <View>
+          <View style={{
+            backgroundColor: '#F5F3FF',
+            borderRadius: 12, padding: 14,
+            flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+            marginBottom: 14,
+          }}>
+            <View style={{ marginTop: 1 }}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#7B2FFF" strokeWidth={2}>
+                <Circle cx="12" cy="12" r="10" />
+                <Path d="M12 16v-4M12 8h.01" />
+              </Svg>
+            </View>
+            <Text style={{ flex: 1, color: '#5E1AD6', fontSize: 12, lineHeight: 17 }}>
+              Will ne te reconnaît que sur les events que tu suis. Retire-en un et tes données faciales sont supprimées.
+            </Text>
+          </View>
+
+          {followedEvents.map(event => {
+            const data = eventData[event.code] || { count: 0, state: 'searching' };
+            return (
+              <FollowedEventRow
+                key={event.code}
+                event={event}
+                count={data.count}
+                state={data.state}
+                onPress={() => onOpenEvent?.(event)}
+                onUnfollow={() => onToggleFollow?.(event.code)}
+              />
+            );
+          })}
+        </View>
       )}
     </RefreshableScrollView>
+  );
+}
+
+// État vide pédagogique : 3 étapes + CTA "Trouver un event".
+function PhotosEmptyState({ selfieUri, onFindEvent }) {
+  return (
+    <View style={{ paddingVertical: 24, paddingHorizontal: 16 }}>
+      {/* Gros badge violet avec coeur */}
+      <View style={{
+        width: 72, height: 72, borderRadius: 36,
+        backgroundColor: '#7B2FFF',
+        alignItems: 'center', justifyContent: 'center',
+        alignSelf: 'center', marginBottom: 18,
+        shadowColor: '#7B2FFF', shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
+      }}>
+        <Svg width={34} height={30} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
+          <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+        </Svg>
+      </View>
+
+      <Text style={{
+        fontSize: 22, fontWeight: '800', color: '#1A1426',
+        textAlign: 'center', letterSpacing: -0.3, marginBottom: 10,
+      }}>
+        Suis un event pour{'\n'}recevoir tes photos
+      </Text>
+      <Text style={{
+        fontSize: 14, color: '#5A5468', lineHeight: 20,
+        textAlign: 'center', marginBottom: 22,
+        paddingHorizontal: 12,
+      }}>
+        Will te reconnaît uniquement sur les events que tu suis. Ajoute-en un, et tes photos arrivent toutes seules.
+      </Text>
+
+      {onFindEvent && (
+        <TouchableOpacity
+          onPress={onFindEvent}
+          activeOpacity={0.85}
+          style={{
+            backgroundColor: '#7B2FFF', borderRadius: 999,
+            paddingVertical: 13, paddingHorizontal: 22,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            gap: 8,
+            alignSelf: 'center', marginBottom: 26,
+            shadowColor: '#7B2FFF', shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
+          }}
+        >
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Circle cx="11" cy="11" r="8" />
+            <Path d="M21 21l-4-4" />
+          </Svg>
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Trouver un event</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* 3 étapes pédagogiques */}
+      <View style={{ paddingHorizontal: 8 }}>
+        <PhotosStepRow num={1} text={selfieUri ? "Ton selfie est déjà enregistré ✓" : "Ajoute ton selfie"} done={!!selfieUri} />
+        <PhotosStepRow num={2} text="Tu suis l'event de ta course" />
+        <PhotosStepRow num={3} text="Tes photos arrivent automatiquement" />
+      </View>
+    </View>
+  );
+}
+
+function PhotosStepRow({ num, text, done = false }) {
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+      paddingVertical: 8,
+    }}>
+      <View style={{
+        width: 28, height: 28, borderRadius: 14,
+        backgroundColor: done ? '#10B981' : '#EDE4FF',
+        alignItems: 'center', justifyContent: 'center',
+      }}>
+        {done ? (
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M20 6L9 17l-5-5" />
+          </Svg>
+        ) : (
+          <Text style={{ color: '#7B2FFF', fontSize: 13, fontWeight: '700' }}>{num}</Text>
+        )}
+      </View>
+      <Text style={{ flex: 1, color: '#1A1426', fontSize: 14 }}>{text}</Text>
+    </View>
+  );
+}
+
+function FollowedEventRow({ event, count, state, onPress, onUnfollow }) {
+  const tint = colorForType(event.event_type);
+  let subtitle;
+  if (state === 'searching') subtitle = 'en recherche…';
+  else if (state === 'empty') subtitle = 'Pas encore de photo. Reviens après la course.';
+  else subtitle = `${count} photo${count > 1 ? 's' : ''} trouvée${count > 1 ? 's' : ''}`;
+
+  const subtitleColor = state === 'ready' ? '#5E1AD6' : '#918BA0';
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.85}
+      style={{
+        flexDirection: 'row', alignItems: 'center',
+        padding: 12, marginBottom: 10,
+        backgroundColor: '#fff', borderRadius: 14,
+        borderWidth: 1, borderColor: '#E4E0EC',
+      }}
+    >
+      <View style={{
+        width: 60, height: 60, borderRadius: 12,
+        backgroundColor: tint, overflow: 'hidden',
+      }}>
+        {event.cover_image ? (
+          <ExpoImage source={{ uri: event.cover_image }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+        ) : null}
+      </View>
+      <View style={{ flex: 1, marginLeft: 12, minWidth: 0 }}>
+        <Text style={{ color: '#1A1426', fontSize: 15, fontWeight: '700' }} numberOfLines={1}>
+          {event.name}
+        </Text>
+        <Text style={{ color: subtitleColor, fontSize: 13, marginTop: 2 }} numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+      <TouchableOpacity
+        onPress={(e) => { e.stopPropagation?.(); onUnfollow?.(); }}
+        hitSlop={8}
+        style={{ padding: 8 }}
+      >
+        <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61" fill="#7B2FFF">
+          <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+        </Svg>
+      </TouchableOpacity>
+    </TouchableOpacity>
   );
 }
 
@@ -6921,7 +7056,7 @@ function SearchModal({ visible, events, onClose, onPick }) {
 }
 
 // ---------- ROOT ----------
-function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, onLogout, onLogin, onUpdateProfile, onDeleteAccount }) {
+function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, onLogout, onLogin, onUpdateProfile, onDeleteAccount, onDeleteFaceData }) {
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -7216,6 +7351,14 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
             {profile && (
               <TouchableOpacity onPress={() => { onClose(); onLogout?.(); }} style={{ alignItems: 'center', marginTop: 12, paddingVertical: 12 }}>
                 <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
+              </TouchableOpacity>
+            )}
+
+            {profile && onDeleteFaceData && (
+              <TouchableOpacity onPress={onDeleteFaceData} style={{ alignItems: 'center', marginTop: 12, paddingVertical: 10 }}>
+                <Text style={{ color: '#7B2FFF', fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' }}>
+                  Supprimer mes données faciales
+                </Text>
               </TouchableOpacity>
             )}
 
@@ -9835,6 +9978,40 @@ export default function App() {
     setBottomTab('home');
   }, [organizerSession]);
 
+  // RGPD chirurgical : supprime selfie + empreintes biometriques sur TOUS
+  // les events suivis, sans toucher au compte. Le coureur peut redeposer
+  // un selfie et re-suivre des events ensuite. Cf DELETE /runner/face-data.
+  const deleteFaceData = useCallback(() => {
+    if (!runnerSession?.token) return;
+    Alert.alert(
+      'Supprimer tes données faciales ?',
+      'Ton selfie et ton visage seront retirés de tous les events que tu suis. Ton compte est conservé. Tu pourras tout recommencer en redéposant un selfie.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', style: 'destructive', onPress: async () => {
+          const r = await api.deleteFaceData(runnerSession.token);
+          if (r?.success) {
+            // Cleanup local : selfie, follows, follow_started timestamps
+            setSelfieUri(null);
+            setFollows([]);
+            await AsyncStorage.removeItem('@will_selfie').catch(() => {});
+            await AsyncStorage.removeItem('@will_follows').catch(() => {});
+            // Purge tous les @will_follow_started_* presents
+            try {
+              const allKeys = await AsyncStorage.getAllKeys();
+              const startedKeys = allKeys.filter(k => k.startsWith('@will_follow_started_'));
+              if (startedKeys.length > 0) await AsyncStorage.multiRemove(startedKeys);
+            } catch {}
+            setProfileMenu(false);
+            Alert.alert('Données faciales supprimées', 'Tout est nettoyé. Tu peux redéposer un selfie quand tu veux.');
+          } else {
+            Alert.alert('Erreur', r?.error || 'Impossible de supprimer. Reessaie.');
+          }
+        }},
+      ]
+    );
+  }, [runnerSession]);
+
   // RGPD : suppression définitive du compte coureur (App Store Guideline 5.1.1(v))
   const deleteRunnerAccount = useCallback(() => {
     if (!runnerSession?.token) return;
@@ -10300,16 +10477,16 @@ export default function App() {
                   <PhotosScreen
                     events={events}
                     onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
-                    gallery={[]}
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
                     onOpenProfile={() => setProfileMenu(true)}
                     follows={follows}
                     userId={userId}
                     runnerToken={runnerSession?.token}
-                    onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
-                    photoFavoritesSet={photoFavoritesSet}
-                    onTogglePhotoFavorite={togglePhotoFavorite}
+                    onOpenEvent={setOpenedEvent}
+                    onFindEvent={() => setBottomTab('home')}
+                    onToggleFollow={(code) => requireAuth(() => toggleFollow(code))}
+                    isActive={bottomTab === 'photos'}
                     selfieSkipped={selfieSkipped && !selfieUri}
                   />
                 ) : (
@@ -10521,6 +10698,7 @@ export default function App() {
         onLogin={() => setAuthModalVisible(true)}
         onUpdateProfile={updateRunnerProfile}
         onDeleteAccount={() => { setProfileMenu(false); deleteRunnerAccount(); }}
+        onDeleteFaceData={() => { setProfileMenu(false); deleteFaceData(); }}
       />
 
       <SelfieViewerModal
