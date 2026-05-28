@@ -1546,25 +1546,31 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
       showsVerticalScrollIndicator={false}
     >
       <View style={s.headerRow}>
-        <View style={s.headerLeft}>
-          <TouchableOpacity
-            hitSlop={10}
-            onPress={onOpenProfile}
-            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-          >
-            <Icon.User size={30} color="#c9beed" />
-            {selfieUri && (
-              <View style={{
-                position: 'absolute', top: 4, right: 4,
-                width: 10, height: 10, borderRadius: 5,
-                backgroundColor: '#10B981', borderWidth: 2, borderColor: C.bg,
-              }} />
-            )}
-          </TouchableOpacity>
+        {/* SLOT GAUCHE : avatar (normal) ou "Annuler" (selection mode).
+            Slot fixe en hauteur pour ne JAMAIS shifter le header. */}
+        <View style={[s.headerLeft, { minWidth: 40, justifyContent: 'flex-start' }]}>
+          {selectionMode ? (
+            <TouchableOpacity onPress={exitSelection} hitSlop={10} disabled={downloading}>
+              <Text style={{ color: C.textSoft, fontSize: 13, fontWeight: '500' }}>Annuler</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              hitSlop={10}
+              onPress={onOpenProfile}
+              style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+            >
+              <Icon.User size={30} color="#c9beed" />
+              {selfieUri && (
+                <View style={{
+                  position: 'absolute', top: 4, right: 4,
+                  width: 10, height: 10, borderRadius: 5,
+                  backgroundColor: '#10B981', borderWidth: 2, borderColor: C.bg,
+                }} />
+              )}
+            </TouchableOpacity>
+          )}
         </View>
-        {/* E4 — cross-fade titre "Mes photos" <-> toast "Recherche…" /
-            message resultat. Container relative + 2 enfants absolus
-            superposes pour que la galerie ne bouge JAMAIS. */}
+        {/* SLOT CENTRE : cross-fade titre <-> toast refresh. */}
         <View style={{ flex: 1, height: 24, alignItems: 'center', justifyContent: 'center' }}>
           <Animated.View style={{ position: 'absolute', opacity: titleOpacity }}>
             <Text style={[s.welcome, { color: C.primary, fontSize: 17 }]}>Mes photos</Text>
@@ -1584,7 +1590,32 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
             </Animated.View>
           )}
         </View>
-        <View style={{ width: 40, height: 40 }} />
+        {/* SLOT DROIT : "Sélectionner" (light violet, normal) ou
+            "Télécharger (N)" (primary, selection mode). Apparait des
+            qu il y a > 1 photo. Slot reservé 40 minWidth pour
+            symetrie avec l avatar -> grille ne shift pas. */}
+        <View style={{ minWidth: 40, height: 40, alignItems: 'flex-end', justifyContent: 'center' }}>
+          {photos.length > 1 && (
+            selectionMode ? (
+              <TouchableOpacity
+                onPress={downloadSelected}
+                hitSlop={10}
+                disabled={selectedIds.size === 0 || downloading}
+                style={{ opacity: (selectedIds.size === 0 || downloading) ? 0.35 : 1 }}
+              >
+                <Text style={{ color: C.primary, fontSize: 13, fontWeight: '700' }}>
+                  {downloading
+                    ? 'Téléchargement…'
+                    : `Télécharger${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
+                <Text style={{ color: '#c9beed', fontSize: 13, fontWeight: '500' }}>Sélectionner</Text>
+              </TouchableOpacity>
+            )
+          )}
+        </View>
       </View>
 
       <View style={{ height: 14 }} />
@@ -1631,41 +1662,6 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
               <Text style={{ color: '#5E1AD6', fontSize: 12, fontWeight: '600' }}>
                 Will continue de chercher…
               </Text>
-            </View>
-          )}
-          {/* Barre selection (apparait des > 1 photo). Hauteur fixe : toggle
-              Sélectionner <-> Annuler/Télécharger ne shift JAMAIS la grille. */}
-          {photos.length > 1 && (
-            <View style={{
-              flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-              height: 32, marginBottom: 6, paddingHorizontal: 2,
-            }}>
-              {selectionMode ? (
-                <>
-                  <TouchableOpacity onPress={exitSelection} hitSlop={10} disabled={downloading}>
-                    <Text style={{ color: C.textSoft, fontSize: 14, fontWeight: '500' }}>Annuler</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={downloadSelected}
-                    hitSlop={10}
-                    disabled={selectedIds.size === 0 || downloading}
-                    style={{ opacity: (selectedIds.size === 0 || downloading) ? 0.35 : 1 }}
-                  >
-                    <Text style={{ color: C.primary, fontSize: 14, fontWeight: '700' }}>
-                      {downloading
-                        ? 'Téléchargement…'
-                        : `Télécharger${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <View />
-                  <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
-                    <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Sélectionner</Text>
-                  </TouchableOpacity>
-                </>
-              )}
             </View>
           )}
           <PhotoGrid
@@ -1887,7 +1883,7 @@ function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite, 
           i={i}
           photos={photos}
           onPress={onPress}
-          showHearts={showHearts && !selectionMode}
+          showHearts={showHearts}
           fav={showHearts && photoFavoritesSet.has(p.id)}
           onToggleFavorite={onToggleFavorite}
           selectionMode={selectionMode}
@@ -1936,20 +1932,25 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
       />
       {showHearts && (
         <TouchableOpacity
-          onPress={(e) => { e.stopPropagation?.(); onToggleFavorite(p.id); }}
+          onPress={(e) => {
+            e.stopPropagation?.();
+            // En mode selection : le tap heart toggle la selection (pas le
+            // favori) pour ne pas perturber le geste principal du moment.
+            if (selectionMode) onToggleSelect?.(p.id);
+            else onToggleFavorite(p.id);
+          }}
           hitSlop={12}
           style={{ position: 'absolute', top: 6, right: 6 }}
         >
-          <Svg width={20} height={18} viewBox="-1 -1.5 22.78 20.61"
+          <Svg width={14} height={13} viewBox="-1 -1.5 22.78 20.61"
             fill={fav ? '#fff' : 'none'}
-            stroke="#fff" strokeWidth={1.6}>
+            stroke="#fff" strokeWidth={2.2}>
             <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
           </Svg>
         </TouchableOpacity>
       )}
-      {/* Mode selection : pastille check en haut-droite + voile violet leger
-          si selected. La photo non-selectionnee est legerement attenuee
-          (opacity 0.7 du voile invisible) pour aider la lecture du set. */}
+      {/* Mode selection : pastille check en haut-GAUCHE (le coeur favori
+          garde sa place a droite) + voile violet leger si selected. */}
       {selectionMode && (
         <>
           {selected && (
@@ -1961,7 +1962,7 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
             }} />
           )}
           <View pointerEvents="none" style={{
-            position: 'absolute', top: 6, right: 6,
+            position: 'absolute', top: 6, left: 6,
             width: 22, height: 22, borderRadius: 11,
             alignItems: 'center', justifyContent: 'center',
             backgroundColor: selected ? C.primary : 'rgba(255,255,255,0.7)',
