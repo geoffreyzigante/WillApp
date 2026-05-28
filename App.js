@@ -2464,14 +2464,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             </ScrollView>
           )}
 
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', marginVertical: 14, gap: 8 }}>
-            <Text style={s.sectionTitle}>Photos</Text>
-            {filteredPhotos.length > 0 && (
-              <Text style={{ color: C.textSoft, fontSize: 13, opacity: 0.7 }}>
-                {`${filteredPhotos.length} photo${filteredPhotos.length > 1 ? 's' : ''}`}
-              </Text>
-            )}
-          </View>
+          {/* Petit espacement avant la grille (le titre "Photos" + count
+              a ete retire — la grille parle d elle-meme). */}
+          <View style={{ height: 12 }} />
         </>
       )}
     </View>
