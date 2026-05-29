@@ -8961,6 +8961,10 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
         >
+          {/* Backdrop tappable : occupe la zone vide au-dessus de la sheet
+              (s ecrase a 0 quand le form deborde du viewport, ce qui evite
+              de griser une zone interactive). */}
+          <TouchableOpacity activeOpacity={1} onPress={onClose} style={{ flex: 1 }} />
           <View style={{ backgroundColor: C.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 }}>
           {mode === 'register' && (
             <Text style={{ color: C.textSoft, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 6 }}>
