@@ -10857,32 +10857,31 @@ export default function App() {
   // setTimeout pour laisser React stabiliser le layout apres le 1er
   // render reel.
 
-  // Mode photographe (full screen caméra)
-  if (inPhotographerMode && (session?.role === 'photographer' || session?.role === 'organizer')) {
-    return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <StatusBar barStyle="light-content" backgroundColor="#000" translucent />
-          <PhotographerScreen
-            session={session}
-            // Bouton retour : sort du mode sans effacer la session — le
-            // photographe peut revenir avec un seul tap (pas de re-saisie mdp).
-            onExit={() => setInPhotographerMode(false)}
-            // Vraie déconnexion : efface la session SecureStore + queue locale.
-            // Au prochain login (meme event ou autre), la galerie repart vide :
-            // les photos uploadees restent consultables via le dashboard orga.
-            onLogout={async () => {
-              try { await AsyncStorage.multiRemove([UPLOAD_QUEUE_KEY, LAST_CAPTURE_KEY]); } catch {}
-              try { const d = pendingDir(); if (d.exists) d.delete(); } catch {}
-              setSession(null);
-              setInPhotographerMode(false);
-              Secure.removeItem('@will_photographer_session').catch(() => {});
-            }}
-          />
-        </View>
-      </GestureHandlerRootView>
-    );
-  }
+  // Mode photographe = overlay absoluteFill SUR le SafeAreaView de l accueil
+  // (toujours monté en dessous). Précédemment un early-return démontait tout
+  // l accueil ; au logout/back le remount du SafeAreaView mesurait l inset
+  // top iOS de facon asynchrone -> flash "trop haut" puis "redescend".
+  const photographerOverlay = inPhotographerMode && (session?.role === 'photographer' || session?.role === 'organizer') ? (
+    <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#000" translucent />
+      <PhotographerScreen
+        session={session}
+        // Bouton retour : sort du mode sans effacer la session — le
+        // photographe peut revenir avec un seul tap (pas de re-saisie mdp).
+        onExit={() => setInPhotographerMode(false)}
+        // Vraie déconnexion : efface la session SecureStore + queue locale.
+        // Au prochain login (meme event ou autre), la galerie repart vide :
+        // les photos uploadees restent consultables via le dashboard orga.
+        onLogout={async () => {
+          try { await AsyncStorage.multiRemove([UPLOAD_QUEUE_KEY, LAST_CAPTURE_KEY]); } catch {}
+          try { const d = pendingDir(); if (d.exists) d.delete(); } catch {}
+          setSession(null);
+          setInPhotographerMode(false);
+          Secure.removeItem('@will_photographer_session').catch(() => {});
+        }}
+      />
+    </View>
+  ) : null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -11240,6 +11239,8 @@ export default function App() {
       />
 
     </SafeAreaView>
+
+    {photographerOverlay}
 
     {/* Splash overlay : ecran blanc + LoadingIcon (fleur Will) violet light
         centre. Meme icone que le pull-to-refresh des galeries -> ressenti
