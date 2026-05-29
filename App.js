@@ -7473,7 +7473,7 @@ function SearchModal({ visible, events, onClose, onPick }) {
 }
 
 // ---------- ROOT ----------
-function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, onLogout, onLogin, onUpdateProfile, onDeleteAccount, onDeleteFaceData }) {
+function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData }) {
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -7582,19 +7582,7 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
               <Text style={[s.welcome, { color: '#c9beed', marginBottom: 20, marginTop: 4, fontSize: 26 }]}>
                 Hello {profile.firstName}
               </Text>
-            ) : (
-              <View style={{ alignItems: 'center', marginVertical: 12 }}>
-                <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 10, textAlign: 'center' }}>
-                  Connecte-toi pour retrouver tes photos sur tous tes appareils
-                </Text>
-                <TouchableOpacity
-                  style={{ backgroundColor: C.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 12 }}
-                  onPress={() => { onClose(); onLogin?.(); }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>Se connecter / S'inscrire</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            ) : null}
 
             {/* Bloc Selfie */}
             {profile && (
@@ -10908,7 +10896,10 @@ export default function App() {
                     onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
-                    onOpenProfile={() => setProfileMenu(true)}
+                    onOpenProfile={() => {
+                      if (runnerSession) setProfileMenu(true);
+                      else { setAuthInitialMode('login'); setAuthModalVisible(true); }
+                    }}
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
                     isFollowing={follows.includes(eventInPanel.code)}
                     onToggleFollow={() => requireAuth(() => toggleFollow(eventInPanel.code))}
@@ -10942,7 +10933,10 @@ export default function App() {
                   setTab={setTab}
                   selfieUri={selfieUri}
                   onDeleteSelfie={deleteSelfie}
-                  onOpenProfile={() => setProfileMenu(true)}
+                  onOpenProfile={() => {
+                    if (runnerSession) setProfileMenu(true);
+                    else { setAuthInitialMode('login'); setAuthModalVisible(true); }
+                  }}
                   follows={follows}
                   onToggleFollow={(code) => requireAuth(() => toggleFollow(code))}
                   onRefresh={reloadEvents}
@@ -11189,7 +11183,6 @@ export default function App() {
         onDelete={deleteSelfie}
         runnerSession={runnerSession}
         onLogout={logoutRunner}
-        onLogin={() => setAuthModalVisible(true)}
         onUpdateProfile={updateRunnerProfile}
         onDeleteAccount={() => { setProfileMenu(false); deleteRunnerAccount(); }}
         onDeleteFaceData={() => { setProfileMenu(false); deleteFaceData(); }}
