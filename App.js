@@ -2106,7 +2106,13 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       .filter(p => String(p.race) === activeRaceFilter)
       .map(p => p.km)
       .filter(k => k !== null && k !== undefined && k !== '');
-    return Array.from(new Set(kms.map(String))).sort((a, b) => Number(a) - Number(b));
+    // Tri : Depart (0) puis Arrivee ('arrivee') puis km N croissant. 'arrivee'
+    // place a 0.5 = entre Depart (0) et km 1, miroir de la roulette de capture.
+    return Array.from(new Set(kms.map(String))).sort((a, b) => {
+      const na = a === 'arrivee' ? 0.5 : Number(a);
+      const nb = b === 'arrivee' ? 0.5 : Number(b);
+      return na - nb;
+    });
   })();
 
   // Tabs course (Toutes + 1 par race). Vide si aucune photo n a de race.
@@ -2119,13 +2125,14 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
   // Tabs km (apparaissent uniquement si course specifique selectionnee ET
   // > 1 position km distincte pour cette course — sinon pas de choix utile).
+  // Labels speciaux : "Départ" (k='0'), "Arrivée" (k='arrivee'). Le reste = "km N".
   const kmTabs = (activeRaceFilter === 'all' || kmsForActiveRace.length <= 1)
     ? []
     : [
         { key: 'all', label: 'Tous' },
         ...kmsForActiveRace.map(k => ({
           key: k,
-          label: k === '0' ? 'Départ' : `km ${k}`,
+          label: k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`,
         })),
       ];
 
