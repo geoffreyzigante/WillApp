@@ -8515,6 +8515,7 @@ function PhotoViewerModal({
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={animateOutAndClose}>
       <GestureHandlerRootView style={{ flex: 1 }}>
+        {visible ? (
         <View style={{ flex: 1 }}>
           {/* Fond blanc anime (fade in au mount, fade out a la fermeture) */}
           <ReAnimated.View
@@ -8874,6 +8875,7 @@ function PhotoViewerModal({
             )}
           </ReAnimated.View>
         </View>
+        ) : null}
       </GestureHandlerRootView>
     </Modal>
   );
