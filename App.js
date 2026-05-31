@@ -4064,7 +4064,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         // dans un worklet a closure figee au mount, donc lire les state donnerait
         // toujours null/null. La ref pointe sur la valeur courante de la roulette.
         race: selectedRaceRef.current ? String(selectedRaceRef.current.km) : null,
-        // selectedKm = null -> non posté ; 0 = "Départ" explicite ; N = km N.
+        // selectedKm = null -> non posté ; 0 = "Départ" ; 'arrivee' = "Arrivée" ; N = km N.
         km: selectedKmRef.current !== null ? String(selectedKmRef.current) : null,
         exif,
       }]);
@@ -4553,13 +4553,18 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 Disambigue le 0 km = "Départ" explicite : une photo prise en
                 cran "-" n écrit PAS de km sur customMetadata R2 (header
                 X-Will-Km absent a l upload).
-                Format items : "km N" (et "Départ" pour N=0). */}
+                Format items : "Départ" (value=0), "Arrivée" (value='arrivee'),
+                puis "km N" pour N>=1. La value 'arrivee' est traitee comme
+                chaine opaque cote worker (cf reassignPhotoMeta, list endpoints,
+                isPhotoVisibleToPublic n utilise que photo.race). */}
             {(() => {
               const kmItems = [
                 { label: '-', value: null },
-                ...Array.from({ length: kmCeiling + 1 }).map((_, k) => ({
-                  label: k === 0 ? 'Départ' : `km ${k}`,
-                  value: k,
+                { label: 'Départ', value: 0 },
+                { label: 'Arrivée', value: 'arrivee' },
+                ...Array.from({ length: kmCeiling }, (_, k) => ({
+                  label: `km ${k + 1}`,
+                  value: k + 1,
                 })),
               ];
               const rawIdx = kmItems.findIndex(it => it.value === selectedKm);
