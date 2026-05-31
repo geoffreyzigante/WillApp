@@ -8032,6 +8032,27 @@ function PhotoViewerModal({
   const winWidth = Dimensions.get('window').width;
   const winHeight = Dimensions.get('window').height;
 
+  // Index cible calcule synchroniquement depuis les props (pas d'attente post-paint).
+  // Sert a initialiser la FlatList AU MOUNT avec la bonne position.
+  const targetIndex = React.useMemo(() => {
+    if (!photo || !photos) return 0;
+    const i = photos.findIndex(p => p.id === photo.id);
+    return i >= 0 ? i : 0;
+  }, [photo, photos]);
+
+  // Compteur de session bumpe a chaque ouverture (visible false->true). Sert
+  // de key sur la FlatList pour forcer un remount et donc appliquer
+  // initialScrollIndex={targetIndex} AU 1er paint de la nouvelle session.
+  // Sans ca, la FlatList -- montee a vie au root App -- conserve son scroll
+  // offset entre deux ouvertures et flashe l'ancienne photo le temps que
+  // scrollToOffset rattrape.
+  const prevVisibleRef = useRef(false);
+  const sessionKeyRef = useRef(0);
+  if (visible && !prevVisibleRef.current) {
+    sessionKeyRef.current += 1;
+  }
+  prevVisibleRef.current = visible;
+
   // SafeArea iPhone (sans dependance react-native-safe-area-context)
   const topPad = Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 0);
   const bottomPad = Platform.OS === 'ios' ? 34 : 16;
@@ -8169,18 +8190,17 @@ function PhotoViewerModal({
     }
   };
 
-  // À chaque ouverture du viewer : sync index, reset transforms, anim d'entree
+  // À chaque ouverture du viewer : sync index, reset transforms, anim d'entree.
+  // targetIndex est calcule depuis les props (utile aussi si on ouvre une autre
+  // photo sans repasser par visible=false).
   useEffect(() => {
     if (!visible) return;
-    if (photo && photos) {
-      const i = photos.findIndex(p => p.id === photo.id);
-      if (i >= 0) setCurrentIndex(i);
-    }
+    setCurrentIndex(targetIndex);
     resetTransforms();
     setLocalHiddenMap({});
     animateIn();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [visible, targetIndex]);
 
   // Bascule visibilite publique de la photo courante (orga uniquement).
   // Optimistic update local + appel callback worker, revert si echec.
@@ -8539,12 +8559,13 @@ function PhotoViewerModal({
             <GestureDetector gesture={composed}>
               <ReAnimated.View style={[{ flex: 1 }, vertStyle]}>
                 <FlatList
+                  key={`viewer-list-${sessionKeyRef.current}`}
                   ref={photoListRef}
                   data={photos}
                   horizontal
                   pagingEnabled
                   showsHorizontalScrollIndicator={false}
-                  initialScrollIndex={currentIndex}
+                  initialScrollIndex={targetIndex}
                   keyExtractor={(p, i) => p.id || `photo-${i}`}
                   getItemLayout={(_, index) => ({ length: cardW, offset: cardW * index, index })}
                   onScrollToIndexFailed={(info) => {
@@ -8651,6 +8672,7 @@ function PhotoViewerModal({
             {photos && photos.length > 0 ? (
               <>
                 <FlatList
+                  key={`viewer-slider-${sessionKeyRef.current}`}
                   ref={sliderRef}
                   data={photos}
                   horizontal
@@ -8660,6 +8682,7 @@ function PhotoViewerModal({
                   windowSize={5}
                   snapToInterval={50}
                   decelerationRate="fast"
+                  initialScrollIndex={targetIndex}
                   getItemLayout={(_, index) => ({ length: 50, offset: 50 * index, index })}
                   onScrollToIndexFailed={(info) => {
                     setTimeout(() => sliderRef.current?.scrollToOffset({
