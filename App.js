@@ -4175,6 +4175,26 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const cloudActive = pendingCount > 0;
   const cloudColor = cloudActive ? '#3B82F6' : 'rgba(255,255,255,0.85)';
 
+  // Garde-fou UX avant sortie d'ecran : si des photos sont encore en transit
+  // (in-flight ou en queue pending/uploading), on previent le benevole pour
+  // qu'il garde l'app au premier plan jusqu'a la fin. La queue est persistante
+  // (recovery au remount) donc rien n'est PERDU s'il quitte, mais le JS thread
+  // doit vivre pour que les fetch finissent -- d'ou le message rassurant
+  // "elles repartiront a ta prochaine ouverture". Ton volontairement neutre,
+  // pas de style destructive sur "Quitter quand meme" (action reversible).
+  function confirmLeaveWithPending(proceed) {
+    if (pendingCount === 0) { proceed(); return; }
+    Alert.alert(
+      'Photos en cours d\'envoi',
+      `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer. Garde l'app ouverte encore un instant pour qu'elles partent. Si tu quittes, elles repartiront à ta prochaine ouverture.`,
+      [
+        { text: 'Rester', style: 'cancel' },
+        { text: 'Quitter quand même', onPress: proceed },
+      ],
+      { cancelable: true },
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       {/* Caméra — resizeMode 'contain' (letterbox naturel), bandes noires explicites par-dessus.
@@ -4262,7 +4282,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         {/* Row 1 : retour | titre+date centré | spacer */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity
-            onPress={onExit || onLogout}
+            onPress={() => confirmLeaveWithPending(onExit || onLogout)}
             hitSlop={10}
             style={{
               paddingHorizontal: 14, height: 36, borderRadius: 18,
@@ -4303,15 +4323,30 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <TouchableOpacity
               onPress={() => {
-                Alert.alert(
-                  'Se déconnecter ?',
-                  'Tu devras saisir à nouveau le mot de passe pour reprendre ton événement.',
-                  [
-                    { text: 'Annuler', style: 'cancel' },
-                    { text: 'Déconnexion', style: 'destructive', onPress: onLogout },
-                  ],
-                  { cancelable: true }
-                );
+                if (pendingCount > 0) {
+                  // Alerte combinee : warning photos en transit + rappel de
+                  // ressaisie du mot de passe, dans un seul popup pour ne pas
+                  // empiler deux modales sur le meme geste.
+                  Alert.alert(
+                    'Photos en cours d\'envoi',
+                    `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer. Garde l'app ouverte encore un instant pour qu'elles partent. Si tu te déconnectes, elles repartiront à ta prochaine connexion (tu devras ressaisir ton mot de passe).`,
+                    [
+                      { text: 'Rester', style: 'cancel' },
+                      { text: 'Se déconnecter quand même', style: 'destructive', onPress: onLogout },
+                    ],
+                    { cancelable: true }
+                  );
+                } else {
+                  Alert.alert(
+                    'Se déconnecter ?',
+                    'Tu devras saisir à nouveau le mot de passe pour reprendre ton événement.',
+                    [
+                      { text: 'Annuler', style: 'cancel' },
+                      { text: 'Déconnexion', style: 'destructive', onPress: onLogout },
+                    ],
+                    { cancelable: true }
+                  );
+                }
               }}
               hitSlop={10}
               style={{
