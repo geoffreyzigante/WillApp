@@ -2629,11 +2629,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 // pour fondre la roulette sous le titre.
 function OverlayWheel({ items, selectedIndex, onChange }) {
   // Refonte 2026-06-01 : selection violet (brand primary #7B2FFF) avec
-  // lignes horizontales au-dessus et en-dessous (au lieu du pill rond
-  // contour rose). VISIBLE etendu a 5 pour montrer plus de contexte
-  // au-dessus/au-dessous de la selection.
-  const ITEM_H = 28;
-  const VISIBLE = 5;
+  // lignes horizontales au-dessus et en-dessous. Compacte (3 items, ITEM_H 24)
+  // pour reduire la hauteur du bottom block du PhotographerScreen.
+  const ITEM_H = 24;
+  const VISIBLE = 3;
   const HEIGHT = VISIBLE * ITEM_H;
   const PAD_V = ((VISIBLE - 1) / 2) * ITEM_H;
   const PURPLE = '#7B2FFF';
@@ -4373,21 +4372,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           style={StyleSheet.absoluteFillObject}
           pointerEvents="none"
         />
-        {/* Date sur sa propre ligne (kicker au-dessus du nom), indentee
-            pour s'aligner avec le nom. paddingLeft = back arrow (36) + gap (12). */}
-        {compactDate ? (
-          <Text
-            style={{
-              color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '700',
-              letterSpacing: 0.6, paddingLeft: 48, marginBottom: 2,
-              textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
-            }}
-            numberOfLines={1}
-          >
-            {compactDate}
-          </Text>
-        ) : null}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        {/* alignItems: 'flex-end' aligne back, titre, et cluster sur la
+            baseline du NOM ; la date "kicker" sit au-dessus dans le bloc
+            titre sans casser l'alignement vertical des icones. */}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12 }}>
           <TouchableOpacity
             onPress={() => confirmLeaveWithPending(onExit || onLogout)}
             hitSlop={10}
@@ -4403,13 +4391,26 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             </Svg>
           </TouchableOpacity>
 
-          {/* Nom de l'event, centre verticalement avec le back arrow */}
+          {/* Bloc titre : date kicker au-dessus, nom dessous (baseline = bottom). */}
           <View style={{ flex: 1, minWidth: 0 }}>
+            {compactDate ? (
+              <Text
+                style={{
+                  color: 'rgba(255,255,255,0.65)', fontSize: 10, fontWeight: '700',
+                  letterSpacing: 0.8, marginBottom: 1,
+                  textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
+                }}
+                numberOfLines={1}
+              >
+                {compactDate}
+              </Text>
+            ) : null}
             <Text
               style={{
-                color: '#fff', fontSize: 18, fontWeight: '700',
+                color: '#fff', fontSize: 19, fontWeight: '700',
                 fontFamily: 'AVEstiana', fontStyle: 'normal',
                 textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
+                lineHeight: 22,
               }}
               numberOfLines={1}
             >
@@ -4624,10 +4625,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 if (v && selectedKm !== null && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(null);
               };
               return (
-                <View style={{ flex: 1, paddingTop: 8, paddingBottom: 10, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 8 }}>
+                <View style={{ flex: 1, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
+                  <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 4 }}>
                     <Text style={{
-                      color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 0.4,
+                      color: '#fff', fontSize: 17, fontWeight: '800', letterSpacing: 0.4,
                       fontFamily: 'AVEstiana', fontStyle: 'normal',
                     }}>Course</Text>
                   </TouchableOpacity>
@@ -4666,10 +4667,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               const kmIdx = rawIdx >= 0 ? rawIdx : 0;
               const setKmIdx = (idx) => setSelectedKm(kmItems[idx].value);
               return (
-                <View style={{ flex: 1, paddingTop: 8, paddingBottom: 10, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 8 }}>
+                <View style={{ flex: 1, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
+                  <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 4 }}>
                     <Text style={{
-                      color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 0.4,
+                      color: '#fff', fontSize: 17, fontWeight: '800', letterSpacing: 0.4,
                       fontFamily: 'AVEstiana', fontStyle: 'normal',
                     }}>Km</Text>
                   </TouchableOpacity>
