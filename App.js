@@ -2628,13 +2628,14 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 // au-dessus/en-dessous attenues. Top-fade en degrade vers le panneau noir
 // pour fondre la roulette sous le titre.
 function OverlayWheel({ items, selectedIndex, onChange }) {
-  // Refonte 2026-06-01 : selection violet (brand primary #7B2FFF) avec
-  // lignes horizontales au-dessus et en-dessous. Compacte (3 items, ITEM_H 24)
-  // pour reduire la hauteur du bottom block du PhotographerScreen.
-  const ITEM_H = 24;
-  const VISIBLE = 3;
-  const HEIGHT = VISIBLE * ITEM_H;
-  const PAD_V = ((VISIBLE - 1) / 2) * ITEM_H;
+  // Mockup 2026-06-01 : selection violet brand #7B2FFF, 4 items visibles
+  // ASYMETRIQUES (1 item au-dessus de la selection, selection a la slot
+  // 2 from top, 2 items en-dessous). 2 lignes horizontales violettes
+  // delimitent le slot selectionne.
+  const ITEM_H = 28;
+  const HEIGHT = 4 * ITEM_H;             // 4 slots visibles
+  const PAD_V_TOP = ITEM_H;              // 1 slot vide au-dessus = 1 item au-dessus selection
+  const PAD_V_BOTTOM = 2 * ITEM_H;       // 2 slots vides en-dessous = 2 items au-dessous
   const PURPLE = '#7B2FFF';
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -2642,17 +2643,17 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
   }, [selectedIndex]);
   return (
     <View style={{ height: HEIGHT, alignSelf: 'stretch', position: 'relative' }}>
-      {/* Lignes violettes au-dessus et en-dessous de la selection */}
+      {/* Lignes violettes : top du slot selectionne + bottom du meme slot */}
       <View pointerEvents="none" style={{
         position: 'absolute',
-        top: PAD_V, left: 16, right: 16,
+        top: PAD_V_TOP, left: 16, right: 16,
         height: 1.5,
         backgroundColor: PURPLE,
         borderRadius: 1,
       }} />
       <View pointerEvents="none" style={{
         position: 'absolute',
-        top: PAD_V + ITEM_H - 1.5, left: 16, right: 16,
+        top: PAD_V_TOP + ITEM_H - 1.5, left: 16, right: 16,
         height: 1.5,
         backgroundColor: PURPLE,
         borderRadius: 1,
@@ -2663,7 +2664,7 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
         contentOffset={{ x: 0, y: selectedIndex * ITEM_H }}
-        contentContainerStyle={{ paddingVertical: PAD_V }}
+        contentContainerStyle={{ paddingTop: PAD_V_TOP, paddingBottom: PAD_V_BOTTOM }}
         onMomentumScrollEnd={e => {
           const idx = Math.max(0, Math.min(items.length - 1, Math.round(e.nativeEvent.contentOffset.y / ITEM_H)));
           if (idx !== selectedIndex) onChange(idx);
@@ -2671,17 +2672,21 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
       >
         {items.map((it, i) => {
           const isSel = i === selectedIndex;
-          const dist = Math.abs(i - selectedIndex);
-          // Opacite degressive : selection 1.0, voisins immediats 0.5,
-          // au-dela 0.25 pour rappeler la profondeur de la roulette.
-          const opacity = isSel ? 1 : dist === 1 ? 0.5 : 0.25;
+          const delta = i - selectedIndex; // negatif = au-dessus, positif = au-dessous
+          // Opacite : selection 1, voisins immediats 0.5 dessous / 0.3 dessus,
+          // plus loin 0.25. L'asymetrie reflete la priorite visuelle a ce qui
+          // vient apres (item suivant deja partiellement visible).
+          let opacity = 0.25;
+          if (isSel) opacity = 1;
+          else if (delta === -1) opacity = 0.3;
+          else if (delta === 1) opacity = 0.55;
           return (
             <View key={i} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center' }}>
               <Text style={{
                 color: isSel ? PURPLE : '#fff',
                 opacity,
-                fontSize: isSel ? 16 : 14,
-                fontWeight: isSel ? '700' : '500',
+                fontSize: isSel ? 18 : 15,
+                fontWeight: isSel ? '600' : '500',
               }}>{it.label}</Text>
             </View>
           );
@@ -4625,10 +4630,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 if (v && selectedKm !== null && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(null);
               };
               return (
-                <View style={{ flex: 1, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 4 }}>
+                <View style={{ flex: 1, paddingTop: 6, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
+                  <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 6 }}>
                     <Text style={{
-                      color: '#fff', fontSize: 17, fontWeight: '800', letterSpacing: 0.4,
+                      color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: 0.3,
                       fontFamily: 'AVEstiana', fontStyle: 'normal',
                     }}>Course</Text>
                   </TouchableOpacity>
@@ -4667,10 +4672,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               const kmIdx = rawIdx >= 0 ? rawIdx : 0;
               const setKmIdx = (idx) => setSelectedKm(kmItems[idx].value);
               return (
-                <View style={{ flex: 1, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 4 }}>
+                <View style={{ flex: 1, paddingTop: 6, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
+                  <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 6 }}>
                     <Text style={{
-                      color: '#fff', fontSize: 17, fontWeight: '800', letterSpacing: 0.4,
+                      color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: 0.3,
                       fontFamily: 'AVEstiana', fontStyle: 'normal',
                     }}>Km</Text>
                   </TouchableOpacity>
