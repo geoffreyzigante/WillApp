@@ -3327,7 +3327,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const [myPhotos, setMyPhotos] = useState([]);
   const [myPhotosLoading, setMyPhotosLoading] = useState(false);
   const [myPhotosError, setMyPhotosError] = useState(false);
-  const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryViewerPhoto, setGalleryViewerPhoto] = useState(null);
   const myPhotosFetchInFlightRef = useRef(false);
   const myPhotosDebounceRef = useRef(null);
@@ -4210,6 +4209,16 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     ? Math.max(0, Math.min(1, 1 - (queueStats.pending + queueStats.uploading) / drainStartTotal))
     : 0;
 
+  // Date compacte pour le header refondu (refonte 2026-06-01) : just le jour
+  // de depart, "30 MAI 2026". Sur un event multi-jour on perd le range mais
+  // la date complete reste visible sur la home / event card / public page.
+  const compactDate = (() => {
+    if (!session?.event?.event_date) return null;
+    const d = new Date(session.event.event_date);
+    if (isNaN(d.getTime())) return null;
+    return `${d.getDate()} ${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`;
+  })();
+
   // Voyant luminosite : pilote la couleur via le SHUTTER live (pas l'ISO).
   // Justification terrain (test 2026-05-26) : l'ISO reste a son plancher (50)
   // en interieur clair comme en exterieur, ne bouge qu'en vraie penombre —
@@ -4345,102 +4354,93 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         }}
       />
 
-      {/* ─── TOP AREA (style iOS Camera : dark gradient + floating row, pas de boîte) ─── */}
+      {/* ─── TOP AREA — refonte 2026-06-01 ─────────────────────────────
+          Minimaliste : back (44 round dark) | date+nom alignes a gauche |
+          chevron + power rouge (40 round). Tout le reste (compteurs,
+          erreurs, progress, ISO/shutter/EV en dev) est replie sous le
+          chevron. Status bar et tech-readout autonomes supprimes. ───*/}
       <Animated.View
         pointerEvents="box-none"
         style={{
           position: 'absolute', top: 0, left: 0, right: 0,
-          paddingTop: 56, paddingBottom: 8, paddingHorizontal: 20,
+          paddingTop: 56, paddingBottom: 12, paddingHorizontal: 16,
           transform: [{ translateY: headerSlideY }],
           zIndex: 10,
         }}
       >
         <LinearGradient
-          colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0)']}
+          colors={['rgba(0,0,0,0.7)', 'rgba(0,0,0,0)']}
           style={StyleSheet.absoluteFillObject}
           pointerEvents="none"
         />
-        {/* Row 1 : retour | titre+date centré | spacer */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity
             onPress={() => confirmLeaveWithPending(onExit || onLogout)}
             hitSlop={10}
             style={{
-              paddingHorizontal: 14, height: 36, borderRadius: 18,
-              backgroundColor: 'rgba(255,255,255,0.15)',
+              width: 44, height: 44, borderRadius: 22,
+              backgroundColor: '#1a1a1a',
               alignItems: 'center', justifyContent: 'center',
             }}
+            accessibilityLabel="Retour"
           >
-            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
               <Path d="M19 12H5M12 19l-7-7 7-7" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
           </TouchableOpacity>
 
-          <View style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
+          {/* Bloc titre aligne a gauche : date au-dessus (compacte), nom dessous. */}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            {compactDate ? (
+              <Text
+                style={{
+                  color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '700',
+                  letterSpacing: 0.6,
+                  textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
+                }}
+                numberOfLines={1}
+              >
+                {compactDate}
+              </Text>
+            ) : null}
             <Text
               style={{
                 color: '#fff', fontSize: 18, fontWeight: '700',
                 fontFamily: 'AVEstiana', fontStyle: 'normal',
                 textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
+                marginTop: compactDate ? 1 : 0,
               }}
               numberOfLines={1}
             >
               {session?.event?.name || 'Événement'}
             </Text>
-            {session?.event?.event_date ? (
-              <Text
-                style={{
-                  color: 'rgba(255,255,255,0.75)', fontSize: 11, marginTop: 1,
-                  textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
-                }}
-                numberOfLines={1}
-              >
-                {formatDateLong(session.event.event_date, session.event.event_date_end)}
-              </Text>
-            ) : null}
           </View>
 
-          {/* Cluster a droite : chip "derniere photo" (mini-galerie) + Deconnexion. */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {/* Chip 28px round : derniere photo uploadee (myPhotos[0]). Tap
-                ouvre la sheet grille. Affiche un placeholder appareil photo
-                tant qu'aucune photo n'est encore uploadee (ou pendant le
-                premier fetch). Erreur reseau : on garde le placeholder, on
-                ne bloque PAS le bouton. */}
+          {/* Cluster droit : chevron (toggle details) + power rouge (logout). */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TouchableOpacity
-              onPress={() => setGalleryOpen(true)}
-              hitSlop={10}
-              activeOpacity={0.8}
+              onPress={() => setTechExpanded(v => !v)}
+              hitSlop={8}
+              accessibilityLabel={techExpanded ? 'Cacher les détails' : 'Voir les détails'}
               style={{
-                width: 28, height: 28, borderRadius: 14,
-                backgroundColor: 'rgba(255,255,255,0.12)',
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: '#1a1a1a',
                 alignItems: 'center', justifyContent: 'center',
-                overflow: 'hidden',
               }}
-              accessibilityLabel="Voir mes photos"
             >
-              {myPhotos.length > 0 && myPhotos[0]?.thumb_url ? (
-                <ExpoImage
-                  source={{ uri: myPhotos[0].thumb_url }}
-                  style={{ width: '100%', height: '100%' }}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  transition={150}
-                  recyclingKey={myPhotos[0].key}
+              <Svg width={16} height={10} viewBox="0 0 16 10" fill="none">
+                <Path
+                  d={techExpanded ? "M2 8L8 2L14 8" : "M2 2L8 8L14 2"}
+                  stroke="#fff"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
-              ) : (
-                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                  <Path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="#fff" strokeWidth={1.8} />
-                </Svg>
-              )}
+              </Svg>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
                 if (pendingCount > 0) {
-                  // Alerte combinee : warning photos en transit + rappel de
-                  // ressaisie du mot de passe, dans un seul popup pour ne pas
-                  // empiler deux modales sur le meme geste.
                   Alert.alert(
                     'Photos en cours d\'envoi',
                     `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer. Garde l'app ouverte encore un instant pour qu'elles partent. Si tu te déconnectes, elles repartiront à ta prochaine connexion (tu devras ressaisir ton mot de passe).`,
@@ -4462,181 +4462,96 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                   );
                 }
               }}
-              hitSlop={10}
+              hitSlop={8}
               style={{
-                width: 28, height: 28, borderRadius: 14,
-                backgroundColor: 'rgba(255,255,255,0.12)',
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: '#F43F5E',
                 alignItems: 'center', justifyContent: 'center',
               }}
+              accessibilityLabel="Déconnexion"
             >
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 2v10" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
-                <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                <Path d="M12 2v10" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+                <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
               </Svg>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Status bar refondue (2026-05-26) : 1 seule ligne horizontale,
-            edge-to-edge (marginHorizontal negatif pour casser le padding 20 du
-            parent et s'aligner sur la largeur du bouton Stop ci-dessous).
-            3 infos compactes separees par " · " :
-              [voyant lumiere]  ·  [N sauvegardees]  ·  [N en attente]
-            - Lumiere : voyant ISO live (frame processor natif, source de
-              verite des l'ouverture camera, AVANT toute capture).
-            - Sauvegardees : uploadedCount, incremente UNIQUEMENT sur PUT 200
-              OK confirme par R2.
-            - En attente : captures en vol + queue pending/uploading. EXCLUT
-              les failed (qui restent sur la ligne orange "X a renvoyer" si > 0,
-              car c'est une anomalie qui demande une action — pas un transit).
-            Compteurs internes (capturedCount, inFlight, queueStats, lostCount)
-            restent calcules pour la logique drain/debug, plus affiches ici. */}
-        <View style={{
-          marginTop: 8,
-          marginHorizontal: -20,
-          paddingHorizontal: 12,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          {/* Voyant lumiere */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{
-              width: 8, height: 8, borderRadius: 4,
-              backgroundColor: lightDot,
-            }} />
-            <Text style={{
-              color: 'rgba(255,255,255,0.9)', fontSize: 11, fontWeight: '600',
-              letterSpacing: 0.3,
-              textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
-            }}>
-              {lightLabel}
-            </Text>
-          </View>
-
-          {/* Separateur */}
-          <Text style={{
-            color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '600',
-            marginHorizontal: 10,
-            textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
-          }}>·</Text>
-
-          {/* Sauvegardees (cloud + compteur, toujours visible) */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M17.5 19a4.5 4.5 0 00.5-8.97 6 6 0 00-11.62-1.5A4.5 4.5 0 006.5 19h11z"
-                stroke={cloudColor}
-                strokeWidth={1.8}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill={cloudActive ? 'rgba(59,130,246,0.18)' : 'none'}
-              />
-            </Svg>
-            <Text style={{
-              color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '600',
-              letterSpacing: 0.3,
-              textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
-            }}>
-              {uploadedCount} sauvegardée{uploadedCount > 1 ? 's' : ''}
-            </Text>
-          </View>
-
-          {/* Separateur */}
-          <Text style={{
-            color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '600',
-            marginHorizontal: 10,
-            textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
-          }}>·</Text>
-
-          {/* En attente (transit normal, toujours visible) */}
-          <Text style={{
-            color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '600',
-            letterSpacing: 0.3,
-            textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
+        {/* Panneau details replie : compteurs + erreur + progress + readout
+            (preview/dev only). Visible uniquement quand chevron deplie. */}
+        {techExpanded && (
+          <View style={{
+            marginTop: 12,
+            paddingHorizontal: 14, paddingVertical: 10,
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            borderRadius: 14,
           }}>
-            {pendingCount} en attente
-          </Text>
-        </View>
+            <View style={{
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                  <Path
+                    d="M17.5 19a4.5 4.5 0 00.5-8.97 6 6 0 00-11.62-1.5A4.5 4.5 0 006.5 19h11z"
+                    stroke={cloudColor}
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill={cloudActive ? 'rgba(59,130,246,0.18)' : 'none'}
+                  />
+                </Svg>
+                <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' }}>
+                  {uploadedCount} sauvegardée{uploadedCount > 1 ? 's' : ''}
+                </Text>
+              </View>
+              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginHorizontal: 10 }}>·</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' }}>
+                {pendingCount} en attente
+              </Text>
+            </View>
 
-        {/* Debug readout (preview/dev only) : derniere mesure live brute du
-            frame processor — ISO + shutter effectif + EV. Sert au diagnostic
-            terrain "pourquoi cette photo est floue" : shutter cape a 1/30s
-            sur preview 30 fps + ISO qui grimpe = scene trop sombre, flou de
-            mouvement imminent.
-            Replie par defaut derriere une petite fleche centree pour ne pas
-            polluer la vue benevole. Tap fleche → reveal/cache. Aucun
-            affichage en production (gated par IS_PREVIEW_OR_DEV). */}
-        {IS_PREVIEW_OR_DEV && liveExposureSamples.length > 0 && (
-          <View style={{ alignItems: 'center', marginTop: 4 }}>
-            <TouchableOpacity
-              onPress={() => setTechExpanded(v => !v)}
-              hitSlop={10}
-              activeOpacity={0.6}
-              accessibilityLabel={techExpanded ? 'Cacher les valeurs techniques' : 'Voir les valeurs techniques'}
-              style={{ paddingVertical: 2, paddingHorizontal: 12 }}
-            >
-              <Svg width={14} height={8} viewBox="0 0 14 8" fill="none">
-                <Path
-                  d={techExpanded ? "M2 6L7 1L12 6" : "M2 2L7 7L12 2"}
-                  stroke="rgba(255,255,255,0.55)"
-                  strokeWidth={1.6}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </TouchableOpacity>
-            {techExpanded && (() => {
+            {(lostCount + queueStats.failed) > 0 && (
+              <Text style={{
+                color: '#FB923C', fontSize: 12, fontWeight: '700',
+                textAlign: 'center', marginTop: 6,
+              }}>
+                {lostCount + queueStats.failed} à renvoyer
+              </Text>
+            )}
+
+            {drainShowBar && (
+              <View style={{ marginTop: 8 }}>
+                <View style={{
+                  height: 3, borderRadius: 2,
+                  backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden',
+                }}>
+                  <View style={{
+                    width: `${Math.round(drainProgress * 100)}%`,
+                    height: '100%', backgroundColor: '#22C55E', borderRadius: 2,
+                  }} />
+                </View>
+                <Text style={{
+                  color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '600',
+                  textAlign: 'center', marginTop: 4,
+                }}>
+                  {Math.round(drainProgress * drainStartTotal)} / {drainStartTotal} envoyées
+                </Text>
+              </View>
+            )}
+
+            {IS_PREVIEW_OR_DEV && liveExposureSamples.length > 0 && (() => {
               const last = liveExposureSamples[liveExposureSamples.length - 1];
               return (
                 <Text style={{
                   color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '600',
-                  textAlign: 'center', marginTop: 2, letterSpacing: 0.4,
+                  textAlign: 'center', marginTop: 8, letterSpacing: 0.4,
                   fontVariant: ['tabular-nums'],
-                  textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
                 }}>
                   ISO {Math.round(last.iso)}  ·  {formatShutter(last.shutter)}  ·  {formatEV(last.brightness)}
                 </Text>
               );
             })()}
-          </View>
-        )}
-
-        {/* Filet de securite : n'apparait QUE si une photo est bloquee (failed
-            apres retries ou perdue dans le pipeline). Anomalie qui demande
-            une action, garde ce filet rouge orange pour ne pas etre noyee
-            dans la ligne neutre du transit normal. */}
-        {(lostCount + queueStats.failed) > 0 && (
-          <Text style={{
-            color: '#FB923C', fontSize: 11, fontWeight: '700',
-            letterSpacing: 0.3, textAlign: 'center', marginTop: 4,
-            textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
-          }}>
-            {lostCount + queueStats.failed} à renvoyer
-          </Text>
-        )}
-
-        {/* Progress bar : visible quand un drain en cours porte sur > 5 photos. */}
-        {drainShowBar && (
-          <View style={{ marginTop: 8, paddingHorizontal: 40 }}>
-            <View style={{
-              height: 3, borderRadius: 2,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-              overflow: 'hidden',
-            }}>
-              <View style={{
-                width: `${Math.round(drainProgress * 100)}%`,
-                height: '100%',
-                backgroundColor: '#22C55E',
-                borderRadius: 2,
-              }} />
-            </View>
-            <Text style={{
-              color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '600',
-              textAlign: 'center', marginTop: 4, letterSpacing: 0.3,
-            }}>
-              {Math.round(drainProgress * drainStartTotal)} / {drainStartTotal} envoyées
-            </Text>
           </View>
         )}
       </Animated.View>
@@ -4770,165 +4685,122 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         </View>
       </Animated.View>
 
-      {/* ─── Mini-galerie : sheet pageSheet remonte du bas, grille 3 cols.
-          Sobre, fond noir, juste les vignettes. Tap vignette → viewer
-          fullscreen interne (tap photo pour fermer). Etats : loading, vide,
-          erreur reseau, ok. Limite a 60 (la galerie complete vit dans
-          le dashboard orga). ─── */}
-      <Modal
-        visible={galleryOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setGalleryOpen(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: '#0A0A0A' }}>
+      {/* ─── Pill Luminosité ─── flottante en haut de la preview, centree.
+          Visible UNIQUEMENT si lumi != OK (silence quand tout va bien).
+          Couleur = lightDot (jaune moyenne / rouge faible). */}
+      {(lightDot === '#FBBF24' || lightDot === '#F43F5E') && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: CAMERA_TOP + 16, left: 0, right: 0,
+            alignItems: 'center',
+            zIndex: 5,
+          }}
+        >
           <View style={{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12,
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: 'rgba(255,255,255,0.12)',
+            backgroundColor: lightDot,
+            paddingHorizontal: 20, paddingVertical: 8,
+            borderRadius: 999,
+            shadowColor: '#000',
+            shadowOpacity: 0.25, shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
           }}>
-            <TouchableOpacity
-              onPress={() => setGalleryOpen(false)}
-              hitSlop={10}
-              style={{
-                width: 32, height: 32, borderRadius: 16,
-                backgroundColor: 'rgba(255,255,255,0.12)',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-              accessibilityLabel="Fermer"
-            >
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path d="M6 6l12 12M18 6L6 18" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
-              </Svg>
-            </TouchableOpacity>
             <Text style={{
-              color: '#fff', fontSize: 16, fontWeight: '700',
-              fontFamily: 'AVEstiana',
+              color: '#fff', fontSize: 13, fontWeight: '700',
+              letterSpacing: 0.3,
             }}>
-              Mes photos{myPhotos.length > 0 ? ` (${myPhotos.length})` : ''}
+              {lightLabel}
             </Text>
-            <TouchableOpacity
-              onPress={fetchMyPhotos}
-              disabled={myPhotosLoading}
-              hitSlop={10}
-              style={{
-                width: 32, height: 32, borderRadius: 16,
-                backgroundColor: 'rgba(255,255,255,0.12)',
-                alignItems: 'center', justifyContent: 'center',
-                opacity: myPhotosLoading ? 0.5 : 1,
-              }}
-              accessibilityLabel="Rafraîchir"
-            >
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            </TouchableOpacity>
           </View>
+        </View>
+      )}
 
-          {myPhotosLoading && myPhotos.length === 0 ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <ActivityIndicator color="#fff" />
-            </View>
-          ) : myPhotosError && myPhotos.length === 0 ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, textAlign: 'center', marginBottom: 14 }}>
-                Impossible de charger tes photos pour l'instant.
-              </Text>
-              <TouchableOpacity
-                onPress={fetchMyPhotos}
-                style={{ backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 }}
-              >
-                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Réessayer</Text>
-              </TouchableOpacity>
-            </View>
-          ) : myPhotos.length === 0 ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
-                Aucune photo encore.{'\n'}Les photos que tu prends apparaissent ici dès qu'elles sont sauvegardées.
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={myPhotos.slice(0, 60)}
-              keyExtractor={(item) => item.key}
-              numColumns={3}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  onPress={() => setGalleryViewerPhoto(item)}
-                  activeOpacity={0.85}
-                  style={{ width: '33.333%', aspectRatio: 1, padding: 2 }}
-                >
-                  <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1a1a1a' }}>
-                    <ExpoImage
-                      source={{ uri: item.thumb_url }}
-                      style={StyleSheet.absoluteFillObject}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                      priority="low"
-                      transition={100}
-                      recyclingKey={item.key}
-                    />
-                  </View>
-                </TouchableOpacity>
-              )}
-              refreshControl={
-                <RefreshControl
-                  refreshing={myPhotosLoading}
-                  onRefresh={fetchMyPhotos}
-                  tintColor="#fff"
-                />
-              }
-              contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
-              showsVerticalScrollIndicator={false}
-              removeClippedSubviews
-              initialNumToRender={12}
-              maxToRenderPerBatch={9}
-              windowSize={5}
-            />
-          )}
-
-          {/* Viewer fullscreen interne au sheet : tap n'importe ou sur la
-              photo (ou bouton X) pour fermer. Source : photo.url (pleine
-              resolution via /photo-jpeg pour HEIC). */}
-          <Modal
-            visible={!!galleryViewerPhoto}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setGalleryViewerPhoto(null)}
+      {/* ─── Mini-galerie ─── bande horizontale flottante en bas de la
+          preview (juste au-dessus du Go!). Scroll horizontal pour voir plus,
+          tap vignette → viewer plein ecran. Limite a 60 (au-dela, c'est
+          dans la galerie orga). Cache si aucune photo (silence visuel). */}
+      {myPhotos.length > 0 && (
+        <View
+          style={{
+            position: 'absolute',
+            top: CAMERA_TOP + previewH - 76,
+            left: 0, right: 0,
+            height: 64,
+            zIndex: 5,
+          }}
+        >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6 }}
           >
-            <View style={{ flex: 1, backgroundColor: '#000' }}>
+            {myPhotos.slice(0, 60).map((p) => (
               <TouchableOpacity
-                activeOpacity={1}
-                onPress={() => setGalleryViewerPhoto(null)}
-                style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
-              >
-                {galleryViewerPhoto && (
-                  <ExpoImage
-                    source={{ uri: galleryViewerPhoto.url }}
-                    style={{ width: '100%', height: '100%' }}
-                    contentFit="contain"
-                    cachePolicy="memory-disk"
-                    transition={200}
-                  />
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setGalleryViewerPhoto(null)}
-                hitSlop={10}
+                key={p.key}
+                onPress={() => setGalleryViewerPhoto(p)}
+                activeOpacity={0.85}
                 style={{
-                  position: 'absolute', top: 54, right: 16,
-                  width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: 'rgba(0,0,0,0.55)',
-                  alignItems: 'center', justifyContent: 'center',
+                  width: 56, height: 56, borderRadius: 8,
+                  overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
+                  borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
                 }}
               >
-                <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                  <Path d="M6 6l12 12M18 6L6 18" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
-                </Svg>
+                <ExpoImage
+                  source={{ uri: p.thumb_url }}
+                  style={{ width: '100%', height: '100%' }}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  priority="low"
+                  transition={100}
+                  recyclingKey={p.key}
+                />
               </TouchableOpacity>
-            </View>
-          </Modal>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* ─── Viewer fullscreen ─── ouvert quand on tape une vignette de la
+          bande. Tap n'importe ou (ou X) pour fermer. Source : photo.url
+          (pleine resolution via /photo-jpeg pour HEIC). */}
+      <Modal
+        visible={!!galleryViewerPhoto}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGalleryViewerPhoto(null)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => setGalleryViewerPhoto(null)}
+            style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+          >
+            {galleryViewerPhoto && (
+              <ExpoImage
+                source={{ uri: galleryViewerPhoto.url }}
+                style={{ width: '100%', height: '100%' }}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+                transition={200}
+              />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setGalleryViewerPhoto(null)}
+            hitSlop={10}
+            style={{
+              position: 'absolute', top: 54, right: 16,
+              width: 36, height: 36, borderRadius: 18,
+              backgroundColor: 'rgba(0,0,0,0.55)',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+            accessibilityLabel="Fermer"
+          >
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+              <Path d="M6 6l12 12M18 6L6 18" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+            </Svg>
+          </TouchableOpacity>
         </View>
       </Modal>
 
