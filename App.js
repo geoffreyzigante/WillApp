@@ -6,6 +6,7 @@ import {
   AppState, Share, NativeModules,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Image as ExpoImage } from 'expo-image';
 import * as Font from 'expo-font';
 import * as ImagePicker from 'expo-image-picker';
@@ -4783,8 +4784,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
       {/* ─── Pill Luminosité ─── flottante en haut de la preview, centree.
           Visible UNIQUEMENT si lumi != OK (silence quand tout va bien).
-          Background SOLIDE bright (jaune ou rouge brand), drop shadow pour
-          la lisibilite sur preview claire. */}
+          BlurView iOS natif (intensite 50, tint dark) + tinted overlay
+          color (jaune/rouge selon etat) a basse opacite pour la nuance,
+          rendu glass de notification iOS. */}
       {(lightDot === '#FBBF24' || lightDot === '#F43F5E') && (
         <View
           pointerEvents="none"
@@ -4796,19 +4798,40 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           }}
         >
           <View style={{
-            backgroundColor: lightDot,
-            paddingHorizontal: 22, paddingVertical: 8,
             borderRadius: 999,
+            overflow: 'hidden',
             shadowColor: '#000',
-            shadowOpacity: 0.3, shadowRadius: 8,
-            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.3, shadowRadius: 10,
+            shadowOffset: { width: 0, height: 3 },
           }}>
-            <Text style={{
-              color: '#fff', fontSize: 13, fontWeight: '700',
-              letterSpacing: 0.3,
-            }}>
-              {lightLabel}
-            </Text>
+            <BlurView
+              intensity={60}
+              tint="dark"
+              style={{
+                paddingHorizontal: 22, paddingVertical: 8,
+                borderRadius: 999,
+                overflow: 'hidden',
+              }}
+            >
+              {/* Voile colore subtil pour la nuance jaune/rouge sans casser
+                  le givre — on garde la transparence en majeure partie. */}
+              <View
+                pointerEvents="none"
+                style={{
+                  ...StyleSheet.absoluteFillObject,
+                  backgroundColor: lightDot === '#FBBF24'
+                    ? 'rgba(251,191,36,0.35)'
+                    : 'rgba(244,63,94,0.35)',
+                }}
+              />
+              <Text style={{
+                color: '#fff', fontSize: 13, fontWeight: '600',
+                letterSpacing: 0.3,
+                textShadowColor: 'rgba(0,0,0,0.4)', textShadowRadius: 3,
+              }}>
+                {lightLabel}
+              </Text>
+            </BlurView>
           </View>
         </View>
       )}
