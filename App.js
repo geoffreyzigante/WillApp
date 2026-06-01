@@ -3332,6 +3332,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const myPhotosFetchInFlightRef = useRef(false);
   const myPhotosDebounceRef = useRef(null);
 
+  // Readout technique ISO/shutter/EV : replie par defaut sous une fleche
+  // pour ne pas polluer la vue benevole. Toujours gate IS_PREVIEW_OR_DEV
+  // (jamais visible en prod, meme deplie).
+  const [techExpanded, setTechExpanded] = useState(false);
+
   const fetchMyPhotos = useCallback(async () => {
     if (!session?.event?.code || !session?.token) return;
     if (myPhotosFetchInFlightRef.current) return;
@@ -4558,21 +4563,44 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             frame processor — ISO + shutter effectif + EV. Sert au diagnostic
             terrain "pourquoi cette photo est floue" : shutter cape a 1/30s
             sur preview 30 fps + ISO qui grimpe = scene trop sombre, flou de
-            mouvement imminent. Aucun affichage en production (gated par
-            IS_PREVIEW_OR_DEV). */}
-        {IS_PREVIEW_OR_DEV && liveExposureSamples.length > 0 && (() => {
-          const last = liveExposureSamples[liveExposureSamples.length - 1];
-          return (
-            <Text style={{
-              color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '600',
-              textAlign: 'center', marginTop: 4, letterSpacing: 0.4,
-              fontVariant: ['tabular-nums'],
-              textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
-            }}>
-              ISO {Math.round(last.iso)}  ·  {formatShutter(last.shutter)}  ·  {formatEV(last.brightness)}
-            </Text>
-          );
-        })()}
+            mouvement imminent.
+            Replie par defaut derriere une petite fleche centree pour ne pas
+            polluer la vue benevole. Tap fleche → reveal/cache. Aucun
+            affichage en production (gated par IS_PREVIEW_OR_DEV). */}
+        {IS_PREVIEW_OR_DEV && liveExposureSamples.length > 0 && (
+          <View style={{ alignItems: 'center', marginTop: 4 }}>
+            <TouchableOpacity
+              onPress={() => setTechExpanded(v => !v)}
+              hitSlop={10}
+              activeOpacity={0.6}
+              accessibilityLabel={techExpanded ? 'Cacher les valeurs techniques' : 'Voir les valeurs techniques'}
+              style={{ paddingVertical: 2, paddingHorizontal: 12 }}
+            >
+              <Svg width={14} height={8} viewBox="0 0 14 8" fill="none">
+                <Path
+                  d={techExpanded ? "M2 6L7 1L12 6" : "M2 2L7 7L12 2"}
+                  stroke="rgba(255,255,255,0.55)"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </TouchableOpacity>
+            {techExpanded && (() => {
+              const last = liveExposureSamples[liveExposureSamples.length - 1];
+              return (
+                <Text style={{
+                  color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '600',
+                  textAlign: 'center', marginTop: 2, letterSpacing: 0.4,
+                  fontVariant: ['tabular-nums'],
+                  textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3,
+                }}>
+                  ISO {Math.round(last.iso)}  ·  {formatShutter(last.shutter)}  ·  {formatEV(last.brightness)}
+                </Text>
+              );
+            })()}
+          </View>
+        )}
 
         {/* Filet de securite : n'apparait QUE si une photo est bloquee (failed
             apres retries ou perdue dans le pipeline). Anomalie qui demande
