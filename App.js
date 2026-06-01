@@ -2636,10 +2636,10 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
   // pendant le scroll (onScroll), pas seulement au stop. Le coloring rose
   // et l'opacite suivent en temps reel ; onChange n'est appele qu'au
   // momentum end (eviter spam de setState externes).
-  const ITEM_H = 28;
+  const ITEM_H = 24;
   const HEIGHT = 4 * ITEM_H;
-  const PAD_V_TOP = Math.round(ITEM_H / 2);    // 14 : titre proche du slot select
-  const PAD_V_BOTTOM = 2 * ITEM_H;             // 56 : 2 items visibles en-dessous
+  const PAD_V_TOP = Math.round(ITEM_H / 2);    // 12 : titre proche du slot select
+  const PAD_V_BOTTOM = 2 * ITEM_H;             // 48 : 2 items visibles en-dessous
   const PINK = '#F4A6FF';
   const HAIRLINE = StyleSheet.hairlineWidth;
   const REPEAT = 20;
@@ -4415,16 +4415,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         }}
       />
 
-      {/* ─── TOP AREA — refonte 2026-06-01 ─────────────────────────────
-          Minimaliste : back (44 round dark) | date+nom alignes a gauche |
-          chevron + power rouge (40 round). Tout le reste (compteurs,
-          erreurs, progress, ISO/shutter/EV en dev) est replie sous le
-          chevron. Status bar et tech-readout autonomes supprimes. ───*/}
+      {/* ─── TOP AREA — refonte 2026-06-02 ─────────────────────────────
+          Header pousse vers le bas du black band (paddingTop 80) pour
+          rapprocher le contenu de la preview camera. */}
       <Animated.View
         pointerEvents="box-none"
         style={{
           position: 'absolute', top: 0, left: 0, right: 0,
-          paddingTop: 56, paddingBottom: 12, paddingHorizontal: 16,
+          paddingTop: 80, paddingBottom: 12, paddingHorizontal: 16,
           transform: [{ translateY: headerSlideY }],
           zIndex: 10,
         }}
@@ -4645,6 +4643,40 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           // mais Go! reste en bas de cette zone — visuellement il semble décalé.
           minHeight: Math.max(0, winH - (CAMERA_TOP + previewH)),
         }}>
+          {/* Strip mini-galerie : 1ere ligne du panneau noir, scroll horizontal.
+              Tap n'importe quelle vignette → ouvre la sheet grille complete. */}
+          {myPhotos.length > 0 && (
+            <View style={{ height: 56, marginHorizontal: -16 }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6, height: 56 }}
+              >
+                {myPhotos.slice(0, 60).map((p) => (
+                  <TouchableOpacity
+                    key={p.key}
+                    onPress={() => setGalleryOpen(true)}
+                    activeOpacity={0.85}
+                    style={{
+                      width: 44, height: 44, borderRadius: 6,
+                      overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    <ExpoImage
+                      source={{ uri: p.thumb_url }}
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      priority="low"
+                      transition={100}
+                      recyclingKey={p.key}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           {/* Row 1 : bandeau Go!/Stop — top aligné strictement avec le haut du panneau noir */}
           <TouchableOpacity
             onPress={onCapturePress}
@@ -4687,7 +4719,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 if (v && selectedKm !== null && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(null);
               };
               return (
-                <View style={{ flex: 1, paddingTop: 16, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
+                <View style={{ flex: 1, paddingTop: 10, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 0 }}>
                     <Text style={{
                       color: '#fff', fontSize: 20, fontWeight: '600', letterSpacing: 0.2,
@@ -4729,7 +4761,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               const kmIdx = rawIdx >= 0 ? rawIdx : 0;
               const setKmIdx = (idx) => setSelectedKm(kmItems[idx].value);
               return (
-                <View style={{ flex: 1, paddingTop: 16, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
+                <View style={{ flex: 1, paddingTop: 10, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 0 }}>
                     <Text style={{
                       color: '#fff', fontSize: 20, fontWeight: '600', letterSpacing: 0.2,
@@ -4781,52 +4813,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         </View>
       )}
 
-      {/* ─── Mini-galerie ─── bande horizontale flottante en bas de la
-          preview (juste au-dessus du Go!). Vignettes 44px qui flottent
-          DIRECTEMENT sur la preview (pas de bandeau noir derriere) ;
-          drop shadow sur chaque vignette pour la lisibilite. Tap → sheet. */}
-      {myPhotos.length > 0 && (
-        <View
-          style={{
-            position: 'absolute',
-            top: CAMERA_TOP + previewH - 60,
-            left: 0, right: 0,
-            height: 52,
-            zIndex: 5,
-          }}
-        >
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6, height: 52 }}
-          >
-            {myPhotos.slice(0, 60).map((p) => (
-              <TouchableOpacity
-                key={p.key}
-                onPress={() => setGalleryOpen(true)}
-                activeOpacity={0.85}
-                style={{
-                  width: 44, height: 44, borderRadius: 6,
-                  overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
-                  shadowColor: '#000',
-                  shadowOpacity: 0.4, shadowRadius: 4,
-                  shadowOffset: { width: 0, height: 1 },
-                }}
-              >
-                <ExpoImage
-                  source={{ uri: p.thumb_url }}
-                  style={{ width: '100%', height: '100%' }}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  priority="low"
-                  transition={100}
-                  recyclingKey={p.key}
-                />
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+      {/* Strip mini-galerie deplace dans le BOTTOM AREA (juste au-dessus
+          du Go!) pour eviter l'overlap avec le panneau noir qui a grandi. */}
 
       {/* ─── Mini-galerie sheet ─── ouverte au tap d'une vignette de la bande,
           grille 3 cols complete. Tap vignette dans la sheet → viewer plein
