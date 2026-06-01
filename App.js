@@ -2629,29 +2629,32 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 // pour fondre la roulette sous le titre.
 function OverlayWheel({ items, selectedIndex, onChange }) {
   // iOS-style picker INFINI (refonte 2026-06-02) : items dupliques REPEAT
-  // fois, position initiale au milieu, mapping modulo pour boucler le
-  // defilement. 4 slots visibles asymetriques (1 au-dessus, selection
-  // slot 2, 2 en-dessous), fade noir en haut et en bas, lignes hairline.
+  // fois, snap-back silencieux au middle block des qu'on s'approche des
+  // bords (boucle infinie en pratique). PAD_V_TOP reduit a ITEM_H/2 pour
+  // rapprocher le titre de la selection.
+  // Visual feedback INSTANTANE : visualIndex track la position courante
+  // pendant le scroll (onScroll), pas seulement au stop. Le coloring rose
+  // et l'opacite suivent en temps reel ; onChange n'est appele qu'au
+  // momentum end (eviter spam de setState externes).
   const ITEM_H = 28;
   const HEIGHT = 4 * ITEM_H;
-  const PAD_V_TOP = ITEM_H;
-  const PAD_V_BOTTOM = 2 * ITEM_H;
-  const PURPLE = '#7B2FFF';
+  const PAD_V_TOP = Math.round(ITEM_H / 2);    // 14 : titre proche du slot select
+  const PAD_V_BOTTOM = 2 * ITEM_H;             // 56 : 2 items visibles en-dessous
+  const PINK = '#F4A6FF';
   const HAIRLINE = StyleSheet.hairlineWidth;
   const REPEAT = 20;
   const N = items.length;
   const middleStart = Math.floor(REPEAT / 2) * N;
   const initialGi = middleStart + selectedIndex;
   const totalCount = REPEAT * N;
-  // Marge avant teleportation : on ne laisse pas l'utilisateur atteindre
-  // les vrais bords du contenu. Des qu'il scroll a moins de SAFE blocs du
-  // bord, on le ramene en silence au block central correspondant.
   const SAFE = 3;
   const scrollRef = useRef(null);
   const lastGiRef = useRef(initialGi);
+  // visualIndex = item actuellement DANS le slot selectionne (suivi du scroll).
+  // Sert au coloring rose. Synchronise sur selectedIndex en cas de change ext.
+  const [visualIndex, setVisualIndex] = useState(selectedIndex);
+  useEffect(() => { setVisualIndex(selectedIndex); }, [selectedIndex]);
 
-  // selectedIndex change externe (label tap reset, ou autre) → scroll vers
-  // la copie LA PLUS PROCHE de la position actuelle.
   useEffect(() => {
     const cur = lastGiRef.current;
     const curBlock = Math.floor(cur / N);
@@ -2680,9 +2683,6 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
         contentContainerStyle={{ paddingTop: PAD_V_TOP, paddingBottom: PAD_V_BOTTOM }}
         onMomentumScrollEnd={e => {
           let gi = Math.round(e.nativeEvent.contentOffset.y / ITEM_H);
-          // Snap back vers le block central si on s'approche des bords :
-          // teleportation sans animation, l'item visible reste le meme
-          // (gi a la meme valeur modulo N apres reset).
           const block = Math.floor(gi / N);
           if (block < SAFE || block >= REPEAT - SAFE) {
             const offsetWithinBlock = gi - block * N;
@@ -2694,15 +2694,18 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
           if (idx !== selectedIndex) onChange(idx);
         }}
         onScroll={e => {
-          lastGiRef.current = Math.round(e.nativeEvent.contentOffset.y / ITEM_H);
+          const gi = Math.round(e.nativeEvent.contentOffset.y / ITEM_H);
+          lastGiRef.current = gi;
+          const idx = ((gi % N) + N) % N;
+          if (idx !== visualIndex) setVisualIndex(idx);
         }}
-        scrollEventThrottle={64}
+        scrollEventThrottle={16}
       >
         {Array.from({ length: totalCount }, (_, gi) => {
           const i = gi % N;
           const it = items[i];
-          const isSel = i === selectedIndex;
-          const delta = i - selectedIndex;
+          const isSel = i === visualIndex;
+          const delta = i - visualIndex;
           let opacity = 0.2;
           if (isSel) opacity = 1;
           else if (delta === -1) opacity = 0.35;
@@ -2710,7 +2713,7 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
           return (
             <View key={gi} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center' }}>
               <Text style={{
-                color: isSel ? PURPLE : '#fff',
+                color: isSel ? PINK : '#fff',
                 opacity,
                 fontSize: isSel ? 17 : 15,
                 fontWeight: isSel ? '500' : '400',
@@ -2719,32 +2722,32 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
           );
         })}
       </ScrollView>
-      {/* Fade vers le noir, en haut (au-dessus du slot selectionne) */}
+      {/* Fade vers le noir, en haut */}
       <LinearGradient
         pointerEvents="none"
         colors={['#000', 'rgba(0,0,0,0)']}
         start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: PAD_V_TOP }}
       />
-      {/* Fade vers le noir, en bas (sous les items au-dessous de la selection) */}
+      {/* Fade vers le noir, en bas */}
       <LinearGradient
         pointerEvents="none"
         colors={['rgba(0,0,0,0)', '#000']}
         start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: PAD_V_BOTTOM }}
       />
-      {/* Lignes violettes hairline (au-dessus des gradients pour rester visibles) */}
+      {/* Lignes roses hairline au-dessus et au-dessous du slot selectionne */}
       <View pointerEvents="none" style={{
         position: 'absolute',
         top: PAD_V_TOP, left: 24, right: 24,
         height: HAIRLINE,
-        backgroundColor: PURPLE,
+        backgroundColor: PINK,
       }} />
       <View pointerEvents="none" style={{
         position: 'absolute',
         top: PAD_V_TOP + ITEM_H - HAIRLINE, left: 24, right: 24,
         height: HAIRLINE,
-        backgroundColor: PURPLE,
+        backgroundColor: PINK,
       }} />
     </View>
   );
@@ -4684,7 +4687,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 if (v && selectedKm !== null && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(null);
               };
               return (
-                <View style={{ flex: 1, paddingTop: 0, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
+                <View style={{ flex: 1, paddingTop: 16, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 0 }}>
                     <Text style={{
                       color: '#fff', fontSize: 20, fontWeight: '600', letterSpacing: 0.2,
@@ -4726,7 +4729,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               const kmIdx = rawIdx >= 0 ? rawIdx : 0;
               const setKmIdx = (idx) => setSelectedKm(kmItems[idx].value);
               return (
-                <View style={{ flex: 1, paddingTop: 0, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
+                <View style={{ flex: 1, paddingTop: 16, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 0 }}>
                     <Text style={{
                       color: '#fff', fontSize: 20, fontWeight: '600', letterSpacing: 0.2,
