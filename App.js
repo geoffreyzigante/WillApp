@@ -3314,6 +3314,82 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     return () => sub.remove();
   }, []);
 
+  // ─── Mini-galerie photographe ─────────────────────────────────────────
+  // Chip 28px dans le header montre la derniere photo uploadee ; tap →
+  // sheet grille des N dernieres pour cet event. Source : worker R2 via
+  // /photographer/my-photos (filtre prefix {eventCode}/{photographerId}/).
+  // Pas de liste locale : les fichiers sont supprimes apres PUT 200 OK.
+  // Refresh sur 3 triggers, jamais en polling :
+  //   - mount + retour foreground
+  //   - bump uploadedCount (debounce 800ms : un burst declenche 1 fetch et
+  //     pas N)
+  // Erreur reseau silencieuse : la mini-galerie ne bloque PAS la capture.
+  const [myPhotos, setMyPhotos] = useState([]);
+  const [myPhotosLoading, setMyPhotosLoading] = useState(false);
+  const [myPhotosError, setMyPhotosError] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryViewerPhoto, setGalleryViewerPhoto] = useState(null);
+  const myPhotosFetchInFlightRef = useRef(false);
+  const myPhotosDebounceRef = useRef(null);
+
+  const fetchMyPhotos = useCallback(async () => {
+    if (!session?.event?.code || !session?.token) return;
+    if (myPhotosFetchInFlightRef.current) return;
+    myPhotosFetchInFlightRef.current = true;
+    if (isMountedRef.current) setMyPhotosLoading(true);
+    try {
+      const r = await fetch(
+        `${API_URL}/photographer/my-photos?eventCode=${encodeURIComponent(session.event.code)}`,
+        { headers: { Authorization: `Bearer ${session.token}` } },
+      );
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      const list = Array.isArray(data?.photos) ? data.photos : [];
+      // Tri burstTs DESC puis idx DESC -- meme convention que loadPhotos
+      // public/orga ; recente en tete pour que la chip montre la derniere.
+      list.sort((a, b) => {
+        const dt = extractBurstTs(b.key) - extractBurstTs(a.key);
+        if (dt !== 0) return dt;
+        return extractIdx(b.key) - extractIdx(a.key);
+      });
+      if (isMountedRef.current) {
+        setMyPhotos(list);
+        setMyPhotosError(false);
+      }
+    } catch (e) {
+      console.warn('[my-photos] fetch failed:', e?.message || e);
+      if (isMountedRef.current) setMyPhotosError(true);
+    } finally {
+      myPhotosFetchInFlightRef.current = false;
+      if (isMountedRef.current) setMyPhotosLoading(false);
+    }
+  }, [session?.event?.code, session?.token]);
+
+  useEffect(() => {
+    fetchMyPhotos();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') fetchMyPhotos();
+    });
+    return () => sub.remove();
+  }, [fetchMyPhotos]);
+
+  // Debounce 800ms sur le bump uploadedCount : pendant un burst plusieurs
+  // PUT 200 arrivent en <1s, on declenche UN fetch ~800ms apres le dernier.
+  useEffect(() => {
+    if (uploadedCount === 0) return;
+    if (myPhotosDebounceRef.current) clearTimeout(myPhotosDebounceRef.current);
+    myPhotosDebounceRef.current = setTimeout(() => {
+      myPhotosDebounceRef.current = null;
+      fetchMyPhotos();
+    }, 800);
+    return () => {
+      if (myPhotosDebounceRef.current) {
+        clearTimeout(myPhotosDebounceRef.current);
+        myPhotosDebounceRef.current = null;
+      }
+    };
+  }, [uploadedCount, fetchMyPhotos]);
+
   // Enqueue: deplace le fichier brut capture vers will_pending/raw/{id}.heic,
   // ecrit son sidecar JSON, et ajoute l'item a la queue en `processed:false`
   // pour que processQueue le prenne en charge. Le move (vs copy) est volontaire :
@@ -4319,8 +4395,41 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             ) : null}
           </View>
 
-          {/* Cluster a droite : Deconnexion. */}
+          {/* Cluster a droite : chip "derniere photo" (mini-galerie) + Deconnexion. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {/* Chip 28px round : derniere photo uploadee (myPhotos[0]). Tap
+                ouvre la sheet grille. Affiche un placeholder appareil photo
+                tant qu'aucune photo n'est encore uploadee (ou pendant le
+                premier fetch). Erreur reseau : on garde le placeholder, on
+                ne bloque PAS le bouton. */}
+            <TouchableOpacity
+              onPress={() => setGalleryOpen(true)}
+              hitSlop={10}
+              activeOpacity={0.8}
+              style={{
+                width: 28, height: 28, borderRadius: 14,
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                alignItems: 'center', justifyContent: 'center',
+                overflow: 'hidden',
+              }}
+              accessibilityLabel="Voir mes photos"
+            >
+              {myPhotos.length > 0 && myPhotos[0]?.thumb_url ? (
+                <ExpoImage
+                  source={{ uri: myPhotos[0].thumb_url }}
+                  style={{ width: '100%', height: '100%' }}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={150}
+                  recyclingKey={myPhotos[0].key}
+                />
+              ) : (
+                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                  <Path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="#fff" strokeWidth={1.8} />
+                </Svg>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
                 if (pendingCount > 0) {
@@ -4632,6 +4741,168 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
         </View>
       </Animated.View>
+
+      {/* ─── Mini-galerie : sheet pageSheet remonte du bas, grille 3 cols.
+          Sobre, fond noir, juste les vignettes. Tap vignette → viewer
+          fullscreen interne (tap photo pour fermer). Etats : loading, vide,
+          erreur reseau, ok. Limite a 60 (la galerie complete vit dans
+          le dashboard orga). ─── */}
+      <Modal
+        visible={galleryOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setGalleryOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#0A0A0A' }}>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: 'rgba(255,255,255,0.12)',
+          }}>
+            <TouchableOpacity
+              onPress={() => setGalleryOpen(false)}
+              hitSlop={10}
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+              accessibilityLabel="Fermer"
+            >
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 6l12 12M18 6L6 18" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+              </Svg>
+            </TouchableOpacity>
+            <Text style={{
+              color: '#fff', fontSize: 16, fontWeight: '700',
+              fontFamily: 'AVEstiana',
+            }}>
+              Mes photos{myPhotos.length > 0 ? ` (${myPhotos.length})` : ''}
+            </Text>
+            <TouchableOpacity
+              onPress={fetchMyPhotos}
+              disabled={myPhotosLoading}
+              hitSlop={10}
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                alignItems: 'center', justifyContent: 'center',
+                opacity: myPhotosLoading ? 0.5 : 1,
+              }}
+              accessibilityLabel="Rafraîchir"
+            >
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                <Path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+
+          {myPhotosLoading && myPhotos.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator color="#fff" />
+            </View>
+          ) : myPhotosError && myPhotos.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, textAlign: 'center', marginBottom: 14 }}>
+                Impossible de charger tes photos pour l'instant.
+              </Text>
+              <TouchableOpacity
+                onPress={fetchMyPhotos}
+                style={{ backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 }}
+              >
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Réessayer</Text>
+              </TouchableOpacity>
+            </View>
+          ) : myPhotos.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+                Aucune photo encore.{'\n'}Les photos que tu prends apparaissent ici dès qu'elles sont sauvegardées.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={myPhotos.slice(0, 60)}
+              keyExtractor={(item) => item.key}
+              numColumns={3}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() => setGalleryViewerPhoto(item)}
+                  activeOpacity={0.85}
+                  style={{ width: '33.333%', aspectRatio: 1, padding: 2 }}
+                >
+                  <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1a1a1a' }}>
+                    <ExpoImage
+                      source={{ uri: item.thumb_url }}
+                      style={StyleSheet.absoluteFillObject}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      priority="low"
+                      transition={100}
+                      recyclingKey={item.key}
+                    />
+                  </View>
+                </TouchableOpacity>
+              )}
+              refreshControl={
+                <RefreshControl
+                  refreshing={myPhotosLoading}
+                  onRefresh={fetchMyPhotos}
+                  tintColor="#fff"
+                />
+              }
+              contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews
+              initialNumToRender={12}
+              maxToRenderPerBatch={9}
+              windowSize={5}
+            />
+          )}
+
+          {/* Viewer fullscreen interne au sheet : tap n'importe ou sur la
+              photo (ou bouton X) pour fermer. Source : photo.url (pleine
+              resolution via /photo-jpeg pour HEIC). */}
+          <Modal
+            visible={!!galleryViewerPhoto}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setGalleryViewerPhoto(null)}
+          >
+            <View style={{ flex: 1, backgroundColor: '#000' }}>
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => setGalleryViewerPhoto(null)}
+                style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+              >
+                {galleryViewerPhoto && (
+                  <ExpoImage
+                    source={{ uri: galleryViewerPhoto.url }}
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="contain"
+                    cachePolicy="memory-disk"
+                    transition={200}
+                  />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setGalleryViewerPhoto(null)}
+                hitSlop={10}
+                style={{
+                  position: 'absolute', top: 54, right: 16,
+                  width: 36, height: 36, borderRadius: 18,
+                  backgroundColor: 'rgba(0,0,0,0.55)',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                  <Path d="M6 6l12 12M18 6L6 18" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+                </Svg>
+              </TouchableOpacity>
+            </View>
+          </Modal>
+        </View>
+      </Modal>
 
     </View>
   );
