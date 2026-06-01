@@ -2628,25 +2628,35 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 // au-dessus/en-dessous attenues. Top-fade en degrade vers le panneau noir
 // pour fondre la roulette sous le titre.
 function OverlayWheel({ items, selectedIndex, onChange }) {
-  const ITEM_H = 26;
-  const VISIBLE = 3;
+  // Refonte 2026-06-01 : selection violet (brand primary #7B2FFF) avec
+  // lignes horizontales au-dessus et en-dessous (au lieu du pill rond
+  // contour rose). VISIBLE etendu a 5 pour montrer plus de contexte
+  // au-dessus/au-dessous de la selection.
+  const ITEM_H = 28;
+  const VISIBLE = 5;
   const HEIGHT = VISIBLE * ITEM_H;
   const PAD_V = ((VISIBLE - 1) / 2) * ITEM_H;
+  const PURPLE = '#7B2FFF';
   const scrollRef = useRef(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: selectedIndex * ITEM_H, animated: true });
   }, [selectedIndex]);
   return (
     <View style={{ height: HEIGHT, alignSelf: 'stretch', position: 'relative' }}>
-      {/* Pastille de selection au centre, contour rose + bg blanc subtil, pill arrondi */}
+      {/* Lignes violettes au-dessus et en-dessous de la selection */}
       <View pointerEvents="none" style={{
         position: 'absolute',
-        top: PAD_V, left: 8, right: 8,
-        height: ITEM_H,
-        borderRadius: 999,
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        borderWidth: 0.5,
-        borderColor: 'rgba(230,115,255,0.45)',
+        top: PAD_V, left: 16, right: 16,
+        height: 1.5,
+        backgroundColor: PURPLE,
+        borderRadius: 1,
+      }} />
+      <View pointerEvents="none" style={{
+        position: 'absolute',
+        top: PAD_V + ITEM_H - 1.5, left: 16, right: 16,
+        height: 1.5,
+        backgroundColor: PURPLE,
+        borderRadius: 1,
       }} />
       <ScrollView
         ref={scrollRef}
@@ -2662,33 +2672,22 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
       >
         {items.map((it, i) => {
           const isSel = i === selectedIndex;
+          const dist = Math.abs(i - selectedIndex);
+          // Opacite degressive : selection 1.0, voisins immediats 0.5,
+          // au-dela 0.25 pour rappeler la profondeur de la roulette.
+          const opacity = isSel ? 1 : dist === 1 ? 0.5 : 0.25;
           return (
             <View key={i} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center' }}>
               <Text style={{
-                color: isSel ? '#E673FF' : 'rgba(255,255,255,0.4)',
-                fontSize: isSel ? 15 : 13,
-                fontWeight: '500',
+                color: isSel ? PURPLE : '#fff',
+                opacity,
+                fontSize: isSel ? 16 : 14,
+                fontWeight: isSel ? '700' : '500',
               }}>{it.label}</Text>
             </View>
           );
         })}
       </ScrollView>
-      {/* Top-fade : confine STRICTEMENT a la zone au-dessus de la selection
-          (height = PAD_V exactement). Opaque sur 75% (couvre le texte du
-          haut centre a 50%), puis fade-out vers transparent juste avant
-          le top de la pastille selectionnee. Pas de chevauchement. */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={['rgba(0,0,0,1)', 'rgba(0,0,0,1)', 'rgba(0,0,0,0)']}
-        locations={[0, 0.75, 1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0,
-          height: PAD_V,
-        }}
-      />
     </View>
   );
 }
@@ -3327,6 +3326,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const [myPhotos, setMyPhotos] = useState([]);
   const [myPhotosLoading, setMyPhotosLoading] = useState(false);
   const [myPhotosError, setMyPhotosError] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryViewerPhoto, setGalleryViewerPhoto] = useState(null);
   const myPhotosFetchInFlightRef = useRef(false);
   const myPhotosDebounceRef = useRef(null);
@@ -4373,42 +4373,43 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           style={StyleSheet.absoluteFillObject}
           pointerEvents="none"
         />
+        {/* Date sur sa propre ligne (kicker au-dessus du nom), indentee
+            pour s'aligner avec le nom. paddingLeft = back arrow (36) + gap (12). */}
+        {compactDate ? (
+          <Text
+            style={{
+              color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '700',
+              letterSpacing: 0.6, paddingLeft: 48, marginBottom: 2,
+              textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
+            }}
+            numberOfLines={1}
+          >
+            {compactDate}
+          </Text>
+        ) : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity
             onPress={() => confirmLeaveWithPending(onExit || onLogout)}
             hitSlop={10}
             style={{
-              width: 44, height: 44, borderRadius: 22,
+              width: 36, height: 36, borderRadius: 18,
               backgroundColor: '#1a1a1a',
               alignItems: 'center', justifyContent: 'center',
             }}
             accessibilityLabel="Retour"
           >
-            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
               <Path d="M19 12H5M12 19l-7-7 7-7" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
           </TouchableOpacity>
 
-          {/* Bloc titre aligne a gauche : date au-dessus (compacte), nom dessous. */}
+          {/* Nom de l'event, centre verticalement avec le back arrow */}
           <View style={{ flex: 1, minWidth: 0 }}>
-            {compactDate ? (
-              <Text
-                style={{
-                  color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '700',
-                  letterSpacing: 0.6,
-                  textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
-                }}
-                numberOfLines={1}
-              >
-                {compactDate}
-              </Text>
-            ) : null}
             <Text
               style={{
                 color: '#fff', fontSize: 18, fontWeight: '700',
                 fontFamily: 'AVEstiana', fontStyle: 'normal',
                 textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
-                marginTop: compactDate ? 1 : 0,
               }}
               numberOfLines={1}
             >
@@ -4423,12 +4424,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               hitSlop={8}
               accessibilityLabel={techExpanded ? 'Cacher les détails' : 'Voir les détails'}
               style={{
-                width: 40, height: 40, borderRadius: 20,
+                width: 36, height: 36, borderRadius: 18,
                 backgroundColor: '#1a1a1a',
                 alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <Svg width={16} height={10} viewBox="0 0 16 10" fill="none">
+              <Svg width={14} height={9} viewBox="0 0 16 10" fill="none">
                 <Path
                   d={techExpanded ? "M2 8L8 2L14 8" : "M2 2L8 8L14 2"}
                   stroke="#fff"
@@ -4464,13 +4465,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               }}
               hitSlop={8}
               style={{
-                width: 40, height: 40, borderRadius: 20,
+                width: 36, height: 36, borderRadius: 18,
                 backgroundColor: '#F43F5E',
                 alignItems: 'center', justifyContent: 'center',
               }}
               accessibilityLabel="Déconnexion"
             >
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
                 <Path d="M12 2v10" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
                 <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
               </Svg>
@@ -4623,10 +4624,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 if (v && selectedKm !== null && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(null);
               };
               return (
-                <View style={{ flex: 1, paddingTop: 6, paddingBottom: 8, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: -16 }}>
+                <View style={{ flex: 1, paddingTop: 8, paddingBottom: 10, paddingHorizontal: 10, alignItems: 'center' }}>
+                  <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 8 }}>
                     <Text style={{
-                      color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
+                      color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 0.4,
                       fontFamily: 'AVEstiana', fontStyle: 'normal',
                     }}>Course</Text>
                   </TouchableOpacity>
@@ -4665,10 +4666,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               const kmIdx = rawIdx >= 0 ? rawIdx : 0;
               const setKmIdx = (idx) => setSelectedKm(kmItems[idx].value);
               return (
-                <View style={{ flex: 1, paddingTop: 6, paddingBottom: 8, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: -16 }}>
+                <View style={{ flex: 1, paddingTop: 8, paddingBottom: 10, paddingHorizontal: 10, alignItems: 'center' }}>
+                  <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 8 }}>
                     <Text style={{
-                      color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.5,
+                      color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: 0.4,
                       fontFamily: 'AVEstiana', fontStyle: 'normal',
                     }}>Km</Text>
                   </TouchableOpacity>
@@ -4687,7 +4688,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
       {/* ─── Pill Luminosité ─── flottante en haut de la preview, centree.
           Visible UNIQUEMENT si lumi != OK (silence quand tout va bien).
-          Couleur = lightDot (jaune moyenne / rouge faible). */}
+          Frosted glass simule via rgba sur la couleur lightDot + bordure
+          blanche subtile (pas de BlurView : evite un native rebuild). */}
       {(lightDot === '#FBBF24' || lightDot === '#F43F5E') && (
         <View
           pointerEvents="none"
@@ -4699,16 +4701,21 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           }}
         >
           <View style={{
-            backgroundColor: lightDot,
-            paddingHorizontal: 20, paddingVertical: 8,
+            backgroundColor: lightDot === '#FBBF24'
+              ? 'rgba(251,191,36,0.55)'
+              : 'rgba(244,63,94,0.6)',
+            paddingHorizontal: 22, paddingVertical: 8,
             borderRadius: 999,
+            borderWidth: 0.5,
+            borderColor: 'rgba(255,255,255,0.35)',
             shadowColor: '#000',
-            shadowOpacity: 0.25, shadowRadius: 6,
+            shadowOpacity: 0.25, shadowRadius: 8,
             shadowOffset: { width: 0, height: 2 },
           }}>
             <Text style={{
               color: '#fff', fontSize: 13, fontWeight: '700',
               letterSpacing: 0.3,
+              textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 2,
             }}>
               {lightLabel}
             </Text>
@@ -4717,33 +4724,36 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       )}
 
       {/* ─── Mini-galerie ─── bande horizontale flottante en bas de la
-          preview (juste au-dessus du Go!). Scroll horizontal pour voir plus,
-          tap vignette → viewer plein ecran. Limite a 60 (au-dela, c'est
-          dans la galerie orga). Cache si aucune photo (silence visuel). */}
+          preview (juste au-dessus du Go!). Vignettes 44px, background
+          givre (rgba) sur toute la bande. Tap vignette → ouvre la sheet
+          grille complete (galerie comme avant le refactor). */}
       {myPhotos.length > 0 && (
         <View
           style={{
             position: 'absolute',
-            top: CAMERA_TOP + previewH - 76,
+            top: CAMERA_TOP + previewH - 64,
             left: 0, right: 0,
-            height: 64,
+            height: 56,
             zIndex: 5,
+            backgroundColor: 'rgba(0,0,0,0.35)',
+            borderTopWidth: 0.5,
+            borderTopColor: 'rgba(255,255,255,0.15)',
           }}
         >
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6 }}
+            contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6, height: 56 }}
           >
             {myPhotos.slice(0, 60).map((p) => (
               <TouchableOpacity
                 key={p.key}
-                onPress={() => setGalleryViewerPhoto(p)}
+                onPress={() => setGalleryOpen(true)}
                 activeOpacity={0.85}
                 style={{
-                  width: 56, height: 56, borderRadius: 8,
+                  width: 44, height: 44, borderRadius: 6,
                   overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
-                  borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+                  borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)',
                 }}
               >
                 <ExpoImage
@@ -4761,8 +4771,126 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         </View>
       )}
 
+      {/* ─── Mini-galerie sheet ─── ouverte au tap d'une vignette de la bande,
+          grille 3 cols complete. Tap vignette dans la sheet → viewer plein
+          ecran. Pull-to-refresh + bouton rafraichir manuel. ─── */}
+      <Modal
+        visible={galleryOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setGalleryOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#0A0A0A' }}>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: 'rgba(255,255,255,0.12)',
+          }}>
+            <TouchableOpacity
+              onPress={() => setGalleryOpen(false)}
+              hitSlop={10}
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+              accessibilityLabel="Fermer"
+            >
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 6l12 12M18 6L6 18" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+              </Svg>
+            </TouchableOpacity>
+            <Text style={{
+              color: '#fff', fontSize: 16, fontWeight: '700',
+              fontFamily: 'AVEstiana',
+            }}>
+              Mes photos{myPhotos.length > 0 ? ` (${myPhotos.length})` : ''}
+            </Text>
+            <TouchableOpacity
+              onPress={fetchMyPhotos}
+              disabled={myPhotosLoading}
+              hitSlop={10}
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                alignItems: 'center', justifyContent: 'center',
+                opacity: myPhotosLoading ? 0.5 : 1,
+              }}
+              accessibilityLabel="Rafraîchir"
+            >
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                <Path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+
+          {myPhotosLoading && myPhotos.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator color="#fff" />
+            </View>
+          ) : myPhotosError && myPhotos.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, textAlign: 'center', marginBottom: 14 }}>
+                Impossible de charger tes photos pour l'instant.
+              </Text>
+              <TouchableOpacity
+                onPress={fetchMyPhotos}
+                style={{ backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 }}
+              >
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Réessayer</Text>
+              </TouchableOpacity>
+            </View>
+          ) : myPhotos.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+                Aucune photo encore.{'\n'}Les photos que tu prends apparaissent ici dès qu'elles sont sauvegardées.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={myPhotos.slice(0, 60)}
+              keyExtractor={(item) => item.key}
+              numColumns={3}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  onPress={() => setGalleryViewerPhoto(item)}
+                  activeOpacity={0.85}
+                  style={{ width: '33.333%', aspectRatio: 1, padding: 2 }}
+                >
+                  <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1a1a1a' }}>
+                    <ExpoImage
+                      source={{ uri: item.thumb_url }}
+                      style={StyleSheet.absoluteFillObject}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      priority="low"
+                      transition={100}
+                      recyclingKey={item.key}
+                    />
+                  </View>
+                </TouchableOpacity>
+              )}
+              refreshControl={
+                <RefreshControl
+                  refreshing={myPhotosLoading}
+                  onRefresh={fetchMyPhotos}
+                  tintColor="#fff"
+                />
+              }
+              contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews
+              initialNumToRender={12}
+              maxToRenderPerBatch={9}
+              windowSize={5}
+            />
+          )}
+        </View>
+      </Modal>
+
       {/* ─── Viewer fullscreen ─── ouvert quand on tape une vignette de la
-          bande. Tap n'importe ou (ou X) pour fermer. Source : photo.url
+          sheet. Tap n'importe ou (ou X) pour fermer. Source : photo.url
           (pleine resolution via /photo-jpeg pour HEIC). */}
       <Modal
         visible={!!galleryViewerPhoto}
