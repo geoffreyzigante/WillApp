@@ -4689,8 +4689,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
       {/* ─── Pill Luminosité ─── flottante en haut de la preview, centree.
           Visible UNIQUEMENT si lumi != OK (silence quand tout va bien).
-          Frosted glass simule via rgba sur la couleur lightDot + bordure
-          blanche subtile (pas de BlurView : evite un native rebuild). */}
+          Background SOLIDE bright (jaune ou rouge brand), drop shadow pour
+          la lisibilite sur preview claire. */}
       {(lightDot === '#FBBF24' || lightDot === '#F43F5E') && (
         <View
           pointerEvents="none"
@@ -4702,21 +4702,16 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           }}
         >
           <View style={{
-            backgroundColor: lightDot === '#FBBF24'
-              ? 'rgba(251,191,36,0.55)'
-              : 'rgba(244,63,94,0.6)',
+            backgroundColor: lightDot,
             paddingHorizontal: 22, paddingVertical: 8,
             borderRadius: 999,
-            borderWidth: 0.5,
-            borderColor: 'rgba(255,255,255,0.35)',
             shadowColor: '#000',
-            shadowOpacity: 0.25, shadowRadius: 8,
+            shadowOpacity: 0.3, shadowRadius: 8,
             shadowOffset: { width: 0, height: 2 },
           }}>
             <Text style={{
               color: '#fff', fontSize: 13, fontWeight: '700',
               letterSpacing: 0.3,
-              textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 2,
             }}>
               {lightLabel}
             </Text>
@@ -4725,26 +4720,23 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       )}
 
       {/* ─── Mini-galerie ─── bande horizontale flottante en bas de la
-          preview (juste au-dessus du Go!). Vignettes 44px, background
-          givre (rgba) sur toute la bande. Tap vignette → ouvre la sheet
-          grille complete (galerie comme avant le refactor). */}
+          preview (juste au-dessus du Go!). Vignettes 44px qui flottent
+          DIRECTEMENT sur la preview (pas de bandeau noir derriere) ;
+          drop shadow sur chaque vignette pour la lisibilite. Tap → sheet. */}
       {myPhotos.length > 0 && (
         <View
           style={{
             position: 'absolute',
-            top: CAMERA_TOP + previewH - 64,
+            top: CAMERA_TOP + previewH - 60,
             left: 0, right: 0,
-            height: 56,
+            height: 52,
             zIndex: 5,
-            backgroundColor: 'rgba(0,0,0,0.35)',
-            borderTopWidth: 0.5,
-            borderTopColor: 'rgba(255,255,255,0.15)',
           }}
         >
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6, height: 56 }}
+            contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6, height: 52 }}
           >
             {myPhotos.slice(0, 60).map((p) => (
               <TouchableOpacity
@@ -4754,7 +4746,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 style={{
                   width: 44, height: 44, borderRadius: 6,
                   overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
-                  borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)',
+                  shadowColor: '#000',
+                  shadowOpacity: 0.4, shadowRadius: 4,
+                  shadowOffset: { width: 0, height: 1 },
                 }}
               >
                 <ExpoImage
