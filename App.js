@@ -2628,36 +2628,21 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 // au-dessus/en-dessous attenues. Top-fade en degrade vers le panneau noir
 // pour fondre la roulette sous le titre.
 function OverlayWheel({ items, selectedIndex, onChange }) {
-  // Mockup 2026-06-01 : selection violet brand #7B2FFF, 4 items visibles
-  // ASYMETRIQUES (1 item au-dessus de la selection, selection a la slot
-  // 2 from top, 2 items en-dessous). 2 lignes horizontales violettes
-  // delimitent le slot selectionne.
+  // iOS-style picker (refonte 2026-06-02) : 4 items asymetriques (1 au-dessus,
+  // selection slot 2, 2 en-dessous), fade vers le noir en haut ET en bas
+  // pour le look "depth", lignes violettes hairline, weights legers (400/500).
   const ITEM_H = 28;
-  const HEIGHT = 4 * ITEM_H;             // 4 slots visibles
-  const PAD_V_TOP = ITEM_H;              // 1 slot vide au-dessus = 1 item au-dessus selection
-  const PAD_V_BOTTOM = 2 * ITEM_H;       // 2 slots vides en-dessous = 2 items au-dessous
+  const HEIGHT = 4 * ITEM_H;
+  const PAD_V_TOP = ITEM_H;
+  const PAD_V_BOTTOM = 2 * ITEM_H;
   const PURPLE = '#7B2FFF';
+  const HAIRLINE = StyleSheet.hairlineWidth;
   const scrollRef = useRef(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: selectedIndex * ITEM_H, animated: true });
   }, [selectedIndex]);
   return (
     <View style={{ height: HEIGHT, alignSelf: 'stretch', position: 'relative' }}>
-      {/* Lignes violettes : top du slot selectionne + bottom du meme slot */}
-      <View pointerEvents="none" style={{
-        position: 'absolute',
-        top: PAD_V_TOP, left: 16, right: 16,
-        height: 1.5,
-        backgroundColor: PURPLE,
-        borderRadius: 1,
-      }} />
-      <View pointerEvents="none" style={{
-        position: 'absolute',
-        top: PAD_V_TOP + ITEM_H - 1.5, left: 16, right: 16,
-        height: 1.5,
-        backgroundColor: PURPLE,
-        borderRadius: 1,
-      }} />
       <ScrollView
         ref={scrollRef}
         snapToInterval={ITEM_H}
@@ -2672,26 +2657,50 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
       >
         {items.map((it, i) => {
           const isSel = i === selectedIndex;
-          const delta = i - selectedIndex; // negatif = au-dessus, positif = au-dessous
-          // Opacite : selection 1, voisins immediats 0.5 dessous / 0.3 dessus,
-          // plus loin 0.25. L'asymetrie reflete la priorite visuelle a ce qui
-          // vient apres (item suivant deja partiellement visible).
-          let opacity = 0.25;
+          const delta = i - selectedIndex;
+          let opacity = 0.2;
           if (isSel) opacity = 1;
-          else if (delta === -1) opacity = 0.3;
+          else if (delta === -1) opacity = 0.35;
           else if (delta === 1) opacity = 0.55;
           return (
             <View key={i} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center' }}>
               <Text style={{
                 color: isSel ? PURPLE : '#fff',
                 opacity,
-                fontSize: isSel ? 18 : 15,
-                fontWeight: isSel ? '600' : '500',
+                fontSize: isSel ? 17 : 15,
+                fontWeight: isSel ? '500' : '400',
               }}>{it.label}</Text>
             </View>
           );
         })}
       </ScrollView>
+      {/* Fade vers le noir, en haut (au-dessus du slot selectionne) */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['#000', 'rgba(0,0,0,0)']}
+        start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: PAD_V_TOP }}
+      />
+      {/* Fade vers le noir, en bas (sous les items au-dessous de la selection) */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(0,0,0,0)', '#000']}
+        start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+        style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: PAD_V_BOTTOM }}
+      />
+      {/* Lignes violettes hairline (au-dessus des gradients pour rester visibles) */}
+      <View pointerEvents="none" style={{
+        position: 'absolute',
+        top: PAD_V_TOP, left: 24, right: 24,
+        height: HAIRLINE,
+        backgroundColor: PURPLE,
+      }} />
+      <View pointerEvents="none" style={{
+        position: 'absolute',
+        top: PAD_V_TOP + ITEM_H - HAIRLINE, left: 24, right: 24,
+        height: HAIRLINE,
+        backgroundColor: PURPLE,
+      }} />
     </View>
   );
 }
@@ -4633,7 +4642,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 <View style={{ flex: 1, paddingTop: 6, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 6 }}>
                     <Text style={{
-                      color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: 0.3,
+                      color: '#fff', fontSize: 20, fontWeight: '600', letterSpacing: 0.2,
                       fontFamily: 'AVEstiana', fontStyle: 'normal',
                     }}>Course</Text>
                   </TouchableOpacity>
@@ -4675,7 +4684,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 <View style={{ flex: 1, paddingTop: 6, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 6 }}>
                     <Text style={{
-                      color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: 0.3,
+                      color: '#fff', fontSize: 20, fontWeight: '600', letterSpacing: 0.2,
                       fontFamily: 'AVEstiana', fontStyle: 'normal',
                     }}>Km</Text>
                   </TouchableOpacity>
