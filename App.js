@@ -2145,23 +2145,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     });
   })();
 
-  // Au moins une course a-t-elle > 1 positions km ? Si oui, on reserve
-  // un espace constant pour la row Poste pour eviter le saut de layout
-  // quand la row apparait / disparait. Sinon (aucune race n a multi-km),
-  // pas de reservation, la galerie reste a sa position normale.
-  const anyRaceHasMultiKms = (() => {
-    for (const r of uniqueRaces) {
-      const kms = new Set(
-        photos
-          .filter(p => String(p.race) === String(r))
-          .map(p => p.km)
-          .filter(k => k !== null && k !== undefined && k !== '')
-          .map(String)
-      );
-      if (kms.size > 1) return true;
-    }
-    return false;
-  })();
 
   // Slide animation de l indicator race vers le tab actif.
   useEffect(() => {
@@ -2245,24 +2228,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const GRID_GAP = 6;
   const SCROLL_PADDING_H = 20; // doit matcher s.scroll.paddingHorizontal
   const cellSize = (SCREEN_W - SCROLL_PADDING_H * 2 - GRID_PADDING_H * 2 - GRID_GAP * (NUM_COLS - 1)) / NUM_COLS;
-  // Layout bento : photo "big" = 2x2 cells, donc width = 2*cellSize + 1 gap
-  // (la cell entre les 2 colonnes occupees). Hauteur identique = square.
-  const bigSize = 2 * cellSize + GRID_GAP;
 
   const visiblePhotos = filteredPhotos.slice(0, visibleCount);
   const hasMore = visibleCount < filteredPhotos.length;
-
-  // Regroupe les photos en chunks de 6 pour le layout bento : chaque chunk
-  // = 1 grosse (2x2) a gauche + 2 petites (1x1) empilees a droite + 3
-  // petites (1x1) en dessous. Si chunk incomplet (fin de liste), on rend
-  // que ce qui existe.
-  const photoChunks = (() => {
-    const chunks = [];
-    for (let i = 0; i < visiblePhotos.length; i += 6) {
-      chunks.push(visiblePhotos.slice(i, i + 6));
-    }
-    return chunks;
-  })();
 
   // Header de la FlatList : tout ce qui s'affiche au-dessus de la grille.
   // Renvoie une seule View ; FlatList le rend une fois en haut, sans virtualisation.
@@ -2651,12 +2619,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   pointerEvents={(activeRaceFilter === 'all' || kmsForActiveRace.length <= 1) ? 'none' : 'auto'}
                   style={{
                     opacity: kmRowAnim,
-                    // Reserve un espace constant pour la row UNIQUEMENT si
-                    // au moins une course a multi-km. Sinon pas d espace
-                    // gaspille. -> Pas de saut quand on toggle, et galerie
-                    // a sa position normale sur events single-km.
-                    minHeight: anyRaceHasMultiKms ? 36 : 0,
-                    marginTop: anyRaceHasMultiKms ? 4 : 0,
+                    marginTop: activeRaceFilter === 'all' || kmsForActiveRace.length <= 1 ? 0 : 4,
                     transform: [{
                       translateY: kmRowAnim.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }),
                     }],
@@ -2757,44 +2720,17 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
   // Rendu d'une cellule : flex: 1 + aspectRatio: 1 (pas de width fixe pour
   // eviter tout decalage horizontal cause par s.scroll paddingHorizontal: 20).
-  // Helper : render une PhotoCell dans un container de taille fixe (pour
-  // le bento ou ses skeletons).
-  const renderPhotoSized = (photo, width, height, key) => {
-    if (!photo) return <View key={key} style={{ width, height }} />;
-    return (
-      <View key={key} style={{ width, height }}>
-        <PhotoCell
-          photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
-          onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
-            origin,
-            eventTitle: event?.name,
-            eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
-          })}
-        />
-      </View>
-    );
-  };
-
-  const renderChunk = ({ item: chunk }) => (
-    <View style={{ paddingHorizontal: GRID_PADDING_H, marginBottom: GRID_GAP }}>
-      {/* Top : big a gauche + 2 small empiles a droite */}
-      <View style={{ flexDirection: 'row', gap: GRID_GAP, marginBottom: GRID_GAP }}>
-        {renderPhotoSized(chunk[0], bigSize, bigSize, 'big')}
-        <View style={{ gap: GRID_GAP, justifyContent: 'space-between' }}>
-          {renderPhotoSized(chunk[1], cellSize, cellSize, 's1')}
-          {renderPhotoSized(chunk[2], cellSize, cellSize, 's2')}
-        </View>
-      </View>
-      {/* Bottom : 3 small en ligne (uniquement si au moins 1 photo dans
-          cette partie, evite une row vide en fin de liste). */}
-      {(chunk[3] || chunk[4] || chunk[5]) && (
-        <View style={{ flexDirection: 'row', gap: GRID_GAP }}>
-          {renderPhotoSized(chunk[3], cellSize, cellSize, 's3')}
-          {renderPhotoSized(chunk[4], cellSize, cellSize, 's4')}
-          {renderPhotoSized(chunk[5], cellSize, cellSize, 's5')}
-        </View>
-      )}
-    </View>
+  const renderItem = ({ item }) => (
+    <PhotoCell
+      // Pour la grille on utilise thumbUri (~25 KB) au lieu de uri (~2-5 MB).
+      // Le viewer plein ecran recoit item entier (avec uri haute resolution).
+      photo={{ ...item, uri: item.thumbUri || item.uri }}
+      onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
+        origin,
+        eventTitle: event?.name,
+        eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+      })}
+    />
   );
 
   const renderFooter = () => {
@@ -2811,11 +2747,17 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       <FlatList
         style={s.scroll}
         contentContainerStyle={{ paddingBottom: 120 }}
-        data={showEmptyMessage ? [] : photoChunks}
-        keyExtractor={(chunk, i) => chunk[0]?.id || `chunk-${i}`}
-        renderItem={renderChunk}
-        initialNumToRender={3}
-        maxToRenderPerBatch={2}
+        data={showEmptyMessage ? [] : visiblePhotos}
+        keyExtractor={(item) => item.id || item.uri}
+        renderItem={renderItem}
+        numColumns={NUM_COLS}
+        columnWrapperStyle={NUM_COLS > 1 ? {
+          paddingHorizontal: GRID_PADDING_H,
+          gap: GRID_GAP,
+          marginBottom: GRID_GAP,
+        } : undefined}
+        initialNumToRender={12}
+        maxToRenderPerBatch={9}
         windowSize={5}
         removeClippedSubviews={true}
         onEndReached={() => {
