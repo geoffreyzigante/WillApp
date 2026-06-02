@@ -3046,7 +3046,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const winH = Dimensions.get('window').height;
   // Marge horizontale autour du viewer pour respirer (et garder le ratio
   // 4:3 strict sur la nouvelle largeur reduite).
-  const PREVIEW_MARGIN_H = 10;
+  const PREVIEW_MARGIN_H = 20;
   const previewW = winW - PREVIEW_MARGIN_H * 2;
   const previewH = Math.min(winH, previewW * (4 / 3));
   // CAMERA_TOP releve a 188 pour faire la place au strip galerie au-dessus
@@ -4325,7 +4325,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     const sorted = shutterSamples.sort((a, b) => a - b);
     const mid = sorted[Math.floor(sorted.length / 2)];
     if (mid <= 0.001) { lightDot = '#22C55E'; lightLabel = 'Luminosité OK'; }
-    else if (mid <= 0.002) { lightDot = '#FBBF24'; lightLabel = 'Luminosité moyenne'; }
+    else if (mid <= 0.002) { lightDot = '#F97316'; lightLabel = 'Luminosité moyenne'; }
     else { lightDot = '#F43F5E'; lightLabel = 'Luminosité faible'; }
   }
 
@@ -4629,7 +4629,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           zIndex: 10,
         }}
       >
-        {/* Go!/Stop : moitie de la largeur viewer, centre, radius 16. */}
+        {/* Go!/Stop : moitie de la largeur viewer, centre, radius 24. */}
         <TouchableOpacity
           onPress={onCapturePress}
           activeOpacity={0.9}
@@ -4637,14 +4637,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             width: previewW / 2,
             alignSelf: 'center',
             height: 60,
-            borderRadius: 16,
+            borderRadius: 24,
             backgroundColor: isAutoArmed ? '#FF3B30' : C.pinkPillActive,
             alignItems: 'center', justifyContent: 'center',
           }}
         >
           <Text style={{
             color: '#fff',
-            fontSize: 22,
+            fontSize: 30,
             fontStyle: 'italic',
             fontWeight: '800',
             fontFamily: 'AVEstiana',
@@ -4673,9 +4673,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 <View style={{ flex: 1, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 0 }}>
                     <Text style={{
-                      color: '#fff', fontSize: 20, fontWeight: '600', letterSpacing: 0.2,
-                      fontFamily: 'AVEstiana', fontStyle: 'normal',
-                    }}>Course</Text>
+                      color: 'rgba(255,255,255,0.45)',
+                      fontSize: 10, fontWeight: '600', letterSpacing: 1.5,
+                      fontFamily: 'Montserrat',
+                      textTransform: 'uppercase',
+                    }}>Choix de la course</Text>
                   </TouchableOpacity>
                   <OverlayWheel
                     items={courseItems}
@@ -4715,9 +4717,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 <View style={{ flex: 1, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 0 }}>
                     <Text style={{
-                      color: '#fff', fontSize: 20, fontWeight: '600', letterSpacing: 0.2,
-                      fontFamily: 'AVEstiana', fontStyle: 'normal',
-                    }}>Km</Text>
+                      color: 'rgba(255,255,255,0.45)',
+                      fontSize: 10, fontWeight: '600', letterSpacing: 1.5,
+                      fontFamily: 'Montserrat',
+                      textTransform: 'uppercase',
+                    }}>Km posté</Text>
                   </TouchableOpacity>
                   <OverlayWheel
                     items={kmItems}
@@ -4733,15 +4737,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       {/* ─── Pill Luminosité ─── flottante en haut de la preview, centree.
           Visible UNIQUEMENT si lumi != OK. Pill solide bright sans band
           colore derriere. */}
-      {(lightDot === '#FBBF24' || lightDot === '#F43F5E') && (
+      {(lightDot === '#F97316' || lightDot === '#F43F5E') && (
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            // Pill chevauche le HAUT du viewer (16px au-dessus, ~14px
-            // au-dessous = half-overlap rounded corner). Quand techExpanded,
-            // descend de 36px pour clear l'aplat info qui sort du header.
-            top: CAMERA_TOP - 16 + (techExpanded ? 36 : 0),
+            // Pill DANS le viewer (16px sous le bord superieur) pour ne pas
+            // chevaucher le strip galerie au-dessus du viewer.
+            top: CAMERA_TOP + 16 + (techExpanded ? 36 : 0),
             left: 0, right: 0,
             alignItems: 'center',
             zIndex: 5,
@@ -10616,6 +10619,7 @@ export default function App() {
   useEffect(() => {
     Font.loadAsync({
       AVEstiana: require('./assets/fonts/AV_Estiana-VF.ttf'),
+      Montserrat: require('./assets/fonts/Montserrat-VF.ttf'),
     }).then(() => setFontsLoaded(true)).catch(() => setFontsLoaded(true));
   }, []);
 
