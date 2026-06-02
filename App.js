@@ -951,6 +951,22 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
 
 function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false }) {
   const [searchQuery, setSearchQuery] = useState('');
+  // Indicateur violet qui glisse entre les 3 pills. Mesure une fois la largeur
+  // du conteneur (- padding), divise par 3 = largeur d un slot. Spring sur
+  // translateX synchronise avec le state tab.
+  const TAB_KEYS = ['upcoming', 'past', 'follows'];
+  const tabIdx = Math.max(0, TAB_KEYS.indexOf(tab));
+  const [tabsContainerW, setTabsContainerW] = useState(0);
+  const tabsSlideX = useRef(new Animated.Value(0)).current;
+  const slotW = tabsContainerW > 0 ? tabsContainerW / 3 : 0;
+  useEffect(() => {
+    if (slotW <= 0) return;
+    Animated.spring(tabsSlideX, {
+      toValue: slotW * tabIdx,
+      useNativeDriver: true,
+      tension: 110, friction: 14,
+    }).start();
+  }, [tabIdx, slotW, tabsSlideX]);
   const tabFiltered = events.filter(e => {
     if (tab === 'upcoming') return isUpcoming(e.event_date, e.event_date_end);
     if (tab === 'past') return !isUpcoming(e.event_date, e.event_date_end);
@@ -1064,29 +1080,48 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         )}
       </View>
 
-      {/* Tabs row : À venir / Passés / Favoris (pleine largeur).
-          Separateur vertical leger affiche UNIQUEMENT entre deux pills
-          non-selectionnees adjacentes (la pill active fait deja office de
-          separation visuelle). */}
-      <View style={{
-        flexDirection: 'row',
-        backgroundColor: C.pillBg,
-        borderRadius: 16,
-        padding: 4,
-        marginBottom: 8,
-        alignItems: 'center',
-      }}>
-        <TouchableOpacity onPress={() => setTab('upcoming')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'upcoming' && s.pillActive]}>
+      {/* Tabs row : indicateur violet animes qui glisse entre les 3 pills.
+          Plus de bg per-pill, plus de drop d opacite brutal au tap : tout
+          le feedback est dans le slide du fond. Separateur hairline entre
+          les deux pills non-actives adjacentes. */}
+      <View
+        onLayout={(e) => setTabsContainerW(e.nativeEvent.layout.width - 8)}
+        style={{
+          flexDirection: 'row',
+          backgroundColor: C.pillBg,
+          borderRadius: 16,
+          padding: 4,
+          marginBottom: 8,
+          alignItems: 'center',
+          position: 'relative',
+        }}
+      >
+        {/* Indicateur slide (violet sous les pills). Ne se rend qu une fois
+            la largeur du conteneur connue, pour eviter un flash a 0. */}
+        {slotW > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 4, top: 4, bottom: 4,
+              width: slotW,
+              backgroundColor: C.primary,
+              borderRadius: 12,
+              transform: [{ translateX: tabsSlideX }],
+            }}
+          />
+        )}
+        {/* 3 pills transparentes par-dessus. activeOpacity haut = feedback
+            tap doux qui n eclipse pas le slide de l indicateur. */}
+        <TouchableOpacity onPress={() => setTab('upcoming')} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
           <Text style={[s.pillText, tab === 'upcoming' && s.pillTextActive]}>À venir</Text>
         </TouchableOpacity>
-        {/* Separateur entre A venir et Passes : visible si 'follows' selectionne (les 2 voisines non actives). */}
-        {tab === 'follows' && <View style={{ width: StyleSheet.hairlineWidth, height: 16, backgroundColor: 'rgba(0,0,0,0.12)' }} />}
-        <TouchableOpacity onPress={() => setTab('past')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'past' && s.pillActive]}>
+        {tab === 'follows' && <View pointerEvents="none" style={{ width: StyleSheet.hairlineWidth, height: 16, backgroundColor: 'rgba(0,0,0,0.12)', zIndex: 2 }} />}
+        <TouchableOpacity onPress={() => setTab('past')} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
           <Text style={[s.pillText, tab === 'past' && s.pillTextActive]}>Passés</Text>
         </TouchableOpacity>
-        {/* Separateur entre Passes et Favoris : visible si 'upcoming' selectionne. */}
-        {tab === 'upcoming' && <View style={{ width: StyleSheet.hairlineWidth, height: 16, backgroundColor: 'rgba(0,0,0,0.12)' }} />}
-        <TouchableOpacity onPress={() => setTab('follows')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'follows' && s.pillActive]}>
+        {tab === 'upcoming' && <View pointerEvents="none" style={{ width: StyleSheet.hairlineWidth, height: 16, backgroundColor: 'rgba(0,0,0,0.12)', zIndex: 2 }} />}
+        <TouchableOpacity onPress={() => setTab('follows')} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
           <Text style={[s.pillText, tab === 'follows' && s.pillTextActive]}>Favoris</Text>
         </TouchableOpacity>
       </View>
