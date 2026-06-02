@@ -9599,28 +9599,27 @@ function PhotoViewerModal({
   const currentHidden = effectiveHidden(currentPhoto);
   const fav = currentPhoto?.id && photoFavoritesSet?.has(currentPhoto.id);
 
-  // Sync bidirectionnel slider <-> photo principale via currentIndex :
-  // - tap miniature OU scroll slider -> setCurrentIndex
-  // - useEffect ci-dessous propage a la fois au slider et a la FlatList photo
-  // L'animation native FlatList est doucement amortie (decelerationRate normal).
+  // Sync bidirectionnel slider <-> photo principale via currentIndex.
+  // sourceRef indique QUELLE liste a declenche le changement : si c est le
+  // slider (ou la photo principale), on EVITE de re-scroller cette meme liste,
+  // sinon un onMomentumScrollEnd stale peut re-write currentIndex avec la
+  // valeur d avant et faire "revenir l image a la derniere vue".
+  // null = changement externe (ouverture viewer, tap miniature) -> sync les deux.
   const sliderRef = useRef(null);
-  // Index de la derniere miniature qui a declenche un haptic. Evite de
-  // re-tapper sur le meme idx quand onScroll fire plusieurs fois pour la
-  // meme position. Initialise au currentIndex courant.
+  const sourceRef = useRef(null);
   const lastHapticIdxRef = useRef(currentIndex);
   useEffect(() => {
     if (!photos || currentIndex < 0 || currentIndex >= photos.length) return;
-    try { sliderRef.current?.scrollToOffset({ offset: currentIndex * 50, animated: true }); }
-    catch {}
-    // Photo principale : scroll-to-index avec animation. Pas necessaire si
-    // l'index vient d'un onMomentumScrollEnd de cette meme FlatList (deja a
-    // jour), mais inoffensif (animated:true ne re-scroll pas si deja en place).
-    // v2.5 point 3 : animation grande photo SUPPRIMEE quand le slider change.
-    // Snap instantane (animated:false) -> l'image en haut apparait directement,
-    // pas de glissement parasite. Le swipe horizontal sur la grande photo
-    // reste anime nativement par FlatList pagingEnabled (geste direct user).
-    try { photoListRef.current?.scrollToOffset({ offset: currentIndex * cardW, animated: false }); }
-    catch {}
+    const source = sourceRef.current;
+    sourceRef.current = null;
+    if (source !== 'slider') {
+      try { sliderRef.current?.scrollToOffset({ offset: currentIndex * 50, animated: true }); }
+      catch {}
+    }
+    if (source !== 'photo') {
+      try { photoListRef.current?.scrollToOffset({ offset: currentIndex * cardW, animated: false }); }
+      catch {}
+    }
   }, [currentIndex, photos]);
 
   // v2.5 point 1 : re-prefetch des photos au retour foreground pour eviter
@@ -9760,6 +9759,7 @@ function PhotoViewerModal({
                     const offset = e.nativeEvent.contentOffset.x;
                     const idx = Math.round(offset / cardW);
                     if (idx !== currentIndex && idx >= 0 && photos && idx < photos.length) {
+                      sourceRef.current = 'photo';
                       setCurrentIndex(idx);
                     }
                   }}
@@ -9892,6 +9892,7 @@ function PhotoViewerModal({
                     const offset = e.nativeEvent.contentOffset.x;
                     const idx = Math.round(offset / 50);
                     if (idx !== currentIndex && idx >= 0 && idx < photos.length) {
+                      sourceRef.current = 'slider';
                       setCurrentIndex(idx);
                     }
                   }}
