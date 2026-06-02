@@ -4730,19 +4730,14 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       </Animated.View>
 
       {/* ─── Pill Luminosité ─── flottante en haut de la preview, centree.
-          Visible UNIQUEMENT si lumi != OK (silence quand tout va bien).
-          BAND : fond plein colore edge-to-edge sous le pill (matching
-          lightDot a opacite reduite), PILL : solide brillant centre. */}
+          Visible UNIQUEMENT si lumi != OK. Pill solide bright sans band
+          colore derriere. */}
       {(lightDot === '#FBBF24' || lightDot === '#F43F5E') && (
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: CAMERA_TOP, left: 0, right: 0,
-            paddingTop: 12, paddingBottom: 10,
-            backgroundColor: lightDot === '#FBBF24'
-              ? 'rgba(251,191,36,0.18)'
-              : 'rgba(244,63,94,0.2)',
+            top: CAMERA_TOP + 16, left: 0, right: 0,
             alignItems: 'center',
             zIndex: 5,
           }}
@@ -4792,8 +4787,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6, height: 52 }}
             >
               {visible.map((p, i) => {
-                const t = i / last; // 0 a gauche -> 1 a droite
-                const opacity = 1 - 0.9 * t; // 1.0 a 0.1
+                // Symetrique : 10% aux bords, 100% au centre. center = (n-1)/2,
+                // distance normalisee a la moitie de la largeur.
+                const center = last / 2;
+                const t = center > 0 ? Math.abs(i - center) / center : 0;
+                const opacity = 1 - 0.9 * t;
                 return (
                   <TouchableOpacity
                     key={p.key}
