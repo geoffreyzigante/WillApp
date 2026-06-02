@@ -2748,84 +2748,79 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     );
   };
 
-  // Masonry Pinterest 3 colonnes avec photos pouvant occuper 1 OU 2 cols.
-  // Algorithme : pour chaque photo,
-  //   - colspan=1 : place dans la col la plus courte (shortest-first).
-  //   - colspan=2 : choisit la paire de cols adjacentes (0-1 ou 1-2) ou
-  //     max(h_left, h_right) est minimal. Place la photo a y =
-  //     max(heights), met a jour les 2 cols a la meme y+h.
-  // Pattern : 1 sur 7 photos est 2-col-wide pour rythme visuel.
-  const renderMasonry = () => {
-    if (showEmptyMessage || visiblePhotos.length === 0) return null;
-    const COLS = 3;
-    const colWidth = (SCREEN_W - SCROLL_PADDING_H * 2 - GRID_GAP * (COLS - 1)) / COLS;
-    const wideWidth = colWidth * 2 + GRID_GAP;
-    const singleCycle = [1, 0.75, 1, 0.83, 0.75, 1];   // ratios 1-col
-    const wideCycle = [1.5, 1.3];                       // ratios 2-col (landscape-ish)
-    const placements = [];
-    const colHeights = [0, 0, 0];
+  // Grid 3-col carre style Instagram avec 1 photo 2x2 (big) toutes les 6
+  // (bento). Chunks de 6 photos, chaque chunk rend :
+  //   ligne 1 : [BIG 2x2][s][s]   (big a gauche + 2 small empilees a droite)
+  //   ligne 2 : [s][s][s]          (3 small)
+  // Position du big alterne entre gauche (chunks pairs) et droite (impairs)
+  // pour casser la repetition. Flex layout propre, pas de trous.
+  const bigSize = 2 * cellSize + GRID_GAP;
+  const photoChunks = (() => {
+    const chunks = [];
+    for (let i = 0; i < visiblePhotos.length; i += 6) {
+      chunks.push(visiblePhotos.slice(i, i + 6));
+    }
+    return chunks;
+  })();
 
-    // Tolerance max sur le decalage entre les 2 cols d une paire pour
-    // placer une wide. Au-dela on retombe sur 1-col (eviter les gros
-    // trous sous la col la plus courte).
-    const WIDE_GAP_MAX = 40;
-    visiblePhotos.forEach((p, i) => {
-      let wantWide = i > 0 && i % 5 === 2;
-      if (wantWide) {
-        // Determine la meilleure paire 0-1 ou 1-2 et son ecart actuel.
-        const gap01 = Math.abs(colHeights[0] - colHeights[1]);
-        const gap12 = Math.abs(colHeights[1] - colHeights[2]);
-        const bestGap = Math.min(gap01, gap12);
-        if (bestGap > WIDE_GAP_MAX) wantWide = false;
-      }
-      if (wantWide) {
-        const ar = wideCycle[Math.floor(i / 7) % wideCycle.length];
-        const h = wideWidth / ar;
-        const gap01 = Math.abs(colHeights[0] - colHeights[1]);
-        const gap12 = Math.abs(colHeights[1] - colHeights[2]);
-        const pairStart = gap01 <= gap12 ? 0 : 1;
-        const y = Math.max(colHeights[pairStart], colHeights[pairStart + 1]);
-        placements.push({
-          photo: p,
-          x: pairStart * (colWidth + GRID_GAP),
-          y, width: wideWidth, height: h,
-        });
-        colHeights[pairStart] = y + h + GRID_GAP;
-        colHeights[pairStart + 1] = y + h + GRID_GAP;
-      } else {
-        const ar = singleCycle[i % singleCycle.length];
-        const h = colWidth / ar;
-        const shorter = colHeights[0] <= colHeights[1] && colHeights[0] <= colHeights[2] ? 0
-                      : colHeights[1] <= colHeights[2] ? 1 : 2;
-        placements.push({
-          photo: p,
-          x: shorter * (colWidth + GRID_GAP),
-          y: colHeights[shorter],
-          width: colWidth, height: h,
-        });
-        colHeights[shorter] += h + GRID_GAP;
-      }
-    });
-
-    const totalHeight = Math.max(...colHeights);
+  const renderPhotoSized = (photo, width, height, key) => {
+    if (!photo) return <View key={key} style={{ width, height }} />;
     return (
-      <View style={{ height: totalHeight, position: 'relative' }}>
-        {placements.map(({ photo, x, y, width, height }) => (
-          <View
-            key={photo.id}
-            style={{ position: 'absolute', left: x, top: y, width, height }}
-          >
-            <PhotoCell
-              photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
-              size={{ width, height }}
-              onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
-                origin,
-                eventTitle: event?.name,
-                eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
-              })}
-            />
-          </View>
-        ))}
+      <View key={key} style={{ width, height }}>
+        <PhotoCell
+          photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
+          size={{ width, height }}
+          onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
+            origin,
+            eventTitle: event?.name,
+            eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+          })}
+        />
+      </View>
+    );
+  };
+
+  const renderChunks = () => {
+    if (showEmptyMessage || photoChunks.length === 0) return null;
+    return (
+      <View style={{ paddingHorizontal: GRID_PADDING_H }}>
+        {photoChunks.map((chunk, idx) => {
+          // Position du big : alterne gauche (idx pair) / droite (idx impair).
+          const bigLeft = idx % 2 === 0;
+          return (
+            <View key={idx} style={{ marginBottom: GRID_GAP }}>
+              {/* Ligne du big : 2x2 + colonne de 2 small */}
+              <View style={{ flexDirection: 'row', gap: GRID_GAP, marginBottom: GRID_GAP }}>
+                {bigLeft ? (
+                  <>
+                    {renderPhotoSized(chunk[0], bigSize, bigSize, 'big')}
+                    <View style={{ gap: GRID_GAP, justifyContent: 'space-between' }}>
+                      {renderPhotoSized(chunk[1], cellSize, cellSize, 's1')}
+                      {renderPhotoSized(chunk[2], cellSize, cellSize, 's2')}
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <View style={{ gap: GRID_GAP, justifyContent: 'space-between' }}>
+                      {renderPhotoSized(chunk[1], cellSize, cellSize, 's1')}
+                      {renderPhotoSized(chunk[2], cellSize, cellSize, 's2')}
+                    </View>
+                    {renderPhotoSized(chunk[0], bigSize, bigSize, 'big')}
+                  </>
+                )}
+              </View>
+              {/* Ligne 3 small (uniquement si au moins 1 photo dans cette
+                  partie, evite une row vide en fin de liste). */}
+              {(chunk[3] || chunk[4] || chunk[5]) && (
+                <View style={{ flexDirection: 'row', gap: GRID_GAP }}>
+                  {renderPhotoSized(chunk[3], cellSize, cellSize, 's3')}
+                  {renderPhotoSized(chunk[4], cellSize, cellSize, 's4')}
+                  {renderPhotoSized(chunk[5], cellSize, cellSize, 's5')}
+                </View>
+              )}
+            </View>
+          );
+        })}
       </View>
     );
   };
@@ -2855,7 +2850,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         showsVerticalScrollIndicator={false}
       >
         {renderHeader()}
-        {(loading || upcoming) && visiblePhotos.length === 0 ? renderListEmpty() : renderMasonry()}
+        {(loading || upcoming) && visiblePhotos.length === 0 ? renderListEmpty() : renderChunks()}
         {renderFooter()}
       </ScrollView>
 
