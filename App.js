@@ -2104,6 +2104,28 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // Reset le filtre km quand la course change (revient a "Tous" naturellement).
   useEffect(() => { setActiveKmFilter('all'); }, [activeRaceFilter]);
 
+  // Niveau 1 — courses uniques presentes dans les photos. Trie numerique asc.
+  const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)))
+    .sort((a, b) => Number(a) - Number(b));
+
+  // Niveau 2 — positions km presentes pour la course active. Exclut les
+  // photos sans km (cran "-" cote photographe) -> elles ne creent pas
+  // d onglet, on les retrouve uniquement dans le sous-onglet "Tous".
+  const kmsForActiveRace = (() => {
+    if (activeRaceFilter === 'all') return [];
+    const kms = photos
+      .filter(p => String(p.race) === activeRaceFilter)
+      .map(p => p.km)
+      .filter(k => k !== null && k !== undefined && k !== '');
+    // Tri : Depart (0) puis Arrivee ('arrivee') puis km N croissant. 'arrivee'
+    // place a 0.5 = entre Depart (0) et km 1, miroir de la roulette de capture.
+    return Array.from(new Set(kms.map(String))).sort((a, b) => {
+      const na = a === 'arrivee' ? 0.5 : Number(a);
+      const nb = b === 'arrivee' ? 0.5 : Number(b);
+      return na - nb;
+    });
+  })();
+
   // Slide animation de l indicator race vers le tab actif.
   useEffect(() => {
     const l = raceTabLayoutsRef.current[activeRaceFilter];
@@ -2130,28 +2152,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       Animated.spring(kmIndicatorW, { toValue: l.width, useNativeDriver: false, friction: 10, tension: 80 }),
     ]).start();
   }, [activeKmFilter, activeRaceFilter, kmsForActiveRace.length]);
-
-  // Niveau 1 — courses uniques presentes dans les photos. Trie numerique asc.
-  const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)))
-    .sort((a, b) => Number(a) - Number(b));
-
-  // Niveau 2 — positions km presentes pour la course active. Exclut les
-  // photos sans km (cran "-" cote photographe) -> elles ne creent pas
-  // d onglet, on les retrouve uniquement dans le sous-onglet "Tous".
-  const kmsForActiveRace = (() => {
-    if (activeRaceFilter === 'all') return [];
-    const kms = photos
-      .filter(p => String(p.race) === activeRaceFilter)
-      .map(p => p.km)
-      .filter(k => k !== null && k !== undefined && k !== '');
-    // Tri : Depart (0) puis Arrivee ('arrivee') puis km N croissant. 'arrivee'
-    // place a 0.5 = entre Depart (0) et km 1, miroir de la roulette de capture.
-    return Array.from(new Set(kms.map(String))).sort((a, b) => {
-      const na = a === 'arrivee' ? 0.5 : Number(a);
-      const nb = b === 'arrivee' ? 0.5 : Number(b);
-      return na - nb;
-    });
-  })();
 
   // Tabs course (Toutes + 1 par race). Vide si aucune photo n a de race.
   const raceTabs = uniqueRaces.length === 0
