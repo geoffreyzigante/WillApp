@@ -2370,56 +2370,61 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         ) : null}
       </View>
 
-      {/* Phase D3 — CTA Suivre + RGPD compact. Visible uniquement si
-          NON SUIVI (le coeur rempli sur le hero suffit ensuite a indiquer
-          qu on suit, tap sur le coeur pour unfollow direct). */}
+      {/* CTA Favoris + RGPD integre : une seule card violette unifiee
+          (titre + sous-titre + divider + ligne biometrique inline). Visible
+          uniquement si NON SUIVI. */}
       {onToggleFollow && !isFollowing && (
-          <View style={{ marginTop: 4, marginBottom: 12 }}>
-            <TouchableOpacity onPress={onToggleFollow} activeOpacity={0.88}>
-              <LinearGradient
-                colors={['#7B2FFF', '#5E1AD6']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={{
-                  borderRadius: 16,
-                  paddingVertical: 14, paddingHorizontal: 18,
-                  shadowColor: '#7B2FFF', shadowOpacity: 0.3,
-                  shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                  <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
-                    <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-                  </Svg>
-                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
-                    Suis-le avant le départ
-                  </Text>
-                </View>
-                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 4, textAlign: 'center' }}>
-                  Pour recevoir tes photos automatiquement le jour J.
+        <View style={{ marginTop: 4, marginBottom: 12 }}>
+          <TouchableOpacity onPress={onToggleFollow} activeOpacity={0.88}>
+            <LinearGradient
+              colors={['#7B2FFF', '#5E1AD6']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={{
+                borderRadius: 16,
+                paddingVertical: 14, paddingHorizontal: 18,
+                shadowColor: '#7B2FFF', shadowOpacity: 0.3,
+                shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+              }}
+            >
+              {/* Titre : coeur + texte */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
+                  <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+                </Svg>
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                  Ajoute-le en favoris AVANT le départ
                 </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-            {/* RGPD compact : icone + 1 ligne avec lien En savoir plus inline. */}
-            <View style={{
-              marginTop: 8,
-              flexDirection: 'row', alignItems: 'center', gap: 8,
-              paddingHorizontal: 4,
-            }}>
-              <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#7B2FFF" strokeWidth={2}>
-                <Circle cx="12" cy="8" r="4" />
-                <Path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
-              </Svg>
-              <Text style={{ flex: 1, fontSize: 11, color: '#5A5468', lineHeight: 15 }}>
-                Will analyse ton visage pour y retrouver tes photos.{' '}
-                <Text
-                  style={{ color: '#7B2FFF', textDecorationLine: 'underline' }}
-                  onPress={() => Linking.openURL('https://will-app.com/confidentialite').catch(() => {})}
-                >
-                  En savoir plus
-                </Text>
+              </View>
+              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 4, textAlign: 'center' }}>
+                Pour recevoir tes photos automatiquement le jour J.
               </Text>
-            </View>
-          </View>
+
+              {/* Divider hairline blanc transparent */}
+              <View style={{
+                height: StyleSheet.hairlineWidth,
+                backgroundColor: 'rgba(255,255,255,0.25)',
+                marginVertical: 12,
+              }} />
+
+              {/* Ligne biometrique + lien En savoir plus inline */}
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2}>
+                  <Circle cx="12" cy="8" r="4" />
+                  <Path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
+                </Svg>
+                <Text style={{ flex: 1, color: 'rgba(255,255,255,0.85)', fontSize: 11, lineHeight: 15 }}>
+                  Will analyse ton visage pour y retrouver tes photos.{' '}
+                  <Text
+                    style={{ color: '#fff', fontWeight: '600', textDecorationLine: 'underline' }}
+                    onPress={() => Linking.openURL('https://will-app.com/confidentialite').catch(() => {})}
+                  >
+                    En savoir plus
+                  </Text>
+                </Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* CTA Site web retire : redondant avec le bouton "Site organisateur"
