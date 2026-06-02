@@ -2455,6 +2455,17 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             </Text>
           </View>
 
+          {/* Divider hairline tint entre le header photos et la section
+              distances : petite demarcation visuelle sans casser l unite
+              de la card. */}
+          {distances.length > 0 && (
+            <View style={{
+              height: StyleSheet.hairlineWidth,
+              backgroundColor: `${tint}40`,
+              marginTop: 14,
+            }} />
+          )}
+
           {/* Distances integrees, sans titre de section ni puce avant km. */}
           {distances.length > 0 && (
             <View style={{ marginTop: 14 }}>
