@@ -2245,9 +2245,24 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const GRID_GAP = 6;
   const SCROLL_PADDING_H = 20; // doit matcher s.scroll.paddingHorizontal
   const cellSize = (SCREEN_W - SCROLL_PADDING_H * 2 - GRID_PADDING_H * 2 - GRID_GAP * (NUM_COLS - 1)) / NUM_COLS;
+  // Layout bento : photo "big" = 2x2 cells, donc width = 2*cellSize + 1 gap
+  // (la cell entre les 2 colonnes occupees). Hauteur identique = square.
+  const bigSize = 2 * cellSize + GRID_GAP;
 
   const visiblePhotos = filteredPhotos.slice(0, visibleCount);
   const hasMore = visibleCount < filteredPhotos.length;
+
+  // Regroupe les photos en chunks de 6 pour le layout bento : chaque chunk
+  // = 1 grosse (2x2) a gauche + 2 petites (1x1) empilees a droite + 3
+  // petites (1x1) en dessous. Si chunk incomplet (fin de liste), on rend
+  // que ce qui existe.
+  const photoChunks = (() => {
+    const chunks = [];
+    for (let i = 0; i < visiblePhotos.length; i += 6) {
+      chunks.push(visiblePhotos.slice(i, i + 6));
+    }
+    return chunks;
+  })();
 
   // Header de la FlatList : tout ce qui s'affiche au-dessus de la grille.
   // Renvoie une seule View ; FlatList le rend une fois en haut, sans virtualisation.
@@ -2295,7 +2310,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </TouchableOpacity>
       </View>
 
-      <View style={{ position: 'relative', marginTop: 12, marginBottom: 8 }}>
+      <View style={{ position: 'relative', marginTop: 12, marginBottom: 4 }}>
         {/* Override le marginBottom: 10 hérité de s.eventCard — l'espacement
             avec le bloc suivant est géré par le wrapper (marginBottom: 8). */}
         <View style={[s.eventCard, { marginBottom: 0 }]}>
@@ -2549,7 +2564,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               </TouchableOpacity>
             );
             return (
-              <View style={{ marginTop: 12, marginBottom: 2 }}>
+              <View style={{ marginTop: 6, marginBottom: 0 }}>
                 {/* Row 1 : Toutes + Course (pill violette animee), bouton de
                     tri fixe a droite. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -2705,7 +2720,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
           {/* Petit espacement avant la grille (le titre "Photos" + count
               a ete retire — la grille parle d elle-meme). */}
-          <View style={{ height: 12 }} />
+          <View style={{ height: 4 }} />
         </>
       )}
     </View>
@@ -2742,17 +2757,44 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
   // Rendu d'une cellule : flex: 1 + aspectRatio: 1 (pas de width fixe pour
   // eviter tout decalage horizontal cause par s.scroll paddingHorizontal: 20).
-  const renderItem = ({ item }) => (
-    <PhotoCell
-      // Pour la grille on utilise thumbUri (~25 KB) au lieu de uri (~2-5 MB).
-      // Le viewer plein ecran recoit item entier (avec uri haute resolution).
-      photo={{ ...item, uri: item.thumbUri || item.uri }}
-      onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
-        origin,
-        eventTitle: event?.name,
-        eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
-      })}
-    />
+  // Helper : render une PhotoCell dans un container de taille fixe (pour
+  // le bento ou ses skeletons).
+  const renderPhotoSized = (photo, width, height, key) => {
+    if (!photo) return <View key={key} style={{ width, height }} />;
+    return (
+      <View key={key} style={{ width, height }}>
+        <PhotoCell
+          photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
+          onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
+            origin,
+            eventTitle: event?.name,
+            eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+          })}
+        />
+      </View>
+    );
+  };
+
+  const renderChunk = ({ item: chunk }) => (
+    <View style={{ paddingHorizontal: GRID_PADDING_H, marginBottom: GRID_GAP }}>
+      {/* Top : big a gauche + 2 small empiles a droite */}
+      <View style={{ flexDirection: 'row', gap: GRID_GAP, marginBottom: GRID_GAP }}>
+        {renderPhotoSized(chunk[0], bigSize, bigSize, 'big')}
+        <View style={{ gap: GRID_GAP, justifyContent: 'space-between' }}>
+          {renderPhotoSized(chunk[1], cellSize, cellSize, 's1')}
+          {renderPhotoSized(chunk[2], cellSize, cellSize, 's2')}
+        </View>
+      </View>
+      {/* Bottom : 3 small en ligne (uniquement si au moins 1 photo dans
+          cette partie, evite une row vide en fin de liste). */}
+      {(chunk[3] || chunk[4] || chunk[5]) && (
+        <View style={{ flexDirection: 'row', gap: GRID_GAP }}>
+          {renderPhotoSized(chunk[3], cellSize, cellSize, 's3')}
+          {renderPhotoSized(chunk[4], cellSize, cellSize, 's4')}
+          {renderPhotoSized(chunk[5], cellSize, cellSize, 's5')}
+        </View>
+      )}
+    </View>
   );
 
   const renderFooter = () => {
@@ -2769,17 +2811,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       <FlatList
         style={s.scroll}
         contentContainerStyle={{ paddingBottom: 120 }}
-        data={showEmptyMessage ? [] : visiblePhotos}
-        keyExtractor={(item) => item.id || item.uri}
-        renderItem={renderItem}
-        numColumns={NUM_COLS}
-        columnWrapperStyle={NUM_COLS > 1 ? {
-          paddingHorizontal: GRID_PADDING_H,
-          gap: GRID_GAP,
-          marginBottom: GRID_GAP,
-        } : undefined}
-        initialNumToRender={12}
-        maxToRenderPerBatch={9}
+        data={showEmptyMessage ? [] : photoChunks}
+        keyExtractor={(chunk, i) => chunk[0]?.id || `chunk-${i}`}
+        renderItem={renderChunk}
+        initialNumToRender={3}
+        maxToRenderPerBatch={2}
         windowSize={5}
         removeClippedSubviews={true}
         onEndReached={() => {
