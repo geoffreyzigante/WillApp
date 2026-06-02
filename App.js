@@ -2013,6 +2013,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // course. activeKmFilter pertinent uniquement si activeRaceFilter !== "all".
   const [activeRaceFilter, setActiveRaceFilter] = useState('all');
   const [activeKmFilter, setActiveKmFilter] = useState('all');
+  // Tri photos : true = recentes en haut (default, burstTs DESC), false = plus
+  // anciennes en haut. Bouton sur la droite des pills permet de basculer.
+  const [sortDesc, setSortDesc] = useState(true);
   // Animated sliding pill iOS-style. Layout de chaque tab mesure via
   // onLayout. La pill slide vers la position du tab actif.
   const raceTabLayoutsRef = useRef({});
@@ -2140,6 +2143,24 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     });
   })();
 
+  // Au moins une course a-t-elle > 1 positions km ? Si oui, on reserve
+  // un espace constant pour la row Poste pour eviter le saut de layout
+  // quand la row apparait / disparait. Sinon (aucune race n a multi-km),
+  // pas de reservation, la galerie reste a sa position normale.
+  const anyRaceHasMultiKms = (() => {
+    for (const r of uniqueRaces) {
+      const kms = new Set(
+        photos
+          .filter(p => String(p.race) === String(r))
+          .map(p => p.km)
+          .filter(k => k !== null && k !== undefined && k !== '')
+          .map(String)
+      );
+      if (kms.size > 1) return true;
+    }
+    return false;
+  })();
+
   // Slide animation de l indicator race vers le tab actif.
   useEffect(() => {
     const l = raceTabLayoutsRef.current[activeRaceFilter];
@@ -2176,7 +2197,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     Animated.timing(gridAnim, {
       toValue: 1, duration: 220, useNativeDriver: true,
     }).start();
-  }, [activeRaceFilter, activeKmFilter]);
+  }, [activeRaceFilter, activeKmFilter, sortDesc]);
 
   // Tabs course (Toutes + 1 par race). Vide si aucune photo n a de race.
   const raceTabs = uniqueRaces.length === 0
@@ -2200,12 +2221,18 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       ];
 
   const filteredPhotos = (() => {
-    if (activeRaceFilter === 'all') return photos;
-    let list = photos.filter(p => String(p.race) === activeRaceFilter);
-    if (activeKmFilter !== 'all') {
-      list = list.filter(p => String(p.km) === activeKmFilter);
+    let list;
+    if (activeRaceFilter === 'all') {
+      list = photos;
+    } else {
+      list = photos.filter(p => String(p.race) === activeRaceFilter);
+      if (activeKmFilter !== 'all') {
+        list = list.filter(p => String(p.km) === activeKmFilter);
+      }
     }
-    return list;
+    // photos est deja trie burstTs DESC dans loadPhotos. sortDesc=false ->
+    // on inverse pour avoir les plus anciennes en premier.
+    return sortDesc ? list : [...list].reverse();
   })();
 
   const distances = Array.isArray(event.distances) ? event.distances : [];
@@ -2259,21 +2286,24 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         <View style={[s.eventCard, { marginBottom: 0 }]}>
           {/* Layer 0 : aplat coloré pleine carte (fallback + fond sous image) */}
           <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
-          {/* Layer 1 : cover image pleine carte */}
+          {/* Layer 1 : cover image sur la MOITIE DROITE seulement (left:50%
+              -> right:0). La gauche garde l aplat tint pour lisibilite du
+              texte. */}
           {event.cover_image ? (
             <ExpoImage
               source={{ uri: event.cover_image }}
-              style={StyleSheet.absoluteFillObject}
+              style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', right: 0 }}
               contentFit="cover"
             />
           ) : null}
-          {/* Layer 2 : gradient — solide à gauche (0-50%), fade 100→10% à droite (50-100%) */}
+          {/* Layer 2 : gradient de transition douce a la couture (45% -> 55%)
+              entre l aplat gauche et l image droite. */}
           {event.cover_image ? (
             <LinearGradient
-              colors={[tint, tint + '1A']}
+              colors={[tint, tint + '00']}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
-              locations={[0.5, 1]}
+              locations={[0.45, 0.55]}
               style={StyleSheet.absoluteFillObject}
               pointerEvents="none"
             />
@@ -2522,10 +2552,13 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             );
             return (
               <View style={{ marginTop: 12, marginBottom: 2 }}>
-                {/* Row 1 : Toutes + Course (pill violette animee) */}
+                {/* Row 1 : Toutes + Course (pill violette animee), bouton de
+                    tri fixe a droite. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <ScrollView
                   horizontal showsHorizontalScrollIndicator={false}
                   contentContainerStyle={{ paddingHorizontal: 2, alignItems: 'center' }}
+                  style={{ flex: 1 }}
                 >
                   <View style={{ position: 'relative', flexDirection: 'row', alignItems: 'center' }}>
                     <Animated.View
@@ -2574,13 +2607,43 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     })}
                   </View>
                 </ScrollView>
+                {/* Bouton inverser l ordre du tri (recente / ancien). */}
+                <TouchableOpacity
+                  onPress={() => {
+                    try { Haptics?.selectionAsync?.(); } catch {}
+                    setSortDesc(v => !v);
+                  }}
+                  hitSlop={10}
+                  activeOpacity={0.7}
+                  accessibilityLabel={sortDesc ? 'Trier du plus ancien au plus recent' : 'Trier du plus recent au plus ancien'}
+                  style={{
+                    width: 34, height: 34, borderRadius: 17,
+                    backgroundColor: '#f5f3ff',
+                    alignItems: 'center', justifyContent: 'center',
+                    marginLeft: 8,
+                  }}
+                >
+                  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                    {/* Fleche gauche : oriente bas par defaut (sortDesc) ;
+                        cote droit : oriente haut. Sortie : alternance qui
+                        signifie "inverser le sens". */}
+                    <Path d="M7 4v16M3 16l4 4 4-4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    <Path d="M17 20V4M13 8l4-4 4 4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  </Svg>
+                </TouchableOpacity>
+                </View>
 
                 {/* Row 2 : Posté centre sous la course, pill rose animee. */}
                 <Animated.View
                   pointerEvents={(activeRaceFilter === 'all' || kmsForActiveRace.length <= 1) ? 'none' : 'auto'}
                   style={{
                     opacity: kmRowAnim,
-                    marginTop: activeRaceFilter === 'all' || kmsForActiveRace.length <= 1 ? 0 : 4,
+                    // Reserve un espace constant pour la row UNIQUEMENT si
+                    // au moins une course a multi-km. Sinon pas d espace
+                    // gaspille. -> Pas de saut quand on toggle, et galerie
+                    // a sa position normale sur events single-km.
+                    minHeight: anyRaceHasMultiKms ? 36 : 0,
+                    marginTop: anyRaceHasMultiKms ? 4 : 0,
                     transform: [{
                       translateY: kmRowAnim.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }),
                     }],
