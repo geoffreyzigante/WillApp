@@ -2296,14 +2296,16 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               contentFit="cover"
             />
           ) : null}
-          {/* Layer 2 : gradient de transition douce a la couture (45% -> 55%)
-              entre l aplat gauche et l image droite. */}
+          {/* Layer 2 : gradient sur la moitie droite (image), tint 100%
+              au seam (x=0.5) -> tint 10% au bord droit (x=1.0).
+              L image fade donc progressivement de invisible (gauche) a
+              90% visible (droite). */}
           {event.cover_image ? (
             <LinearGradient
-              colors={[tint, tint + '00']}
+              colors={[tint, tint + '1A']}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
-              locations={[0.45, 0.55]}
+              locations={[0.5, 1]}
               style={StyleSheet.absoluteFillObject}
               pointerEvents="none"
             />
