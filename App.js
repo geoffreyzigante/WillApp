@@ -1170,14 +1170,14 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
           <View style={{ alignSelf: 'stretch', gap: 10, marginBottom: 22 }}>
             {[
               { n: 1, t: 'Crée ton compte et prends ton selfie' },
-              { n: 2, t: 'Ajoute ton event en favoris avant la course' },
+              { n: 2, t: 'Ajoute ton event en favori avant le jour J' },
               { n: 3, t: "Profite, Will s'occupe du reste" },
             ].map(({ n, t }) => (
               <View key={n} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FAF7FF', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
                 <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{n}</Text>
                 </View>
-                <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }}>{t}</Text>
+                <Text style={{ color: C.text, fontSize: 13, fontWeight: '500' }}>{t}</Text>
               </View>
             ))}
           </View>
