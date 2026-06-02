@@ -2138,9 +2138,14 @@ const WHEEL_LOOPS = 30;
 function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 }) {
   const listRef = useRef(null);
   const [containerW, setContainerW] = useState(0);
-  const scrollX = useRef(new Animated.Value(0)).current;
   const n = items.length;
   const activeIdx = Math.max(0, items.findIndex(it => it.key === activeKey));
+  const middleStart = Math.floor(WHEEL_LOOPS / 2) * n;
+  const initialIdx = middleStart + activeIdx;
+  // scrollX initialise au scroll offset du filtre actif (et NON 0) pour
+  // que l interpolation place le texte blanc sur le bon item des le premier
+  // rendu. Sinon : scrollX=0 -> item 0 colore en blanc, pas l actif.
+  const scrollX = useRef(new Animated.Value(initialIdx * WHEEL_ITEM_W)).current;
   const looped = useMemo(() => {
     const arr = [];
     for (let i = 0; i < WHEEL_LOOPS; i++) {
@@ -2150,8 +2155,6 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
     }
     return arr;
   }, [items, n]);
-  const middleStart = Math.floor(WHEEL_LOOPS / 2) * n;
-  const initialIdx = middleStart + activeIdx;
   const padH = containerW > 0 ? (containerW - WHEEL_ITEM_W) / 2 : 0;
   return (
     <View
@@ -2200,6 +2203,10 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
             onMomentumScrollEnd={(e) => {
               const offset = e.nativeEvent.contentOffset.x;
               const idx = Math.round(offset / WHEEL_ITEM_W);
+              // Cole scrollX a la valeur exacte du snap : sans ca, le throttle
+              // 16ms peut laisser scrollX a ~idx*W +/- 1px et le texte de
+              // l item centre reste a une couleur interpolee (jamais pur blanc).
+              scrollX.setValue(idx * WHEEL_ITEM_W);
               const realIdx = ((idx % n) + n) % n;
               const newKey = items[realIdx].key;
               if (newKey !== activeKey) onChange(newKey);
