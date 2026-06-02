@@ -2748,17 +2748,18 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     );
   };
 
-  // Grid 3-col carre style Instagram avec 1 photo 2x2 (big) toutes les 6
-  // (bento). Chunks de 6 photos, chaque chunk rend :
-  //   ligne 1 : [BIG 2x2][s][s]   (big a gauche + 2 small empilees a droite)
-  //   ligne 2 : [s][s][s]          (3 small)
-  // Position du big alterne entre gauche (chunks pairs) et droite (impairs)
-  // pour casser la repetition. Flex layout propre, pas de trous.
+  // Grid 3-col carre avec 1 big (2x2) tous les 12 photos = 3 rangs de
+  // small entre chaque big. Chunks de 12 photos, chaque chunk rend :
+  //   row 1+2 : [BIG 2x2][s][s]   (1 big + 2 small empilees)
+  //   row 3   : [s][s][s]
+  //   row 4   : [s][s][s]
+  //   row 5   : [s][s][s]
+  // Position du big alterne entre gauche (chunks pairs) et droite (impairs).
   const bigSize = 2 * cellSize + GRID_GAP;
   const photoChunks = (() => {
     const chunks = [];
-    for (let i = 0; i < visiblePhotos.length; i += 6) {
-      chunks.push(visiblePhotos.slice(i, i + 6));
+    for (let i = 0; i < visiblePhotos.length; i += 12) {
+      chunks.push(visiblePhotos.slice(i, i + 12));
     }
     return chunks;
   })();
@@ -2809,15 +2810,28 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   </>
                 )}
               </View>
-              {/* Ligne 3 small (uniquement si au moins 1 photo dans cette
-                  partie, evite une row vide en fin de liste). */}
-              {(chunk[3] || chunk[4] || chunk[5]) && (
-                <View style={{ flexDirection: 'row', gap: GRID_GAP }}>
-                  {renderPhotoSized(chunk[3], cellSize, cellSize, 's3')}
-                  {renderPhotoSized(chunk[4], cellSize, cellSize, 's4')}
-                  {renderPhotoSized(chunk[5], cellSize, cellSize, 's5')}
-                </View>
-              )}
+              {/* 3 rangs de 3 small (chacun masque si la rangee est vide en
+                  fin de liste pour eviter des spacers fantomes). */}
+              {[
+                [chunk[3], chunk[4], chunk[5]],
+                [chunk[6], chunk[7], chunk[8]],
+                [chunk[9], chunk[10], chunk[11]],
+              ].map((row, ri) => (
+                (row[0] || row[1] || row[2]) ? (
+                  <View
+                    key={`row${ri}`}
+                    style={{
+                      flexDirection: 'row',
+                      gap: GRID_GAP,
+                      marginBottom: ri < 2 ? GRID_GAP : 0,
+                    }}
+                  >
+                    {renderPhotoSized(row[0], cellSize, cellSize, `r${ri}-0`)}
+                    {renderPhotoSized(row[1], cellSize, cellSize, `r${ri}-1`)}
+                    {renderPhotoSized(row[2], cellSize, cellSize, `r${ri}-2`)}
+                  </View>
+                ) : null
+              ))}
             </View>
           );
         })}
