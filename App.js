@@ -2127,6 +2127,108 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
   );
 }
 
+// Roulette horizontale infinie (style picker iOS). Le filtre actif est
+// au centre, derriere un cadre accent (violet/rose). Items dupliques N
+// fois pour simuler l infini : on demarre au milieu de la copie centrale.
+// snapToInterval garantit le snap doux sur chaque item.
+const WHEEL_ITEM_W = 100;
+const WHEEL_LOOPS = 30;
+function RaceWheel({ items, activeKey, onChange, accent, bg }) {
+  const listRef = useRef(null);
+  const [containerW, setContainerW] = useState(0);
+  const n = items.length;
+  const activeIdx = Math.max(0, items.findIndex(it => it.key === activeKey));
+  const looped = useMemo(() => {
+    const arr = [];
+    for (let i = 0; i < WHEEL_LOOPS; i++) {
+      for (let j = 0; j < n; j++) {
+        arr.push({ ...items[j], _li: i * n + j });
+      }
+    }
+    return arr;
+  }, [items, n]);
+  const middleStart = Math.floor(WHEEL_LOOPS / 2) * n;
+  const initialIdx = middleStart + activeIdx;
+  const padH = containerW > 0 ? (containerW - WHEEL_ITEM_W) / 2 : 0;
+  return (
+    <View
+      onLayout={(e) => setContainerW(e.nativeEvent.layout.width)}
+      style={{
+        flex: 1, marginRight: 10, height: 40,
+        backgroundColor: bg, borderRadius: 16,
+        overflow: 'hidden', position: 'relative',
+      }}
+    >
+      {containerW > 0 && (
+        <>
+          {/* Cadre central fixe (accent). Z=1, sous les items (z=2) pour
+              que le texte blanc actif soit lisible par dessus. */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 4, bottom: 4,
+              left: padH, width: WHEEL_ITEM_W,
+              backgroundColor: accent, borderRadius: 12,
+              zIndex: 1,
+            }}
+          />
+          <FlatList
+            ref={listRef}
+            data={looped}
+            horizontal
+            keyExtractor={(it) => `wheel-${it._li}`}
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={WHEEL_ITEM_W}
+            decelerationRate="fast"
+            initialScrollIndex={initialIdx}
+            getItemLayout={(_, index) => ({ length: WHEEL_ITEM_W, offset: WHEEL_ITEM_W * index, index })}
+            onScrollToIndexFailed={(info) => {
+              setTimeout(() => listRef.current?.scrollToOffset({
+                offset: (info.averageItemLength || WHEEL_ITEM_W) * info.index, animated: false,
+              }), 50);
+            }}
+            contentContainerStyle={{ paddingHorizontal: padH }}
+            onMomentumScrollEnd={(e) => {
+              const offset = e.nativeEvent.contentOffset.x;
+              const idx = Math.round(offset / WHEEL_ITEM_W);
+              const realIdx = ((idx % n) + n) % n;
+              const newKey = items[realIdx].key;
+              if (newKey !== activeKey) onChange(newKey);
+            }}
+            renderItem={({ item, index }) => {
+              const realIdx = ((index % n) + n) % n;
+              const isActive = realIdx === activeIdx;
+              return (
+                <TouchableOpacity
+                  onPress={() => {
+                    listRef.current?.scrollToIndex({ index, animated: true });
+                    const newKey = items[realIdx].key;
+                    if (newKey !== activeKey) onChange(newKey);
+                  }}
+                  activeOpacity={0.7}
+                  style={{
+                    width: WHEEL_ITEM_W, height: 40,
+                    alignItems: 'center', justifyContent: 'center',
+                    zIndex: 2,
+                  }}
+                >
+                  <Text style={{
+                    color: isActive ? '#fff' : accent,
+                    fontWeight: isActive ? '700' : '500',
+                    fontSize: 13.5,
+                    fontFamily: 'Montserrat',
+                  }}>{item.label}</Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </>
+      )}
+    </View>
+  );
+}
+
 function EventDetailScreen(props) {
   return (
     <GridErrorBoundary>
@@ -2687,72 +2789,22 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             );
             return (
               <View style={{ marginTop: 6, marginBottom: 0 }}>
-                {/* Row 1 : ScrollView horizontale + contentContainer flexGrow:1.
-                    Quand peu de courses (rentrent dans la largeur), la pill
-                    s etend pleine largeur (tabs flex:1 distribuees a egalite).
-                    Quand trop de courses, le conteneur scroll horizontalement
-                    (tabs gardent leur minWidth, total > viewport -> scroll). */}
+                {/* Row 1 : ROULETTE infinie horizontale. Les filtres
+                    coulissent ; un cadre violet fixe au centre marque la
+                    selection courante. snapToInterval + array dupliquee 30x
+                    -> sensation infinie. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <ScrollView
-                    horizontal showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ flexGrow: 1 }}
-                    style={{ flex: 1, marginRight: 10 }}
-                  >
-                  {/* Conteneur pill style HomeScreen : fond pillBg pale,
-                      borderRadius 16, padding 4. flex:1 -> remplit le
-                      contentContainer; en overflow, prend la taille du
-                      contenu et scrolle. */}
-                  <View style={{
-                    flex: 1,
-                    position: 'relative', flexDirection: 'row', alignItems: 'center',
-                    backgroundColor: C.pillBg, borderRadius: 16, padding: 4,
-                  }}>
-                    <Animated.View
-                      pointerEvents="none"
-                      style={{
-                        position: 'absolute',
-                        top: 4, bottom: 4, left: 4,
-                        borderRadius: 12,
-                        backgroundColor: C.primary,
-                        width: raceIndicatorW,
-                        transform: [{ translateX: raceIndicatorX }],
-                      }}
-                    />
-                    <Tab
-                      tabKey="all"
-                      label="Toutes"
-                      active={activeRaceFilter === 'all'}
-                      onPress={() => {
-                        LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
-                        setActiveRaceFilter('all');
-                        setActiveKmFilter('all');
-                      }}
-                      layoutsRef={raceTabLayoutsRef}
-                      indicatorX={raceIndicatorX}
-                      indicatorW={raceIndicatorW}
-                      initRef={raceIndicatorInitRef}
-                    />
-                    {uniqueRaces.map((r) => {
-                      const key = String(r);
-                      return (
-                        <Tab
-                          key={`r-${key}`}
-                          tabKey={key}
-                          label={`${r} km`}
-                          active={activeRaceFilter === key}
-                          onPress={() => {
-                            LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
-                            setActiveRaceFilter(key);
-                          }}
-                          layoutsRef={raceTabLayoutsRef}
-                          indicatorX={raceIndicatorX}
-                          indicatorW={raceIndicatorW}
-                          initRef={raceIndicatorInitRef}
-                        />
-                      );
-                    })}
-                  </View>
-                  </ScrollView>
+                  <RaceWheel
+                    items={[{ key: 'all', label: 'Toutes' }, ...uniqueRaces.map(r => ({ key: String(r), label: `${r} km` }))]}
+                    activeKey={activeRaceFilter}
+                    onChange={(key) => {
+                      LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+                      setActiveRaceFilter(key);
+                      if (key === 'all') setActiveKmFilter('all');
+                    }}
+                    accent={C.primary}
+                    bg={C.pillBg}
+                  />
                 {/* Bouton inverser l ordre du tri (recente / ancien). */}
                 <TouchableOpacity
                   onPress={() => {
