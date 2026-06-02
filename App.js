@@ -2455,14 +2455,15 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             </Text>
           </View>
 
-          {/* Divider hairline tint entre le header photos et la section
-              distances : petite demarcation visuelle sans casser l unite
-              de la card. */}
+          {/* Divider blanc full-width (edge-to-edge) entre le header photos
+              et la section distances. marginHorizontal -16 pour casser le
+              paddingHorizontal 16 de la card et atteindre les bords. */}
           {distances.length > 0 && (
             <View style={{
-              height: StyleSheet.hairlineWidth,
-              backgroundColor: `${tint}40`,
+              height: 1,
+              backgroundColor: '#fff',
               marginTop: 14,
+              marginHorizontal: -16,
             }} />
           )}
 
