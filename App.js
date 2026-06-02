@@ -2000,7 +2000,7 @@ function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow }) {
+function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -2263,7 +2263,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const renderHeader = () => (
     <View>
       <View style={s.headerRow}>
-        <View style={s.headerLeft}>
+        <View style={[s.headerLeft, { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }]}>
           <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
             <Icon.User size={30} color="#c9beed" />
             {selfieUri && (
@@ -2273,6 +2273,18 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               }} />
             )}
           </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+            {runnerFirstName ? (
+              <Text style={[s.welcome, { color: '#c9beed', fontSize: 17 }]} numberOfLines={1}>
+                Hello {runnerFirstName}
+              </Text>
+            ) : (
+              <>
+                <Text style={[s.welcome, { color: '#c9beed', fontSize: 17 }]} numberOfLines={1}>Bienvenue sur </Text>
+                <Icon.Logo width={36} color="#c9beed" />
+              </>
+            )}
+          </View>
         </View>
         <TouchableOpacity onPress={onClose} hitSlop={10}>
           <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
@@ -11773,6 +11785,7 @@ export default function App() {
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
                     isFollowing={follows.includes(eventInPanel.code)}
                     onToggleFollow={() => requireAuth(() => toggleFollow(eventInPanel.code))}
+                    runnerFirstName={runnerSession?.profile?.firstName}
                   />
                 </View>
               </GestureDetector>
