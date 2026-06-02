@@ -2698,7 +2698,12 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
           const gi = Math.round(e.nativeEvent.contentOffset.y / ITEM_H);
           lastGiRef.current = gi;
           const idx = ((gi % N) + N) % N;
-          if (idx !== visualIndex) setVisualIndex(idx);
+          if (idx !== visualIndex) {
+            // Haptic UISelectionFeedbackGenerator : tap court a chaque cran
+            // traverse (meme pattern que les picker iOS natifs).
+            try { Haptics?.selectionAsync?.(); } catch {}
+            setVisualIndex(idx);
+          }
         }}
         scrollEventThrottle={16}
       >
