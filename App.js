@@ -3411,6 +3411,22 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const [techExpanded, setTechExpanded] = useState(false);
   // Menu flottant a gauche du viewer : ferme par defaut, ouvert via chevron.
   const [menuOpen, setMenuOpen] = useState(false);
+  // Animated.Value pour open/close en spring (rotation chevron + fade/translate
+  // des boutons d action + opacite du backdrop).
+  const menuAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(menuAnim, {
+      toValue: menuOpen ? 1 : 0,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 90,
+    }).start();
+  }, [menuOpen]);
+
+  const toggleMenu = () => {
+    try { Haptics?.selectionAsync?.(); } catch {}
+    setMenuOpen(v => !v);
+  };
 
   const fetchMyPhotos = useCallback(async () => {
     if (!session?.event?.code || !session?.token) return;
@@ -4713,125 +4729,159 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       {/* Strip galerie supprime : remplace par un bouton dans le cluster
           flottant a gauche du viewer (ouvre directement la sheet grille). */}
 
-      {/* ─── Cluster flottant a gauche du viewer ─── ferme par defaut.
-          Ancre BOTTOM (winH - viewer_bottom + 16) -> chevron toujours 16px
-          au-dessus du bord bas du viewer, le menu pousse les boutons vers
-          le haut quand il s ouvre. */}
-      <View style={{
-        position: 'absolute',
-        bottom: winH - (CAMERA_TOP + previewH - 16),
-        left: PREVIEW_MARGIN_H + 14,
-        backgroundColor: 'rgba(255,255,255,0.18)',
-        borderRadius: 26,
-        paddingVertical: 6,
-        paddingHorizontal: 6,
-        alignItems: 'center',
-        zIndex: 6,
-      }}>
-        {/* Boutons d action, visibles UNIQUEMENT si menuOpen */}
-        {menuOpen && (
-          <>
-            {/* Galerie */}
-            <TouchableOpacity
-              onPress={() => { setGalleryOpen(true); setMenuOpen(false); }}
-              activeOpacity={0.8}
-              accessibilityLabel="Voir mes photos"
-              style={{
-                width: 40, height: 40, borderRadius: 20,
-                backgroundColor: C.pinkPillActive,
-                alignItems: 'center', justifyContent: 'center',
-                marginBottom: 8,
-              }}
-            >
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                <Path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-                <Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="#fff" strokeWidth={1.8} />
-              </Svg>
-            </TouchableOpacity>
-
-            {/* Info (toggle techExpanded) */}
-            <TouchableOpacity
-              onPress={() => { setTechExpanded(v => !v); setMenuOpen(false); }}
-              activeOpacity={0.8}
-              accessibilityLabel={techExpanded ? 'Cacher les détails' : 'Voir les détails'}
-              style={{
-                width: 40, height: 40, borderRadius: 20,
-                backgroundColor: C.pinkPillActive,
-                alignItems: 'center', justifyContent: 'center',
-                marginBottom: 8,
-              }}
-            >
-              <Text style={{
-                color: '#fff', fontSize: 20, fontWeight: '700',
-                fontFamily: 'AVEstiana', fontStyle: 'italic',
-                lineHeight: 24,
-              }}>i</Text>
-            </TouchableOpacity>
-
-            {/* Power (logout) */}
-            <TouchableOpacity
-              onPress={() => {
-                setMenuOpen(false);
-                if (pendingCount > 0) {
-                  Alert.alert(
-                    'Photos en cours d\'envoi',
-                    `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer. Garde l'app ouverte encore un instant pour qu'elles partent. Si tu te déconnectes, elles repartiront à ta prochaine connexion (tu devras ressaisir ton mot de passe).`,
-                    [
-                      { text: 'Rester', style: 'cancel' },
-                      { text: 'Se déconnecter quand même', style: 'destructive', onPress: onLogout },
-                    ],
-                    { cancelable: true }
-                  );
-                } else {
-                  Alert.alert(
-                    'Se déconnecter ?',
-                    'Tu devras saisir à nouveau le mot de passe pour reprendre ton événement.',
-                    [
-                      { text: 'Annuler', style: 'cancel' },
-                      { text: 'Déconnexion', style: 'destructive', onPress: onLogout },
-                    ],
-                    { cancelable: true }
-                  );
-                }
-              }}
-              activeOpacity={0.8}
-              accessibilityLabel="Déconnexion"
-              style={{
-                width: 40, height: 40, borderRadius: 20,
-                backgroundColor: C.pinkPillActive,
-                alignItems: 'center', justifyContent: 'center',
-                marginBottom: 8,
-              }}
-            >
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 2v10" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-                <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-              </Svg>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* Chevron toggle (toujours visible) : haut ferme = "ouvrir vers le
-            haut", bas ouvert = "refermer". */}
+      {/* ─── Backdrop dismiss ─── couvre toute la zone capture quand le
+          menu est ouvert ; tap dessus = ferme. Transparent : aucun
+          assombrissement, juste un layer de hit-test. */}
+      {menuOpen && (
         <TouchableOpacity
-          onPress={() => setMenuOpen(v => !v)}
-          activeOpacity={0.8}
-          accessibilityLabel={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+          activeOpacity={1}
+          onPress={() => setMenuOpen(false)}
           style={{
-            width: 40, height: 40, borderRadius: 20,
-            backgroundColor: C.pinkPillActive,
-            alignItems: 'center', justifyContent: 'center',
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            zIndex: 5,
+          }}
+        />
+      )}
+
+      {/* ─── Cluster flottant a gauche du viewer ─── ancre BOTTOM, anime
+          en spring (translateY + opacity) sur menuAnim 0..1. Chevron a
+          la base, action buttons empiles au-dessus, chevron pivote 180
+          deg quand le menu ouvre. */}
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          bottom: winH - (CAMERA_TOP + previewH - 16),
+          left: PREVIEW_MARGIN_H + 14,
+          alignItems: 'center',
+          zIndex: 6,
+        }}
+      >
+        <Animated.View
+          pointerEvents={menuOpen ? 'auto' : 'none'}
+          style={{
+            backgroundColor: 'rgba(255,255,255,0.18)',
+            borderRadius: 26,
+            paddingHorizontal: 6,
+            paddingTop: 6,
+            paddingBottom: 0,
+            marginBottom: -6,
+            alignItems: 'center',
+            opacity: menuAnim,
+            transform: [{
+              translateY: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
+            }],
           }}
         >
-          <Svg width={16} height={10} viewBox="0 0 16 10" fill="none">
-            <Path
-              d={menuOpen ? "M2 2L8 8L14 2" : "M2 8L8 2L14 8"}
-              stroke="#fff"
-              strokeWidth={2.2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </Svg>
+          {/* Galerie */}
+          <TouchableOpacity
+            onPress={() => { setGalleryOpen(true); setMenuOpen(false); }}
+            activeOpacity={0.8}
+            accessibilityLabel="Voir mes photos"
+            style={{
+              width: 40, height: 40, borderRadius: 20,
+              backgroundColor: C.pinkPillActive,
+              alignItems: 'center', justifyContent: 'center',
+              marginBottom: 8,
+            }}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+              <Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="#fff" strokeWidth={1.8} />
+            </Svg>
+          </TouchableOpacity>
+
+          {/* Info (toggle techExpanded) */}
+          <TouchableOpacity
+            onPress={() => { setTechExpanded(v => !v); setMenuOpen(false); }}
+            activeOpacity={0.8}
+            accessibilityLabel={techExpanded ? 'Cacher les détails' : 'Voir les détails'}
+            style={{
+              width: 40, height: 40, borderRadius: 20,
+              backgroundColor: C.pinkPillActive,
+              alignItems: 'center', justifyContent: 'center',
+              marginBottom: 8,
+            }}
+          >
+            <Text style={{
+              color: '#fff', fontSize: 20, fontWeight: '700',
+              fontFamily: 'AVEstiana', fontStyle: 'italic',
+              lineHeight: 24,
+            }}>i</Text>
+          </TouchableOpacity>
+
+          {/* Power (logout) */}
+          <TouchableOpacity
+            onPress={() => {
+              setMenuOpen(false);
+              if (pendingCount > 0) {
+                Alert.alert(
+                  'Photos en cours d\'envoi',
+                  `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer. Garde l'app ouverte encore un instant pour qu'elles partent. Si tu te déconnectes, elles repartiront à ta prochaine connexion (tu devras ressaisir ton mot de passe).`,
+                  [
+                    { text: 'Rester', style: 'cancel' },
+                    { text: 'Se déconnecter quand même', style: 'destructive', onPress: onLogout },
+                  ],
+                  { cancelable: true }
+                );
+              } else {
+                Alert.alert(
+                  'Se déconnecter ?',
+                  'Tu devras saisir à nouveau le mot de passe pour reprendre ton événement.',
+                  [
+                    { text: 'Annuler', style: 'cancel' },
+                    { text: 'Déconnexion', style: 'destructive', onPress: onLogout },
+                  ],
+                  { cancelable: true }
+                );
+              }
+            }}
+            activeOpacity={0.8}
+            accessibilityLabel="Déconnexion"
+            style={{
+              width: 40, height: 40, borderRadius: 20,
+              backgroundColor: C.pinkPillActive,
+              alignItems: 'center', justifyContent: 'center',
+              marginBottom: 12,
+            }}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Path d="M12 2v10" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+              <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+            </Svg>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Chevron : trigger, toujours visible. Bouton rond avec ombre
+            subtile et rotation 180 deg quand le menu ouvre. */}
+        <TouchableOpacity
+          onPress={toggleMenu}
+          activeOpacity={0.85}
+          accessibilityLabel={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+          style={{
+            width: 44, height: 44, borderRadius: 22,
+            backgroundColor: C.pinkPillActive,
+            alignItems: 'center', justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.25, shadowRadius: 5,
+            shadowOffset: { width: 0, height: 2 },
+          }}
+        >
+          <Animated.View style={{
+            transform: [{
+              rotate: menuAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }),
+            }],
+          }}>
+            <Svg width={16} height={10} viewBox="0 0 16 10" fill="none">
+              <Path
+                d="M2 8L8 2L14 8"
+                stroke="#fff"
+                strokeWidth={2.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
+          </Animated.View>
         </TouchableOpacity>
       </View>
 
