@@ -935,11 +935,12 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
           <Text style={s.selfieSub}>Ajoute ton event en favoris avant le départ et reçois tes photos automatiquement !</Text>
         </View>
         <View style={[s.selfieAvatar, { backgroundColor: 'transparent' }]}>
-          {/* Coeur (meme path SVG que PhotosEmptyState badge violet) :
-              langage visuel = mecanique favoris, qui declenche l envoi
-              des photos. Choix valide par l utilisateur apres iteration. */}
-          <Svg width={34} height={30} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
-            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+          {/* Icone Favoris_2 (source ~/WILL/Favoris_2.svg) : coeur + accent
+              + petite goutte, langage visuel "favoris geste rapide". */}
+          <Svg width={36} height={46} viewBox="0 0 25.6 32.5" fill="#fff">
+            <Path d="M9.6,6.7c1.9-.4,3.8.2,5.1,1.5.7-1.7,2.2-3.1,4.1-3.5,3.1-.7,6.1,1.3,6.7,4.3.8,3.5-3,9.1-5.4,12.4-1.1,1.5-3.2,2-4.9,1-3.6-2-9.3-5.6-10-9.1-.7-3.1,1.3-6.1,4.4-6.7h0Z" />
+            <Path d="M4.2,21.3c1.2.2,2.1,1.1,2.5,2.1.8-.8,2-1.2,3.1-.9,1.9.4,3.1,2.2,2.7,4.1-.5,2.1-3.9,4.4-6.1,5.6-1,.6-2.3.3-3-.6C1.9,29.6-.4,26.1,0,24c.4-1.9,2.2-3.1,4.1-2.7Z" />
+            <Path d="M5.6,0c.6.1,1.1.5,1.3,1.1.4-.4,1-.6,1.6-.5.9.2,1.6,1.1,1.4,2.1-.2,1.1-2,2.2-3.1,2.8-.5.3-1.2.2-1.5-.3-.8-1-1.9-2.8-1.7-3.8C3.7.4,4.7-.2,5.6,0Z" />
           </Svg>
         </View>
       </LinearGradient>
