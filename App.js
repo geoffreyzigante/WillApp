@@ -7722,16 +7722,21 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
-          <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
-            <TouchableOpacity onPress={onClose} hitSlop={20}>
-              <View style={s.modalHandle} />
-            </TouchableOpacity>
-            <Text style={[s.welcome, { color: C.text, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
-              {role === 'organizer' ? 'Espace organisateur' : 'Espace photographe'}
-            </Text>
+        <View style={{ flex: 1 }}>
+          {/* Backdrop : BlurView dark + voile rose subtil (rgba C.pinkPill
+              ~13%). Fade-in herite de animationType="fade" du Modal. */}
+          <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFillObject} />
+          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(214,124,248,0.16)' }]} pointerEvents="none" />
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
+            <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
+              <TouchableOpacity onPress={onClose} hitSlop={20}>
+                <View style={s.modalHandle} />
+              </TouchableOpacity>
+              <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
+                {role === 'organizer' ? 'Espace organisateur' : 'Espace photographe'}
+              </Text>
             <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }}>
               {role === 'photographer' ? 'Sélectionne ton événement et entre ton code PIN' : 'Connecte-toi à ton événement'}
             </Text>
@@ -7916,8 +7921,9 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: (code && password) ? '#fff' : C.textSoft, fontSize: 15, fontWeight: '700' }}>Continuer</Text>}
               </TouchableOpacity>
             )}
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -9675,16 +9681,20 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
-          <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
-            <TouchableOpacity onPress={onClose} hitSlop={20}>
-              <View style={s.modalHandle} />
-            </TouchableOpacity>
-            <Text style={[s.welcome, { color: C.text, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
-              {mode === 'login' ? 'Espace organisateur' : 'Créer un compte'}
-            </Text>
+        <View style={{ flex: 1 }}>
+          {/* Backdrop : BlurView dark + voile rose subtil. */}
+          <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFillObject} />
+          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(214,124,248,0.16)' }]} pointerEvents="none" />
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
+            <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
+              <TouchableOpacity onPress={onClose} hitSlop={20}>
+                <View style={s.modalHandle} />
+              </TouchableOpacity>
+              <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
+                {mode === 'login' ? 'Espace organisateur' : 'Créer un compte'}
+              </Text>
             <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }}>
               {mode === 'login' ? 'Connecte-toi à ton compte organisateur' : 'Crée ton compte pour gérer tes events'}
             </Text>
@@ -9720,8 +9730,9 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
                 {mode === 'login' ? "Pas encore de compte ? S'inscrire" : 'Déjà un compte ? Se connecter'}
               </Text>
             </TouchableOpacity>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
