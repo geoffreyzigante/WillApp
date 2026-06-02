@@ -2013,6 +2013,16 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // course. activeKmFilter pertinent uniquement si activeRaceFilter !== "all".
   const [activeRaceFilter, setActiveRaceFilter] = useState('all');
   const [activeKmFilter, setActiveKmFilter] = useState('all');
+  // Animated sliding underline iOS Apple Music-style. Layout de chaque tab
+  // mesure via onLayout, puis l indicator slide vers la position du tab actif.
+  const raceTabLayoutsRef = useRef({});
+  const kmTabLayoutsRef = useRef({});
+  const raceIndicatorX = useRef(new Animated.Value(0)).current;
+  const raceIndicatorW = useRef(new Animated.Value(0)).current;
+  const kmIndicatorX = useRef(new Animated.Value(0)).current;
+  const kmIndicatorW = useRef(new Animated.Value(0)).current;
+  // Fade + slide-in pour la row Posté quand elle apparait.
+  const kmRowAnim = useRef(new Animated.Value(0)).current;
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false); // Phase D3 : confirm "Ne plus suivre"
   const tint = colorForType(event.event_type);
   const upcoming = isUpcoming(event.event_date, event.event_date_end);
@@ -2093,6 +2103,33 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
   // Reset le filtre km quand la course change (revient a "Tous" naturellement).
   useEffect(() => { setActiveKmFilter('all'); }, [activeRaceFilter]);
+
+  // Slide animation de l indicator race vers le tab actif.
+  useEffect(() => {
+    const l = raceTabLayoutsRef.current[activeRaceFilter];
+    if (!l) return;
+    Animated.parallel([
+      Animated.spring(raceIndicatorX, { toValue: l.x, useNativeDriver: false, friction: 10, tension: 80 }),
+      Animated.spring(raceIndicatorW, { toValue: l.width, useNativeDriver: false, friction: 10, tension: 80 }),
+    ]).start();
+  }, [activeRaceFilter]);
+
+  // Slide animation de l indicator km + fade-in de la row.
+  useEffect(() => {
+    const visible = activeRaceFilter !== 'all' && kmsForActiveRace.length > 0;
+    Animated.spring(kmRowAnim, {
+      toValue: visible ? 1 : 0,
+      useNativeDriver: true,
+      friction: 11, tension: 80,
+    }).start();
+    if (!visible) return;
+    const l = kmTabLayoutsRef.current[activeKmFilter];
+    if (!l) return;
+    Animated.parallel([
+      Animated.spring(kmIndicatorX, { toValue: l.x, useNativeDriver: false, friction: 10, tension: 80 }),
+      Animated.spring(kmIndicatorW, { toValue: l.width, useNativeDriver: false, friction: 10, tension: 80 }),
+    ]).start();
+  }, [activeKmFilter, activeRaceFilter, kmsForActiveRace.length]);
 
   // Niveau 1 — courses uniques presentes dans les photos. Trie numerique asc.
   const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)))
@@ -2426,85 +2463,128 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               (pill 12px, height contenue, fond pale) pour ne pas dominer
               la hero card + lien follow + CTA site qui sont au-dessus. */}
           {raceTabs.length > 0 && photos.length > 0 && (() => {
-            // Filtres iOS segmented underline : texte seul, soulignement violet
-            // sous l onglet actif, pas de pill bg. Hierarchie via 2 rows :
-            // row 1 = Toutes + Course (race), row 2 = Posté (km, plus petit
-            // et indente, visible uniquement si une course est selectionnee).
-            const Tab = ({ label, active, onPress, small = false, activeColor = C.primary }) => (
-              <TouchableOpacity onPress={onPress} activeOpacity={0.5} style={{ alignItems: 'center' }}>
+            // iOS Apple Music-style tabs : underline animee qui slide entre
+            // les onglets actifs. onLayout mesure chaque tab, l indicator
+            // est une Animated.View absolue qui scroll avec le contenu.
+            const Tab = ({ tabKey, label, active, onPress, layoutsRef, small = false, activeColor = C.primary }) => (
+              <TouchableOpacity
+                onPress={onPress}
+                onLayout={(e) => { layoutsRef.current[tabKey] = e.nativeEvent.layout; }}
+                activeOpacity={0.5}
+                style={{ paddingHorizontal: 2 }}
+              >
                 <Text style={{
-                  fontSize: small ? 12 : 13,
+                  fontSize: small ? 12.5 : 14,
                   fontWeight: active ? '700' : '500',
                   color: active ? activeColor : C.textSoft,
-                  paddingBottom: 4,
+                  paddingBottom: 6,
                   fontFamily: 'Montserrat',
                 }}>{label}</Text>
-                <View style={{
-                  height: 2, width: '100%',
-                  borderRadius: 1,
-                  backgroundColor: active ? activeColor : 'transparent',
-                }} />
               </TouchableOpacity>
             );
             return (
-              <View style={{ marginTop: 10, marginBottom: 2 }}>
-                {/* Row 1 : Toutes + Course */}
+              <View style={{ marginTop: 12, marginBottom: 2 }}>
+                {/* Row 1 : Toutes + Course (underline violet animee) */}
                 <ScrollView
                   horizontal showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 22, paddingVertical: 4, alignItems: 'flex-end' }}
+                  contentContainerStyle={{ gap: 22, paddingHorizontal: 2, alignItems: 'flex-end' }}
                 >
-                  <Tab
-                    label="Toutes"
-                    active={activeRaceFilter === 'all'}
-                    onPress={() => { setActiveRaceFilter('all'); setActiveKmFilter('all'); }}
-                  />
-                  {uniqueRaces.map((r) => {
-                    const key = String(r);
-                    return (
-                      <Tab
-                        key={`r-${key}`}
-                        label={`${r} km`}
-                        active={activeRaceFilter === key}
-                        onPress={() => setActiveRaceFilter(key)}
-                      />
-                    );
-                  })}
-                </ScrollView>
-
-                {/* Row 2 : Posté CENTRE sous la course active, en rose brand. */}
-                {activeRaceFilter !== 'all' && kmsForActiveRace.length > 0 && (
-                  <ScrollView
-                    horizontal showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{
-                      gap: 18, paddingVertical: 4, alignItems: 'flex-end',
-                      // flexGrow + justifyContent center the chips when the
-                      // content is narrower than the viewport (when it
-                      // overflows, the scroll just works normally).
-                      flexGrow: 1, justifyContent: 'center',
-                    }}
-                  >
+                  <View style={{ position: 'relative', flexDirection: 'row', gap: 22, alignItems: 'flex-end' }}>
                     <Tab
-                      label="Tous"
-                      active={activeKmFilter === 'all'}
-                      onPress={() => setActiveKmFilter('all')}
-                      small
-                      activeColor={C.pinkPill}
+                      tabKey="all"
+                      label="Toutes"
+                      active={activeRaceFilter === 'all'}
+                      onPress={() => { setActiveRaceFilter('all'); setActiveKmFilter('all'); }}
+                      layoutsRef={raceTabLayoutsRef}
                     />
-                    {kmsForActiveRace.map((k) => {
-                      const label = k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`;
+                    {uniqueRaces.map((r) => {
+                      const key = String(r);
                       return (
                         <Tab
-                          key={`k-${k}`}
-                          label={label}
-                          active={activeKmFilter === k}
-                          onPress={() => setActiveKmFilter(k)}
-                          small
-                          activeColor={C.pinkPill}
+                          key={`r-${key}`}
+                          tabKey={key}
+                          label={`${r} km`}
+                          active={activeRaceFilter === key}
+                          onPress={() => setActiveRaceFilter(key)}
+                          layoutsRef={raceTabLayoutsRef}
                         />
                       );
                     })}
-                  </ScrollView>
-                )}
+                    <Animated.View
+                      pointerEvents="none"
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        height: 2.5,
+                        borderRadius: 1.5,
+                        backgroundColor: C.primary,
+                        width: raceIndicatorW,
+                        transform: [{ translateX: raceIndicatorX }],
+                      }}
+                    />
+                  </View>
+                </ScrollView>
+
+                {/* Row 2 : Posté centre sous la course, en rose, anime
+                    fade+slide quand elle apparait. */}
+                <Animated.View
+                  pointerEvents={activeRaceFilter === 'all' ? 'none' : 'auto'}
+                  style={{
+                    opacity: kmRowAnim,
+                    transform: [{
+                      translateY: kmRowAnim.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }),
+                    }],
+                  }}
+                >
+                  {activeRaceFilter !== 'all' && kmsForActiveRace.length > 0 && (
+                    <ScrollView
+                      horizontal showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{
+                        gap: 18, paddingHorizontal: 2,
+                        flexGrow: 1, justifyContent: 'center', alignItems: 'flex-end',
+                      }}
+                    >
+                      <View style={{ position: 'relative', flexDirection: 'row', gap: 18, alignItems: 'flex-end' }}>
+                        <Tab
+                          tabKey="all"
+                          label="Tous"
+                          active={activeKmFilter === 'all'}
+                          onPress={() => setActiveKmFilter('all')}
+                          layoutsRef={kmTabLayoutsRef}
+                          small
+                          activeColor={C.pinkPill}
+                        />
+                        {kmsForActiveRace.map((k) => {
+                          const label = k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`;
+                          return (
+                            <Tab
+                              key={`k-${k}`}
+                              tabKey={k}
+                              label={label}
+                              active={activeKmFilter === k}
+                              onPress={() => setActiveKmFilter(k)}
+                              layoutsRef={kmTabLayoutsRef}
+                              small
+                              activeColor={C.pinkPill}
+                            />
+                          );
+                        })}
+                        <Animated.View
+                          pointerEvents="none"
+                          style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            height: 2.5,
+                            borderRadius: 1.5,
+                            backgroundColor: C.pinkPill,
+                            width: kmIndicatorW,
+                            transform: [{ translateX: kmIndicatorX }],
+                          }}
+                        />
+                      </View>
+                    </ScrollView>
+                  )}
+                </Animated.View>
               </View>
             );
           })()}
