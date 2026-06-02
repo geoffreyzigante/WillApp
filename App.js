@@ -2406,21 +2406,28 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 marginVertical: 12,
               }} />
 
-              {/* Ligne biometrique + lien En savoir plus inline */}
+              {/* Ligne biometrique : icone + texte. 'En savoir plus' a la
+                  ligne en dessous, sous-ligne. */}
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
                 <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2}>
                   <Circle cx="12" cy="8" r="4" />
                   <Path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
                 </Svg>
-                <Text style={{ flex: 1, color: 'rgba(255,255,255,0.85)', fontSize: 11, lineHeight: 15 }}>
-                  Will analyse ton visage pour y retrouver tes photos.{' '}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, lineHeight: 15 }}>
+                    Will analyse ton visage pour y retrouver tes photos.
+                  </Text>
                   <Text
-                    style={{ color: '#fff', fontWeight: '600', textDecorationLine: 'underline' }}
+                    style={{
+                      color: '#fff', fontSize: 11, fontWeight: '600',
+                      textDecorationLine: 'underline',
+                      marginTop: 4,
+                    }}
                     onPress={() => Linking.openURL('https://will-app.com/confidentialite').catch(() => {})}
                   >
                     En savoir plus
                   </Text>
-                </Text>
+                </View>
               </View>
             </LinearGradient>
           </TouchableOpacity>
@@ -2437,34 +2444,24 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           paddingVertical: 16, paddingHorizontal: 16,
           backgroundColor: `${tint}1A`, borderRadius: 16,
         }}>
-          {/* Header : icone + titre + sous-titre */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          {/* Header centre : icone + titre + sous-titre alignes au centre */}
+          <View style={{ alignItems: 'center' }}>
             <Icon.PhotoCam size={28} color={tint} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: tint, fontSize: 14, fontWeight: '700' }}>
-                Photos disponibles le jour J
-              </Text>
-              <Text style={{ color: tint, fontSize: 11, marginTop: 2, opacity: 0.75 }}>
-                Reviens le jour de l'événement pour les voir
-              </Text>
-            </View>
+            <Text style={{ color: tint, fontSize: 14, fontWeight: '700', marginTop: 8, textAlign: 'center' }}>
+              Photos disponibles le jour J
+            </Text>
+            <Text style={{ color: tint, fontSize: 11, marginTop: 2, opacity: 0.75, textAlign: 'center' }}>
+              Reviens le jour de l'événement pour les voir
+            </Text>
           </View>
 
-          {/* Distances integrees dans la meme card. Visible si distances
-              configurees par l orga. */}
+          {/* Distances integrees, sans titre de section ni puce avant km. */}
           {distances.length > 0 && (
             <View style={{ marginTop: 14 }}>
-              <Text style={{
-                color: tint, fontSize: 10, fontWeight: '700', letterSpacing: 1,
-                textTransform: 'uppercase', fontFamily: 'Montserrat',
-                marginBottom: 8, opacity: 0.85,
-              }}>
-                {distances.length > 1 ? 'Courses' : 'Course'}
-              </Text>
               {/* Header colonnes */}
               <View style={{
                 flexDirection: 'row', alignItems: 'center',
-                paddingLeft: 18, paddingBottom: 6,
+                paddingBottom: 6,
                 borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${tint}40`,
               }}>
                 <Text style={{
@@ -2490,10 +2487,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
                   borderBottomColor: `${tint}40`,
                 }}>
-                  <View style={{
-                    width: 8, height: 8, borderRadius: 4,
-                    backgroundColor: tint, marginRight: 10,
-                  }} />
                   <Text style={{ color: tint, fontSize: 15, fontWeight: '700', width: 60 }}>
                     {d.km} km
                   </Text>
