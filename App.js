@@ -7722,13 +7722,12 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={{ flex: 1 }}>
-          {/* Backdrop : BlurView dark + voile rose subtil (rgba C.pinkPill
-              ~13%). Fade-in herite de animationType="fade" du Modal. */}
+          {/* Backdrop : BlurView dark seul (pas de teinte rose). Slide-up
+              herite de animationType="slide" du Modal. */}
           <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFillObject} />
-          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(214,124,248,0.16)' }]} pointerEvents="none" />
           <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
             <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
               <TouchableOpacity onPress={onClose} hitSlop={20}>
@@ -9681,12 +9680,11 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={{ flex: 1 }}>
-          {/* Backdrop : BlurView dark + voile rose subtil. */}
+          {/* Backdrop : BlurView dark seul (pas de teinte rose). */}
           <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFillObject} />
-          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(214,124,248,0.16)' }]} pointerEvents="none" />
           <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
             <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
               <TouchableOpacity onPress={onClose} hitSlop={20}>
