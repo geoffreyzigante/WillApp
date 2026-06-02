@@ -9262,13 +9262,13 @@ function PhotoViewerModal({
 
   // Layout cible (hauteurs fixes pour calcul de la zone photo)
   const HEADER_H = 56;          // titre + date
-  const SLIDER_H = 64;          // slider 56px + padding
+  const SLIDER_H = 0;           // slider supprime ; constante conservee pour les autres refs
   const BUTTON_AREA_H = 78;     // bouton + paddings
   const photoMargin = 20;       // marge G/D autour de la photo principale
   const targetX = photoMargin;
   const targetY = topPad + HEADER_H;
   const targetW = winWidth - photoMargin * 2;
-  const targetH = winHeight - topPad - HEADER_H - SLIDER_H - BUTTON_AREA_H - bottomPad - 8;
+  const targetH = winHeight - topPad - HEADER_H - BUTTON_AREA_H - bottomPad - 8;
 
   // ── v2.3 refonte : Animation shared-element en TRANSFORM-ONLY ─────────
   // Au lieu d'animer left/top/width/height (re-layout cher → saccades), on
@@ -9599,23 +9599,15 @@ function PhotoViewerModal({
   const currentHidden = effectiveHidden(currentPhoto);
   const fav = currentPhoto?.id && photoFavoritesSet?.has(currentPhoto.id);
 
-  // Sync bidirectionnel slider <-> photo principale via currentIndex.
-  // sourceRef indique QUELLE liste a declenche le changement : si c est le
-  // slider (ou la photo principale), on EVITE de re-scroller cette meme liste,
-  // sinon un onMomentumScrollEnd stale peut re-write currentIndex avec la
-  // valeur d avant et faire "revenir l image a la derniere vue".
-  // null = changement externe (ouverture viewer, tap miniature) -> sync les deux.
-  const sliderRef = useRef(null);
+  // Slider supprime : sync = photoList uniquement. Sur changement externe
+  // (open viewer / programmatic), on scroll-snap a currentIndex. Sur swipe
+  // utilisateur sur la photo principale (sourceRef='photo'), on NE sync PAS
+  // pour eviter qu un onMomentumScrollEnd stale re-write currentIndex.
   const sourceRef = useRef(null);
-  const lastHapticIdxRef = useRef(currentIndex);
   useEffect(() => {
     if (!photos || currentIndex < 0 || currentIndex >= photos.length) return;
     const source = sourceRef.current;
     sourceRef.current = null;
-    if (source !== 'slider') {
-      try { sliderRef.current?.scrollToOffset({ offset: currentIndex * 50, animated: true }); }
-      catch {}
-    }
     if (source !== 'photo') {
       try { photoListRef.current?.scrollToOffset({ offset: currentIndex * cardW, animated: false }); }
       catch {}
@@ -9761,9 +9753,6 @@ function PhotoViewerModal({
                     const offset = e.nativeEvent.contentOffset.x;
                     const idx = Math.round(offset / cardW);
                     if (idx !== currentIndex && idx >= 0 && photos && idx < photos.length) {
-                      // Sync slider SYNCHRONIQUEMENT pour eviter le delai
-                      // setState -> useEffect (cf. commentaire slider sym.).
-                      try { sliderRef.current?.scrollToOffset({ offset: idx * 50, animated: true }); } catch {}
                       sourceRef.current = 'photo';
                       setCurrentIndex(idx);
                     }
@@ -9843,141 +9832,11 @@ function PhotoViewerModal({
             </TouchableOpacity>
           </ReAnimated.View>
 
-          {/* Slider PELLICULE à cadre central FIXE (style scrubber video iPhone).
-              Les miniatures coulissent ; un cadre rose absolute marque la
-              position centrale. La miniature sous le cadre = photo courante.
-              Sync bidirectionnelle :
-                - tap miniature → setCurrentIndex
-                - scroll slider → onMomentumScrollEnd → setCurrentIndex
-                - swipe carte → useEffect → scrollToOffset */}
-          <ReAnimated.View
-            style={[{
-              position: 'absolute', left: 0, right: 0,
-              top: targetY + cardH + 8, height: SLIDER_H,
-              justifyContent: 'center',
-            }, uiStyle]}
-          >
-            {photos && photos.length > 0 ? (
-              <>
-                <FlatList
-                  key={`viewer-slider-${sessionKeyRef.current}`}
-                  ref={sliderRef}
-                  data={photos}
-                  horizontal
-                  keyExtractor={(p, i) => p.id || `slider-${i}`}
-                  showsHorizontalScrollIndicator={false}
-                  initialNumToRender={12}
-                  windowSize={5}
-                  snapToInterval={50}
-                  decelerationRate="fast"
-                  initialScrollIndex={targetIndex}
-                  getItemLayout={(_, index) => ({ length: 50, offset: 50 * index, index })}
-                  onScrollToIndexFailed={(info) => {
-                    setTimeout(() => sliderRef.current?.scrollToOffset({
-                      offset: (info.averageItemLength || 50) * info.index, animated: true,
-                    }), 50);
-                  }}
-                  // Haptic tap iOS (UISelectionFeedbackGenerator) sur CHAQUE
-                  // miniature qui passe sous le cadre central pendant le scroll
-                  // -- pas seulement au snap final. Style galerie iPhone.
-                  // lastHapticIdxRef evite de re-tapper sur la meme miniature
-                  // si onScroll fire plusieurs fois pour le meme index.
-                  scrollEventThrottle={16}
-                  onScroll={(e) => {
-                    const offset = e.nativeEvent.contentOffset.x;
-                    const idx = Math.round(offset / 50);
-                    if (idx !== lastHapticIdxRef.current && idx >= 0 && idx < photos.length) {
-                      lastHapticIdxRef.current = idx;
-                      try { Haptics?.selectionAsync?.(); } catch {}
-                    }
-                  }}
-                  onMomentumScrollEnd={(e) => {
-                    // Commit du currentIndex UNIQUEMENT au snap final (sinon la
-                    // grande photo en haut sauterait a chaque miniature passee).
-                    const offset = e.nativeEvent.contentOffset.x;
-                    const idx = Math.round(offset / 50);
-                    if (idx !== currentIndex && idx >= 0 && idx < photos.length) {
-                      // Sync la grande photo SYNCHRONIQUEMENT avant setState :
-                      // evite le chemin setCurrentIndex -> re-render -> useEffect
-                      // (~50ms) qui faisait sentir un delai entre slider et photo.
-                      try { photoListRef.current?.scrollToOffset({ offset: idx * cardW, animated: false }); } catch {}
-                      sourceRef.current = 'slider';
-                      setCurrentIndex(idx);
-                    }
-                  }}
-                  // v2.5 point 4 : padding extra a la FIN pour permettre de
-                  // slider un peu plus que la derniere miniature (effet
-                  // over-scroll iPhone Photos). Le padding gauche reste pile
-                  // pour que l item 0 tombe sous le cadre central.
-                  contentContainerStyle={{
-                    alignItems: 'center',
-                    paddingLeft: (winWidth - 44) / 2,
-                    paddingRight: (winWidth - 44) / 2 + 60,   // +60 = over-scroll droit
-                  }}
-                  renderItem={({ item, index }) => (
-                    <TouchableOpacity
-                      onPress={() => setCurrentIndex(index)}
-                      activeOpacity={0.85}
-                      style={{
-                        // v2.5 point 4 : thumb 44x44 (etait 56x56) -> plus de
-                        // miniatures visibles a la fois, slider plus aere.
-                        width: 44, height: 44, marginRight: 6,
-                        borderRadius: 6, overflow: 'hidden',
-                      }}
-                    >
-                      {/* v2.5 point 2 : hint de taille au decodeur (downsample
-                          si supporte). Reduit la conso memoire + le temps de
-                          decompression au retour foreground. */}
-                      <ExpoImage
-                        source={{ uri: item.uri, width: 88, height: 88 }}
-                        style={{ flex: 1 }}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        priority="low"
-                        transition={80}
-                        recyclingKey={item.id}
-                      />
-                    </TouchableOpacity>
-                  )}
-                />
-                {/* Cadre rose central FIXE (overlay pointer-events:none) */}
-                <View
-                  pointerEvents="none"
-                  style={{
-                    position: 'absolute',
-                    left: (winWidth - 44) / 2 - 2, // -2 pour centrer le cadre sur la thumb 44
-                    top: (SLIDER_H - 44) / 2 - 2,
-                    width: 48, height: 48,
-                    borderRadius: 8,
-                    borderWidth: 2,
-                    borderColor: C.pinkPill,
-                  }}
-                />
-                {/* v2.4 point 2 : fade-out blanc aux extremites du slider.
-                    LinearGradient overlay gauche (blanc -> transparent) et
-                    droite (transparent -> blanc), pointerEvents=none pour ne
-                    pas bloquer le scroll. Largeur 40px = ~2/3 d'une miniature. */}
-                <LinearGradient
-                  pointerEvents="none"
-                  colors={['rgba(255,255,255,1)', 'rgba(255,255,255,0)']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={{
-                    position: 'absolute', left: 0, top: 0, bottom: 0, width: 40,
-                  }}
-                />
-                <LinearGradient
-                  pointerEvents="none"
-                  colors={['rgba(255,255,255,0)', 'rgba(255,255,255,1)']}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={{
-                    position: 'absolute', right: 0, top: 0, bottom: 0, width: 40,
-                  }}
-                />
-              </>
-            ) : null}
-          </ReAnimated.View>
+          {/* Slider supprime 2026-06-02 : bug recurrent de retour stale sur
+              la derniere photo slidee, malgre les tentatives de sync via
+              sourceRef + sync synchrone. Navigation entre photos = uniquement
+              swipe horizontal sur la grande photo (FlatList pagingEnabled
+              native, sans aucun sync croise -> pas de race possible). */}
 
           {/* Bouton bas : Telecharger (coureur, violet primary) OU
               Publier/Masquer (orga, rose Will). Supprimer cache par flag. */}
