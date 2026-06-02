@@ -7603,6 +7603,18 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  // Sheet slide-in via Animated.translateY (independant du fade backdrop
+  // qui est gere par animationType="fade" du Modal). 1000 = off-screen.
+  const sheetTranslate = useRef(new Animated.Value(1000)).current;
+  useEffect(() => {
+    if (visible) {
+      sheetTranslate.setValue(1000);
+      Animated.spring(sheetTranslate, {
+        toValue: 0, useNativeDriver: true,
+        friction: 11, tension: 80,
+      }).start();
+    }
+  }, [visible]);
   // Reset flow (organisateur uniquement) : 'login' → 'reset-request' → 'reset-verify'
   const [resetMode, setResetMode] = useState('login');
   const [resetCode, setResetCode] = useState('');
@@ -7722,13 +7734,15 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={{ flex: 1 }}>
-          {/* Backdrop : BlurView dark seul (pas de teinte rose). Slide-up
-              herite de animationType="slide" du Modal. */}
-          <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFillObject} />
+          {/* Backdrop : iOS systemThinMaterialDark (givre frostal natif,
+              plus leger qu'un Gaussian blur dense). Fade-in herite du
+              animationType="fade" du Modal. */}
+          <BlurView intensity={100} tint="systemThinMaterialDark" style={StyleSheet.absoluteFillObject} />
           <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
+            <Animated.View style={{ transform: [{ translateY: sheetTranslate }] }}>
             <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
               <TouchableOpacity onPress={onClose} hitSlop={20}>
                 <View style={s.modalHandle} />
@@ -7921,6 +7935,7 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
               </TouchableOpacity>
             )}
             </TouchableOpacity>
+            </Animated.View>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -9638,6 +9653,17 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
   const [lastName, setLastName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Sheet slide-in via Animated.translateY (independant du fade backdrop).
+  const sheetTranslate = useRef(new Animated.Value(1000)).current;
+  useEffect(() => {
+    if (visible) {
+      sheetTranslate.setValue(1000);
+      Animated.spring(sheetTranslate, {
+        toValue: 0, useNativeDriver: true,
+        friction: 11, tension: 80,
+      }).start();
+    }
+  }, [visible]);
 
   // Pré-remplit l'email avec la dernière valeur connue à chaque ouverture.
   useEffect(() => {
@@ -9680,12 +9706,13 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={{ flex: 1 }}>
-          {/* Backdrop : BlurView dark seul (pas de teinte rose). */}
-          <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFillObject} />
+          {/* Backdrop : iOS systemThinMaterialDark, fade-in herite du Modal. */}
+          <BlurView intensity={100} tint="systemThinMaterialDark" style={StyleSheet.absoluteFillObject} />
           <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
+            <Animated.View style={{ transform: [{ translateY: sheetTranslate }] }}>
             <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
               <TouchableOpacity onPress={onClose} hitSlop={20}>
                 <View style={s.modalHandle} />
@@ -9729,6 +9756,7 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
               </Text>
             </TouchableOpacity>
             </TouchableOpacity>
+            </Animated.View>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
