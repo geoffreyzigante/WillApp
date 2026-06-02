@@ -9507,6 +9507,17 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
   const [citySuggestions, setCitySuggestions] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Sheet slide-in : meme pattern que LoginModal / AuthOrganizerModal.
+  const sheetTranslate = useRef(new Animated.Value(1000)).current;
+  useEffect(() => {
+    if (visible) {
+      sheetTranslate.setValue(1000);
+      Animated.spring(sheetTranslate, {
+        toValue: 0, useNativeDriver: true,
+        friction: 11, tension: 80,
+      }).start();
+    }
+  }, [visible]);
 
   // Pré-remplit l'email avec la dernière valeur connue à chaque ouverture.
   // Et resynchronise le mode (login/register) sur l'intention d'ouverture.
@@ -9577,161 +9588,105 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}
-      >
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
-        >
-          {/* Backdrop tappable : occupe la zone vide au-dessus de la sheet
-              (s ecrase a 0 quand le form deborde du viewport, ce qui evite
-              de griser une zone interactive). */}
-          <TouchableOpacity activeOpacity={1} onPress={onClose} style={{ flex: 1 }} />
-          <View style={{ backgroundColor: C.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 }}>
-          {mode === 'register' && (
-            <Text style={{ color: C.textSoft, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 6 }}>
-              Étape 1 sur 2
-            </Text>
-          )}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <Text style={{ color: C.text, fontSize: 22, fontWeight: '700' }}>
-              {mode === 'login' ? 'Connexion' : 'Inscription'}
-            </Text>
-            <TouchableOpacity onPress={onClose} hitSlop={10}>
-              <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                <Path d="m8 8 8 8M16 8l-8 8" stroke={C.text} strokeWidth={2.4} strokeLinecap="round" />
-              </Svg>
-            </TouchableOpacity>
-          </View>
-
-          {mode === 'register' && (
-            <>
-              <TextInput
-                placeholder="Prénom"
-                placeholderTextColor={C.textSoft}
-                value={firstName}
-                onChangeText={setFirstName}
-                style={authStyles.input}
-              />
-              <TextInput
-                placeholder="Nom"
-                placeholderTextColor={C.textSoft}
-                value={lastName}
-                onChangeText={setLastName}
-                style={authStyles.input}
-              />
-              <TextInput
-                placeholder="Code postal"
-                placeholderTextColor={C.textSoft}
-                value={postalCode}
-                onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
-                keyboardType="number-pad"
-                maxLength={5}
-                style={authStyles.input}
-              />
-              {citySuggestions.length > 0 && !city && (
-                <ScrollView
-                  style={{ maxHeight: 140, marginBottom: 10, borderRadius: 12, backgroundColor: '#f5f3ff' }}
-                  keyboardShouldPersistTaps="handled"
-                >
-                  {citySuggestions.map((c) => (
-                    <TouchableOpacity
-                      key={c}
-                      onPress={() => { setCity(c); setCitySuggestions([]); }}
-                      style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
-                    >
-                      <Text style={{ color: C.text, fontSize: 14 }}>{c}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              )}
-              {city ? (
-                <TouchableOpacity
-                  onPress={() => setCity('')}
-                  style={[authStyles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
-                >
-                  <Text style={{ color: C.text, fontSize: 15 }}>{city}</Text>
-                  <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={{ flex: 1 }}>
+          {/* Backdrop : BlurView leger iOS (meme pattern que LoginModal +
+              AuthOrganizerModal). Fade-in herite de animationType="fade". */}
+          <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
+            <Animated.View style={{ transform: [{ translateY: sheetTranslate }] }}>
+              <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
+                <TouchableOpacity onPress={onClose} hitSlop={20}>
+                  <View style={s.modalHandle} />
                 </TouchableOpacity>
-              ) : null}
-            </>
-          )}
-          <TextInput
-            placeholder="Email"
-            placeholderTextColor={C.textSoft}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={authStyles.input}
-          />
-          <PasswordInput
-            placeholder="Mot de passe"
-            placeholderTextColor={C.textSoft}
-            value={password}
-            onChangeText={setPassword}
-            style={authStyles.input}
-          />
-          {mode === 'register' && password ? (
-            <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
-              <View style={{ flexDirection: 'row', gap: 4, marginBottom: 6 }}>
-                {[1, 2, 3, 4].map((i) => (
-                  <View
-                    key={i}
-                    style={{
-                      flex: 1,
-                      height: 3,
-                      borderRadius: 2,
-                      backgroundColor: i <= pwdStrength.score ? pwdStrength.color : '#e9e4f9',
-                    }}
-                  />
-                ))}
-              </View>
-              <Text style={{ color: pwdStrength.color, fontSize: 11, fontWeight: '600' }}>
-                {pwdStrength.label}
-              </Text>
-            </View>
-          ) : null}
+                {mode === 'register' && (
+                  <Text style={{ color: C.textSoft, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase', textAlign: 'center', marginTop: 0, marginBottom: 4 }}>
+                    Étape 1 sur 2
+                  </Text>
+                )}
+                <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
+                  {mode === 'login' ? 'Connexion' : 'Inscription'}
+                </Text>
+                <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }}>
+                  {mode === 'login' ? 'Connecte-toi à ton compte' : 'Crée ton compte coureur'}
+                </Text>
 
-          {error ? (
-            <Text style={{ color: '#ff6b6b', fontSize: 13, marginTop: 4, marginBottom: 8 }}>{error}</Text>
-          ) : null}
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 0 }}
+                  style={{ maxHeight: 460 }}
+                >
+                  {mode === 'register' && (
+                    <>
+                      <TextInput placeholder="Prénom" placeholderTextColor={C.textSoft} value={firstName} onChangeText={setFirstName} style={formSectionStyle.input} />
+                      <TextInput placeholder="Nom" placeholderTextColor={C.textSoft} value={lastName} onChangeText={setLastName} style={formSectionStyle.input} />
+                      <TextInput
+                        placeholder="Code postal"
+                        placeholderTextColor={C.textSoft}
+                        value={postalCode}
+                        onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
+                        keyboardType="number-pad"
+                        maxLength={5}
+                        style={formSectionStyle.input}
+                      />
+                      {citySuggestions.length > 0 && !city && (
+                        <ScrollView
+                          style={{ maxHeight: 140, marginBottom: 10, borderRadius: 12, backgroundColor: '#f5f3ff' }}
+                          keyboardShouldPersistTaps="handled"
+                          nestedScrollEnabled
+                        >
+                          {citySuggestions.map((c) => (
+                            <TouchableOpacity
+                              key={c}
+                              onPress={() => { setCity(c); setCitySuggestions([]); }}
+                              style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
+                            >
+                              <Text style={{ color: C.text, fontSize: 14 }}>{c}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      )}
+                      {city ? (
+                        <TouchableOpacity
+                          onPress={() => setCity('')}
+                          style={[formSectionStyle.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                        >
+                          <Text style={{ color: C.text, fontSize: 15 }}>{city}</Text>
+                          <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </>
+                  )}
+                  <TextInput placeholder="Email" placeholderTextColor={C.textSoft} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={formSectionStyle.input} />
+                  <PasswordInput placeholder="Mot de passe" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} style={formSectionStyle.input} />
+                  {mode === 'register' && password ? (
+                    <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
+                      <View style={{ flexDirection: 'row', gap: 4, marginBottom: 6 }}>
+                        {[1, 2, 3, 4].map((i) => (
+                          <View key={i} style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: i <= pwdStrength.score ? pwdStrength.color : '#e9e4f9' }} />
+                        ))}
+                      </View>
+                      <Text style={{ color: pwdStrength.color, fontSize: 11, fontWeight: '600' }}>{pwdStrength.label}</Text>
+                    </View>
+                  ) : null}
+                  {error ? <Text style={{ color: '#ff6b6b', fontSize: 13, marginTop: 4, marginBottom: 8 }}>{error}</Text> : null}
+                </ScrollView>
 
-          <TouchableOpacity
-            onPress={submit}
-            disabled={busy}
-            style={{
-              backgroundColor: C.primary,
-              paddingVertical: 14,
-              borderRadius: 14,
-              alignItems: 'center',
-              marginTop: 12,
-              opacity: busy ? 0.6 : 1,
-            }}
-          >
-            {busy ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
-                {mode === 'login' ? 'Se connecter' : "S'inscrire"}
-              </Text>
-            )}
-          </TouchableOpacity>
+                <TouchableOpacity onPress={submit} disabled={busy} style={{ backgroundColor: C.pinkPill, paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 12, opacity: busy ? 0.6 : 1 }}>
+                  {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{mode === 'login' ? 'Se connecter' : "S'inscrire"}</Text>}
+                </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
-            style={{ marginTop: 16, alignItems: 'center' }}
-          >
-            <Text style={{ color: C.textSoft, fontSize: 13 }}>
-              {mode === 'login' ? "Pas encore de compte ? S'inscrire" : 'Déjà un compte ? Se connecter'}
-            </Text>
+                <TouchableOpacity onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }} style={{ marginTop: 14, alignItems: 'center', paddingVertical: 6 }}>
+                  <Text style={{ color: C.textSoft, fontSize: 13 }}>
+                    {mode === 'login' ? "Pas encore de compte ? S'inscrire" : 'Déjà un compte ? Se connecter'}
+                  </Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </Animated.View>
           </TouchableOpacity>
         </View>
-        </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
   );
