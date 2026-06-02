@@ -2521,11 +2521,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
                 </Svg>
                 <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
-                  Ajoute-le en favoris AVANT le départ
+                  Ajoute-le en favoris avant le départ
                 </Text>
               </View>
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 4, textAlign: 'center' }}>
-                Pour recevoir tes photos automatiquement le jour J.
+                Pour recevoir tes photos automatiquement
               </Text>
 
               {/* Divider hairline blanc transparent */}
@@ -2535,28 +2535,22 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 marginVertical: 12,
               }} />
 
-              {/* Ligne biometrique : icone + texte. 'En savoir plus' a la
-                  ligne en dessous, sous-ligne. */}
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+              {/* Sous-sous-titre : lien direct vers la page confidentialite,
+                  precede de l icone biometrique pour le contexte visuel. */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2}>
                   <Circle cx="12" cy="8" r="4" />
                   <Path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
                 </Svg>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, lineHeight: 15 }}>
-                    Will analyse ton visage pour y retrouver tes photos.
-                  </Text>
-                  <Text
-                    style={{
-                      color: '#fff', fontSize: 11, fontWeight: '600',
-                      textDecorationLine: 'underline',
-                      marginTop: 4,
-                    }}
-                    onPress={() => Linking.openURL('https://will-app.com/confidentialite').catch(() => {})}
-                  >
-                    En savoir plus
-                  </Text>
-                </View>
+                <Text
+                  style={{
+                    color: '#fff', fontSize: 11, fontWeight: '600',
+                    textDecorationLine: 'underline',
+                  }}
+                  onPress={() => Linking.openURL('https://will-app.com/confidentialite').catch(() => {})}
+                >
+                  En savoir plus sur la reconnaissance faciale
+                </Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
@@ -9286,13 +9280,14 @@ function PhotoViewerModal({
   const bgOpacity = useSharedValue(0);    // fond viewer global
   const uiOpacity = useSharedValue(0);    // titre / date / slider / bouton / icones
 
-  // Easing worklet inline pour transitions hero -> cubic ease-out
-  // (ease out doux, pas d'overshoot). 320ms = sweet spot iOS Photos.
-  // Worklet pour pouvoir etre invoque depuis le UI thread Reanimated.
-  const HERO_DURATION = 320;
+  // Easing worklet pour transitions hero. Quartic ease-out (1-pow(1-t,4))
+  // -> demarrage plus doux, fin plus posee qu un cubic. 420ms en ouverture
+  // pour laisser respirer la zoom-in ; close synchro a 380ms (cf.
+  // animateOutAndClose). Worklet pour invocation UI thread Reanimated.
+  const HERO_DURATION = 420;
   const HERO_EASING = (t) => {
     'worklet';
-    return 1 - Math.pow(1 - t, 3);
+    return 1 - Math.pow(1 - t, 4);
   };
 
   // Swipe horizontal du rail (3 cartes) + vertical (close)
@@ -9355,20 +9350,22 @@ function PhotoViewerModal({
   };
 
   // ── Animation de fermeture : retrecit vers origin puis onClose ──
+  // 380ms (vs 280ms avant) + quartic easing -> sortie plus posee, moins
+  // brusque, raccord avec l ouverture qui est elle a 420ms.
   const animateOutAndClose = () => {
-    uiOpacity.value = withTiming(0, { duration: 160, easing: HERO_EASING });
-    bgOpacity.value = withTiming(0, { duration: 260, easing: HERO_EASING });
+    uiOpacity.value = withTiming(0, { duration: 220, easing: HERO_EASING });
+    bgOpacity.value = withTiming(0, { duration: 340, easing: HERO_EASING });
     if (origin && Number.isFinite(origin.x)) {
       const originCx = origin.x + origin.w / 2;
       const originCy = origin.y + origin.h / 2;
-      entryTx.value = withTiming(originCx - targetCardCx, { duration: 280, easing: HERO_EASING });
-      entryTy.value = withTiming(originCy - targetCardCy, { duration: 280, easing: HERO_EASING });
-      pradius.value = withTiming(10, { duration: 280, easing: HERO_EASING });
-      entryScale.value = withTiming(origin.w / cardW, { duration: 280, easing: HERO_EASING }, (finished) => {
+      entryTx.value = withTiming(originCx - targetCardCx, { duration: 380, easing: HERO_EASING });
+      entryTy.value = withTiming(originCy - targetCardCy, { duration: 380, easing: HERO_EASING });
+      pradius.value = withTiming(10, { duration: 380, easing: HERO_EASING });
+      entryScale.value = withTiming(origin.w / cardW, { duration: 380, easing: HERO_EASING }, (finished) => {
         if (finished) runOnJS(onClose)();
       });
     } else {
-      setTimeout(onClose, 260);
+      setTimeout(onClose, 340);
     }
   };
 
