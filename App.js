@@ -2425,52 +2425,100 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               separateur fin puis du N2 si pertinent. Ensemble pill discrete
               (pill 12px, height contenue, fond pale) pour ne pas dominer
               la hero card + lien follow + CTA site qui sont au-dessus. */}
-          {raceTabs.length > 0 && photos.length > 0 && (
-            <ScrollView
-              horizontal showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 6, paddingVertical: 2, alignItems: 'center' }}
-              style={{ marginTop: 8, marginBottom: 2 }}
-            >
-              {raceTabs.map((t) => {
-                const active = activeRaceFilter === t.key;
-                return (
+          {raceTabs.length > 0 && photos.length > 0 && (() => {
+            // 3 niveaux empiles avec labels Montserrat MAJ a gauche :
+            //   Toutes  : 1 chip "Toutes les photos" (reset filtres).
+            //   Course  : chips par race (uniqueRaces, sans le prefix "Toutes").
+            //   Post    : chips par km posté (visible si une course est selectionnee).
+            const allActive = activeRaceFilter === 'all';
+            const labelStyle = {
+              color: C.textSoft, fontSize: 10, fontWeight: '600',
+              letterSpacing: 1, textTransform: 'uppercase',
+              fontFamily: 'Montserrat',
+              width: 56,
+            };
+            return (
+              <View style={{ marginTop: 10, marginBottom: 2, gap: 8 }}>
+                {/* Niveau 1 : Toutes */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={labelStyle}>Toutes</Text>
                   <TouchableOpacity
-                    key={`r-${t.key}`}
-                    onPress={() => setActiveRaceFilter(t.key)}
+                    onPress={() => { setActiveRaceFilter('all'); setActiveKmFilter('all'); }}
                     style={{
                       paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
-                      backgroundColor: active ? C.primary : '#f5f3ff',
+                      backgroundColor: allActive ? C.primary : '#f5f3ff',
                     }}
                   >
-                    <Text style={{ color: active ? '#fff' : C.text, fontSize: 12, fontWeight: '600' }}>{t.label}</Text>
+                    <Text style={{ color: allActive ? '#fff' : C.text, fontSize: 12, fontWeight: '600' }}>Toutes les photos</Text>
                   </TouchableOpacity>
-                );
-              })}
+                </View>
 
-              {/* Separateur vertical fin entre N1 et N2 (apparait si N2 actif). */}
-              {kmTabs.length > 0 && (
-                <View style={{ width: 1, height: 16, backgroundColor: '#EDE4FF', marginHorizontal: 4 }} />
-              )}
-
-              {kmTabs.map((t) => {
-                const active = activeKmFilter === t.key;
-                return (
-                  <TouchableOpacity
-                    key={`k-${t.key}`}
-                    onPress={() => setActiveKmFilter(t.key)}
-                    style={{
-                      paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
-                      backgroundColor: active ? C.primary : 'transparent',
-                      borderWidth: active ? 0 : 1,
-                      borderColor: '#EDE4FF',
-                    }}
+                {/* Niveau 2 : Course */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={labelStyle}>Course</Text>
+                  <ScrollView
+                    horizontal showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 6, alignItems: 'center' }}
                   >
-                    <Text style={{ color: active ? '#fff' : C.textSoft, fontSize: 11, fontWeight: '600' }}>{t.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          )}
+                    {uniqueRaces.map((r) => {
+                      const key = String(r);
+                      const active = activeRaceFilter === key;
+                      return (
+                        <TouchableOpacity
+                          key={`r-${key}`}
+                          onPress={() => setActiveRaceFilter(key)}
+                          style={{
+                            paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+                            backgroundColor: active ? C.primary : '#f5f3ff',
+                          }}
+                        >
+                          <Text style={{ color: active ? '#fff' : C.text, fontSize: 12, fontWeight: '600' }}>{r} km</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+
+                {/* Niveau 3 : Poste (visible uniquement si une course active
+                    ET au moins une position km existe). */}
+                {activeRaceFilter !== 'all' && kmsForActiveRace.length > 0 && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={labelStyle}>Posté</Text>
+                    <ScrollView
+                      horizontal showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 6, alignItems: 'center' }}
+                    >
+                      <TouchableOpacity
+                        onPress={() => setActiveKmFilter('all')}
+                        style={{
+                          paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+                          backgroundColor: activeKmFilter === 'all' ? C.primary : '#f5f3ff',
+                        }}
+                      >
+                        <Text style={{ color: activeKmFilter === 'all' ? '#fff' : C.text, fontSize: 11, fontWeight: '600' }}>Tous</Text>
+                      </TouchableOpacity>
+                      {kmsForActiveRace.map((k) => {
+                        const active = activeKmFilter === k;
+                        const label = k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`;
+                        return (
+                          <TouchableOpacity
+                            key={`k-${k}`}
+                            onPress={() => setActiveKmFilter(k)}
+                            style={{
+                              paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+                              backgroundColor: active ? C.primary : '#f5f3ff',
+                            }}
+                          >
+                            <Text style={{ color: active ? '#fff' : C.text, fontSize: 11, fontWeight: '600' }}>{label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
 
           {/* Petit espacement avant la grille (le titre "Photos" + count
               a ete retire — la grille parle d elle-meme). */}
