@@ -11267,11 +11267,9 @@ export default function App() {
       const storedOldFavorites = await AsyncStorage.getItem('@will_favorites');
       if (__DEV__) console.log('[Phase D reset] @will_phase_d_reset_done =', resetDone, 'old @will_favorites =', storedOldFavorites);
       if (resetDone === '1') {
-        // Boot normal post-reset : charge follows depuis @will_follows si présent
-        const storedFollows = await AsyncStorage.getItem('@will_follows');
-        if (storedFollows) {
-          try { setFollows(JSON.parse(storedFollows)); } catch { setFollows([]); }
-        }
+        // Boot normal post-reset : le chargement de @will_follows est fait
+        // par un useEffect dedie qui depend de runnerSession (favoris cachees
+        // uniquement quand connecte). Rien a faire ici.
         return;
       }
       // 1er boot post-Phase D : vide anciens favoris + flag + affiche modale si non-vide
@@ -11326,8 +11324,13 @@ export default function App() {
 
   // Favoris photos perso (locaux par device, scopés par userId).
   // Rechargés quand userId change (ex: login runner → userId aligne sur runner.userId).
+  // Conditionne au runnerSession : les favoris ne doivent EXISTER en cache
+  // que pour un compte connecte (cf. requete utilisateur, deconnecte = 0 favoris).
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !runnerSession) {
+      setPhotoFavorites([]);
+      return;
+    }
     AsyncStorage.getItem(`@will_photo_favorites_${userId}`).then(v => {
       if (v) {
         try { setPhotoFavorites(JSON.parse(v)); } catch { setPhotoFavorites([]); }
@@ -11335,7 +11338,19 @@ export default function App() {
         setPhotoFavorites([]);
       }
     });
-  }, [userId]);
+  }, [userId, runnerSession]);
+
+  // Charge @will_follows uniquement quand un runner est connecte. Pas de
+  // pre-load au boot inconditionnel — le block phase D ne le fait plus —
+  // pour que la valeur en memoire colle a la regle "favoris uniquement
+  // si connecte". Au login, on relit ; au logout, logoutRunner purge.
+  useEffect(() => {
+    if (!runnerSession) return;
+    AsyncStorage.getItem('@will_follows').then(v => {
+      if (!v) return;
+      try { setFollows(JSON.parse(v)); } catch {}
+    });
+  }, [runnerSession?.profile?.userId]);
 
   const handleAuthSuccess = useCallback((session) => {
     const { isNewSignup, ...stored } = session || {};
@@ -11449,12 +11464,22 @@ export default function App() {
     // Sinon ce device continuerait de recevoir des notifs apres logout.
     const tk = runnerSession?.token;
     if (tk) { api.deletePushToken(tk); }
+    const prevUserId = runnerSession?.profile?.userId;
     setRunnerSession(null);
     setSelfieUri(null);
+    // Favoris (events suivis + photos likees) ne doivent persister QUE pour
+    // un user connecte. On purge l in-memory et le cache au logout : la
+    // prochaine connexion repart propre (pas de fuite d un compte a l autre).
+    setFollows([]);
+    setPhotoFavorites([]);
     Secure.removeItem('@will_runner').catch(() => {});
     AsyncStorage.removeItem('@will_selfie').catch(() => {});
     AsyncStorage.removeItem('@will_photos_cache').catch(() => {});
     AsyncStorage.removeItem('@will_last_seen_burst_ts').catch(() => {});
+    AsyncStorage.removeItem('@will_follows').catch(() => {});
+    if (prevUserId) {
+      AsyncStorage.removeItem(`@will_photo_favorites_${prevUserId}`).catch(() => {});
+    }
   }, [runnerSession]);
 
   const handleOrganizerAuthSuccess = useCallback((session) => {
@@ -11682,7 +11707,9 @@ export default function App() {
 
   const photoFavoritesSet = useMemo(() => new Set(photoFavorites), [photoFavorites]);
   const togglePhotoFavorite = useCallback((photoId) => {
-    if (!photoId || !userId) return;
+    // Garde-fou : seul un runner connecte peut likeer une photo. Le caller
+    // doit deja wrapper avec requireAuth pour ouvrir le modal de login si non.
+    if (!photoId || !userId || !runnerSession) return;
     setPhotoFavorites(prev => {
       const next = prev.includes(photoId)
         ? prev.filter(k => k !== photoId)
@@ -11690,7 +11717,7 @@ export default function App() {
       AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(next)).catch(() => {});
       return next;
     });
-  }, [userId]);
+  }, [userId, runnerSession]);
 
   const deleteSelfie = useCallback(() => {
     Alert.alert('Supprimer le selfie ?', 'Tu pourras en reprendre un nouveau.', [
@@ -11965,7 +11992,15 @@ export default function App() {
                   onOpenOrgRole={handlePickRole}
                   onOpenSearch={() => setSearchModal(true)}
                   tab={tab}
-                  setTab={setTab}
+                  setTab={(next) => {
+                    // L onglet Suivis exige un compte connecte : tap deconnecte
+                    // -> ouvre le modal d auth, ne switche pas la pill.
+                    if (next === 'follows' && !runnerSession) {
+                      requireAuth(() => setTab('follows'));
+                      return;
+                    }
+                    setTab(next);
+                  }}
                   selfieUri={selfieUri}
                   onDeleteSelfie={deleteSelfie}
                   onOpenProfile={() => {
@@ -12241,7 +12276,7 @@ export default function App() {
         eventDate={openedPhoto?.eventDate}
         onClose={() => setOpenedPhoto(null)}
         photoFavoritesSet={photoFavoritesSet}
-        onTogglePhotoFavorite={togglePhotoFavorite}
+        onTogglePhotoFavorite={(id) => requireAuth(() => togglePhotoFavorite(id))}
       />
 
       <AuthRunnerModal
