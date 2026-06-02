@@ -9643,16 +9643,18 @@ function PhotoViewerModal({
     return () => sub.remove();
   }, [currentIndex, photos, visible]);
 
-  // Progressive loading : precharge la photo suivante et precedente pour que
-  // les swipes Tinder enchainent sans latence. ExpoImage cache memory-disk
-  // -> les prefetches restent en cache pour le swap instantane.
+  // Progressive loading : precharge un voisinage de +/-3 photos pour que
+  // les swipes Tinder ET les sauts via slider (plusieurs miniatures d un
+  // coup) enchainent sans flash. Avant : seulement +/-1 -> tout saut de
+  // plus de 1 cran via slider causait un decode jit + flicker visible.
   useEffect(() => {
     if (!photos) return;
     const urls = [];
-    const next = photos[currentIndex + 1];
-    const prev = photos[currentIndex - 1];
-    if (next?.uri) urls.push(next.uri);
-    if (prev?.uri) urls.push(prev.uri);
+    for (let d = -3; d <= 3; d++) {
+      if (d === 0) continue;
+      const p = photos[currentIndex + d];
+      if (p?.uri) urls.push(p.uri);
+    }
     if (urls.length && ExpoImage.prefetch) {
       ExpoImage.prefetch(urls).catch(() => {});
     }
@@ -9759,6 +9761,9 @@ function PhotoViewerModal({
                     const offset = e.nativeEvent.contentOffset.x;
                     const idx = Math.round(offset / cardW);
                     if (idx !== currentIndex && idx >= 0 && photos && idx < photos.length) {
+                      // Sync slider SYNCHRONIQUEMENT pour eviter le delai
+                      // setState -> useEffect (cf. commentaire slider sym.).
+                      try { sliderRef.current?.scrollToOffset({ offset: idx * 50, animated: true }); } catch {}
                       sourceRef.current = 'photo';
                       setCurrentIndex(idx);
                     }
@@ -9892,6 +9897,10 @@ function PhotoViewerModal({
                     const offset = e.nativeEvent.contentOffset.x;
                     const idx = Math.round(offset / 50);
                     if (idx !== currentIndex && idx >= 0 && idx < photos.length) {
+                      // Sync la grande photo SYNCHRONIQUEMENT avant setState :
+                      // evite le chemin setCurrentIndex -> re-render -> useEffect
+                      // (~50ms) qui faisait sentir un delai entre slider et photo.
+                      try { photoListRef.current?.scrollToOffset({ offset: idx * cardW, animated: false }); } catch {}
                       sourceRef.current = 'slider';
                       setCurrentIndex(idx);
                     }
