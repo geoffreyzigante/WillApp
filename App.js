@@ -935,10 +935,12 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
           <Text style={s.selfieSub}>Ajoute ton event en favoris avant le départ et reçois tes photos automatiquement !</Text>
         </View>
         <View style={s.selfieAvatar}>
-          {/* Meme illustration "face scan" (cadres FaceID) que PhotosUnauthScreen :
-              langage visuel = scan biometrique, pas un avatar generique.
-              Color = blanc car le fond de la card est violet. */}
-          <SelfieIllustration size={56} color="#FFFFFF" />
+          {/* Coeur (meme path SVG que PhotosEmptyState badge violet) :
+              langage visuel = mecanique favoris, qui declenche l envoi
+              des photos. Choix valide par l utilisateur apres iteration. */}
+          <Svg width={34} height={30} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
+            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+          </Svg>
         </View>
       </LinearGradient>
     </TouchableOpacity>
@@ -11211,7 +11213,12 @@ export default function App() {
   }, [events]);
 
   useEffect(() => {
+    // Le .ttf a un PostScript = 'AVEstiana-Bold' (Subfamily Bold unique). On
+    // registre sous DEUX cles : nom PostScript natif (que iOS reconnait sans
+    // ambiguite) + alias 'AVEstiana' historique pour compat avec les styles
+    // existants qui referencent ce nom-la.
     Font.loadAsync({
+      'AVEstiana-Bold': require('./assets/fonts/AV_Estiana-VF.ttf'),
       AVEstiana: require('./assets/fonts/AV_Estiana-VF.ttf'),
       Montserrat: require('./assets/fonts/Montserrat-VF.ttf'),
     }).then(() => setFontsLoaded(true)).catch(() => setFontsLoaded(true));
@@ -12385,11 +12392,9 @@ const s = StyleSheet.create({
   selfieDelete: { padding: 6 },
 
   selfieCard: { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 8 },
-  // AV_Estiana-VF.ttf n a qu une seule instance (PostScript = AVEstiana-Bold,
-  // Subfamily = Bold). Si on specifie fontWeight:'700', iOS cherche une variante
-  // "encore plus grasse" qui n existe pas et fallback sur la system font.
-  // Retirer fontWeight laisse iOS appliquer le font registre tel quel (deja Bold).
-  selfieTitle: { color: '#fff', fontSize: 24, fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 28 },
+  // Utilise le nom PostScript natif 'AVEstiana-Bold' (vs alias 'AVEstiana')
+  // pour que iOS resolve le font sans ambiguite weight / style.
+  selfieTitle: { color: '#fff', fontSize: 24, fontFamily: 'AVEstiana-Bold', lineHeight: 28 },
   selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
   selfieAvatar: { width: 68, height: 68, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 
