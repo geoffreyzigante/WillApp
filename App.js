@@ -1782,9 +1782,15 @@ function PhotosStepRow({ num, text, done = false }) {
 const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav }) {
   const [errored, setErrored] = React.useState(false);
   const cellRef = React.useRef(null);
-  // size optionnel : si fourni, on fixe la taille (skeletons / autres usages) ;
-  // sinon flex: 1 + aspectRatio: 1 pour remplir la rangee FlatList et garder le carre.
-  const sizeStyle = size ? { width: size, height: size } : { flex: 1, aspectRatio: 1 };
+  // size optionnel :
+  //   - number  -> carre {width: n, height: n}
+  //   - object  -> {width, height} explicites (masonry hauteurs variables)
+  //   - absent  -> flex: 1 + aspectRatio: 1 (grid carre dans FlatList)
+  const sizeStyle = (() => {
+    if (size && typeof size === 'object') return { width: size.width, height: size.height };
+    if (typeof size === 'number') return { width: size, height: size };
+    return { flex: 1, aspectRatio: 1 };
+  })();
   // Wrapping ref + measureInWindow pour shared-element : le caller recoit
   // { x, y, w, h } de la thumb tapee et anime la photo viewer depuis cette
   // position vers le plein ecran.
@@ -2742,31 +2748,50 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     );
   };
 
+  // Masonry Pinterest 2 colonnes : chaque photo a un aspectRatio cycle
+  // (1:1 / 3:4 / 5:6) puisqu on n a pas le ratio reel depuis le worker.
+  // Distribution shortest-column-first pour un packing serre.
+  const renderMasonry = () => {
+    if (showEmptyMessage || visiblePhotos.length === 0) return null;
+    const COLS = 2;
+    const colWidth = (SCREEN_W - SCROLL_PADDING_H * 2 - GRID_GAP) / COLS;
+    const cycle = [1, 0.75, 1, 0.83, 0.75]; // mix carre / portrait / portrait haut
+    const cols = [[], []];
+    const colHeights = [0, 0];
+    visiblePhotos.forEach((p, i) => {
+      const ar = cycle[i % cycle.length];
+      const h = colWidth / ar;
+      const shorter = colHeights[0] <= colHeights[1] ? 0 : 1;
+      cols[shorter].push({ photo: p, height: h });
+      colHeights[shorter] += h + GRID_GAP;
+    });
+    return (
+      <View style={{ flexDirection: 'row', gap: GRID_GAP }}>
+        {cols.map((col, ci) => (
+          <View key={ci} style={{ width: colWidth, gap: GRID_GAP }}>
+            {col.map(({ photo, height }) => (
+              <PhotoCell
+                key={photo.id}
+                photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
+                size={{ width: colWidth, height }}
+                onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
+                  origin,
+                  eventTitle: event?.name,
+                  eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+                })}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <>
-      <FlatList
+      <ScrollView
         style={s.scroll}
         contentContainerStyle={{ paddingBottom: 120 }}
-        data={showEmptyMessage ? [] : visiblePhotos}
-        keyExtractor={(item) => item.id || item.uri}
-        renderItem={renderItem}
-        numColumns={NUM_COLS}
-        columnWrapperStyle={NUM_COLS > 1 ? {
-          paddingHorizontal: GRID_PADDING_H,
-          gap: GRID_GAP,
-          marginBottom: GRID_GAP,
-        } : undefined}
-        initialNumToRender={12}
-        maxToRenderPerBatch={9}
-        windowSize={5}
-        removeClippedSubviews={true}
-        onEndReached={() => {
-          if (hasMore) setVisibleCount(c => Math.min(c + PAGE_SIZE, filteredPhotos.length));
-        }}
-        onEndReachedThreshold={0.5}
-        ListHeaderComponent={renderHeader()}
-        ListEmptyComponent={renderListEmpty}
-        ListFooterComponent={renderFooter}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -2775,8 +2800,21 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             colors={[C.primary]}
           />
         }
+        onScroll={({ nativeEvent }) => {
+          if (!hasMore) return;
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          const distFromBottom = contentSize.height - (layoutMeasurement.height + contentOffset.y);
+          if (distFromBottom < 600) {
+            setVisibleCount(c => Math.min(c + PAGE_SIZE, filteredPhotos.length));
+          }
+        }}
+        scrollEventThrottle={250}
         showsVerticalScrollIndicator={false}
-      />
+      >
+        {renderHeader()}
+        {(loading || upcoming) && visiblePhotos.length === 0 ? renderListEmpty() : renderMasonry()}
+        {renderFooter()}
+      </ScrollView>
 
       {/* Confirm modal "Ne plus suivre" (Phase D3). Le toggle via le coeur
           top-right reste instantane (gestures rapides), seule la voie
