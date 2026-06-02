@@ -7729,10 +7729,10 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
             <TouchableOpacity onPress={onClose} hitSlop={20}>
               <View style={s.modalHandle} />
             </TouchableOpacity>
-            <Text style={[s.welcome, { color: role === 'photographer' ? C.pinkPill : C.primary, fontSize: 22, marginBottom: 4, marginTop: 4 }]}>
+            <Text style={[s.welcome, { color: C.text, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
               {role === 'organizer' ? 'Espace organisateur' : 'Espace photographe'}
             </Text>
-            <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18 }}>
+            <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }}>
               {role === 'photographer' ? 'Sélectionne ton événement et entre ton code PIN' : 'Connecte-toi à ton événement'}
             </Text>
 
@@ -7883,7 +7883,7 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   onPress={resetMode === 'reset-request' ? requestReset : verifyReset}
                   disabled={resetBusy || (resetMode === 'reset-request' ? !code : (!resetCode || !resetNewPassword))}
                   style={{
-                    backgroundColor: C.primary, paddingVertical: 14, borderRadius: 14,
+                    backgroundColor: C.pinkPill, paddingVertical: 14, borderRadius: 14,
                     alignItems: 'center', marginTop: 8,
                     opacity: resetBusy ? 0.7 : 1,
                   }}
@@ -7909,7 +7909,7 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 onPress={submit}
                 disabled={busy || !code || !password}
                 style={{
-                  backgroundColor: (code && password) ? C.primary : '#e9e4f9',
+                  backgroundColor: (code && password) ? C.pinkPill : '#e9e4f9',
                   paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 8,
                 }}
               >
@@ -9676,28 +9676,27 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: C.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <Text style={{ color: C.text, fontSize: 22, fontWeight: '700' }}>
-                {mode === 'login' ? 'Espace organisateur' : 'Créer un compte organisateur'}
-              </Text>
-              <TouchableOpacity onPress={onClose} hitSlop={10}>
-                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                  <Path d="m8 8 8 8M16 8l-8 8" stroke={C.text} strokeWidth={2.4} strokeLinecap="round" />
-                </Svg>
-              </TouchableOpacity>
-            </View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
+          <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
+            <TouchableOpacity onPress={onClose} hitSlop={20}>
+              <View style={s.modalHandle} />
+            </TouchableOpacity>
+            <Text style={[s.welcome, { color: C.text, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
+              {mode === 'login' ? 'Espace organisateur' : 'Créer un compte'}
+            </Text>
+            <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }}>
+              {mode === 'login' ? 'Connecte-toi à ton compte organisateur' : 'Crée ton compte pour gérer tes events'}
+            </Text>
 
             {mode === 'register' && (
               <>
-                <TextInput placeholder="Prénom" placeholderTextColor={C.textSoft} value={firstName} onChangeText={setFirstName} style={authStyles.input} />
-                <TextInput placeholder="Nom" placeholderTextColor={C.textSoft} value={lastName} onChangeText={setLastName} style={authStyles.input} />
+                <TextInput placeholder="Prénom" placeholderTextColor={C.textSoft} value={firstName} onChangeText={setFirstName} style={formSectionStyle.input} />
+                <TextInput placeholder="Nom" placeholderTextColor={C.textSoft} value={lastName} onChangeText={setLastName} style={formSectionStyle.input} />
               </>
             )}
-            <TextInput placeholder="Email" placeholderTextColor={C.textSoft} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={authStyles.input} />
-            <PasswordInput placeholder="Mot de passe" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} style={authStyles.input} />
+            <TextInput placeholder="Email" placeholderTextColor={C.textSoft} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={formSectionStyle.input} />
+            <PasswordInput placeholder="Mot de passe" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} style={formSectionStyle.input} />
 
             {mode === 'register' && password ? (
               <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
@@ -9716,13 +9715,13 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
               {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{mode === 'login' ? 'Se connecter' : "S'inscrire"}</Text>}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }} style={{ marginTop: 16, alignItems: 'center' }}>
+            <TouchableOpacity onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }} style={{ marginTop: 14, alignItems: 'center', paddingVertical: 6 }}>
               <Text style={{ color: C.textSoft, fontSize: 13 }}>
                 {mode === 'login' ? "Pas encore de compte ? S'inscrire" : 'Déjà un compte ? Se connecter'}
               </Text>
             </TouchableOpacity>
-          </View>
-        </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </KeyboardAvoidingView>
     </Modal>
   );
