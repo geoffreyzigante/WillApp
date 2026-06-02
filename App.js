@@ -4541,16 +4541,18 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           </View>
         </View>
 
-        {/* Panneau details replie : compteurs + erreur + readout en ligne
-            INLINE dans le header (sur la bande noire du gradient, pas dans
-            une carte separee). paddingLeft 48 = back arrow (36) + gap (12),
-            tout est aligne avec le nom de l event. */}
+        {/* Panneau details replie : compteurs + erreur + readout sur une
+            seule ligne CENTREE, fond noir aplat edge-to-edge (casse le
+            paddingHorizontal 16 du parent via marginHorizontal: -16). */}
         {techExpanded && (
           <View style={{
             marginTop: 8,
-            paddingLeft: 48, paddingRight: 8,
+            marginHorizontal: -16,
+            paddingHorizontal: 16, paddingVertical: 10,
+            backgroundColor: '#000',
             flexDirection: 'row',
             alignItems: 'center',
+            justifyContent: 'center',
             flexWrap: 'wrap',
             columnGap: 10,
             rowGap: 4,
@@ -4737,7 +4739,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: CAMERA_TOP + 16, left: 0, right: 0,
+            // Pill descend de 44px quand le panneau info est ouvert pour ne
+            // pas se faire couvrir par l aplat noir des compteurs.
+            top: CAMERA_TOP + 16 + (techExpanded ? 44 : 0),
+            left: 0, right: 0,
             alignItems: 'center',
             zIndex: 5,
           }}
@@ -4761,18 +4766,13 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       )}
 
       {/* ─── Mini-galerie strip ─── flottante absolue juste au-dessus du
-          bottom panel (calc bottom = panel height + gap). Pas de fond
-          noir : les vignettes flottent directement sur la preview.
-          Opacite degressive : 100% a gauche -> 10% a droite (gradient
-          per-thumb, plus recent = plus visible). Tap → sheet grille. */}
+          bottom panel. Vignettes pleine opacite ; gradient LinearGradient
+          overlay screen-space (sur la VUE visible, pas sur les items) :
+          dark a gauche (0-20%) -> transparent (20-80%) -> dark a droite
+          (80-100%). Effet spotlight au centre regardless du scroll. */}
       {myPhotos.length > 0 && (() => {
-        // Hauteur effective du bottom panel : Go! (60) + Course/Km section
-        // (paddingTop 10 + label ~24 + wheel 96 + paddingBottom 4 = 134)
-        // + safe area paddingBottom (36). Tient sur iPhone notch ; sur SE
-        // l estimation peut etre legerement off, on accepte +/- 8px.
         const BOTTOM_PANEL_H = 230;
         const visible = myPhotos.slice(0, 60);
-        const last = Math.max(1, visible.length - 1);
         return (
           <View style={{
             position: 'absolute',
@@ -4786,36 +4786,36 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6, height: 52 }}
             >
-              {visible.map((p, i) => {
-                // Symetrique : 10% aux bords, 100% au centre. center = (n-1)/2,
-                // distance normalisee a la moitie de la largeur.
-                const center = last / 2;
-                const t = center > 0 ? Math.abs(i - center) / center : 0;
-                const opacity = 1 - 0.9 * t;
-                return (
-                  <TouchableOpacity
-                    key={p.key}
-                    onPress={() => setGalleryOpen(true)}
-                    activeOpacity={0.85}
-                    style={{
-                      width: 44, height: 44, borderRadius: 6,
-                      overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
-                      opacity,
-                    }}
-                  >
-                    <ExpoImage
-                      source={{ uri: p.thumb_url }}
-                      style={{ width: '100%', height: '100%' }}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                      priority="low"
-                      transition={100}
-                      recyclingKey={p.key}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
+              {visible.map((p) => (
+                <TouchableOpacity
+                  key={p.key}
+                  onPress={() => setGalleryOpen(true)}
+                  activeOpacity={0.85}
+                  style={{
+                    width: 44, height: 44, borderRadius: 6,
+                    overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <ExpoImage
+                    source={{ uri: p.thumb_url }}
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    priority="low"
+                    transition={100}
+                    recyclingKey={p.key}
+                  />
+                </TouchableOpacity>
+              ))}
             </ScrollView>
+            {/* Overlay screen-space : fade noir a gauche et a droite. */}
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(0,0,0,0.9)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.9)']}
+              locations={[0, 0.18, 0.82, 1]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFillObject}
+            />
           </View>
         );
       })()}
