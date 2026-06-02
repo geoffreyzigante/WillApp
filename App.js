@@ -1164,14 +1164,14 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             fontSize: 13, color: C.textSoft, textAlign: 'center',
             lineHeight: 18, marginBottom: 22, paddingHorizontal: 8,
           }}>
-            Ajoute tes événements à venir en favoris : Will reconnaît ton visage et t'envoie tes photos automatiquement le jour J.
+            Ajoute tes events à venir en favoris avant le départ. Will te reconnaît et t'envoie tes photos dès qu'elles sont prises.
           </Text>
           {/* 3 etapes numerotees */}
           <View style={{ alignSelf: 'stretch', gap: 10, marginBottom: 22 }}>
             {[
               { n: 1, t: 'Crée ton compte' },
               { n: 2, t: 'Prends ton selfie' },
-              { n: 3, t: 'Ajoute ton event en favoris' },
+              { n: 3, t: 'Ajoute ton event en favoris avant la course' },
             ].map(({ n, t }) => (
               <View key={n} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FAF7FF', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
                 <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' }}>
