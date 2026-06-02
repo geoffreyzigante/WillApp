@@ -2826,9 +2826,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             );
           })()}
 
-          {/* Petit espacement avant la grille (le titre "Photos" + count
-              a ete retire — la grille parle d elle-meme). */}
-          <View style={{ height: 4 }} />
+          {/* Espacement avant la grille — donne de l air aux filtres pour
+              qu ils respirent avant le bloc dense des miniatures. */}
+          <View style={{ height: 16 }} />
         </>
       )}
     </View>
