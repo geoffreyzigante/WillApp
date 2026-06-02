@@ -2765,14 +2765,25 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     const placements = [];
     const colHeights = [0, 0, 0];
 
+    // Tolerance max sur le decalage entre les 2 cols d une paire pour
+    // placer une wide. Au-dela on retombe sur 1-col (eviter les gros
+    // trous sous la col la plus courte).
+    const WIDE_GAP_MAX = 30;
     visiblePhotos.forEach((p, i) => {
-      const isWide = i > 0 && i % 7 === 3; // jamais en premier, ~14% des photos
-      if (isWide) {
+      let wantWide = i > 0 && i % 7 === 3;
+      if (wantWide) {
+        // Determine la meilleure paire 0-1 ou 1-2 et son ecart actuel.
+        const gap01 = Math.abs(colHeights[0] - colHeights[1]);
+        const gap12 = Math.abs(colHeights[1] - colHeights[2]);
+        const bestGap = Math.min(gap01, gap12);
+        if (bestGap > WIDE_GAP_MAX) wantWide = false;
+      }
+      if (wantWide) {
         const ar = wideCycle[Math.floor(i / 7) % wideCycle.length];
         const h = wideWidth / ar;
-        const max01 = Math.max(colHeights[0], colHeights[1]);
-        const max12 = Math.max(colHeights[1], colHeights[2]);
-        const pairStart = max01 <= max12 ? 0 : 1;
+        const gap01 = Math.abs(colHeights[0] - colHeights[1]);
+        const gap12 = Math.abs(colHeights[1] - colHeights[2]);
+        const pairStart = gap01 <= gap12 ? 0 : 1;
         const y = Math.max(colHeights[pairStart], colHeights[pairStart + 1]);
         placements.push({
           photo: p,
