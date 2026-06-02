@@ -2013,16 +2013,24 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // course. activeKmFilter pertinent uniquement si activeRaceFilter !== "all".
   const [activeRaceFilter, setActiveRaceFilter] = useState('all');
   const [activeKmFilter, setActiveKmFilter] = useState('all');
-  // Animated sliding underline iOS Apple Music-style. Layout de chaque tab
-  // mesure via onLayout, puis l indicator slide vers la position du tab actif.
+  // Animated sliding pill iOS-style. Layout de chaque tab mesure via
+  // onLayout. La pill slide vers la position du tab actif.
   const raceTabLayoutsRef = useRef({});
   const kmTabLayoutsRef = useRef({});
   const raceIndicatorX = useRef(new Animated.Value(0)).current;
   const raceIndicatorW = useRef(new Animated.Value(0)).current;
   const kmIndicatorX = useRef(new Animated.Value(0)).current;
   const kmIndicatorW = useRef(new Animated.Value(0)).current;
+  // Refs : true quand la pill a deja ete positionnee au moins une fois sur
+  // le tab actif (premier mount). Permet a onLayout de snap-set la pill
+  // INSTANTANEMENT si pas encore initialisee.
+  const raceIndicatorInitRef = useRef(false);
+  const kmIndicatorInitRef = useRef(false);
   // Fade + slide-in pour la row Posté quand elle apparait.
   const kmRowAnim = useRef(new Animated.Value(0)).current;
+  // Cross-fade + slide-in pour la grille de photos a chaque changement de
+  // filtre (key sur activeRaceFilter+activeKmFilter via useEffect).
+  const gridAnim = useRef(new Animated.Value(1)).current;
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false); // Phase D3 : confirm "Ne plus suivre"
   const tint = colorForType(event.event_type);
   const upcoming = isUpcoming(event.event_date, event.event_date_end);
@@ -2101,8 +2109,14 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     setVisibleCount(PAGE_SIZE);
   }, [activeRaceFilter, activeKmFilter]);
 
-  // Reset le filtre km quand la course change (revient a "Tous" naturellement).
-  useEffect(() => { setActiveKmFilter('all'); }, [activeRaceFilter]);
+  // Reset le filtre km quand la course change (revient a "Tous" naturellement)
+  // + reset la flag d init de la pill km (les anciens layouts km appartiennent
+  // a une autre course, le snap-set devra refire au prochain layout).
+  useEffect(() => {
+    setActiveKmFilter('all');
+    kmIndicatorInitRef.current = false;
+    kmTabLayoutsRef.current = {};
+  }, [activeRaceFilter]);
 
   // Niveau 1 — courses uniques presentes dans les photos. Trie numerique asc.
   const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)))
@@ -2152,6 +2166,17 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       Animated.spring(kmIndicatorW, { toValue: l.width, useNativeDriver: false, friction: 10, tension: 80 }),
     ]).start();
   }, [activeKmFilter, activeRaceFilter, kmsForActiveRace.length]);
+
+  // Cross-fade + slide-in subtil de la grille a chaque changement de filtre.
+  // gridAnim demarre a 1, on le force a 0 puis on l anime vers 1 -> fade in
+  // + translateX 16 -> 0 (slide depuis la droite). useNativeDriver pour
+  // performance, pas de re-render JS.
+  useEffect(() => {
+    gridAnim.setValue(0);
+    Animated.timing(gridAnim, {
+      toValue: 1, duration: 220, useNativeDriver: true,
+    }).start();
+  }, [activeRaceFilter, activeKmFilter]);
 
   // Tabs course (Toutes + 1 par race). Vide si aucune photo n a de race.
   const raceTabs = uniqueRaces.length === 0
@@ -2465,12 +2490,21 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           {uniqueRaces.length > 1 && photos.length > 0 && (() => {
             // iOS UISegmentedControl-style : pill animee qui glisse derriere
             // l onglet actif. onLayout mesure chaque tab ; la pill (Animated
-            // .View absolute z-0) slide entre les tabs. Tabs au z-1 avec
-            // texte qui passe de gris a blanc sur l actif.
-            const Tab = ({ tabKey, label, active, onPress, layoutsRef, small = false }) => (
+            // .View absolute z-0) slide entre les tabs. Au PREMIER layout
+            // de l onglet actif, on snap-set la pill sans animation pour
+            // qu elle apparaisse direct (fix bug "pill absent au mount").
+            const Tab = ({ tabKey, label, active, onPress, layoutsRef, indicatorX, indicatorW, initRef, small = false }) => (
               <TouchableOpacity
                 onPress={onPress}
-                onLayout={(e) => { layoutsRef.current[tabKey] = e.nativeEvent.layout; }}
+                onLayout={(e) => {
+                  const layout = e.nativeEvent.layout;
+                  layoutsRef.current[tabKey] = layout;
+                  if (active && !initRef.current) {
+                    initRef.current = true;
+                    indicatorX.setValue(layout.x);
+                    indicatorW.setValue(layout.width);
+                  }
+                }}
                 activeOpacity={0.7}
                 style={{
                   paddingHorizontal: small ? 12 : 14,
@@ -2511,6 +2545,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                       active={activeRaceFilter === 'all'}
                       onPress={() => { setActiveRaceFilter('all'); setActiveKmFilter('all'); }}
                       layoutsRef={raceTabLayoutsRef}
+                      indicatorX={raceIndicatorX}
+                      indicatorW={raceIndicatorW}
+                      initRef={raceIndicatorInitRef}
                     />
                     {uniqueRaces.map((r) => {
                       const key = String(r);
@@ -2522,6 +2559,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                           active={activeRaceFilter === key}
                           onPress={() => setActiveRaceFilter(key)}
                           layoutsRef={raceTabLayoutsRef}
+                          indicatorX={raceIndicatorX}
+                          indicatorW={raceIndicatorW}
+                          initRef={raceIndicatorInitRef}
                         />
                       );
                     })}
@@ -2534,6 +2574,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   style={{
                     opacity: kmRowAnim,
                     marginTop: 4,
+                    // Hauteur reservee constante pour eviter le saut de
+                    // layout (hero qui bouge) quand la row apparait /
+                    // disparait. 36 = hauteur d une row de tabs small.
+                    minHeight: 36,
                     transform: [{
                       translateY: kmRowAnim.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }),
                     }],
@@ -2565,6 +2609,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                           active={activeKmFilter === 'all'}
                           onPress={() => setActiveKmFilter('all')}
                           layoutsRef={kmTabLayoutsRef}
+                          indicatorX={kmIndicatorX}
+                          indicatorW={kmIndicatorW}
+                          initRef={kmIndicatorInitRef}
                           small
                         />
                         {kmsForActiveRace.map((k) => {
@@ -2577,6 +2624,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                               active={activeKmFilter === k}
                               onPress={() => setActiveKmFilter(k)}
                               layoutsRef={kmTabLayoutsRef}
+                              indicatorX={kmIndicatorX}
+                              indicatorW={kmIndicatorW}
+                              initRef={kmIndicatorInitRef}
                               small
                             />
                           );
@@ -2629,16 +2679,26 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // Rendu d'une cellule : flex: 1 + aspectRatio: 1 (pas de width fixe pour
   // eviter tout decalage horizontal cause par s.scroll paddingHorizontal: 20).
   const renderItem = ({ item }) => (
-    <PhotoCell
-      // Pour la grille on utilise thumbUri (~25 KB) au lieu de uri (~2-5 MB).
-      // Le viewer plein ecran recoit item entier (avec uri haute resolution).
-      photo={{ ...item, uri: item.thumbUri || item.uri }}
-      onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
-        origin,
-        eventTitle: event?.name,
-        eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
-      })}
-    />
+    <Animated.View
+      style={{
+        flex: 1,
+        opacity: gridAnim,
+        transform: [{
+          translateX: gridAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }),
+        }],
+      }}
+    >
+      <PhotoCell
+        // Pour la grille on utilise thumbUri (~25 KB) au lieu de uri (~2-5 MB).
+        // Le viewer plein ecran recoit item entier (avec uri haute resolution).
+        photo={{ ...item, uri: item.thumbUri || item.uri }}
+        onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
+          origin,
+          eventTitle: event?.name,
+          eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+        })}
+      />
+    </Animated.View>
   );
 
   const renderFooter = () => {
