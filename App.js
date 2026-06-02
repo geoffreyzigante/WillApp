@@ -1106,19 +1106,20 @@ function EventCard({ event, onPress, isFollowing, onToggleFollow, style }) {
           quand pas de cover, et de fond sous l'image (techniquement caché par
           l'image dans ce cas, mais protège contre tout artefact d'aliasing). */}
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
-      {/* Layer 1 : cover image pleine carte. Le gradient au-dessus la masque
-          totalement à gauche et la révèle progressivement à droite. */}
+      {/* Layer 1 : cover image sur la MOITIE DROITE seulement (left:50%
+          -> right:0). La gauche reste en aplat tint pour la lisibilite du
+          texte (date / nom / lieu). */}
       {event.cover_image ? (
         <ExpoImage
           source={{ uri: event.cover_image }}
-          style={StyleSheet.absoluteFillObject}
+          style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', right: 0 }}
           contentFit="cover"
         />
       ) : null}
-      {/* Layer 2 : gradient coloré pleine largeur. locations=[0.5, 1] →
-          - 0% à 50% : tint 100% opaque (aplat pur, image complètement masquée)
-          - 50% à 100% : tint passe de 100% à 10% (image émerge progressivement)
-          tint+'1A' = #RRGGBB1A = 10% opacité (alpha 0x1A = 26/255). */}
+      {/* Layer 2 : gradient pleine largeur, tint 100% au seam (x=0.5) ->
+          tint 10% au bord droit. L image fade progressivement de invisible
+          (gauche) a 90% visible (droite). Meme convention que le hero de
+          la galerie publique (EventDetailScreen). */}
       {event.cover_image ? (
         <LinearGradient
           colors={[tint, tint + '1A']}
