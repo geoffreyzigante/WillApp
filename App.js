@@ -343,7 +343,7 @@ const C = {
   textSoft: '#6B6B7B',
   white: '#FFFFFF',
   pillBg: '#EFE7FF',
-  pinkPill: '#F4A6FF',
+  pinkPill: '#D67CF8',
   pinkPillText: '#FFFFFF',
   pinkPillBg: '#FDECFF',
   pinkPillActive: '#E673FF',
@@ -2641,7 +2641,7 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
   const HEIGHT = 4 * ITEM_H;
   const PAD_V_TOP = Math.round(ITEM_H / 2);    // 12 : titre proche du slot select
   const PAD_V_BOTTOM = 2 * ITEM_H;             // 48 : 2 items visibles en-dessous
-  const PINK = '#F4A6FF';
+  const PINK = '#D67CF8';
   const HAIRLINE = StyleSheet.hairlineWidth;
   const REPEAT = 20;
   const N = items.length;
@@ -4541,61 +4541,63 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           </View>
         </View>
 
-        {/* Panneau details replie : compteurs + erreur + readout sur une
-            seule ligne CENTREE, fond noir aplat edge-to-edge (casse le
-            paddingHorizontal 16 du parent via marginHorizontal: -16). */}
+        {/* Panneau details replie : 2 LIGNES centrees sur aplat noir edge-
+            to-edge. Ligne 1 = compteurs + erreur (toujours visible si
+            techExpanded). Ligne 2 = ISO/shutter/EV (preview/dev only). */}
         {techExpanded && (
           <View style={{
             marginTop: 8,
             marginHorizontal: -16,
             paddingHorizontal: 16, paddingVertical: 10,
             backgroundColor: '#000',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexWrap: 'wrap',
-            columnGap: 10,
-            rowGap: 4,
           }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d="M17.5 19a4.5 4.5 0 00.5-8.97 6 6 0 00-11.62-1.5A4.5 4.5 0 006.5 19h11z"
-                  stroke={cloudColor}
-                  strokeWidth={1.8}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill={cloudActive ? 'rgba(59,130,246,0.18)' : 'none'}
-                />
-              </Svg>
-              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' }}>
-                {uploadedCount} sauvegardée{uploadedCount > 1 ? 's' : ''}
-              </Text>
-            </View>
-            <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>·</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' }}>
-              {pendingCount} en attente
-            </Text>
-            {(lostCount + queueStats.failed) > 0 && (
-              <>
-                <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>·</Text>
-                <Text style={{ color: '#FB923C', fontSize: 12, fontWeight: '600' }}>
-                  {lostCount + queueStats.failed} à renvoyer
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              columnGap: 10,
+              rowGap: 4,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+                  <Path
+                    d="M17.5 19a4.5 4.5 0 00.5-8.97 6 6 0 00-11.62-1.5A4.5 4.5 0 006.5 19h11z"
+                    stroke={cloudColor}
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill={cloudActive ? 'rgba(59,130,246,0.18)' : 'none'}
+                  />
+                </Svg>
+                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' }}>
+                  {uploadedCount} sauvegardée{uploadedCount > 1 ? 's' : ''}
                 </Text>
-              </>
-            )}
+              </View>
+              <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>·</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' }}>
+                {pendingCount} en attente
+              </Text>
+              {(lostCount + queueStats.failed) > 0 && (
+                <>
+                  <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>·</Text>
+                  <Text style={{ color: '#FB923C', fontSize: 12, fontWeight: '600' }}>
+                    {lostCount + queueStats.failed} à renvoyer
+                  </Text>
+                </>
+              )}
+            </View>
             {IS_PREVIEW_OR_DEV && liveExposureSamples.length > 0 && (() => {
               const last = liveExposureSamples[liveExposureSamples.length - 1];
               return (
-                <>
-                  <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>·</Text>
-                  <Text style={{
-                    color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '500',
-                    fontVariant: ['tabular-nums'],
-                  }}>
-                    ISO {Math.round(last.iso)} · {formatShutter(last.shutter)} · {formatEV(last.brightness)}
-                  </Text>
-                </>
+                <Text style={{
+                  marginTop: 4,
+                  textAlign: 'center',
+                  color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '500',
+                  fontVariant: ['tabular-nums'],
+                }}>
+                  ISO {Math.round(last.iso)} · {formatShutter(last.shutter)} · {formatEV(last.brightness)}
+                </Text>
               );
             })()}
           </View>
@@ -4766,10 +4768,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       )}
 
       {/* ─── Mini-galerie strip ─── flottante absolue juste au-dessus du
-          bottom panel. Vignettes pleine opacite ; gradient LinearGradient
-          overlay screen-space (sur la VUE visible, pas sur les items) :
-          dark a gauche (0-20%) -> transparent (20-80%) -> dark a droite
-          (80-100%). Effet spotlight au centre regardless du scroll. */}
+          bottom panel. Vignettes pleine opacite, pas de fade noir (rejete
+          par l utilisateur : "moche"). Tap → sheet grille. */}
       {myPhotos.length > 0 && (() => {
         const BOTTOM_PANEL_H = 230;
         const visible = myPhotos.slice(0, 60);
@@ -4808,14 +4808,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            {/* Overlay screen-space : fade noir a gauche et a droite. */}
-            <LinearGradient
-              pointerEvents="none"
-              colors={['rgba(0,0,0,0.9)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.9)']}
-              locations={[0, 0.18, 0.82, 1]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={StyleSheet.absoluteFillObject}
-            />
           </View>
         );
       })()}
@@ -9153,7 +9145,7 @@ function PhotoViewerModal({
                     width: 48, height: 48,
                     borderRadius: 8,
                     borderWidth: 2,
-                    borderColor: '#F4A6FF',
+                    borderColor: '#D67CF8',
                   }}
                 />
                 {/* v2.4 point 2 : fade-out blanc aux extremites du slider.
@@ -9199,7 +9191,7 @@ function PhotoViewerModal({
                   activeOpacity={0.85}
                   style={{
                     flex: 1, paddingVertical: 14, borderRadius: 999,
-                    backgroundColor: '#F4A6FF',   // rose Will pinkPill (orga)
+                    backgroundColor: '#D67CF8',   // rose Will pinkPill (orga)
                     alignItems: 'center', justifyContent: 'center',
                     flexDirection: 'row', gap: 8,
                     opacity: busy ? 0.65 : 1,
@@ -11706,7 +11698,7 @@ const s = StyleSheet.create({
   welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 18, marginBottom: 18 },
 
   selfieDoneBanner: { backgroundColor: C.white, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 8, borderWidth: 1, borderColor: C.primaryLight },
-  selfieCheckCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F4A6FF', alignItems: 'center', justifyContent: 'center' },
+  selfieCheckCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#D67CF8', alignItems: 'center', justifyContent: 'center' },
   selfieDoneTitle: { fontWeight: '700', fontSize: 15, color: C.primary, fontFamily: 'AVEstiana', fontStyle: 'normal' },
   selfieDoneSub: { fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
   selfieDelete: { padding: 6 },
