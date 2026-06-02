@@ -2425,51 +2425,59 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       {/* CTA Site web retire : redondant avec le bouton "Site organisateur"
           dans le bottom sheet "+ d'infos" du header. */}
 
-      {/* Courses : un seul bloc avec header de labels + lignes de valeurs.
-          !loading sinon le bloc distances flashe pendant le fetch initial. */}
+      {/* Courses : meme presentation que dans le bottom sheet + d infos
+          (section title Montserrat caps + header colonnes hairline +
+          rows avec bullet + km / time / elevation alignes). */}
       {distances.length > 0 && photos.length === 0 && !loading && (
-        <View style={{
-          marginBottom: 8,
-          backgroundColor: `${tint}1A`,
-          borderRadius: 12,
-          paddingVertical: 12, paddingHorizontal: 16,
-        }}>
-          {/* Header labels */}
-          <View style={{ flexDirection: 'row', marginBottom: 8 }}>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ color: tint, fontSize: 9, fontWeight: '500', letterSpacing: 0.4 }}>DISTANCE</Text>
-            </View>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ color: tint, fontSize: 9, fontWeight: '500', letterSpacing: 0.4 }}>DÉPART</Text>
-            </View>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ color: tint, fontSize: 9, fontWeight: '500', letterSpacing: 0.4 }}>DÉNIVELÉ</Text>
-            </View>
+        <View style={{ marginBottom: 8 }}>
+          <Text style={{
+            color: C.textSoft, fontSize: 10, fontWeight: '700', letterSpacing: 1,
+            textTransform: 'uppercase', fontFamily: 'Montserrat',
+            marginBottom: 8,
+          }}>
+            {distances.length > 1 ? 'Courses' : 'Course'}
+          </Text>
+          {/* Header colonnes */}
+          <View style={{
+            flexDirection: 'row', alignItems: 'center',
+            paddingLeft: 18, paddingBottom: 6,
+            borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e9e4f9',
+          }}>
+            <Text style={{
+              width: 60, fontSize: 10, fontWeight: '600', letterSpacing: 0.6,
+              textTransform: 'uppercase', color: C.textSoft, fontFamily: 'Montserrat',
+            }}>Distance</Text>
+            <Text style={{
+              flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600',
+              letterSpacing: 0.6, textTransform: 'uppercase', color: C.textSoft,
+              fontFamily: 'Montserrat',
+            }}>Départ</Text>
+            <Text style={{
+              width: 70, textAlign: 'right', fontSize: 10, fontWeight: '600',
+              letterSpacing: 0.6, textTransform: 'uppercase', color: C.textSoft,
+              fontFamily: 'Montserrat',
+            }}>Dénivelé</Text>
           </View>
-          {/* Lignes de valeurs */}
-          {distances.map((d, idx) => (
-            <View
-              key={idx}
-              style={{
-                flexDirection: 'row',
-                paddingVertical: 10,
-                borderTopWidth: 1,
-                borderTopColor: `${tint}33`,
-              }}
-            >
-              <View style={{ flex: 1, alignItems: 'center' }}>
-                <Text style={{ color: C.text, fontSize: 16, fontWeight: '700' }}>{d.km} km</Text>
-              </View>
-              <View style={{ flex: 1, alignItems: 'center' }}>
-                <Text style={{ color: C.text, fontSize: 16, fontWeight: '700' }}>
-                  {upcoming && d.time ? d.time : '—'}
-                </Text>
-              </View>
-              <View style={{ flex: 1, alignItems: 'center' }}>
-                <Text style={{ color: C.text, fontSize: 16, fontWeight: '700' }}>
-                  {upcoming && d.elevation ? d.elevation : '—'}
-                </Text>
-              </View>
+          {distances.map((d, i) => (
+            <View key={i} style={{
+              flexDirection: 'row', alignItems: 'center',
+              paddingVertical: 10,
+              borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
+              borderBottomColor: '#e9e4f9',
+            }}>
+              <View style={{
+                width: 8, height: 8, borderRadius: 4,
+                backgroundColor: tint, marginRight: 10,
+              }} />
+              <Text style={{ color: C.text, fontSize: 15, fontWeight: '600', width: 60 }}>
+                {d.km} km
+              </Text>
+              <Text style={{ flex: 1, textAlign: 'center', color: C.textSoft, fontSize: 13 }}>
+                {d.time || '—'}
+              </Text>
+              <Text style={{ width: 70, textAlign: 'right', color: C.textSoft, fontSize: 13 }}>
+                {d.elevation || '—'}
+              </Text>
             </View>
           ))}
         </View>
