@@ -12276,7 +12276,24 @@ export default function App() {
         eventDate={openedPhoto?.eventDate}
         onClose={() => setOpenedPhoto(null)}
         photoFavoritesSet={photoFavoritesSet}
-        onTogglePhotoFavorite={(id) => requireAuth(() => togglePhotoFavorite(id))}
+        onTogglePhotoFavorite={(id) => {
+          if (runnerSession) {
+            togglePhotoFavorite(id);
+            return;
+          }
+          // Deconnecte : iOS empeche AuthRunnerModal de s afficher au dessus
+          // d un PhotoViewerModal transparent deja monte (souci de stacking).
+          // On referme le viewer puis on ouvre l auth modal. Apres login, on
+          // re-ouvre le viewer sur la meme photo et on applique le favori.
+          const snapshot = openedPhoto;
+          setOpenedPhoto(null);
+          setTimeout(() => {
+            requireAuth(() => {
+              if (snapshot) setOpenedPhoto(snapshot);
+              togglePhotoFavorite(id);
+            });
+          }, 220);
+        }}
       />
 
       <AuthRunnerModal
