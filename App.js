@@ -2967,10 +2967,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                         fontFamily: 'Montserrat',
                       }}>Départ</Text>
                       <Text style={{
-                        width: 60, textAlign: 'right', fontSize: 10, fontWeight: '600',
+                        width: 70, textAlign: 'right', fontSize: 10, fontWeight: '600',
                         letterSpacing: 0.6, textTransform: 'uppercase', color: C.textSoft,
                         fontFamily: 'Montserrat',
-                      }}>D+</Text>
+                      }}>Dénivelé</Text>
                     </View>
                     {distances.map((d, i) => (
                       <View key={i} style={{
@@ -2989,8 +2989,8 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                         <Text style={{ flex: 1, textAlign: 'center', color: C.textSoft, fontSize: 13 }}>
                           {d.time || '—'}
                         </Text>
-                        <Text style={{ width: 60, textAlign: 'right', color: C.textSoft, fontSize: 13 }}>
-                          {d.elevation ? `${d.elevation} D+` : '—'}
+                        <Text style={{ width: 70, textAlign: 'right', color: C.textSoft, fontSize: 13 }}>
+                          {d.elevation || '—'}
                         </Text>
                       </View>
                     ))}
