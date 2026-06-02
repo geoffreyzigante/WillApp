@@ -949,7 +949,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false }) {
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin }) {
   const [searchQuery, setSearchQuery] = useState('');
   // Indicateur violet qui glisse entre les 3 pills. Mesure une fois la largeur
   // du conteneur (- padding), divise par 3 = largeur d un slot. Spring sur
@@ -1126,8 +1126,56 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         </TouchableOpacity>
       </View>
 
-      {/* Events list / état vide */}
-      {filtered.length === 0 ? (
+      {/* Events list / état vide. Cas special : Favoris en deconnecte
+          -> empty state pedagogique 3 etapes (compte / selfie / favori)
+          + value prop "photos avant la ligne d arrivee", PAS de modal de
+          connexion automatique. Le user clique les CTA pour ouvrir l auth. */}
+      {tab === 'follows' && !isAuthed ? (
+        <View style={{ paddingVertical: 24, paddingHorizontal: 8, alignItems: 'center' }}>
+          <SelfieIllustration size={84} />
+          <Text style={{
+            fontSize: 22, fontFamily: 'AVEstiana', color: C.text,
+            textAlign: 'center', marginTop: 16, marginBottom: 8, lineHeight: 26,
+          }}>
+            Tes photos avant même{'\n'}la ligne d'arrivée
+          </Text>
+          <Text style={{
+            fontSize: 13, color: C.textSoft, textAlign: 'center',
+            lineHeight: 18, marginBottom: 22, paddingHorizontal: 8,
+          }}>
+            Ajoute tes événements à venir en favoris : Will reconnaît ton visage et t'envoie tes photos automatiquement le jour J.
+          </Text>
+          {/* 3 etapes numerotees */}
+          <View style={{ alignSelf: 'stretch', gap: 10, marginBottom: 22 }}>
+            {[
+              { n: 1, t: 'Crée ton compte' },
+              { n: 2, t: 'Prends ton selfie' },
+              { n: 3, t: 'Ajoute ton event en favoris' },
+            ].map(({ n, t }) => (
+              <View key={n} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FAF7FF', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
+                <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{n}</Text>
+                </View>
+                <Text style={{ color: C.text, fontSize: 14, fontWeight: '500' }}>{t}</Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity
+            onPress={onOpenAuthSignup}
+            activeOpacity={0.88}
+            style={{
+              backgroundColor: C.primary,
+              paddingVertical: 14, paddingHorizontal: 32,
+              borderRadius: 14, alignSelf: 'stretch', alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Créer mon compte</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onOpenAuthLogin} style={{ marginTop: 12, paddingVertical: 6 }} activeOpacity={0.7}>
+            <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>J'ai déjà un compte</Text>
+          </TouchableOpacity>
+        </View>
+      ) : filtered.length === 0 ? (
         <View style={{ alignItems: 'center', paddingVertical: 40 }}>
           <View style={{ marginBottom: 12, opacity: 0.4 }}>
             <Icon.Calendar size={36} color={C.textSoft} />
@@ -12066,15 +12114,10 @@ export default function App() {
                   onOpenOrgRole={handlePickRole}
                   onOpenSearch={() => setSearchModal(true)}
                   tab={tab}
-                  setTab={(next) => {
-                    // L onglet Suivis exige un compte connecte : tap deconnecte
-                    // -> ouvre le modal d auth, ne switche pas la pill.
-                    if (next === 'follows' && !runnerSession) {
-                      requireAuth(() => setTab('follows'));
-                      return;
-                    }
-                    setTab(next);
-                  }}
+                  setTab={setTab}
+                  isAuthed={!!runnerSession}
+                  onOpenAuthSignup={() => { setAuthInitialMode('register'); setAuthModalVisible(true); }}
+                  onOpenAuthLogin={() => { setAuthInitialMode('login'); setAuthModalVisible(true); }}
                   selfieUri={selfieUri}
                   onDeleteSelfie={deleteSelfie}
                   onOpenProfile={() => {
