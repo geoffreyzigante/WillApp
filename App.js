@@ -2138,7 +2138,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
   // Slide animation de l indicator km + fade-in de la row.
   useEffect(() => {
-    const visible = activeRaceFilter !== 'all' && kmsForActiveRace.length > 0;
+    const visible = activeRaceFilter !== 'all' && kmsForActiveRace.length > 1;
     Animated.spring(kmRowAnim, {
       toValue: visible ? 1 : 0,
       useNativeDriver: true,
@@ -2462,7 +2462,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               separateur fin puis du N2 si pertinent. Ensemble pill discrete
               (pill 12px, height contenue, fond pale) pour ne pas dominer
               la hero card + lien follow + CTA site qui sont au-dessus. */}
-          {raceTabs.length > 0 && photos.length > 0 && (() => {
+          {uniqueRaces.length > 1 && photos.length > 0 && (() => {
             // iOS Apple Music-style tabs : underline animee qui slide entre
             // les onglets actifs. onLayout mesure chaque tab, l indicator
             // est une Animated.View absolue qui scroll avec le contenu.
@@ -2528,7 +2528,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 {/* Row 2 : Posté centre sous la course, en rose, anime
                     fade+slide quand elle apparait. */}
                 <Animated.View
-                  pointerEvents={activeRaceFilter === 'all' ? 'none' : 'auto'}
+                  pointerEvents={(activeRaceFilter === 'all' || kmsForActiveRace.length <= 1) ? 'none' : 'auto'}
                   style={{
                     opacity: kmRowAnim,
                     transform: [{
@@ -2536,7 +2536,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     }],
                   }}
                 >
-                  {activeRaceFilter !== 'all' && kmsForActiveRace.length > 0 && (
+                  {activeRaceFilter !== 'all' && kmsForActiveRace.length > 1 && (
                     <ScrollView
                       horizontal showsHorizontalScrollIndicator={false}
                       contentContainerStyle={{
