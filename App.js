@@ -2430,19 +2430,19 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             // sous l onglet actif, pas de pill bg. Hierarchie via 2 rows :
             // row 1 = Toutes + Course (race), row 2 = Posté (km, plus petit
             // et indente, visible uniquement si une course est selectionnee).
-            const Tab = ({ label, active, onPress, small = false }) => (
+            const Tab = ({ label, active, onPress, small = false, activeColor = C.primary }) => (
               <TouchableOpacity onPress={onPress} activeOpacity={0.5} style={{ alignItems: 'center' }}>
                 <Text style={{
                   fontSize: small ? 12 : 13,
                   fontWeight: active ? '700' : '500',
-                  color: active ? C.primary : C.textSoft,
+                  color: active ? activeColor : C.textSoft,
                   paddingBottom: 4,
                   fontFamily: 'Montserrat',
                 }}>{label}</Text>
                 <View style={{
                   height: 2, width: '100%',
                   borderRadius: 1,
-                  backgroundColor: active ? C.primary : 'transparent',
+                  backgroundColor: active ? activeColor : 'transparent',
                 }} />
               </TouchableOpacity>
             );
@@ -2471,17 +2471,24 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   })}
                 </ScrollView>
 
-                {/* Row 2 : Posté (visible uniquement si race active) */}
+                {/* Row 2 : Posté CENTRE sous la course active, en rose brand. */}
                 {activeRaceFilter !== 'all' && kmsForActiveRace.length > 0 && (
                   <ScrollView
                     horizontal showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 18, paddingVertical: 4, paddingLeft: 4, alignItems: 'flex-end' }}
+                    contentContainerStyle={{
+                      gap: 18, paddingVertical: 4, alignItems: 'flex-end',
+                      // flexGrow + justifyContent center the chips when the
+                      // content is narrower than the viewport (when it
+                      // overflows, the scroll just works normally).
+                      flexGrow: 1, justifyContent: 'center',
+                    }}
                   >
                     <Tab
                       label="Tous"
                       active={activeKmFilter === 'all'}
                       onPress={() => setActiveKmFilter('all')}
                       small
+                      activeColor={C.pinkPill}
                     />
                     {kmsForActiveRace.map((k) => {
                       const label = k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`;
@@ -2492,6 +2499,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                           active={activeKmFilter === k}
                           onPress={() => setActiveKmFilter(k)}
                           small
+                          activeColor={C.pinkPill}
                         />
                       );
                     })}
