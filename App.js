@@ -2293,6 +2293,52 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // Tri photos : true = recentes en haut (default, burstTs DESC), false = plus
   // anciennes en haut. Bouton sur la droite des pills permet de basculer.
   const [sortDesc, setSortDesc] = useState(true);
+  // Recherche par numero de dossard. Filet de secours pour les coureurs sans
+  // selfie + favori avant la course : OCR cote worker, fetch /search-bib ici.
+  // bibResults remplace la grille principale tant que bibQuery est non-vide.
+  const [bibQuery, setBibQuery] = useState('');
+  const [bibResults, setBibResults] = useState(null); // null = pas encore cherche, [] = aucun match
+  const [bibSearching, setBibSearching] = useState(false);
+  const [keyboardH, setKeyboardH] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => setKeyboardH(e.endCoordinates?.height || 0));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardH(0));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+  // Debounce 400ms : la requete part quand le user a fini de taper.
+  useEffect(() => {
+    const q = bibQuery.trim();
+    if (!/^\d{1,5}$/.test(q)) {
+      setBibResults(null);
+      setBibSearching(false);
+      return;
+    }
+    setBibSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`${API_URL}/search-bib?eventCode=${encodeURIComponent(event.code)}&bib=${encodeURIComponent(q)}`);
+        const data = r.ok ? await r.json() : { photos: [] };
+        const mapped = (data?.photos || []).map(p => ({
+          id: p.key,
+          key: p.key,
+          uri: p.url,
+          thumbUri: p.thumb_url || p.url,
+          race: p.race,
+          km: p.km,
+          confidence: p.confidence,
+          uploaded: p.uploaded,
+        }));
+        setBibResults(mapped);
+      } catch {
+        setBibResults([]);
+      } finally {
+        setBibSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [bibQuery, event.code]);
   // Bottom sheet "+ d'infos" sur le header de l event (courses, horaires,
   // bouton site organisateur).
   const [infoSheetOpen, setInfoSheetOpen] = useState(false);
@@ -2994,6 +3040,59 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     );
   };
 
+  // Resultats de la recherche par dossard. Grille 3-col simple (pas
+  // de bento) car ces resultats sont deja filtres et tries par confidence.
+  // Le list arg passe a onOpenPhoto est bibResults (et non filteredPhotos),
+  // pour que le swipe horizontal dans le PhotoViewerModal reste sur les
+  // resultats de la recherche.
+  const renderBibPhotoSized = (photo, width, height, key) => {
+    if (!photo) return null;
+    return (
+      <View key={key} style={{ width, height }}>
+        <PhotoCell
+          photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
+          size={{ width, height }}
+          onPress={(origin) => onOpenPhoto?.(photo, bibResults, {
+            origin,
+            eventTitle: event?.name,
+            eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+          })}
+        />
+      </View>
+    );
+  };
+  const renderBibResults = () => {
+    if (bibSearching) {
+      return (
+        <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+          <ActivityIndicator size="small" color={C.primary} />
+        </View>
+      );
+    }
+    if (!bibResults || bibResults.length === 0) {
+      return (
+        <View style={{ paddingVertical: 40, paddingHorizontal: 24, alignItems: 'center' }}>
+          <Text style={{ color: C.text, fontSize: 14, fontWeight: '600', textAlign: 'center', marginBottom: 6 }}>
+            Aucune photo trouvée pour le dossard {bibQuery.trim()}
+          </Text>
+          <Text style={{ color: C.textSoft, fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
+            Scrolle la galerie pour chercher manuellement.
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <View style={{ paddingHorizontal: GRID_PADDING_H }}>
+        <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 8, marginBottom: 10 }}>
+          {bibResults.length} photo{bibResults.length > 1 ? 's' : ''} trouvée{bibResults.length > 1 ? 's' : ''} pour le dossard {bibQuery.trim()}
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP }}>
+          {bibResults.map((p, i) => renderBibPhotoSized(p, cellSize, cellSize, `bib-${i}`))}
+        </View>
+      </View>
+    );
+  };
+
   const renderChunks = () => {
     if (showEmptyMessage || photoChunks.length === 0) return null;
     return (
@@ -3056,7 +3155,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     <>
       <ScrollView
         style={s.scroll}
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: 180 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -3077,9 +3176,56 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         showsVerticalScrollIndicator={false}
       >
         {renderHeader()}
-        {(loading || upcoming) && visiblePhotos.length === 0 ? renderListEmpty() : renderChunks()}
-        {renderFooter()}
+        {bibQuery.trim().length > 0
+          ? renderBibResults()
+          : ((loading || upcoming) && visiblePhotos.length === 0 ? renderListEmpty() : renderChunks())}
+        {bibQuery.trim().length === 0 && renderFooter()}
       </ScrollView>
+
+      {/* Input sticky de recherche par dossard. Position absolute, monte
+          au-dessus du clavier quand focus (keyboardH > 0) sinon reste a
+          88px du bas pour clear le bottom nav (80px hauteur + 8 spacing).
+          Filet de secours pour les coureurs sans selfie + favori avant
+          la course : OCR cote worker, /search-bib renvoie les matches. */}
+      <View style={{
+        position: 'absolute',
+        left: 12, right: 12,
+        bottom: keyboardH > 0 ? keyboardH + 8 : 88,
+        backgroundColor: '#fff',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E5E0FF',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 5,
+      }}>
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+          <Path d="M21 21l-4.35-4.35" stroke={C.primary} strokeWidth={2.2} strokeLinecap="round" />
+          <Path d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" stroke={C.primary} strokeWidth={1.8} />
+        </Svg>
+        <TextInput
+          value={bibQuery}
+          onChangeText={(v) => setBibQuery(v.replace(/\D/g, '').slice(0, 5))}
+          placeholder="Recherche par numéro de dossard"
+          placeholderTextColor={C.textSoft}
+          keyboardType="number-pad"
+          returnKeyType="done"
+          maxLength={5}
+          style={{ flex: 1, fontSize: 14, color: C.text, padding: 0, paddingVertical: 4 }}
+        />
+        {bibQuery.length > 0 && (
+          <TouchableOpacity onPress={() => { setBibQuery(''); Keyboard.dismiss(); }} hitSlop={10} style={{ paddingHorizontal: 4 }}>
+            <Text style={{ color: C.textSoft, fontSize: 16 }}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Confirm modal "Ne plus suivre" (Phase D3). Le toggle via le coeur
           top-right reste instantane (gestures rapides), seule la voie
