@@ -4366,6 +4366,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           top: CAMERA_TOP,
           left: PREVIEW_MARGIN_H, right: PREVIEW_MARGIN_H,
           height: previewH,
+          borderRadius: 16,
+          overflow: 'hidden',
         }}
         device={device}
         format={format}
@@ -4406,7 +4408,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         return (
           <View
             pointerEvents="none"
-            style={{ position: 'absolute', top: CAMERA_TOP, height: previewH, left: PREVIEW_MARGIN_H, right: PREVIEW_MARGIN_H }}
+            style={{ position: 'absolute', top: CAMERA_TOP, height: previewH, left: PREVIEW_MARGIN_H, right: PREVIEW_MARGIN_H, borderRadius: 16, overflow: 'hidden' }}
           >
             <View style={{ position: 'absolute', top: 0, bottom: 0, left: `${leftPct}%`, width: 1, backgroundColor: 'rgba(255,255,255,0.3)' }} />
             <View style={{ position: 'absolute', top: 0, bottom: 0, left: `${rightPct}%`, width: 1, backgroundColor: 'rgba(255,255,255,0.3)' }} />
@@ -4629,22 +4631,20 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       >
         <View style={{
           paddingHorizontal: 16,
-          paddingTop: 0,
+          paddingTop: 16,    // gap entre viewer (en haut) et Go! (en dessous)
           paddingBottom: 6,
           backgroundColor: '#000',
-          // Étend le panneau vers le haut jusqu'au bas de la caméra : sans ça,
-          // l'espace entre camera_bottom et inner_top est aussi noir (parent bg)
-          // mais Go! reste en bas de cette zone — visuellement il semble décalé.
           minHeight: Math.max(0, winH - (CAMERA_TOP + previewH)),
         }}>
-          {/* Row 1 : bandeau Go!/Stop — top aligné strictement avec le haut du panneau noir */}
+          {/* Row 1 : Go!/Stop — moitie de la largeur viewer, centre, radius 16. */}
           <TouchableOpacity
             onPress={onCapturePress}
             activeOpacity={0.9}
             style={{
+              width: previewW / 2,
+              alignSelf: 'center',
               height: 60,
-              marginHorizontal: -16,
-              marginTop: 0,
+              borderRadius: 16,
               backgroundColor: isAutoArmed ? '#FF3B30' : C.pinkPillActive,
               alignItems: 'center', justifyContent: 'center',
             }}
@@ -4679,7 +4679,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 if (v && selectedKm !== null && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(null);
               };
               return (
-                <View style={{ flex: 1, paddingTop: 10, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
+                <View style={{ flex: 1, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 0 }}>
                     <Text style={{
                       color: '#fff', fontSize: 20, fontWeight: '600', letterSpacing: 0.2,
@@ -4721,7 +4721,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
               const kmIdx = rawIdx >= 0 ? rawIdx : 0;
               const setKmIdx = (idx) => setSelectedKm(kmItems[idx].value);
               return (
-                <View style={{ flex: 1, paddingTop: 10, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
+                <View style={{ flex: 1, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 0 }}>
                     <Text style={{
                       color: '#fff', fontSize: 20, fontWeight: '600', letterSpacing: 0.2,
@@ -4781,7 +4781,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           milieu de l ecran, 10% quand il atteint les bords gauche/droite.
           useNativeDriver active : pas de re-render JS par frame. */}
       {myPhotos.length > 0 && (() => {
-        const BOTTOM_PANEL_H = 200;
+        const BOTTOM_PANEL_H = 210;
         const visible = myPhotos.slice(0, 60);
         const PAD_L = 12;
         const ITEM_W = 44;
