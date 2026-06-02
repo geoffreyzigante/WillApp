@@ -5581,7 +5581,7 @@ function PinInputRow({ value, onChange, onComplete, autoFocus = true, focusTrigg
               >
                 <Text style={{
                   fontSize, fontWeight: '700',
-                  fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                  fontFamily: 'AVEstiana',
                   color: C.primary,
                 }}>
                   {digits[i]}
@@ -5664,7 +5664,7 @@ function PinInputRow({ value, onChange, onComplete, autoFocus = true, focusTrigg
               borderColor: error ? '#DC2626' : (filled ? C.primary : '#e8defc'),
               backgroundColor: filled ? '#faf9ff' : '#fff',
               fontSize, fontWeight: '700',
-              fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              fontFamily: 'AVEstiana',
               color: C.primary,
               textAlign: 'center',
             }}
