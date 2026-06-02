@@ -3052,9 +3052,8 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const PREVIEW_MARGIN_H = 20;
   const previewW = winW - PREVIEW_MARGIN_H * 2;
   const previewH = Math.min(winH, previewW * (4 / 3));
-  // CAMERA_TOP releve a 188 pour faire la place au strip galerie au-dessus
-  // du viewer (header 0-128, strip 132-184, gap 4, viewer 188+).
-  const CAMERA_TOP = 188;
+  // Strip galerie supprime, viewer demarre juste sous le header (148).
+  const CAMERA_TOP = 148;
 
   // Course + km posté
   const [selectedRace, setSelectedRace] = useState(null); // null = "Toutes les courses"
@@ -4494,66 +4493,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             </Text>
           </View>
 
-          {/* Cluster droit : chevron (toggle details) + power rouge (logout). */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity
-              onPress={() => setTechExpanded(v => !v)}
-              hitSlop={8}
-              accessibilityLabel={techExpanded ? 'Cacher les détails' : 'Voir les détails'}
-              style={{
-                width: 36, height: 36, borderRadius: 18,
-                backgroundColor: '#1a1a1a',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Svg width={14} height={9} viewBox="0 0 16 10" fill="none">
-                <Path
-                  d={techExpanded ? "M2 8L8 2L14 8" : "M2 2L8 8L14 2"}
-                  stroke="#fff"
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                if (pendingCount > 0) {
-                  Alert.alert(
-                    'Photos en cours d\'envoi',
-                    `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer. Garde l'app ouverte encore un instant pour qu'elles partent. Si tu te déconnectes, elles repartiront à ta prochaine connexion (tu devras ressaisir ton mot de passe).`,
-                    [
-                      { text: 'Rester', style: 'cancel' },
-                      { text: 'Se déconnecter quand même', style: 'destructive', onPress: onLogout },
-                    ],
-                    { cancelable: true }
-                  );
-                } else {
-                  Alert.alert(
-                    'Se déconnecter ?',
-                    'Tu devras saisir à nouveau le mot de passe pour reprendre ton événement.',
-                    [
-                      { text: 'Annuler', style: 'cancel' },
-                      { text: 'Déconnexion', style: 'destructive', onPress: onLogout },
-                    ],
-                    { cancelable: true }
-                  );
-                }
-              }}
-              hitSlop={8}
-              style={{
-                width: 36, height: 36, borderRadius: 18,
-                backgroundColor: '#F43F5E',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-              accessibilityLabel="Déconnexion"
-            >
-              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 2v10" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-                <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-              </Svg>
-            </TouchableOpacity>
-          </View>
+          {/* Chevron + power deplaces dans le cluster flottant sur le viewer */}
         </View>
 
         {/* Panneau details replie : 2 LIGNES centrees sur aplat noir edge-
@@ -4768,82 +4708,99 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         </View>
       )}
 
-      {/* ─── Mini-galerie strip ─── flottante au-dessus du viewer (entre
-          header et viewer). Cachee quand techExpanded est ouvert (sinon
-          recouverte par l aplat info). Chaque vignette a une opacite
-          interpolee Animated a partir du scroll horizontal (fade 10% bords,
-          100% centre, useNativeDriver). */}
-      {myPhotos.length > 0 && !techExpanded && (() => {
-        const visible = myPhotos.slice(0, 60);
-        const PAD_L = 12;
-        const ITEM_W = 44;
-        const GAP = 6;
-        return (
-          <View style={{
-            position: 'absolute',
-            top: CAMERA_TOP - 56, // strip de 52 + 4 gap au-dessus du viewer
-            left: 0, right: 0,
-            height: 52,
-            zIndex: 5,
-          }}>
-            <Animated.ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: PAD_L, alignItems: 'center', gap: GAP, height: 52 }}
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { x: stripScrollX } } }],
-                { useNativeDriver: true }
-              )}
-              scrollEventThrottle={16}
-            >
-              {visible.map((p, i) => {
-                // Centre de la vignette i en coordonnees du contenu de la
-                // ScrollView : paddingLeft + i*(width+gap) + width/2.
-                const itemCenterX = PAD_L + i * (ITEM_W + GAP) + ITEM_W / 2;
-                // Opacite = 1 quand le centre vignette est au milieu de la
-                // VUE visible (winW/2), = 0.1 quand il atteint un bord
-                // (screen X = 0 ou winW). Clamp aux extremes pour eviter
-                // l overshoot a < 0.1.
-                const opacity = stripScrollX.interpolate({
-                  inputRange: [
-                    itemCenterX - winW,        // vignette colle au bord droit
-                    itemCenterX - winW / 2,    // vignette au centre
-                    itemCenterX,               // vignette colle au bord gauche
-                  ],
-                  outputRange: [0.1, 1, 0.1],
-                  extrapolate: 'clamp',
-                });
-                return (
-                  <Animated.View
-                    key={p.key}
-                    style={{
-                      opacity,
-                      width: ITEM_W, height: 44, borderRadius: 6,
-                      overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
-                    }}
-                  >
-                    <TouchableOpacity
-                      onPress={() => setGalleryOpen(true)}
-                      activeOpacity={0.85}
-                      style={{ width: '100%', height: '100%' }}
-                    >
-                      <ExpoImage
-                        source={{ uri: p.thumb_url }}
-                        style={{ width: '100%', height: '100%' }}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        priority="low"
-                        transition={100}
-                        recyclingKey={p.key}
-                      />
-                    </TouchableOpacity>
-                  </Animated.View>
-                );
-              })}
-            </Animated.ScrollView>
-          </View>
-        );
-      })()}
+      {/* Strip galerie supprime : remplace par un bouton dans le cluster
+          flottant a gauche du viewer (ouvre directement la sheet grille). */}
+
+      {/* ─── Cluster flottant a gauche du viewer ─── 3 boutons round PINK
+          empilees dans un container givre. Galerie, Info (toggle techExpanded),
+          Power (logout). Position : interieur viewer bas-gauche. */}
+      <View style={{
+        position: 'absolute',
+        top: CAMERA_TOP + previewH - 160,
+        left: PREVIEW_MARGIN_H + 14,
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        borderRadius: 26,
+        paddingVertical: 6,
+        paddingHorizontal: 6,
+        alignItems: 'center',
+        zIndex: 6,
+      }}>
+        {/* Bouton galerie */}
+        <TouchableOpacity
+          onPress={() => setGalleryOpen(true)}
+          activeOpacity={0.8}
+          accessibilityLabel="Voir mes photos"
+          style={{
+            width: 40, height: 40, borderRadius: 20,
+            backgroundColor: C.pinkPillActive,
+            alignItems: 'center', justifyContent: 'center',
+            marginBottom: 8,
+          }}
+        >
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+            <Path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+            <Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="#fff" strokeWidth={1.8} />
+          </Svg>
+        </TouchableOpacity>
+
+        {/* Bouton info (toggle techExpanded) */}
+        <TouchableOpacity
+          onPress={() => setTechExpanded(v => !v)}
+          activeOpacity={0.8}
+          accessibilityLabel={techExpanded ? 'Cacher les détails' : 'Voir les détails'}
+          style={{
+            width: 40, height: 40, borderRadius: 20,
+            backgroundColor: C.pinkPillActive,
+            alignItems: 'center', justifyContent: 'center',
+            marginBottom: 8,
+          }}
+        >
+          <Text style={{
+            color: '#fff', fontSize: 20, fontWeight: '700',
+            fontFamily: 'AVEstiana', fontStyle: 'italic',
+            lineHeight: 24,
+          }}>i</Text>
+        </TouchableOpacity>
+
+        {/* Bouton power (logout) */}
+        <TouchableOpacity
+          onPress={() => {
+            if (pendingCount > 0) {
+              Alert.alert(
+                'Photos en cours d\'envoi',
+                `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer. Garde l'app ouverte encore un instant pour qu'elles partent. Si tu te déconnectes, elles repartiront à ta prochaine connexion (tu devras ressaisir ton mot de passe).`,
+                [
+                  { text: 'Rester', style: 'cancel' },
+                  { text: 'Se déconnecter quand même', style: 'destructive', onPress: onLogout },
+                ],
+                { cancelable: true }
+              );
+            } else {
+              Alert.alert(
+                'Se déconnecter ?',
+                'Tu devras saisir à nouveau le mot de passe pour reprendre ton événement.',
+                [
+                  { text: 'Annuler', style: 'cancel' },
+                  { text: 'Déconnexion', style: 'destructive', onPress: onLogout },
+                ],
+                { cancelable: true }
+              );
+            }
+          }}
+          activeOpacity={0.8}
+          accessibilityLabel="Déconnexion"
+          style={{
+            width: 40, height: 40, borderRadius: 20,
+            backgroundColor: C.pinkPillActive,
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+            <Path d="M12 2v10" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+            <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+          </Svg>
+        </TouchableOpacity>
+      </View>
 
       {/* ─── Mini-galerie sheet ─── ouverte au tap d'une vignette de la bande,
           grille 3 cols complete. Tap vignette dans la sheet → viewer plein
