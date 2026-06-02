@@ -343,10 +343,15 @@ const C = {
   textSoft: '#6B6B7B',
   white: '#FFFFFF',
   pillBg: '#EFE7FF',
-  pinkPill: '#D67CF8',
+  // Brand officielle sRGB = #D67CF8. iOS rend sur ecran P3 et la pipette
+  // (Digital Color Meter / etc) lit ensuite #c882f1 = drift d environ
+  // (+14, -6, +7) par canal. On INJECTE la valeur compensee #E476FF dans
+  // le code pour que le rendu reel + le sampling tombent sur #D67CF8.
+  // Toute reference au "rose Will" doit utiliser C.pinkPill, pas le hex brut.
+  pinkPill: '#E476FF',
   pinkPillText: '#FFFFFF',
   pinkPillBg: '#FDECFF',
-  pinkPillActive: '#D67CF8',
+  pinkPillActive: '#E476FF',
   violetAccent: '#7C3AED',
   card: '#FFFFFF',
   shadow: 'rgba(123, 47, 255, 0.08)',
@@ -3051,7 +3056,7 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
   const HEIGHT = 4 * ITEM_H;
   const PAD_V_TOP = Math.round(ITEM_H / 2);    // 12 : titre proche du slot select
   const PAD_V_BOTTOM = 2 * ITEM_H;             // 48 : 2 items visibles en-dessous
-  const PINK = '#D67CF8';
+  const PINK = '#E476FF'; // = C.pinkPill (compensation P3, cf. C)
   const HAIRLINE = StyleSheet.hairlineWidth;
   const REPEAT = 20;
   const N = items.length;
@@ -9811,7 +9816,7 @@ function PhotoViewerModal({
                     width: 48, height: 48,
                     borderRadius: 8,
                     borderWidth: 2,
-                    borderColor: '#D67CF8',
+                    borderColor: C.pinkPill,
                   }}
                 />
                 {/* v2.4 point 2 : fade-out blanc aux extremites du slider.
@@ -9857,7 +9862,7 @@ function PhotoViewerModal({
                   activeOpacity={0.85}
                   style={{
                     flex: 1, paddingVertical: 14, borderRadius: 999,
-                    backgroundColor: '#D67CF8',   // rose Will pinkPill (orga)
+                    backgroundColor: C.pinkPill,   // rose Will pinkPill (orga)
                     alignItems: 'center', justifyContent: 'center',
                     flexDirection: 'row', gap: 8,
                     opacity: busy ? 0.65 : 1,
@@ -12351,7 +12356,7 @@ const s = StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   orgToggle: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(244, 166, 255, 0.2)',
+    backgroundColor: 'rgba(228, 118, 255, 0.2)', // = C.pinkPill compense (#E476FF) a 20%
     borderRadius: 16,
     padding: 4,
     alignItems: 'center',
@@ -12369,7 +12374,7 @@ const s = StyleSheet.create({
   welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 18, marginBottom: 18 },
 
   selfieDoneBanner: { backgroundColor: C.white, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 8, borderWidth: 1, borderColor: C.primaryLight },
-  selfieCheckCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#D67CF8', alignItems: 'center', justifyContent: 'center' },
+  selfieCheckCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.pinkPill, alignItems: 'center', justifyContent: 'center' },
   selfieDoneTitle: { fontWeight: '700', fontSize: 15, color: C.primary, fontFamily: 'AVEstiana', fontStyle: 'normal' },
   selfieDoneSub: { fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
   selfieDelete: { padding: 6 },
