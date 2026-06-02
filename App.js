@@ -2663,8 +2663,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 }}
                 activeOpacity={0.7}
                 style={{
+                  flex: 1,
                   paddingHorizontal: small ? 12 : 14,
                   paddingVertical: small ? 6 : 7,
+                  alignItems: 'center',
                   zIndex: 1,
                 }}
               >
@@ -2673,23 +2675,20 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   fontWeight: active ? '700' : '500',
                   color: active ? '#fff' : C.textSoft,
                   fontFamily: 'Montserrat',
+                  textAlign: 'center',
                 }}>{label}</Text>
               </TouchableOpacity>
             );
             return (
               <View style={{ marginTop: 6, marginBottom: 0 }}>
-                {/* Row 1 : Toutes + Course (pill violette animee), bouton de
-                    tri fixe a droite. */}
+                {/* Row 1 : pleine largeur, tabs distribuees a egalite via
+                    flex:1 (au lieu de la ScrollView), bouton tri fixe a droite. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <ScrollView
-                  horizontal showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingHorizontal: 2, alignItems: 'center' }}
-                  style={{ flex: 1 }}
-                >
                   {/* Conteneur pill style HomeScreen : fond pillBg pale,
-                      borderRadius 16, padding 4. L indicateur violet glisse
-                      derriere les tabs (borderRadius 12 pour matcher). */}
+                      borderRadius 16, padding 4. flex:1 -> prend toute la
+                      largeur dispo. L indicateur violet glisse derriere. */}
                   <View style={{
+                    flex: 1,
                     position: 'relative', flexDirection: 'row', alignItems: 'center',
                     backgroundColor: C.pillBg, borderRadius: 16, padding: 4,
                   }}>
@@ -2738,7 +2737,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                       );
                     })}
                   </View>
-                </ScrollView>
                 {/* Bouton inverser l ordre du tri (recente / ancien). */}
                 <TouchableOpacity
                   onPress={() => {
@@ -2777,18 +2775,13 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   }}
                 >
                   {activeRaceFilter !== 'all' && kmsForActiveRace.length > 1 && (
-                    <ScrollView
-                      horizontal showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={{
-                        paddingHorizontal: 2,
-                        flexGrow: 1, justifyContent: 'center', alignItems: 'center',
-                      }}
-                    >
-                      {/* Sous-conteneur pill (km) : meme pattern que la row
-                          race, indicateur rose pour distinguer la hierarchie. */}
+                    <View>
+                      {/* Sous-conteneur pill (km) pleine largeur, fond rose
+                          pale (pinkPillBg) pour distinguer la hierarchie ;
+                          indicateur rose plein (pinkPill). */}
                       <View style={{
                         position: 'relative', flexDirection: 'row', alignItems: 'center',
-                        backgroundColor: C.pillBg, borderRadius: 16, padding: 4,
+                        backgroundColor: C.pinkPillBg, borderRadius: 16, padding: 4,
                       }}>
                         <Animated.View
                           pointerEvents="none"
@@ -2830,7 +2823,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                           );
                         })}
                       </View>
-                    </ScrollView>
+                    </View>
                   )}
                 </Animated.View>
               </View>
