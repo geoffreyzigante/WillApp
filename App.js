@@ -3392,6 +3392,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const [galleryViewerPhoto, setGalleryViewerPhoto] = useState(null);
   const myPhotosFetchInFlightRef = useRef(false);
   const myPhotosDebounceRef = useRef(null);
+  // Animated.Value pour le scroll horizontal du strip — alimente
+  // l interpolation d opacite par thumb (fade transparent aux bords
+  // de la vue visible, plutot qu un overlay noir).
+  const stripScrollX = useRef(new Animated.Value(0)).current;
 
   // Readout technique ISO/shutter/EV : replie par defaut sous une fleche
   // pour ne pas polluer la vue benevole. Toujours gate IS_PREVIEW_OR_DEV
@@ -4768,11 +4772,16 @@ function PhotographerScreen({ session, onLogout, onExit }) {
       )}
 
       {/* ─── Mini-galerie strip ─── flottante absolue juste au-dessus du
-          bottom panel. Vignettes pleine opacite, pas de fade noir (rejete
-          par l utilisateur : "moche"). Tap → sheet grille. */}
+          bottom panel. Chaque vignette a une opacite interpolee Animated
+          a partir du scroll horizontal : 100% quand son centre est au
+          milieu de l ecran, 10% quand il atteint les bords gauche/droite.
+          useNativeDriver active : pas de re-render JS par frame. */}
       {myPhotos.length > 0 && (() => {
         const BOTTOM_PANEL_H = 230;
         const visible = myPhotos.slice(0, 60);
+        const PAD_L = 12;
+        const ITEM_W = 44;
+        const GAP = 6;
         return (
           <View style={{
             position: 'absolute',
@@ -4781,33 +4790,61 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             height: 52,
             zIndex: 5,
           }}>
-            <ScrollView
+            <Animated.ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6, height: 52 }}
+              contentContainerStyle={{ paddingHorizontal: PAD_L, alignItems: 'center', gap: GAP, height: 52 }}
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { x: stripScrollX } } }],
+                { useNativeDriver: true }
+              )}
+              scrollEventThrottle={16}
             >
-              {visible.map((p) => (
-                <TouchableOpacity
-                  key={p.key}
-                  onPress={() => setGalleryOpen(true)}
-                  activeOpacity={0.85}
-                  style={{
-                    width: 44, height: 44, borderRadius: 6,
-                    overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
-                  }}
-                >
-                  <ExpoImage
-                    source={{ uri: p.thumb_url }}
-                    style={{ width: '100%', height: '100%' }}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    priority="low"
-                    transition={100}
-                    recyclingKey={p.key}
-                  />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+              {visible.map((p, i) => {
+                // Centre de la vignette i en coordonnees du contenu de la
+                // ScrollView : paddingLeft + i*(width+gap) + width/2.
+                const itemCenterX = PAD_L + i * (ITEM_W + GAP) + ITEM_W / 2;
+                // Opacite = 1 quand le centre vignette est au milieu de la
+                // VUE visible (winW/2), = 0.1 quand il atteint un bord
+                // (screen X = 0 ou winW). Clamp aux extremes pour eviter
+                // l overshoot a < 0.1.
+                const opacity = stripScrollX.interpolate({
+                  inputRange: [
+                    itemCenterX - winW,        // vignette colle au bord droit
+                    itemCenterX - winW / 2,    // vignette au centre
+                    itemCenterX,               // vignette colle au bord gauche
+                  ],
+                  outputRange: [0.1, 1, 0.1],
+                  extrapolate: 'clamp',
+                });
+                return (
+                  <Animated.View
+                    key={p.key}
+                    style={{
+                      opacity,
+                      width: ITEM_W, height: 44, borderRadius: 6,
+                      overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    <TouchableOpacity
+                      onPress={() => setGalleryOpen(true)}
+                      activeOpacity={0.85}
+                      style={{ width: '100%', height: '100%' }}
+                    >
+                      <ExpoImage
+                        source={{ uri: p.thumb_url }}
+                        style={{ width: '100%', height: '100%' }}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        priority="low"
+                        transition={100}
+                        recyclingKey={p.key}
+                      />
+                    </TouchableOpacity>
+                  </Animated.View>
+                );
+              })}
+            </Animated.ScrollView>
           </View>
         );
       })()}
