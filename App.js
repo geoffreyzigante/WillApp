@@ -935,12 +935,15 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
           <Text style={s.selfieSub}>Ajoute ton event en favoris avant le départ et reçois tes photos automatiquement !</Text>
         </View>
         <View style={[s.selfieAvatar, { backgroundColor: 'transparent' }]}>
-          {/* Icone Favoris_2 (source ~/WILL/Favoris_2.svg) : coeur + accent
-              + petite goutte, langage visuel "favoris geste rapide". */}
-          <Svg width={36} height={46} viewBox="0 0 25.6 32.5" fill="#fff">
-            <Path d="M9.6,6.7c1.9-.4,3.8.2,5.1,1.5.7-1.7,2.2-3.1,4.1-3.5,3.1-.7,6.1,1.3,6.7,4.3.8,3.5-3,9.1-5.4,12.4-1.1,1.5-3.2,2-4.9,1-3.6-2-9.3-5.6-10-9.1-.7-3.1,1.3-6.1,4.4-6.7h0Z" />
-            <Path d="M4.2,21.3c1.2.2,2.1,1.1,2.5,2.1.8-.8,2-1.2,3.1-.9,1.9.4,3.1,2.2,2.7,4.1-.5,2.1-3.9,4.4-6.1,5.6-1,.6-2.3.3-3-.6C1.9,29.6-.4,26.1,0,24c.4-1.9,2.2-3.1,4.1-2.7Z" />
-            <Path d="M5.6,0c.6.1,1.1.5,1.3,1.1.4-.4,1-.6,1.6-.5.9.2,1.6,1.1,1.4,2.1-.2,1.1-2,2.2-3.1,2.8-.5.3-1.2.2-1.5-.3-.8-1-1.9-2.8-1.7-3.8C3.7.4,4.7-.2,5.6,0Z" />
+          {/* Icone ScanCoeur (source ~/WILL/ScanCoeur.svg) : cadres FaceID
+              + coeur central, langage visuel = scan biometrique pour favoris. */}
+          <Svg width={48} height={47} viewBox="0 0 17.61 17.25" fill="#fff">
+            <Path d="M13.53,10.02H4.08c.98,1.26,2.24,2.46,3.22,3.32.86.75,2.15.75,3.01,0,.98-.85,2.25-2.06,3.22-3.32Z" />
+            <Path d="M1.86,3.28c0-.77.62-1.4,1.4-1.4h4.12V0H1.4C.62,0,0,.62,0,1.4v3.46h1.86v-1.57Z" />
+            <Path d="M15.75,3.28v1.57h1.86V1.4c0-.77-.62-1.4-1.4-1.4h-5.98v1.88h4.12c.77,0,1.4.62,1.4,1.4Z" />
+            <Path d="M15.75,13.97c0,.77-.62,1.4-1.4,1.4h-4.12v1.88h5.98c.77,0,1.4-.62,1.4-1.4v-4.39h-1.86v2.5Z" />
+            <Path d="M1.86,13.97v-2.5H0v4.39c0,.77.62,1.4,1.4,1.4h5.98v-1.88H3.26c-.77,0-1.4-.62-1.4-1.4Z" />
+            <Path d="M14.98,7.23c.03-.16.05-.33.05-.48,0-1.88-1.52-3.4-3.4-3.4-1.18,0-2.22.6-2.83,1.52-.61-.91-1.65-1.52-2.83-1.52-1.88,0-3.4,1.52-3.4,3.4,0,.16.02.32.05.48H0v1.86h17.61v-1.86h-2.62Z" />
           </Svg>
         </View>
       </LinearGradient>
