@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  AppState, Share, NativeModules, PanResponder,
+  AppState, Share, NativeModules, PanResponder, LayoutAnimation,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -2543,7 +2543,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                       tabKey="all"
                       label="Toutes"
                       active={activeRaceFilter === 'all'}
-                      onPress={() => { setActiveRaceFilter('all'); setActiveKmFilter('all'); }}
+                      onPress={() => {
+                        LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+                        setActiveRaceFilter('all');
+                        setActiveKmFilter('all');
+                      }}
                       layoutsRef={raceTabLayoutsRef}
                       indicatorX={raceIndicatorX}
                       indicatorW={raceIndicatorW}
@@ -2557,7 +2561,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                           tabKey={key}
                           label={`${r} km`}
                           active={activeRaceFilter === key}
-                          onPress={() => setActiveRaceFilter(key)}
+                          onPress={() => {
+                            LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+                            setActiveRaceFilter(key);
+                          }}
                           layoutsRef={raceTabLayoutsRef}
                           indicatorX={raceIndicatorX}
                           indicatorW={raceIndicatorW}
@@ -2573,11 +2580,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   pointerEvents={(activeRaceFilter === 'all' || kmsForActiveRace.length <= 1) ? 'none' : 'auto'}
                   style={{
                     opacity: kmRowAnim,
-                    marginTop: 4,
-                    // Hauteur reservee constante pour eviter le saut de
-                    // layout (hero qui bouge) quand la row apparait /
-                    // disparait. 36 = hauteur d une row de tabs small.
-                    minHeight: 36,
+                    marginTop: activeRaceFilter === 'all' || kmsForActiveRace.length <= 1 ? 0 : 4,
                     transform: [{
                       translateY: kmRowAnim.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }),
                     }],
