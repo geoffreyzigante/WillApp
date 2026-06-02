@@ -9605,7 +9605,7 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
                     Étape 1 sur 2
                   </Text>
                 )}
-                <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
+                <Text style={[s.welcome, { color: C.primary, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
                   {mode === 'login' ? 'Connexion' : 'Inscription'}
                 </Text>
                 <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }}>
