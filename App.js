@@ -2763,9 +2763,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     <Animated.View
       style={{
         flex: 1,
-        opacity: gridAnim,
+        // Opacity retire : le passage a 0 lors du setValue causait un
+        // micro-flash visible. Seul le translateX (slide) anime maintenant
+        // -> les cells restent visibles en permanence, glissent subtilement.
         transform: [{
-          translateX: gridAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }),
+          translateX: gridAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
         }],
       }}
     >
