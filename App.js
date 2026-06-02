@@ -2463,33 +2463,48 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               (pill 12px, height contenue, fond pale) pour ne pas dominer
               la hero card + lien follow + CTA site qui sont au-dessus. */}
           {uniqueRaces.length > 1 && photos.length > 0 && (() => {
-            // iOS Apple Music-style tabs : underline animee qui slide entre
-            // les onglets actifs. onLayout mesure chaque tab, l indicator
-            // est une Animated.View absolue qui scroll avec le contenu.
-            const Tab = ({ tabKey, label, active, onPress, layoutsRef, small = false, activeColor = C.primary }) => (
+            // iOS UISegmentedControl-style : pill animee qui glisse derriere
+            // l onglet actif. onLayout mesure chaque tab ; la pill (Animated
+            // .View absolute z-0) slide entre les tabs. Tabs au z-1 avec
+            // texte qui passe de gris a blanc sur l actif.
+            const Tab = ({ tabKey, label, active, onPress, layoutsRef, small = false }) => (
               <TouchableOpacity
                 onPress={onPress}
                 onLayout={(e) => { layoutsRef.current[tabKey] = e.nativeEvent.layout; }}
-                activeOpacity={0.5}
-                style={{ paddingHorizontal: 2 }}
+                activeOpacity={0.7}
+                style={{
+                  paddingHorizontal: small ? 12 : 14,
+                  paddingVertical: small ? 6 : 7,
+                  zIndex: 1,
+                }}
               >
                 <Text style={{
-                  fontSize: small ? 12.5 : 14,
+                  fontSize: small ? 12.5 : 13.5,
                   fontWeight: active ? '700' : '500',
-                  color: active ? activeColor : C.textSoft,
-                  paddingBottom: 6,
+                  color: active ? '#fff' : C.textSoft,
                   fontFamily: 'Montserrat',
                 }}>{label}</Text>
               </TouchableOpacity>
             );
             return (
               <View style={{ marginTop: 12, marginBottom: 2 }}>
-                {/* Row 1 : Toutes + Course (underline violet animee) */}
+                {/* Row 1 : Toutes + Course (pill violette animee) */}
                 <ScrollView
                   horizontal showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 22, paddingHorizontal: 2, alignItems: 'flex-end' }}
+                  contentContainerStyle={{ paddingHorizontal: 2, alignItems: 'center' }}
                 >
-                  <View style={{ position: 'relative', flexDirection: 'row', gap: 22, alignItems: 'flex-end' }}>
+                  <View style={{ position: 'relative', flexDirection: 'row', alignItems: 'center' }}>
+                    <Animated.View
+                      pointerEvents="none"
+                      style={{
+                        position: 'absolute',
+                        top: 0, bottom: 0,
+                        borderRadius: 999,
+                        backgroundColor: C.primary,
+                        width: raceIndicatorW,
+                        transform: [{ translateX: raceIndicatorX }],
+                      }}
+                    />
                     <Tab
                       tabKey="all"
                       label="Toutes"
@@ -2510,27 +2525,15 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                         />
                       );
                     })}
-                    <Animated.View
-                      pointerEvents="none"
-                      style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        height: 2.5,
-                        borderRadius: 1.5,
-                        backgroundColor: C.primary,
-                        width: raceIndicatorW,
-                        transform: [{ translateX: raceIndicatorX }],
-                      }}
-                    />
                   </View>
                 </ScrollView>
 
-                {/* Row 2 : Posté centre sous la course, en rose, anime
-                    fade+slide quand elle apparait. */}
+                {/* Row 2 : Posté centre sous la course, pill rose animee. */}
                 <Animated.View
                   pointerEvents={(activeRaceFilter === 'all' || kmsForActiveRace.length <= 1) ? 'none' : 'auto'}
                   style={{
                     opacity: kmRowAnim,
+                    marginTop: 4,
                     transform: [{
                       translateY: kmRowAnim.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }),
                     }],
@@ -2540,11 +2543,22 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     <ScrollView
                       horizontal showsHorizontalScrollIndicator={false}
                       contentContainerStyle={{
-                        gap: 18, paddingHorizontal: 2,
-                        flexGrow: 1, justifyContent: 'center', alignItems: 'flex-end',
+                        paddingHorizontal: 2,
+                        flexGrow: 1, justifyContent: 'center', alignItems: 'center',
                       }}
                     >
-                      <View style={{ position: 'relative', flexDirection: 'row', gap: 18, alignItems: 'flex-end' }}>
+                      <View style={{ position: 'relative', flexDirection: 'row', alignItems: 'center' }}>
+                        <Animated.View
+                          pointerEvents="none"
+                          style={{
+                            position: 'absolute',
+                            top: 0, bottom: 0,
+                            borderRadius: 999,
+                            backgroundColor: C.pinkPill,
+                            width: kmIndicatorW,
+                            transform: [{ translateX: kmIndicatorX }],
+                          }}
+                        />
                         <Tab
                           tabKey="all"
                           label="Tous"
@@ -2552,7 +2566,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                           onPress={() => setActiveKmFilter('all')}
                           layoutsRef={kmTabLayoutsRef}
                           small
-                          activeColor={C.pinkPill}
                         />
                         {kmsForActiveRace.map((k) => {
                           const label = k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`;
@@ -2565,22 +2578,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                               onPress={() => setActiveKmFilter(k)}
                               layoutsRef={kmTabLayoutsRef}
                               small
-                              activeColor={C.pinkPill}
                             />
                           );
                         })}
-                        <Animated.View
-                          pointerEvents="none"
-                          style={{
-                            position: 'absolute',
-                            bottom: 0,
-                            height: 2.5,
-                            borderRadius: 1.5,
-                            backgroundColor: C.pinkPill,
-                            width: kmIndicatorW,
-                            transform: [{ translateX: kmIndicatorX }],
-                          }}
-                        />
                       </View>
                     </ScrollView>
                   )}
