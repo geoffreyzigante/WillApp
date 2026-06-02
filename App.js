@@ -2370,11 +2370,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         ) : null}
       </View>
 
-      {/* Phase D3 — geste de consentement biometrique RGPD.
-          NON SUIVI : gros CTA degrade violet + encart consent (ci-dessous).
-          SUIVI : aucun bloc — le coeur rempli sur la hero card signale
-                  "tu suis", et le tap dessus toggle l unfollow direct
-                  (sans modal de confirmation). */}
+      {/* Phase D3 — CTA Suivre + RGPD compact. Visible uniquement si
+          NON SUIVI (le coeur rempli sur le hero suffit ensuite a indiquer
+          qu on suit, tap sur le coeur pour unfollow direct). */}
       {onToggleFollow && !isFollowing && (
           <View style={{ marginTop: 4, marginBottom: 12 }}>
             <TouchableOpacity onPress={onToggleFollow} activeOpacity={0.88}>
@@ -2383,43 +2381,36 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={{
                   borderRadius: 16,
-                  paddingVertical: 16, paddingHorizontal: 18,
-                  shadowColor: '#7B2FFF', shadowOpacity: 0.35,
-                  shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
+                  paddingVertical: 14, paddingHorizontal: 18,
+                  shadowColor: '#7B2FFF', shadowOpacity: 0.3,
+                  shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
                 }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                  <Svg width={20} height={18} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
+                  <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
                     <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
                   </Svg>
-                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
-                    Suivre et recevoir mes photos
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                    Suis-le avant le départ
                   </Text>
                 </View>
-                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 6, textAlign: 'center' }}>
-                  Tes photos arriveront automatiquement, dès qu'elles sont prises.
+                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 4, textAlign: 'center' }}>
+                  Pour recevoir tes photos automatiquement le jour J.
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
+            {/* RGPD compact : icone + 1 ligne avec lien En savoir plus inline. */}
             <View style={{
-              marginTop: 12,
-              backgroundColor: '#fff',
-              borderColor: '#E4E0EC', borderWidth: 1,
-              borderRadius: 14, padding: 14,
-              flexDirection: 'row', gap: 10, alignItems: 'flex-start',
+              marginTop: 8,
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+              paddingHorizontal: 4,
             }}>
-              <View style={{
-                width: 30, height: 30, borderRadius: 9,
-                backgroundColor: '#EDE4FF',
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#7B2FFF" strokeWidth={2}>
-                  <Circle cx="12" cy="8" r="4" />
-                  <Path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
-                </Svg>
-              </View>
-              <Text style={{ flex: 1, fontSize: 12, color: '#5A5468', lineHeight: 17 }}>
-                En suivant cet event, tu autorises Will à analyser ton visage pour y retrouver tes photos. Tu peux arrêter à tout moment.{' '}
+              <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#7B2FFF" strokeWidth={2}>
+                <Circle cx="12" cy="8" r="4" />
+                <Path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
+              </Svg>
+              <Text style={{ flex: 1, fontSize: 11, color: '#5A5468', lineHeight: 15 }}>
+                Will analyse ton visage pour y retrouver tes photos.{' '}
                 <Text
                   style={{ color: '#7B2FFF', textDecorationLine: 'underline' }}
                   onPress={() => Linking.openURL('https://will-app.com/confidentialite').catch(() => {})}
@@ -2484,18 +2475,23 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </View>
       )}
 
-      {/* Galerie ou message a venir. On AJOUTE !loading sinon le block "a
-          venir" flashe pendant le fetch initial (etat photos=[] + loading=true
-          puis photos remplit). */}
+      {/* Galerie ou message a venir compact : icone + 1 ligne titre +
+          1 ligne sous-titre sur tint clair, paddingV reduit (30 -> 20). */}
       {upcoming && photos.length === 0 && !loading ? (
-        <View style={{ paddingVertical: 30, alignItems: 'center', backgroundColor: `${tint}1A`, borderRadius: 16 }}>
-          <Icon.PhotoCam size={40} color={tint} />
-          <Text style={{ color: tint, fontSize: 14, fontWeight: '700', marginTop: 12, textAlign: 'center' }}>
-            Photos disponibles le jour J
-          </Text>
-          <Text style={{ color: tint, fontSize: 12, marginTop: 4, textAlign: 'center', opacity: 0.75 }}>
-            Reviens le jour de l'événement pour voir tes photos
-          </Text>
+        <View style={{
+          paddingVertical: 20, paddingHorizontal: 18,
+          alignItems: 'center', flexDirection: 'row', gap: 14,
+          backgroundColor: `${tint}1A`, borderRadius: 16,
+        }}>
+          <Icon.PhotoCam size={28} color={tint} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: tint, fontSize: 14, fontWeight: '700' }}>
+              Photos disponibles le jour J
+            </Text>
+            <Text style={{ color: tint, fontSize: 11, marginTop: 2, opacity: 0.75 }}>
+              Reviens le jour de l'événement pour les voir
+            </Text>
+          </View>
         </View>
       ) : (
         <>
