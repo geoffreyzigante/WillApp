@@ -2425,81 +2425,83 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       {/* CTA Site web retire : redondant avec le bouton "Site organisateur"
           dans le bottom sheet "+ d'infos" du header. */}
 
-      {/* Courses : meme presentation que dans le bottom sheet + d infos
-          (section title Montserrat caps + header colonnes hairline +
-          rows avec bullet + km / time / elevation alignes). */}
-      {distances.length > 0 && photos.length === 0 && !loading && (
-        <View style={{ marginBottom: 8 }}>
-          <Text style={{
-            color: C.textSoft, fontSize: 10, fontWeight: '700', letterSpacing: 1,
-            textTransform: 'uppercase', fontFamily: 'Montserrat',
-            marginBottom: 8,
-          }}>
-            {distances.length > 1 ? 'Courses' : 'Course'}
-          </Text>
-          {/* Header colonnes */}
-          <View style={{
-            flexDirection: 'row', alignItems: 'center',
-            paddingLeft: 18, paddingBottom: 6,
-            borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e9e4f9',
-          }}>
-            <Text style={{
-              width: 60, fontSize: 10, fontWeight: '600', letterSpacing: 0.6,
-              textTransform: 'uppercase', color: C.textSoft, fontFamily: 'Montserrat',
-            }}>Distance</Text>
-            <Text style={{
-              flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600',
-              letterSpacing: 0.6, textTransform: 'uppercase', color: C.textSoft,
-              fontFamily: 'Montserrat',
-            }}>Départ</Text>
-            <Text style={{
-              width: 70, textAlign: 'right', fontSize: 10, fontWeight: '600',
-              letterSpacing: 0.6, textTransform: 'uppercase', color: C.textSoft,
-              fontFamily: 'Montserrat',
-            }}>Dénivelé</Text>
-          </View>
-          {distances.map((d, i) => (
-            <View key={i} style={{
-              flexDirection: 'row', alignItems: 'center',
-              paddingVertical: 10,
-              borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
-              borderBottomColor: '#e9e4f9',
-            }}>
-              <View style={{
-                width: 8, height: 8, borderRadius: 4,
-                backgroundColor: tint, marginRight: 10,
-              }} />
-              <Text style={{ color: C.text, fontSize: 15, fontWeight: '600', width: 60 }}>
-                {d.km} km
-              </Text>
-              <Text style={{ flex: 1, textAlign: 'center', color: C.textSoft, fontSize: 13 }}>
-                {d.time || '—'}
-              </Text>
-              <Text style={{ width: 70, textAlign: 'right', color: C.textSoft, fontSize: 13 }}>
-                {d.elevation || '—'}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Galerie ou message a venir compact : icone + 1 ligne titre +
-          1 ligne sous-titre sur tint clair, paddingV reduit (30 -> 20). */}
+      {/* Card unique "a venir" : header (photo jour J) + tableau distances
+          si dispo. Une seule unite visuelle pour la hierarchie d ecran. */}
       {upcoming && photos.length === 0 && !loading ? (
         <View style={{
-          paddingVertical: 20, paddingHorizontal: 18,
-          alignItems: 'center', flexDirection: 'row', gap: 14,
+          paddingVertical: 16, paddingHorizontal: 16,
           backgroundColor: `${tint}1A`, borderRadius: 16,
         }}>
-          <Icon.PhotoCam size={28} color={tint} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: tint, fontSize: 14, fontWeight: '700' }}>
-              Photos disponibles le jour J
-            </Text>
-            <Text style={{ color: tint, fontSize: 11, marginTop: 2, opacity: 0.75 }}>
-              Reviens le jour de l'événement pour les voir
-            </Text>
+          {/* Header : icone + titre + sous-titre */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <Icon.PhotoCam size={28} color={tint} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: tint, fontSize: 14, fontWeight: '700' }}>
+                Photos disponibles le jour J
+              </Text>
+              <Text style={{ color: tint, fontSize: 11, marginTop: 2, opacity: 0.75 }}>
+                Reviens le jour de l'événement pour les voir
+              </Text>
+            </View>
           </View>
+
+          {/* Distances integrees dans la meme card. Visible si distances
+              configurees par l orga. */}
+          {distances.length > 0 && (
+            <View style={{ marginTop: 14 }}>
+              <Text style={{
+                color: tint, fontSize: 10, fontWeight: '700', letterSpacing: 1,
+                textTransform: 'uppercase', fontFamily: 'Montserrat',
+                marginBottom: 8, opacity: 0.85,
+              }}>
+                {distances.length > 1 ? 'Courses' : 'Course'}
+              </Text>
+              {/* Header colonnes */}
+              <View style={{
+                flexDirection: 'row', alignItems: 'center',
+                paddingLeft: 18, paddingBottom: 6,
+                borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${tint}40`,
+              }}>
+                <Text style={{
+                  width: 60, fontSize: 10, fontWeight: '600', letterSpacing: 0.6,
+                  textTransform: 'uppercase', color: tint, fontFamily: 'Montserrat',
+                  opacity: 0.7,
+                }}>Distance</Text>
+                <Text style={{
+                  flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600',
+                  letterSpacing: 0.6, textTransform: 'uppercase', color: tint,
+                  fontFamily: 'Montserrat', opacity: 0.7,
+                }}>Départ</Text>
+                <Text style={{
+                  width: 70, textAlign: 'right', fontSize: 10, fontWeight: '600',
+                  letterSpacing: 0.6, textTransform: 'uppercase', color: tint,
+                  fontFamily: 'Montserrat', opacity: 0.7,
+                }}>Dénivelé</Text>
+              </View>
+              {distances.map((d, i) => (
+                <View key={i} style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingVertical: 10,
+                  borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
+                  borderBottomColor: `${tint}40`,
+                }}>
+                  <View style={{
+                    width: 8, height: 8, borderRadius: 4,
+                    backgroundColor: tint, marginRight: 10,
+                  }} />
+                  <Text style={{ color: tint, fontSize: 15, fontWeight: '700', width: 60 }}>
+                    {d.km} km
+                  </Text>
+                  <Text style={{ flex: 1, textAlign: 'center', color: tint, fontSize: 13, opacity: 0.85 }}>
+                    {d.time || '—'}
+                  </Text>
+                  <Text style={{ width: 70, textAlign: 'right', color: tint, fontSize: 13, opacity: 0.85 }}>
+                    {d.elevation || '—'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       ) : (
         <>
