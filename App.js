@@ -8023,7 +8023,10 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   <Text style={{ color: C.textSoft, fontSize: 13 }}>Annuler</Text>
                 </TouchableOpacity>
               </>
-            ) : (
+            ) : role === 'photographer' ? null : (
+              // Pour le photographe, le PIN auto-submit via onComplete a 4
+              // chiffres : le bouton Continuer est redondant. On le garde
+              // uniquement pour l organisateur (email + mot de passe).
               <TouchableOpacity
                 onPress={submit}
                 disabled={busy || !code || !password}
