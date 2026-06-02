@@ -1169,9 +1169,9 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
           {/* 3 etapes numerotees */}
           <View style={{ alignSelf: 'stretch', gap: 10, marginBottom: 22 }}>
             {[
-              { n: 1, t: 'Crée ton compte' },
-              { n: 2, t: 'Prends ton selfie' },
-              { n: 3, t: 'Ajoute ton event en favoris avant la course' },
+              { n: 1, t: 'Crée ton compte et prends ton selfie' },
+              { n: 2, t: 'Ajoute ton event en favoris avant la course' },
+              { n: 3, t: 'Tes photos te seront automatiquement envoyées' },
             ].map(({ n, t }) => (
               <View key={n} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FAF7FF', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
                 <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' }}>
