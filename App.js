@@ -2163,8 +2163,10 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
     >
       {containerW > 0 && (
         <>
-          {/* Cadre central fixe (accent). Z=1, sous les items (z=2) pour
-              que le texte blanc actif soit lisible par dessus. */}
+          {/* Cadre central fixe (accent). Pas de zIndex explicite :
+              le rendu naturel place la FlatList par-dessus (elle vient
+              apres dans le JSX), donc les items texte sont visibles
+              au-dessus de l indicateur. */}
           <View
             pointerEvents="none"
             style={{
@@ -2172,7 +2174,6 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
               top: 4, bottom: 4,
               left: padH, width: WHEEL_ITEM_W,
               backgroundColor: accent, borderRadius: 12,
-              zIndex: 1,
             }}
           />
           <FlatList
@@ -2216,7 +2217,6 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
                   style={{
                     width: WHEEL_ITEM_W, height: 40,
                     alignItems: 'center', justifyContent: 'center',
-                    zIndex: 2,
                   }}
                 >
                   <Text style={{
