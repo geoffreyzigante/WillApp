@@ -4663,7 +4663,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         <View style={{
           paddingHorizontal: 16,
           paddingTop: 0,
-          paddingBottom: 16,
+          paddingBottom: 6,
           backgroundColor: '#000',
           // Étend le panneau vers le haut jusqu'au bas de la caméra : sans ça,
           // l'espace entre camera_bottom et inner_top est aussi noir (parent bg)
@@ -4814,7 +4814,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           milieu de l ecran, 10% quand il atteint les bords gauche/droite.
           useNativeDriver active : pas de re-render JS par frame. */}
       {myPhotos.length > 0 && (() => {
-        const BOTTOM_PANEL_H = 210;
+        const BOTTOM_PANEL_H = 200;
         const visible = myPhotos.slice(0, 60);
         const PAD_L = 12;
         const ITEM_W = 44;
