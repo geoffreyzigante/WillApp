@@ -931,11 +931,14 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
     <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
       <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
         <View style={{ flex: 1 }}>
-          <Text style={s.selfieTitle}>Un selfie suffit</Text>
+          <Text style={[s.selfieTitle, { fontFamily: 'AVEstiana' }]}>Un selfie suffit</Text>
           <Text style={s.selfieSub}>Ajoute ton event en favoris avant le départ et reçois tes photos automatiquement !</Text>
         </View>
         <View style={s.selfieAvatar}>
-          <Icon.User size={40} color="#FFFFFF" />
+          {/* Cœur identique au badge violet de PhotosEmptyState (App.js:1711). */}
+          <Svg width={34} height={30} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
+            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+          </Svg>
         </View>
       </LinearGradient>
     </TouchableOpacity>
