@@ -2815,7 +2815,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           if (hasMore) setVisibleCount(c => Math.min(c + PAGE_SIZE, filteredPhotos.length));
         }}
         onEndReachedThreshold={0.5}
-        ListHeaderComponent={renderHeader}
+        ListHeaderComponent={renderHeader()}
         ListEmptyComponent={renderListEmpty}
         ListFooterComponent={renderFooter}
         refreshControl={
