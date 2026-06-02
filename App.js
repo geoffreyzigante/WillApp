@@ -934,7 +934,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
           <Text style={s.selfieTitle}>Un selfie suffit</Text>
           <Text style={s.selfieSub}>Ajoute ton event en favoris avant le départ et reçois tes photos automatiquement !</Text>
         </View>
-        <View style={s.selfieAvatar}>
+        <View style={[s.selfieAvatar, { backgroundColor: 'transparent' }]}>
           {/* Coeur (meme path SVG que PhotosEmptyState badge violet) :
               langage visuel = mecanique favoris, qui declenche l envoi
               des photos. Choix valide par l utilisateur apres iteration. */}
