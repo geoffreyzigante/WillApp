@@ -967,6 +967,25 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
       tension: 110, friction: 14,
     }).start();
   }, [tabIdx, slotW, tabsSlideX]);
+
+  // Transition du CONTENU sous les pills : fade + slide horizontal directionnel
+  // (entrée par la droite si on va vers un tab "plus loin", par la gauche
+  // sinon). Donne un sentiment de "page qui glisse" en synchronisation avec
+  // l indicateur des pills.
+  const lastTabIdxRef = useRef(tabIdx);
+  const contentFade = useRef(new Animated.Value(1)).current;
+  const contentSlideX = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (lastTabIdxRef.current === tabIdx) return;
+    const direction = tabIdx > lastTabIdxRef.current ? 1 : -1;
+    lastTabIdxRef.current = tabIdx;
+    contentFade.setValue(0);
+    contentSlideX.setValue(direction * 20);
+    Animated.parallel([
+      Animated.timing(contentFade, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.spring(contentSlideX, { toValue: 0, useNativeDriver: true, tension: 90, friction: 14 }),
+    ]).start();
+  }, [tabIdx, contentFade, contentSlideX]);
   const tabFiltered = events.filter(e => {
     if (tab === 'upcoming') return isUpcoming(e.event_date, e.event_date_end);
     if (tab === 'past') return !isUpcoming(e.event_date, e.event_date_end);
@@ -1129,7 +1148,9 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
       {/* Events list / état vide. Cas special : Favoris en deconnecte
           -> empty state pedagogique 3 etapes (compte / selfie / favori)
           + value prop "photos avant la ligne d arrivee", PAS de modal de
-          connexion automatique. Le user clique les CTA pour ouvrir l auth. */}
+          connexion automatique. Le user clique les CTA pour ouvrir l auth.
+          Wrap dans Animated.View pour fade + slide a chaque switch de tab. */}
+      <Animated.View style={{ opacity: contentFade, transform: [{ translateX: contentSlideX }] }}>
       {tab === 'follows' && !isAuthed ? (
         <View style={{ paddingVertical: 24, paddingHorizontal: 8, alignItems: 'center' }}>
           <SelfieIllustration size={84} />
@@ -1196,6 +1217,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
           />
         ))
       )}
+      </Animated.View>
     </RefreshableScrollView>
   );
 }
