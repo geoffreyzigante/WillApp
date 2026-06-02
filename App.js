@@ -4795,7 +4795,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 paddingVertical: 13, paddingHorizontal: 16,
               }}
             >
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '400' }}>Voir mes photos</Text>
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '400', fontFamily: 'Montserrat' }}>Voir mes photos</Text>
               <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
                 <Path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
                 <Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="#fff" strokeWidth={1.8} />
@@ -4812,7 +4812,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 paddingVertical: 13, paddingHorizontal: 16,
               }}
             >
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '400' }}>
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '400', fontFamily: 'Montserrat' }}>
                 {techExpanded ? 'Masquer les infos' : 'Afficher les infos'}
               </Text>
               <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
@@ -4854,7 +4854,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 paddingVertical: 13, paddingHorizontal: 16,
               }}
             >
-              <Text style={{ color: '#FF453A', fontSize: 16, fontWeight: '400' }}>Déconnexion</Text>
+              <Text style={{ color: '#FF453A', fontSize: 15, fontWeight: '400', fontFamily: 'Montserrat' }}>Déconnexion</Text>
               <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
                 <Path d="M12 2v10" stroke="#FF453A" strokeWidth={2} strokeLinecap="round" />
                 <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#FF453A" strokeWidth={2} strokeLinecap="round" />
@@ -4882,11 +4882,21 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             width: '100%', height: '100%',
             alignItems: 'center', justifyContent: 'center',
           }}>
-            <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
-              <Circle cx={4} cy={10} r={1.6} fill="#fff" />
-              <Circle cx={10} cy={10} r={1.6} fill="#fff" />
-              <Circle cx={16} cy={10} r={1.6} fill="#fff" />
-            </Svg>
+            <Animated.View style={{
+              transform: [{
+                rotate: menuAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }),
+              }],
+            }}>
+              <Svg width={16} height={10} viewBox="0 0 16 10" fill="none">
+                <Path
+                  d="M2 8L8 2L14 8"
+                  stroke="#fff"
+                  strokeWidth={2.2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </Animated.View>
           </BlurView>
         </TouchableOpacity>
       </View>
