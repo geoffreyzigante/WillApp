@@ -2949,24 +2949,49 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     }}>
                       {distances.length > 1 ? 'Courses' : 'Course'}
                     </Text>
+                    {/* Header colonnes (aligne sur le contenu : 8 bullet + 10 gap
+                        avant la 1ere colonne, fixed widths sur km et D+, centre
+                        pour le depart). */}
+                    <View style={{
+                      flexDirection: 'row', alignItems: 'center',
+                      paddingLeft: 18, paddingBottom: 6,
+                      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e9e4f9',
+                    }}>
+                      <Text style={{
+                        width: 60, fontSize: 10, fontWeight: '600', letterSpacing: 0.6,
+                        textTransform: 'uppercase', color: C.textSoft, fontFamily: 'Montserrat',
+                      }}>Distance</Text>
+                      <Text style={{
+                        flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600',
+                        letterSpacing: 0.6, textTransform: 'uppercase', color: C.textSoft,
+                        fontFamily: 'Montserrat',
+                      }}>Départ</Text>
+                      <Text style={{
+                        width: 60, textAlign: 'right', fontSize: 10, fontWeight: '600',
+                        letterSpacing: 0.6, textTransform: 'uppercase', color: C.textSoft,
+                        fontFamily: 'Montserrat',
+                      }}>D+</Text>
+                    </View>
                     {distances.map((d, i) => (
                       <View key={i} style={{
                         flexDirection: 'row', alignItems: 'center',
                         paddingVertical: 10,
-                        borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth,
-                        borderTopColor: '#e9e4f9',
+                        borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
+                        borderBottomColor: '#e9e4f9',
                       }}>
                         <View style={{
                           width: 8, height: 8, borderRadius: 4,
                           backgroundColor: tint, marginRight: 10,
                         }} />
-                        <Text style={{ color: C.text, fontSize: 15, fontWeight: '600', flex: 1 }}>{d.km} km</Text>
-                        {d.time ? (
-                          <Text style={{ color: C.textSoft, fontSize: 13 }}>départ {d.time}</Text>
-                        ) : null}
-                        {d.elevation ? (
-                          <Text style={{ color: C.textSoft, fontSize: 13, marginLeft: 10 }}>{d.elevation} D+</Text>
-                        ) : null}
+                        <Text style={{ color: C.text, fontSize: 15, fontWeight: '600', width: 60 }}>
+                          {d.km} km
+                        </Text>
+                        <Text style={{ flex: 1, textAlign: 'center', color: C.textSoft, fontSize: 13 }}>
+                          {d.time || '—'}
+                        </Text>
+                        <Text style={{ width: 60, textAlign: 'right', color: C.textSoft, fontSize: 13 }}>
+                          {d.elevation ? `${d.elevation} D+` : '—'}
+                        </Text>
                       </View>
                     ))}
                   </>
