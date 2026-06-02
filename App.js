@@ -2748,39 +2748,71 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     );
   };
 
-  // Masonry Pinterest 2 colonnes : chaque photo a un aspectRatio cycle
-  // (1:1 / 3:4 / 5:6) puisqu on n a pas le ratio reel depuis le worker.
-  // Distribution shortest-column-first pour un packing serre.
+  // Masonry Pinterest 3 colonnes avec photos pouvant occuper 1 OU 2 cols.
+  // Algorithme : pour chaque photo,
+  //   - colspan=1 : place dans la col la plus courte (shortest-first).
+  //   - colspan=2 : choisit la paire de cols adjacentes (0-1 ou 1-2) ou
+  //     max(h_left, h_right) est minimal. Place la photo a y =
+  //     max(heights), met a jour les 2 cols a la meme y+h.
+  // Pattern : 1 sur 7 photos est 2-col-wide pour rythme visuel.
   const renderMasonry = () => {
     if (showEmptyMessage || visiblePhotos.length === 0) return null;
-    const COLS = 2;
-    const colWidth = (SCREEN_W - SCROLL_PADDING_H * 2 - GRID_GAP) / COLS;
-    const cycle = [1, 0.75, 1, 0.83, 0.75]; // mix carre / portrait / portrait haut
-    const cols = [[], []];
-    const colHeights = [0, 0];
+    const COLS = 3;
+    const colWidth = (SCREEN_W - SCROLL_PADDING_H * 2 - GRID_GAP * (COLS - 1)) / COLS;
+    const wideWidth = colWidth * 2 + GRID_GAP;
+    const singleCycle = [1, 0.75, 1, 0.83, 0.75, 1];   // ratios 1-col
+    const wideCycle = [1.5, 1.3];                       // ratios 2-col (landscape-ish)
+    const placements = [];
+    const colHeights = [0, 0, 0];
+
     visiblePhotos.forEach((p, i) => {
-      const ar = cycle[i % cycle.length];
-      const h = colWidth / ar;
-      const shorter = colHeights[0] <= colHeights[1] ? 0 : 1;
-      cols[shorter].push({ photo: p, height: h });
-      colHeights[shorter] += h + GRID_GAP;
+      const isWide = i > 0 && i % 7 === 3; // jamais en premier, ~14% des photos
+      if (isWide) {
+        const ar = wideCycle[Math.floor(i / 7) % wideCycle.length];
+        const h = wideWidth / ar;
+        const max01 = Math.max(colHeights[0], colHeights[1]);
+        const max12 = Math.max(colHeights[1], colHeights[2]);
+        const pairStart = max01 <= max12 ? 0 : 1;
+        const y = Math.max(colHeights[pairStart], colHeights[pairStart + 1]);
+        placements.push({
+          photo: p,
+          x: pairStart * (colWidth + GRID_GAP),
+          y, width: wideWidth, height: h,
+        });
+        colHeights[pairStart] = y + h + GRID_GAP;
+        colHeights[pairStart + 1] = y + h + GRID_GAP;
+      } else {
+        const ar = singleCycle[i % singleCycle.length];
+        const h = colWidth / ar;
+        const shorter = colHeights[0] <= colHeights[1] && colHeights[0] <= colHeights[2] ? 0
+                      : colHeights[1] <= colHeights[2] ? 1 : 2;
+        placements.push({
+          photo: p,
+          x: shorter * (colWidth + GRID_GAP),
+          y: colHeights[shorter],
+          width: colWidth, height: h,
+        });
+        colHeights[shorter] += h + GRID_GAP;
+      }
     });
+
+    const totalHeight = Math.max(...colHeights);
     return (
-      <View style={{ flexDirection: 'row', gap: GRID_GAP }}>
-        {cols.map((col, ci) => (
-          <View key={ci} style={{ width: colWidth, gap: GRID_GAP }}>
-            {col.map(({ photo, height }) => (
-              <PhotoCell
-                key={photo.id}
-                photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
-                size={{ width: colWidth, height }}
-                onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
-                  origin,
-                  eventTitle: event?.name,
-                  eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
-                })}
-              />
-            ))}
+      <View style={{ height: totalHeight, position: 'relative' }}>
+        {placements.map(({ photo, x, y, width, height }) => (
+          <View
+            key={photo.id}
+            style={{ position: 'absolute', left: x, top: y, width, height }}
+          >
+            <PhotoCell
+              photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
+              size={{ width, height }}
+              onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
+                origin,
+                eventTitle: event?.name,
+                eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+              })}
+            />
           </View>
         ))}
       </View>
