@@ -2442,27 +2442,8 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           </View>
       )}
 
-      {/* CTA Site web : action secondaire, donc style discret —
-          fond pale (tint + alpha) + texte couleur tint, label generique
-          "Accéder au site de l event" (sans URL en clair). */}
-      {event.website ? (
-        <TouchableOpacity
-          onPress={openWebsite}
-          activeOpacity={0.85}
-          style={{
-            backgroundColor: `${tint}1A`,
-            borderRadius: 14,
-            paddingVertical: 10,
-            paddingHorizontal: 24,
-            alignItems: 'center',
-            marginBottom: 8,
-          }}
-        >
-          <Text style={{ color: tint, fontSize: 14, fontWeight: '600' }}>
-            Accéder au site de l'event →
-          </Text>
-        </TouchableOpacity>
-      ) : null}
+      {/* CTA Site web retire : redondant avec le bouton "Site organisateur"
+          dans le bottom sheet "+ d'infos" du header. */}
 
       {/* Courses : un seul bloc avec header de labels + lignes de valeurs.
           !loading sinon le bloc distances flashe pendant le fetch initial. */}
