@@ -75,6 +75,8 @@ import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-g
 import ReAnimated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedScrollHandler,
+  interpolateColor,
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
@@ -2130,11 +2132,46 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
 // Roulette horizontale infinie (style picker iOS). Le filtre actif est
 // au centre, derriere un cadre accent. Items dupliques N fois pour
 // simuler l infini : on demarre au milieu de la copie centrale. La
-// couleur du texte est interpolee en live pendant le scroll : chaque
-// item passe doucement de accent (loin du centre) a blanc (au centre)
-// -> pas de saut visuel apres snap.
+// couleur du texte est interpolee EN LIVE sur le UI thread via
+// Reanimated 3 (useAnimatedScrollHandler + interpolateColor) : chaque
+// item passe doucement de accent (hors centre) a blanc (sur le cadre)
+// -> pas de "texte accent sur cadre accent" devenu invisible.
 const WHEEL_ITEM_W = 100;
+const WHEEL_H = 34;
 const WHEEL_LOOPS = 30;
+const ReAnimatedFlatList = ReAnimated.createAnimatedComponent(FlatList);
+
+function WheelItem({ index, label, accent, scrollX, onPress }) {
+  const animStyle = useAnimatedStyle(() => {
+    const color = interpolateColor(
+      scrollX.value,
+      [
+        (index - 0.5) * WHEEL_ITEM_W,
+        index * WHEEL_ITEM_W,
+        (index + 0.5) * WHEEL_ITEM_W,
+      ],
+      [accent, '#ffffff', accent],
+    );
+    return { color };
+  });
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      style={{
+        width: WHEEL_ITEM_W, height: WHEEL_H,
+        alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      <ReAnimated.Text style={[{
+        fontWeight: '600',
+        fontSize: 13.5,
+        fontFamily: 'Montserrat',
+      }, animStyle]}>{label}</ReAnimated.Text>
+    </TouchableOpacity>
+  );
+}
+
 function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 }) {
   const listRef = useRef(null);
   const [containerW, setContainerW] = useState(0);
@@ -2142,6 +2179,12 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
   const activeIdx = Math.max(0, items.findIndex(it => it.key === activeKey));
   const middleStart = Math.floor(WHEEL_LOOPS / 2) * n;
   const initialIdx = middleStart + activeIdx;
+  // scrollX initialise pile sur l item actif : au mount, interpolateColor
+  // place le blanc sur le bon item des le 1er paint, pas l item 0.
+  const scrollX = useSharedValue(initialIdx * WHEEL_ITEM_W);
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (e) => { scrollX.value = e.contentOffset.x; },
+  });
   const looped = useMemo(() => {
     const arr = [];
     for (let i = 0; i < WHEEL_LOOPS; i++) {
@@ -2156,27 +2199,25 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
     <View
       onLayout={(e) => setContainerW(e.nativeEvent.layout.width)}
       style={{
-        flex: 1, marginRight, height: 40,
-        backgroundColor: bg, borderRadius: 16,
+        flex: 1, marginRight, height: WHEEL_H,
+        backgroundColor: bg, borderRadius: 14,
         overflow: 'hidden', position: 'relative',
       }}
     >
       {containerW > 0 && (
         <>
-          {/* Cadre central fixe (accent). Pas de zIndex explicite :
-              le rendu naturel place la FlatList par-dessus (elle vient
-              apres dans le JSX), donc les items texte sont visibles
-              au-dessus de l indicateur. */}
+          {/* Cadre central fixe (accent). Rendu AVANT la FlatList pour
+              que les items texte passent par-dessus dans l ordre naturel. */}
           <View
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: 4, bottom: 4,
+              top: 3, bottom: 3,
               left: padH, width: WHEEL_ITEM_W,
-              backgroundColor: accent, borderRadius: 12,
+              backgroundColor: accent, borderRadius: 10,
             }}
           />
-          <FlatList
+          <ReAnimatedFlatList
             ref={listRef}
             data={looped}
             horizontal
@@ -2192,40 +2233,32 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
               }), 50);
             }}
             contentContainerStyle={{ paddingHorizontal: padH }}
+            scrollEventThrottle={16}
+            onScroll={scrollHandler}
             onMomentumScrollEnd={(e) => {
               const offset = e.nativeEvent.contentOffset.x;
               const idx = Math.round(offset / WHEEL_ITEM_W);
+              // Cole scrollX exactement sur l item snap pour ne pas rester
+              // a +/-1px (texte interpole = pas tout-a-fait blanc).
+              scrollX.value = idx * WHEEL_ITEM_W;
               const realIdx = ((idx % n) + n) % n;
               const newKey = items[realIdx].key;
               if (newKey !== activeKey) onChange(newKey);
             }}
             renderItem={({ item, index }) => {
               const realIdx = ((index % n) + n) % n;
-              // Couleur statique : l item dont le realIdx correspond au
-              // filtre actif (peu importe quelle "loop iteration") = blanc.
-              // Visuel : un seul item est sous l indicateur central a la
-              // fois, donc un seul item est BIEN visible en blanc.
-              const isActive = realIdx === activeIdx;
               return (
-                <TouchableOpacity
+                <WheelItem
+                  index={index}
+                  label={item.label}
+                  accent={accent}
+                  scrollX={scrollX}
                   onPress={() => {
                     listRef.current?.scrollToIndex({ index, animated: true });
                     const newKey = items[realIdx].key;
                     if (newKey !== activeKey) onChange(newKey);
                   }}
-                  activeOpacity={0.7}
-                  style={{
-                    width: WHEEL_ITEM_W, height: 40,
-                    alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <Text style={{
-                    color: isActive ? '#ffffff' : accent,
-                    fontWeight: isActive ? '700' : '500',
-                    fontSize: 13.5,
-                    fontFamily: 'Montserrat',
-                  }}>{item.label}</Text>
-                </TouchableOpacity>
+                />
               );
             }}
           />
