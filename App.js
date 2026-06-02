@@ -931,8 +931,8 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
     <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
       <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
         <View style={{ flex: 1 }}>
-          <Text style={s.selfieTitle}>Un selfie suffit</Text>
-          <Text style={s.selfieSub}>Pour recevoir tes photos{'\n'}de tous les événements Will</Text>
+          <Text style={s.selfieTitle}>UN SELFIE SUFFIT</Text>
+          <Text style={s.selfieSub}>Ajoute ton event en favoris avant le départ{'\n'}Reçois tes photos automatiquement</Text>
         </View>
         <View style={s.selfieAvatar}>
           <Icon.User size={40} color="#FFFFFF" />
