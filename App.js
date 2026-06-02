@@ -2128,14 +2128,17 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
 }
 
 // Roulette horizontale infinie (style picker iOS). Le filtre actif est
-// au centre, derriere un cadre accent (violet/rose). Items dupliques N
-// fois pour simuler l infini : on demarre au milieu de la copie centrale.
-// snapToInterval garantit le snap doux sur chaque item.
+// au centre, derriere un cadre accent. Items dupliques N fois pour
+// simuler l infini : on demarre au milieu de la copie centrale. La
+// couleur du texte est interpolee en live pendant le scroll : chaque
+// item passe doucement de accent (loin du centre) a blanc (au centre)
+// -> pas de saut visuel apres snap.
 const WHEEL_ITEM_W = 100;
 const WHEEL_LOOPS = 30;
-function RaceWheel({ items, activeKey, onChange, accent, bg }) {
+function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 }) {
   const listRef = useRef(null);
   const [containerW, setContainerW] = useState(0);
+  const scrollX = useRef(new Animated.Value(0)).current;
   const n = items.length;
   const activeIdx = Math.max(0, items.findIndex(it => it.key === activeKey));
   const looped = useMemo(() => {
@@ -2154,7 +2157,7 @@ function RaceWheel({ items, activeKey, onChange, accent, bg }) {
     <View
       onLayout={(e) => setContainerW(e.nativeEvent.layout.width)}
       style={{
-        flex: 1, marginRight: 10, height: 40,
+        flex: 1, marginRight, height: 40,
         backgroundColor: bg, borderRadius: 16,
         overflow: 'hidden', position: 'relative',
       }}
@@ -2189,6 +2192,11 @@ function RaceWheel({ items, activeKey, onChange, accent, bg }) {
               }), 50);
             }}
             contentContainerStyle={{ paddingHorizontal: padH }}
+            scrollEventThrottle={16}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+              { useNativeDriver: false }
+            )}
             onMomentumScrollEnd={(e) => {
               const offset = e.nativeEvent.contentOffset.x;
               const idx = Math.round(offset / WHEEL_ITEM_W);
@@ -2198,7 +2206,17 @@ function RaceWheel({ items, activeKey, onChange, accent, bg }) {
             }}
             renderItem={({ item, index }) => {
               const realIdx = ((index % n) + n) % n;
-              const isActive = realIdx === activeIdx;
+              // Interpolation live : la couleur du texte se rapproche du
+              // blanc quand l item arrive au centre (scrollX == index * W).
+              const color = scrollX.interpolate({
+                inputRange: [
+                  (index - 0.5) * WHEEL_ITEM_W,
+                  index * WHEEL_ITEM_W,
+                  (index + 0.5) * WHEEL_ITEM_W,
+                ],
+                outputRange: [accent, '#ffffff', accent],
+                extrapolate: 'clamp',
+              });
               return (
                 <TouchableOpacity
                   onPress={() => {
@@ -2213,12 +2231,12 @@ function RaceWheel({ items, activeKey, onChange, accent, bg }) {
                     zIndex: 2,
                   }}
                 >
-                  <Text style={{
-                    color: isActive ? '#fff' : accent,
-                    fontWeight: isActive ? '700' : '500',
+                  <Animated.Text style={{
+                    color,
+                    fontWeight: '600',
                     fontSize: 13.5,
                     fontFamily: 'Montserrat',
-                  }}>{item.label}</Text>
+                  }}>{item.label}</Animated.Text>
                 </TouchableOpacity>
               );
             }}
@@ -2794,7 +2812,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     selection courante. snapToInterval + array dupliquee 30x
                     -> sensation infinie. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <RaceWheel
+                  <FilterWheel
                     items={[{ key: 'all', label: 'Toutes' }, ...uniqueRaces.map(r => ({ key: String(r), label: `${r} km` }))]}
                     activeKey={activeRaceFilter}
                     onChange={(key) => {
@@ -2842,60 +2860,19 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   }}
                 >
                   {activeRaceFilter !== 'all' && kmsForActiveRace.length > 1 && (
-                    <ScrollView
-                      horizontal showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={{ flexGrow: 1 }}
-                    >
-                      {/* Sous-conteneur pill (km) pleine largeur, fond rose
-                          pale (pinkPillBg) pour distinguer la hierarchie ;
-                          indicateur rose plein (pinkPill). flex:1 -> stretch
-                          quand le contenu rentre, scroll horizontal sinon. */}
-                      <View style={{
-                        flex: 1,
-                        position: 'relative', flexDirection: 'row', alignItems: 'center',
-                        backgroundColor: C.pinkPillBg, borderRadius: 16, padding: 4,
-                      }}>
-                        <Animated.View
-                          pointerEvents="none"
-                          style={{
-                            position: 'absolute',
-                            top: 4, bottom: 4, left: 4,
-                            borderRadius: 12,
-                            backgroundColor: C.pinkPill,
-                            width: kmIndicatorW,
-                            transform: [{ translateX: kmIndicatorX }],
-                          }}
-                        />
-                        <Tab
-                          tabKey="all"
-                          label="Tous"
-                          active={activeKmFilter === 'all'}
-                          onPress={() => setActiveKmFilter('all')}
-                          layoutsRef={kmTabLayoutsRef}
-                          indicatorX={kmIndicatorX}
-                          indicatorW={kmIndicatorW}
-                          initRef={kmIndicatorInitRef}
-                          small
-                        />
-                        {kmsForActiveRace.map((k) => {
-                          const label = k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`;
-                          return (
-                            <Tab
-                              key={`k-${k}`}
-                              tabKey={k}
-                              label={label}
-                              active={activeKmFilter === k}
-                              onPress={() => setActiveKmFilter(k)}
-                              layoutsRef={kmTabLayoutsRef}
-                              indicatorX={kmIndicatorX}
-                              indicatorW={kmIndicatorW}
-                              initRef={kmIndicatorInitRef}
-                              small
-                            />
-                          );
-                        })}
-                      </View>
-                    </ScrollView>
+                    /* Roulette km : meme composant que la race row mais
+                       accent rose (sub-filter) sur fond rose pale. */
+                    <FilterWheel
+                      items={[{ key: 'all', label: 'Tous' }, ...kmsForActiveRace.map(k => ({
+                        key: k,
+                        label: k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`,
+                      }))]}
+                      activeKey={activeKmFilter}
+                      onChange={setActiveKmFilter}
+                      accent={C.pinkPill}
+                      bg={C.pinkPillBg}
+                      marginRight={0}
+                    />
                   )}
                 </Animated.View>
               </View>
