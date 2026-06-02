@@ -4541,78 +4541,59 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           </View>
         </View>
 
-        {/* Panneau details replie : compteurs + erreur + progress + readout
-            (preview/dev only). Visible uniquement quand chevron deplie. */}
+        {/* Panneau details replie : compteurs + erreur + readout en ligne
+            INLINE dans le header (sur la bande noire du gradient, pas dans
+            une carte separee). paddingLeft 48 = back arrow (36) + gap (12),
+            tout est aligne avec le nom de l event. */}
         {techExpanded && (
           <View style={{
-            marginTop: 12,
-            paddingHorizontal: 14, paddingVertical: 10,
-            backgroundColor: 'rgba(0,0,0,0.55)',
-            borderRadius: 14,
+            marginTop: 8,
+            paddingLeft: 48, paddingRight: 8,
+            flexDirection: 'row',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            columnGap: 10,
+            rowGap: 4,
           }}>
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M17.5 19a4.5 4.5 0 00.5-8.97 6 6 0 00-11.62-1.5A4.5 4.5 0 006.5 19h11z"
-                    stroke={cloudColor}
-                    strokeWidth={1.8}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill={cloudActive ? 'rgba(59,130,246,0.18)' : 'none'}
-                  />
-                </Svg>
-                <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' }}>
-                  {uploadedCount} sauvegardée{uploadedCount > 1 ? 's' : ''}
-                </Text>
-              </View>
-              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginHorizontal: 10 }}>·</Text>
-              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' }}>
-                {pendingCount} en attente
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M17.5 19a4.5 4.5 0 00.5-8.97 6 6 0 00-11.62-1.5A4.5 4.5 0 006.5 19h11z"
+                  stroke={cloudColor}
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill={cloudActive ? 'rgba(59,130,246,0.18)' : 'none'}
+                />
+              </Svg>
+              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' }}>
+                {uploadedCount} sauvegardée{uploadedCount > 1 ? 's' : ''}
               </Text>
             </View>
-
+            <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>·</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' }}>
+              {pendingCount} en attente
+            </Text>
             {(lostCount + queueStats.failed) > 0 && (
-              <Text style={{
-                color: '#FB923C', fontSize: 12, fontWeight: '700',
-                textAlign: 'center', marginTop: 6,
-              }}>
-                {lostCount + queueStats.failed} à renvoyer
-              </Text>
-            )}
-
-            {drainShowBar && (
-              <View style={{ marginTop: 8 }}>
-                <View style={{
-                  height: 3, borderRadius: 2,
-                  backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden',
-                }}>
-                  <View style={{
-                    width: `${Math.round(drainProgress * 100)}%`,
-                    height: '100%', backgroundColor: '#22C55E', borderRadius: 2,
-                  }} />
-                </View>
-                <Text style={{
-                  color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '600',
-                  textAlign: 'center', marginTop: 4,
-                }}>
-                  {Math.round(drainProgress * drainStartTotal)} / {drainStartTotal} envoyées
+              <>
+                <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>·</Text>
+                <Text style={{ color: '#FB923C', fontSize: 12, fontWeight: '600' }}>
+                  {lostCount + queueStats.failed} à renvoyer
                 </Text>
-              </View>
+              </>
             )}
-
             {IS_PREVIEW_OR_DEV && liveExposureSamples.length > 0 && (() => {
               const last = liveExposureSamples[liveExposureSamples.length - 1];
               return (
-                <Text style={{
-                  color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '600',
-                  textAlign: 'center', marginTop: 8, letterSpacing: 0.4,
-                  fontVariant: ['tabular-nums'],
-                }}>
-                  ISO {Math.round(last.iso)}  ·  {formatShutter(last.shutter)}  ·  {formatEV(last.brightness)}
-                </Text>
+                <>
+                  <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>·</Text>
+                  <Text style={{
+                    color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '500',
+                    fontVariant: ['tabular-nums'],
+                  }}>
+                    ISO {Math.round(last.iso)} · {formatShutter(last.shutter)} · {formatEV(last.brightness)}
+                  </Text>
+                </>
               );
             })()}
           </View>
@@ -4644,40 +4625,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           // mais Go! reste en bas de cette zone — visuellement il semble décalé.
           minHeight: Math.max(0, winH - (CAMERA_TOP + previewH)),
         }}>
-          {/* Strip mini-galerie : 1ere ligne du panneau noir, scroll horizontal.
-              Tap n'importe quelle vignette → ouvre la sheet grille complete. */}
-          {myPhotos.length > 0 && (
-            <View style={{ height: 56, marginHorizontal: -16 }}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6, height: 56 }}
-              >
-                {myPhotos.slice(0, 60).map((p) => (
-                  <TouchableOpacity
-                    key={p.key}
-                    onPress={() => setGalleryOpen(true)}
-                    activeOpacity={0.85}
-                    style={{
-                      width: 44, height: 44, borderRadius: 6,
-                      overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
-                    }}
-                  >
-                    <ExpoImage
-                      source={{ uri: p.thumb_url }}
-                      style={{ width: '100%', height: '100%' }}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                      priority="low"
-                      transition={100}
-                      recyclingKey={p.key}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
           {/* Row 1 : bandeau Go!/Stop — top aligné strictement avec le haut du panneau noir */}
           <TouchableOpacity
             onPress={onCapturePress}
@@ -4784,60 +4731,96 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
       {/* ─── Pill Luminosité ─── flottante en haut de la preview, centree.
           Visible UNIQUEMENT si lumi != OK (silence quand tout va bien).
-          BlurView iOS natif (intensite 50, tint dark) + tinted overlay
-          color (jaune/rouge selon etat) a basse opacite pour la nuance,
-          rendu glass de notification iOS. */}
+          BAND : fond plein colore edge-to-edge sous le pill (matching
+          lightDot a opacite reduite), PILL : solide brillant centre. */}
       {(lightDot === '#FBBF24' || lightDot === '#F43F5E') && (
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            top: CAMERA_TOP + 16, left: 0, right: 0,
+            top: CAMERA_TOP, left: 0, right: 0,
+            paddingTop: 12, paddingBottom: 10,
+            backgroundColor: lightDot === '#FBBF24'
+              ? 'rgba(251,191,36,0.18)'
+              : 'rgba(244,63,94,0.2)',
             alignItems: 'center',
             zIndex: 5,
           }}
         >
           <View style={{
+            backgroundColor: lightDot,
+            paddingHorizontal: 22, paddingVertical: 7,
             borderRadius: 999,
-            overflow: 'hidden',
             shadowColor: '#000',
-            shadowOpacity: 0.3, shadowRadius: 10,
-            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.3, shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
           }}>
-            <BlurView
-              intensity={60}
-              tint="dark"
-              style={{
-                paddingHorizontal: 22, paddingVertical: 8,
-                borderRadius: 999,
-                overflow: 'hidden',
-              }}
-            >
-              {/* Voile colore subtil pour la nuance jaune/rouge sans casser
-                  le givre — on garde la transparence en majeure partie. */}
-              <View
-                pointerEvents="none"
-                style={{
-                  ...StyleSheet.absoluteFillObject,
-                  backgroundColor: lightDot === '#FBBF24'
-                    ? 'rgba(251,191,36,0.35)'
-                    : 'rgba(244,63,94,0.35)',
-                }}
-              />
-              <Text style={{
-                color: '#fff', fontSize: 13, fontWeight: '600',
-                letterSpacing: 0.3,
-                textShadowColor: 'rgba(0,0,0,0.4)', textShadowRadius: 3,
-              }}>
-                {lightLabel}
-              </Text>
-            </BlurView>
+            <Text style={{
+              color: '#fff', fontSize: 13, fontWeight: '700',
+              letterSpacing: 0.3,
+            }}>
+              {lightLabel}
+            </Text>
           </View>
         </View>
       )}
 
-      {/* Strip mini-galerie deplace dans le BOTTOM AREA (juste au-dessus
-          du Go!) pour eviter l'overlap avec le panneau noir qui a grandi. */}
+      {/* ─── Mini-galerie strip ─── flottante absolue juste au-dessus du
+          bottom panel (calc bottom = panel height + gap). Pas de fond
+          noir : les vignettes flottent directement sur la preview.
+          Opacite degressive : 100% a gauche -> 10% a droite (gradient
+          per-thumb, plus recent = plus visible). Tap → sheet grille. */}
+      {myPhotos.length > 0 && (() => {
+        // Hauteur effective du bottom panel : Go! (60) + Course/Km section
+        // (paddingTop 10 + label ~24 + wheel 96 + paddingBottom 4 = 134)
+        // + safe area paddingBottom (36). Tient sur iPhone notch ; sur SE
+        // l estimation peut etre legerement off, on accepte +/- 8px.
+        const BOTTOM_PANEL_H = 230;
+        const visible = myPhotos.slice(0, 60);
+        const last = Math.max(1, visible.length - 1);
+        return (
+          <View style={{
+            position: 'absolute',
+            bottom: BOTTOM_PANEL_H + 6,
+            left: 0, right: 0,
+            height: 52,
+            zIndex: 5,
+          }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 12, alignItems: 'center', gap: 6, height: 52 }}
+            >
+              {visible.map((p, i) => {
+                const t = i / last; // 0 a gauche -> 1 a droite
+                const opacity = 1 - 0.9 * t; // 1.0 a 0.1
+                return (
+                  <TouchableOpacity
+                    key={p.key}
+                    onPress={() => setGalleryOpen(true)}
+                    activeOpacity={0.85}
+                    style={{
+                      width: 44, height: 44, borderRadius: 6,
+                      overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.08)',
+                      opacity,
+                    }}
+                  >
+                    <ExpoImage
+                      source={{ uri: p.thumb_url }}
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      priority="low"
+                      transition={100}
+                      recyclingKey={p.key}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        );
+      })()}
 
       {/* ─── Mini-galerie sheet ─── ouverte au tap d'une vignette de la bande,
           grille 3 cols complete. Tap vignette dans la sheet → viewer plein
