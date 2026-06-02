@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  AppState, Share, NativeModules,
+  AppState, Share, NativeModules, PanResponder,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -7699,13 +7699,14 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken, signupMod
   );
 }
 
-function LoginModal({ visible, role, events, onClose, onSuccess }) {
-  const [code, setCode] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  // Sheet slide-in via Animated.translateY (independant du fade backdrop
-  // qui est gere par animationType="fade" du Modal). 1000 = off-screen.
+// Hook commun pour les bottom sheets auth : slide-in spring au visible
+// + drag-to-dismiss avec PanResponder sur la handle (tap = close,
+// drag > 120px OU velocite > 0.5 = close en anim, sinon snap back).
+function useDismissibleSheet(visible, onClose) {
   const sheetTranslate = useRef(new Animated.Value(1000)).current;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (visible) {
       sheetTranslate.setValue(1000);
@@ -7715,6 +7716,48 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
       }).start();
     }
   }, [visible]);
+
+  const handlePanHandlers = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) sheetTranslate.setValue(g.dy);
+      },
+      onPanResponderRelease: (_, g) => {
+        const tap = Math.abs(g.dy) < 5 && Math.abs(g.dx) < 5;
+        if (tap) {
+          onCloseRef.current?.();
+          return;
+        }
+        const shouldClose = g.dy > 120 || g.vy > 0.5;
+        if (shouldClose) {
+          Animated.timing(sheetTranslate, {
+            toValue: 1000, duration: 220, useNativeDriver: true,
+          }).start(() => onCloseRef.current?.());
+        } else {
+          Animated.spring(sheetTranslate, {
+            toValue: 0, useNativeDriver: true, friction: 11, tension: 80,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(sheetTranslate, {
+          toValue: 0, useNativeDriver: true, friction: 11, tension: 80,
+        }).start();
+      },
+    })
+  ).current.panHandlers;
+
+  return { sheetTranslate, handlePanHandlers };
+}
+
+function LoginModal({ visible, role, events, onClose, onSuccess }) {
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  // Sheet slide-in + drag-to-dismiss via hook commun.
+  const { sheetTranslate, handlePanHandlers } = useDismissibleSheet(visible, onClose);
   // Reset flow (organisateur uniquement) : 'login' → 'reset-request' → 'reset-verify'
   const [resetMode, setResetMode] = useState('login');
   const [resetCode, setResetCode] = useState('');
@@ -7844,9 +7887,9 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
           <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
             <Animated.View style={{ transform: [{ translateY: sheetTranslate }] }}>
             <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
-              <TouchableOpacity onPress={onClose} hitSlop={20}>
+              <View {...handlePanHandlers} style={{ paddingVertical: 6, alignItems: 'center' }}>
                 <View style={s.modalHandle} />
-              </TouchableOpacity>
+              </View>
               <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
                 {role === 'organizer' ? 'Espace organisateur' : 'Espace photographe'}
               </Text>
@@ -9507,17 +9550,7 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
   const [citySuggestions, setCitySuggestions] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  // Sheet slide-in : meme pattern que LoginModal / AuthOrganizerModal.
-  const sheetTranslate = useRef(new Animated.Value(1000)).current;
-  useEffect(() => {
-    if (visible) {
-      sheetTranslate.setValue(1000);
-      Animated.spring(sheetTranslate, {
-        toValue: 0, useNativeDriver: true,
-        friction: 11, tension: 80,
-      }).start();
-    }
-  }, [visible]);
+  const { sheetTranslate, handlePanHandlers } = useDismissibleSheet(visible, onClose);
 
   // Pré-remplit l'email avec la dernière valeur connue à chaque ouverture.
   // Et resynchronise le mode (login/register) sur l'intention d'ouverture.
@@ -9597,9 +9630,9 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
           <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
             <Animated.View style={{ transform: [{ translateY: sheetTranslate }] }}>
               <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
-                <TouchableOpacity onPress={onClose} hitSlop={20}>
+                <View {...handlePanHandlers} style={{ paddingVertical: 6, alignItems: 'center' }}>
                   <View style={s.modalHandle} />
-                </TouchableOpacity>
+                </View>
                 {mode === 'register' && (
                   <Text style={{ color: C.textSoft, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase', textAlign: 'center', marginTop: 0, marginBottom: 4 }}>
                     Étape 1 sur 2
@@ -9712,17 +9745,7 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
   const [lastName, setLastName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  // Sheet slide-in via Animated.translateY (independant du fade backdrop).
-  const sheetTranslate = useRef(new Animated.Value(1000)).current;
-  useEffect(() => {
-    if (visible) {
-      sheetTranslate.setValue(1000);
-      Animated.spring(sheetTranslate, {
-        toValue: 0, useNativeDriver: true,
-        friction: 11, tension: 80,
-      }).start();
-    }
-  }, [visible]);
+  const { sheetTranslate, handlePanHandlers } = useDismissibleSheet(visible, onClose);
 
   // Pré-remplit l'email avec la dernière valeur connue à chaque ouverture.
   useEffect(() => {
@@ -9773,9 +9796,9 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
           <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
             <Animated.View style={{ transform: [{ translateY: sheetTranslate }] }}>
             <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
-              <TouchableOpacity onPress={onClose} hitSlop={20}>
+              <View {...handlePanHandlers} style={{ paddingVertical: 6, alignItems: 'center' }}>
                 <View style={s.modalHandle} />
-              </TouchableOpacity>
+              </View>
               <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
                 {mode === 'login' ? 'Espace organisateur' : 'Créer un compte'}
               </Text>
