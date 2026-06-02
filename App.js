@@ -2142,10 +2142,6 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
   const activeIdx = Math.max(0, items.findIndex(it => it.key === activeKey));
   const middleStart = Math.floor(WHEEL_LOOPS / 2) * n;
   const initialIdx = middleStart + activeIdx;
-  // scrollX initialise au scroll offset du filtre actif (et NON 0) pour
-  // que l interpolation place le texte blanc sur le bon item des le premier
-  // rendu. Sinon : scrollX=0 -> item 0 colore en blanc, pas l actif.
-  const scrollX = useRef(new Animated.Value(initialIdx * WHEEL_ITEM_W)).current;
   const looped = useMemo(() => {
     const arr = [];
     for (let i = 0; i < WHEEL_LOOPS; i++) {
@@ -2195,35 +2191,20 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
               }), 50);
             }}
             contentContainerStyle={{ paddingHorizontal: padH }}
-            scrollEventThrottle={16}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-              { useNativeDriver: false }
-            )}
             onMomentumScrollEnd={(e) => {
               const offset = e.nativeEvent.contentOffset.x;
               const idx = Math.round(offset / WHEEL_ITEM_W);
-              // Cole scrollX a la valeur exacte du snap : sans ca, le throttle
-              // 16ms peut laisser scrollX a ~idx*W +/- 1px et le texte de
-              // l item centre reste a une couleur interpolee (jamais pur blanc).
-              scrollX.setValue(idx * WHEEL_ITEM_W);
               const realIdx = ((idx % n) + n) % n;
               const newKey = items[realIdx].key;
               if (newKey !== activeKey) onChange(newKey);
             }}
             renderItem={({ item, index }) => {
               const realIdx = ((index % n) + n) % n;
-              // Interpolation live : la couleur du texte se rapproche du
-              // blanc quand l item arrive au centre (scrollX == index * W).
-              const color = scrollX.interpolate({
-                inputRange: [
-                  (index - 0.5) * WHEEL_ITEM_W,
-                  index * WHEEL_ITEM_W,
-                  (index + 0.5) * WHEEL_ITEM_W,
-                ],
-                outputRange: [accent, '#ffffff', accent],
-                extrapolate: 'clamp',
-              });
+              // Couleur statique : l item dont le realIdx correspond au
+              // filtre actif (peu importe quelle "loop iteration") = blanc.
+              // Visuel : un seul item est sous l indicateur central a la
+              // fois, donc un seul item est BIEN visible en blanc.
+              const isActive = realIdx === activeIdx;
               return (
                 <TouchableOpacity
                   onPress={() => {
@@ -2238,12 +2219,12 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
                     zIndex: 2,
                   }}
                 >
-                  <Animated.Text style={{
-                    color,
-                    fontWeight: '600',
+                  <Text style={{
+                    color: isActive ? '#ffffff' : accent,
+                    fontWeight: isActive ? '700' : '500',
                     fontSize: 13.5,
                     fontFamily: 'Montserrat',
-                  }}>{item.label}</Animated.Text>
+                  }}>{item.label}</Text>
                 </TouchableOpacity>
               );
             }}
