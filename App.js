@@ -2686,13 +2686,19 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   contentContainerStyle={{ paddingHorizontal: 2, alignItems: 'center' }}
                   style={{ flex: 1 }}
                 >
-                  <View style={{ position: 'relative', flexDirection: 'row', alignItems: 'center' }}>
+                  {/* Conteneur pill style HomeScreen : fond pillBg pale,
+                      borderRadius 16, padding 4. L indicateur violet glisse
+                      derriere les tabs (borderRadius 12 pour matcher). */}
+                  <View style={{
+                    position: 'relative', flexDirection: 'row', alignItems: 'center',
+                    backgroundColor: C.pillBg, borderRadius: 16, padding: 4,
+                  }}>
                     <Animated.View
                       pointerEvents="none"
                       style={{
                         position: 'absolute',
-                        top: 0, bottom: 0,
-                        borderRadius: 999,
+                        top: 4, bottom: 4, left: 4,
+                        borderRadius: 12,
                         backgroundColor: C.primary,
                         width: raceIndicatorW,
                         transform: [{ translateX: raceIndicatorX }],
@@ -2778,13 +2784,18 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                         flexGrow: 1, justifyContent: 'center', alignItems: 'center',
                       }}
                     >
-                      <View style={{ position: 'relative', flexDirection: 'row', alignItems: 'center' }}>
+                      {/* Sous-conteneur pill (km) : meme pattern que la row
+                          race, indicateur rose pour distinguer la hierarchie. */}
+                      <View style={{
+                        position: 'relative', flexDirection: 'row', alignItems: 'center',
+                        backgroundColor: C.pillBg, borderRadius: 16, padding: 4,
+                      }}>
                         <Animated.View
                           pointerEvents="none"
                           style={{
                             position: 'absolute',
-                            top: 0, bottom: 0,
-                            borderRadius: 999,
+                            top: 4, bottom: 4, left: 4,
+                            borderRadius: 12,
                             backgroundColor: C.pinkPill,
                             width: kmIndicatorW,
                             transform: [{ translateX: kmIndicatorX }],
