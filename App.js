@@ -2768,9 +2768,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     // Tolerance max sur le decalage entre les 2 cols d une paire pour
     // placer une wide. Au-dela on retombe sur 1-col (eviter les gros
     // trous sous la col la plus courte).
-    const WIDE_GAP_MAX = 30;
+    const WIDE_GAP_MAX = 40;
     visiblePhotos.forEach((p, i) => {
-      let wantWide = i > 0 && i % 7 === 3;
+      let wantWide = i > 0 && i % 5 === 2;
       if (wantWide) {
         // Determine la meilleure paire 0-1 ou 1-2 et son ecart actuel.
         const gap01 = Math.abs(colHeights[0] - colHeights[1]);
