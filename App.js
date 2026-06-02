@@ -2017,6 +2017,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // Tri photos : true = recentes en haut (default, burstTs DESC), false = plus
   // anciennes en haut. Bouton sur la droite des pills permet de basculer.
   const [sortDesc, setSortDesc] = useState(true);
+  // Bottom sheet "+ d'infos" sur le header de l event (courses, horaires,
+  // bouton site organisateur).
+  const [infoSheetOpen, setInfoSheetOpen] = useState(false);
+  const { sheetTranslate: infoSheetTranslate, handlePanHandlers: infoSheetPanHandlers } = useDismissibleSheet(infoSheetOpen, () => setInfoSheetOpen(false));
   // Animated sliding pill iOS-style. Layout de chaque tab mesure via
   // onLayout. La pill slide vers la position du tab actif.
   const raceTabLayoutsRef = useRef({});
@@ -2273,10 +2277,21 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             )}
           </View>
         </View>
-        <TouchableOpacity onPress={onClose} hitSlop={10}>
-          <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
-            <Path d="m8 8 8 8M16 8l-8 8" stroke={C.textSoft} strokeWidth={2} strokeLinecap="round" />
+        <TouchableOpacity
+          onPress={() => setInfoSheetOpen(true)}
+          activeOpacity={0.7}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: 5,
+            paddingHorizontal: 12, paddingVertical: 7,
+            borderRadius: 999,
+            backgroundColor: '#f5f3ff',
+          }}
+        >
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+            <Path d="M12 8h.01M11 12h1v4h1" stroke={C.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+            <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke={C.primary} strokeWidth={1.8} />
           </Svg>
+          <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700', fontFamily: 'Montserrat' }}>+ d'infos</Text>
         </TouchableOpacity>
       </View>
 
@@ -2854,6 +2869,76 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* Bottom sheet "+ d'infos" : courses + horaires + lien site orga.
+          Meme pattern que les modales auth (BlurView light + spring slide). */}
+      <Modal visible={infoSheetOpen} transparent animationType="fade" onRequestClose={() => setInfoSheetOpen(false)}>
+        <View style={{ flex: 1 }}>
+          <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+          <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={() => setInfoSheetOpen(false)}>
+            <Animated.View style={{ transform: [{ translateY: infoSheetTranslate }] }}>
+              <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
+                <View {...infoSheetPanHandlers} style={{ paddingVertical: 6, alignItems: 'center' }}>
+                  <View style={s.modalHandle} />
+                </View>
+                <Text style={[s.welcome, { color: C.text, fontSize: 22, marginTop: 4, marginBottom: 2, textAlign: 'center' }]} numberOfLines={1}>
+                  {event.name}
+                </Text>
+                <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }} numberOfLines={1}>
+                  {formatDateLong(event.event_date, event.event_date_end)}
+                  {cityLabel(event.location) ? ` · ${cityLabel(event.location)}` : ''}
+                </Text>
+
+                {distances.length > 0 && (
+                  <>
+                    <Text style={{
+                      color: C.textSoft, fontSize: 10, fontWeight: '700', letterSpacing: 1,
+                      textTransform: 'uppercase', fontFamily: 'Montserrat',
+                      marginBottom: 8,
+                    }}>
+                      {distances.length > 1 ? 'Courses' : 'Course'}
+                    </Text>
+                    {distances.map((d, i) => (
+                      <View key={i} style={{
+                        flexDirection: 'row', alignItems: 'center',
+                        paddingVertical: 10,
+                        borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth,
+                        borderTopColor: '#e9e4f9',
+                      }}>
+                        <View style={{
+                          width: 8, height: 8, borderRadius: 4,
+                          backgroundColor: tint, marginRight: 10,
+                        }} />
+                        <Text style={{ color: C.text, fontSize: 15, fontWeight: '600', flex: 1 }}>{d.km} km</Text>
+                        {d.time ? (
+                          <Text style={{ color: C.textSoft, fontSize: 13 }}>départ {d.time}</Text>
+                        ) : null}
+                        {d.elevation ? (
+                          <Text style={{ color: C.textSoft, fontSize: 13, marginLeft: 10 }}>{d.elevation} D+</Text>
+                        ) : null}
+                      </View>
+                    ))}
+                  </>
+                )}
+
+                {event.website ? (
+                  <TouchableOpacity
+                    onPress={() => { setInfoSheetOpen(false); openWebsite(); }}
+                    style={{
+                      backgroundColor: C.primary,
+                      paddingVertical: 14, borderRadius: 14,
+                      alignItems: 'center',
+                      marginTop: distances.length > 0 ? 20 : 8,
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Site organisateur</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </TouchableOpacity>
+            </Animated.View>
+          </TouchableOpacity>
         </View>
       </Modal>
     </>
