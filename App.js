@@ -931,14 +931,14 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
     <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
       <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
         <View style={{ flex: 1 }}>
-          <Text style={[s.selfieTitle, { fontFamily: 'AVEstiana' }]}>Un selfie suffit</Text>
+          <Text style={s.selfieTitle}>Un selfie suffit</Text>
           <Text style={s.selfieSub}>Ajoute ton event en favoris avant le départ et reçois tes photos automatiquement !</Text>
         </View>
         <View style={s.selfieAvatar}>
-          {/* Cœur identique au badge violet de PhotosEmptyState (App.js:1711). */}
-          <Svg width={34} height={30} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
-            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-          </Svg>
+          {/* Meme illustration "face scan" (cadres FaceID) que PhotosUnauthScreen :
+              langage visuel = scan biometrique, pas un avatar generique.
+              Color = blanc car le fond de la card est violet. */}
+          <SelfieIllustration size={56} color="#FFFFFF" />
         </View>
       </LinearGradient>
     </TouchableOpacity>
@@ -1194,15 +1194,17 @@ function EventCard({ event, onPress, isFollowing, onToggleFollow, style }) {
 
 // Illustration selfie pour l'onboarding (visage stylise + FaceID).
 // Source: assets/Selfie.svg, inline pour eviter un require asset transform.
-const SELFIE_ILLUSTRATION_XML = `<?xml version="1.0" encoding="UTF-8"?>
+// Couleur dynamique : violet primary par defaut (sur fond clair), blanc pour
+// usage sur fond violet (ex. selfie card de l accueil).
+function SelfieIllustration({ size = 128, color = '#7B2FFF' }) {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17.61 17.61">
-  <path fill="#7B2FFF" d="M1.86,3.28c0-.77.62-1.4,1.4-1.4h4.12V0H1.4C.62,0,0,.62,0,1.4v5.98h1.86V3.28Z"/>
-  <path fill="#7B2FFF" d="M16.21,0h-5.98v1.88h4.12c.77,0,1.4.62,1.4,1.4v4.1h1.86V1.4C17.61.62,16.98,0,16.21,0Z"/>
-  <path fill="#7B2FFF" d="M15.75,13.64c0,.54-.31,1.01-.76,1.24-.23-1.89-2.9-3.38-6.18-3.38s-5.95,1.49-6.18,3.38c-.45-.23-.76-.7-.76-1.24v-3.41H0v5.98C0,16.98.62,17.61,1.4,17.61h2.84s0,0,0,0h9.12s0,0,0,0h2.84c.77,0,1.4-.62,1.4-1.4v-5.98h-1.86v3.41Z"/>
-  <path fill="#7B2FFF" d="M5.73,6.82c0,1.87,1.38,3.38,3.08,3.38s3.08-1.51,3.08-3.38-1.38-3.38-3.08-3.38-3.08,1.51-3.08,3.38Z"/>
+  <path fill="${color}" d="M1.86,3.28c0-.77.62-1.4,1.4-1.4h4.12V0H1.4C.62,0,0,.62,0,1.4v5.98h1.86V3.28Z"/>
+  <path fill="${color}" d="M16.21,0h-5.98v1.88h4.12c.77,0,1.4.62,1.4,1.4v4.1h1.86V1.4C17.61.62,16.98,0,16.21,0Z"/>
+  <path fill="${color}" d="M15.75,13.64c0,.54-.31,1.01-.76,1.24-.23-1.89-2.9-3.38-6.18-3.38s-5.95,1.49-6.18,3.38c-.45-.23-.76-.7-.76-1.24v-3.41H0v5.98C0,16.98.62,17.61,1.4,17.61h2.84s0,0,0,0h9.12s0,0,0,0h2.84c.77,0,1.4-.62,1.4-1.4v-5.98h-1.86v3.41Z"/>
+  <path fill="${color}" d="M5.73,6.82c0,1.87,1.38,3.38,3.08,3.38s3.08-1.51,3.08-3.38-1.38-3.38-3.08-3.38-3.08,1.51-3.08,3.38Z"/>
 </svg>`;
-function SelfieIllustration({ size = 128 }) {
-  return <SvgXml xml={SELFIE_ILLUSTRATION_XML} width={size} height={size} />;
+  return <SvgXml xml={xml} width={size} height={size} />;
 }
 
 // Ecran "Photos" quand le coureur n'est pas connecte. Explique la valeur
@@ -12383,7 +12385,11 @@ const s = StyleSheet.create({
   selfieDelete: { padding: 6 },
 
   selfieCard: { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 8 },
-  selfieTitle: { color: '#fff', fontSize: 24, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 28 },
+  // AV_Estiana-VF.ttf n a qu une seule instance (PostScript = AVEstiana-Bold,
+  // Subfamily = Bold). Si on specifie fontWeight:'700', iOS cherche une variante
+  // "encore plus grasse" qui n existe pas et fallback sur la system font.
+  // Retirer fontWeight laisse iOS appliquer le font registre tel quel (deja Bold).
+  selfieTitle: { color: '#fff', fontSize: 24, fontFamily: 'AVEstiana', fontStyle: 'normal', lineHeight: 28 },
   selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
   selfieAvatar: { width: 68, height: 68, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 
