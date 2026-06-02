@@ -1169,6 +1169,8 @@ function EventCard({ event, onPress, isFollowing, onToggleFollow, style }) {
           source={{ uri: event.cover_image }}
           style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', right: 0 }}
           contentFit="cover"
+          transition={200}
+          cachePolicy="memory-disk"
         />
       ) : null}
       {/* Layer 2 : gradient pleine largeur, tint 100% au seam (x=0.5) ->
@@ -11229,6 +11231,16 @@ export default function App() {
       // offline : on garde la liste cachée (préchargée au boot)
     }
   }, []);
+
+  // Prefetch des cover images de tous les events de l accueil des qu on a
+  // la liste : le switch entre les pills A venir / Passes / Favoris ne
+  // declenche plus de chargement reseau (les images sont en cache disque
+  // ExpoImage), donc plus de "saut" visuel quand une card s affiche.
+  useEffect(() => {
+    if (!events.length || !ExpoImage.prefetch) return;
+    const urls = events.map(e => e.cover_image).filter(Boolean);
+    if (urls.length) ExpoImage.prefetch(urls).catch(() => {});
+  }, [events]);
 
   // Dev-only helper pour re-tester la modale Phase D : depuis la console
   // RN (Hermes debugger / Expo dev menu → Open JS Debugger), taper :
