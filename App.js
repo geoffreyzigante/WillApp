@@ -1064,22 +1064,30 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         )}
       </View>
 
-      {/* Tabs row : À venir / Passés / Favoris (pleine largeur) */}
+      {/* Tabs row : À venir / Passés / Favoris (pleine largeur).
+          Separateur vertical leger affiche UNIQUEMENT entre deux pills
+          non-selectionnees adjacentes (la pill active fait deja office de
+          separation visuelle). */}
       <View style={{
         flexDirection: 'row',
         backgroundColor: C.pillBg,
         borderRadius: 16,
         padding: 4,
         marginBottom: 8,
+        alignItems: 'center',
       }}>
         <TouchableOpacity onPress={() => setTab('upcoming')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'upcoming' && s.pillActive]}>
           <Text style={[s.pillText, tab === 'upcoming' && s.pillTextActive]}>À venir</Text>
         </TouchableOpacity>
+        {/* Separateur entre A venir et Passes : visible si 'follows' selectionne (les 2 voisines non actives). */}
+        {tab === 'follows' && <View style={{ width: StyleSheet.hairlineWidth, height: 16, backgroundColor: 'rgba(0,0,0,0.12)' }} />}
         <TouchableOpacity onPress={() => setTab('past')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'past' && s.pillActive]}>
           <Text style={[s.pillText, tab === 'past' && s.pillTextActive]}>Passés</Text>
         </TouchableOpacity>
+        {/* Separateur entre Passes et Favoris : visible si 'upcoming' selectionne. */}
+        {tab === 'upcoming' && <View style={{ width: StyleSheet.hairlineWidth, height: 16, backgroundColor: 'rgba(0,0,0,0.12)' }} />}
         <TouchableOpacity onPress={() => setTab('follows')} style={[s.pill, { flex: 1, alignItems: 'center' }, tab === 'follows' && s.pillActive]}>
-          <Text style={[s.pillText, tab === 'follows' && s.pillTextActive]}>Suivis</Text>
+          <Text style={[s.pillText, tab === 'follows' && s.pillTextActive]}>Favoris</Text>
         </TouchableOpacity>
       </View>
 
@@ -1090,7 +1098,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             <Icon.Calendar size={36} color={C.textSoft} />
           </View>
           <Text style={{ color: C.textSoft, fontSize: 14 }}>
-            {tab === 'follows' ? 'Aucun event suivi' : tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
+            {tab === 'follows' ? 'Aucun event en favoris' : tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
           </Text>
         </View>
       ) : (
