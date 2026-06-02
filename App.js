@@ -982,8 +982,8 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
     contentFade.setValue(0);
     contentSlideX.setValue(direction * 20);
     Animated.parallel([
-      Animated.timing(contentFade, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.spring(contentSlideX, { toValue: 0, useNativeDriver: true, tension: 90, friction: 14 }),
+      Animated.timing(contentFade, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.spring(contentSlideX, { toValue: 0, useNativeDriver: true, tension: 50, friction: 12 }),
     ]).start();
   }, [tabIdx, contentFade, contentSlideX]);
   const tabFiltered = events.filter(e => {
