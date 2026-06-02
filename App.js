@@ -2032,9 +2032,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const kmIndicatorInitRef = useRef(false);
   // Fade + slide-in pour la row Posté quand elle apparait.
   const kmRowAnim = useRef(new Animated.Value(0)).current;
-  // Cross-fade + slide-in pour la grille de photos a chaque changement de
-  // filtre (key sur activeRaceFilter+activeKmFilter via useEffect).
-  const gridAnim = useRef(new Animated.Value(1)).current;
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false); // Phase D3 : confirm "Ne plus suivre"
   const tint = colorForType(event.event_type);
   const upcoming = isUpcoming(event.event_date, event.event_date_end);
@@ -2189,16 +2186,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     ]).start();
   }, [activeKmFilter, activeRaceFilter, kmsForActiveRace.length]);
 
-  // Cross-fade + slide-in subtil de la grille a chaque changement de filtre.
-  // gridAnim demarre a 1, on le force a 0 puis on l anime vers 1 -> fade in
-  // + translateX 16 -> 0 (slide depuis la droite). useNativeDriver pour
-  // performance, pas de re-render JS.
-  useEffect(() => {
-    gridAnim.setValue(0);
-    Animated.timing(gridAnim, {
-      toValue: 1, duration: 220, useNativeDriver: true,
-    }).start();
-  }, [activeRaceFilter, activeKmFilter, sortDesc]);
 
   // Tabs course (Toutes + 1 par race). Vide si aucune photo n a de race.
   const raceTabs = uniqueRaces.length === 0
@@ -2760,28 +2747,16 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // Rendu d'une cellule : flex: 1 + aspectRatio: 1 (pas de width fixe pour
   // eviter tout decalage horizontal cause par s.scroll paddingHorizontal: 20).
   const renderItem = ({ item }) => (
-    <Animated.View
-      style={{
-        flex: 1,
-        // Opacity retire : le passage a 0 lors du setValue causait un
-        // micro-flash visible. Seul le translateX (slide) anime maintenant
-        // -> les cells restent visibles en permanence, glissent subtilement.
-        transform: [{
-          translateX: gridAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
-        }],
-      }}
-    >
-      <PhotoCell
-        // Pour la grille on utilise thumbUri (~25 KB) au lieu de uri (~2-5 MB).
-        // Le viewer plein ecran recoit item entier (avec uri haute resolution).
-        photo={{ ...item, uri: item.thumbUri || item.uri }}
-        onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
-          origin,
-          eventTitle: event?.name,
-          eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
-        })}
-      />
-    </Animated.View>
+    <PhotoCell
+      // Pour la grille on utilise thumbUri (~25 KB) au lieu de uri (~2-5 MB).
+      // Le viewer plein ecran recoit item entier (avec uri haute resolution).
+      photo={{ ...item, uri: item.thumbUri || item.uri }}
+      onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
+        origin,
+        eventTitle: event?.name,
+        eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+      })}
+    />
   );
 
   const renderFooter = () => {
