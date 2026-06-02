@@ -2664,6 +2664,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 activeOpacity={0.7}
                 style={{
                   flex: 1,
+                  // minWidth garantit un seuil de lisibilite ; quand le total
+                  // des tabs depasse la largeur du conteneur, la ScrollView
+                  // parent prend le relais et scroll horizontalement.
+                  minWidth: small ? 56 : 64,
                   paddingHorizontal: small ? 12 : 14,
                   paddingVertical: small ? 6 : 7,
                   alignItems: 'center',
@@ -2683,12 +2687,21 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             );
             return (
               <View style={{ marginTop: 6, marginBottom: 0 }}>
-                {/* Row 1 : pleine largeur, tabs distribuees a egalite via
-                    flex:1 (au lieu de la ScrollView), bouton tri fixe a droite. */}
+                {/* Row 1 : ScrollView horizontale + contentContainer flexGrow:1.
+                    Quand peu de courses (rentrent dans la largeur), la pill
+                    s etend pleine largeur (tabs flex:1 distribuees a egalite).
+                    Quand trop de courses, le conteneur scroll horizontalement
+                    (tabs gardent leur minWidth, total > viewport -> scroll). */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <ScrollView
+                    horizontal showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ flexGrow: 1 }}
+                    style={{ flex: 1, marginRight: 10 }}
+                  >
                   {/* Conteneur pill style HomeScreen : fond pillBg pale,
-                      borderRadius 16, padding 4. flex:1 -> prend toute la
-                      largeur dispo. L indicateur violet glisse derriere. */}
+                      borderRadius 16, padding 4. flex:1 -> remplit le
+                      contentContainer; en overflow, prend la taille du
+                      contenu et scrolle. */}
                   <View style={{
                     flex: 1,
                     position: 'relative', flexDirection: 'row', alignItems: 'center',
@@ -2739,6 +2752,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                       );
                     })}
                   </View>
+                  </ScrollView>
                 {/* Bouton inverser l ordre du tri (recente / ancien). */}
                 <TouchableOpacity
                   onPress={() => {
@@ -2752,7 +2766,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     width: 34, height: 34, borderRadius: 17,
                     backgroundColor: '#f5f3ff',
                     alignItems: 'center', justifyContent: 'center',
-                    marginLeft: 8,
                   }}
                 >
                   <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
@@ -2777,11 +2790,16 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   }}
                 >
                   {activeRaceFilter !== 'all' && kmsForActiveRace.length > 1 && (
-                    <View>
+                    <ScrollView
+                      horizontal showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ flexGrow: 1 }}
+                    >
                       {/* Sous-conteneur pill (km) pleine largeur, fond rose
                           pale (pinkPillBg) pour distinguer la hierarchie ;
-                          indicateur rose plein (pinkPill). */}
+                          indicateur rose plein (pinkPill). flex:1 -> stretch
+                          quand le contenu rentre, scroll horizontal sinon. */}
                       <View style={{
+                        flex: 1,
                         position: 'relative', flexDirection: 'row', alignItems: 'center',
                         backgroundColor: C.pinkPillBg, borderRadius: 16, padding: 4,
                       }}>
@@ -2825,7 +2843,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                           );
                         })}
                       </View>
-                    </View>
+                    </ScrollView>
                   )}
                 </Animated.View>
               </View>
