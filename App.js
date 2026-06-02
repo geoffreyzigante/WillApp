@@ -2887,6 +2887,24 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   }, [device]);
   const cameraRef = useRef(null);
 
+  // DEBUG TEMPORAIRE (2026-06-02) : on logue + affiche a l'ecran les dims
+  // video/photo du format selectionne pour confirmer l'origine des bandes
+  // noires. Le buffer video (utilise pour la preview) peut etre 16:9 meme
+  // si la photo est 4:3, ce qui cree du letterbox avec resizeMode="contain".
+  const [formatDebug, setFormatDebug] = useState(null);
+  useEffect(() => {
+    if (!format) { setFormatDebug(null); return; }
+    const pw = format.photoWidth, ph = format.photoHeight;
+    const vw = format.videoWidth, vh = format.videoHeight;
+    const pr = pw && ph ? (pw / ph).toFixed(3) : '?';
+    const vr = vw && vh ? (vw / vh).toFixed(3) : '?';
+    const msg = `photo ${pw}x${ph} (r=${pr})  video ${vw}x${vh} (r=${vr})`;
+    console.warn('[WILL-CAM-FMT]', msg);
+    setFormatDebug(msg);
+    const t = setTimeout(() => setFormatDebug(null), 12000);
+    return () => clearTimeout(t);
+  }, [format]);
+
   // Log device + format -> deplaces cote Swift NSLog [WILL-CAM] (hook
   // WillShutterController.attachDevice). console.log JS n'apparait pas
   // dans Console.app sur build EAS preview ; NSLog est lui visible.
@@ -4393,6 +4411,25 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         enableLocation={false}
       />
 
+      {/* DEBUG TEMPORAIRE : overlay dims format. Auto-masque apres 12s. */}
+      {formatDebug && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: CAMERA_TOP + 4, left: 8, right: 8,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            paddingHorizontal: 8, paddingVertical: 4,
+            borderRadius: 6,
+            zIndex: 999,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 11, fontFamily: 'Menlo' }}>
+            {formatDebug}
+          </Text>
+        </View>
+      )}
+
       {/* Guides zone de capture (lignes verticales discretes au centre).
           Caches a 100% (toute la frame est active). */}
       {(eventConfig.camera?.captureZoneWidthPercent ?? 30) < 100 && (() => {
@@ -4626,7 +4663,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         <View style={{
           paddingHorizontal: 16,
           paddingTop: 0,
-          paddingBottom: 36,
+          paddingBottom: 16,
           backgroundColor: '#000',
           // Étend le panneau vers le haut jusqu'au bas de la caméra : sans ça,
           // l'espace entre camera_bottom et inner_top est aussi noir (parent bg)
@@ -4777,7 +4814,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           milieu de l ecran, 10% quand il atteint les bords gauche/droite.
           useNativeDriver active : pas de re-render JS par frame. */}
       {myPhotos.length > 0 && (() => {
-        const BOTTOM_PANEL_H = 230;
+        const BOTTOM_PANEL_H = 210;
         const visible = myPhotos.slice(0, 60);
         const PAD_L = 12;
         const ITEM_W = 44;
