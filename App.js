@@ -3049,7 +3049,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   const PREVIEW_MARGIN_H = 10;
   const previewW = winW - PREVIEW_MARGIN_H * 2;
   const previewH = Math.min(winH, previewW * (4 / 3));
-  const CAMERA_TOP = 148;
+  // CAMERA_TOP releve a 188 pour faire la place au strip galerie au-dessus
+  // du viewer (header 0-128, strip 132-184, gap 4, viewer 188+).
+  const CAMERA_TOP = 188;
 
   // Course + km posté
   const [selectedRace, setSelectedRace] = useState(null); // null = "Toutes les courses"
@@ -4614,60 +4616,49 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         )}
       </Animated.View>
 
-      {/* ─── BOTTOM AREA : footer noir compact, layout vertical en 2 rows (chips / shutter).
-          - Outer Animated.View : positionnement absolu + slide d'entrée
-          - Inner panel : bg #000 solide, padding 16/12/36 (safe area), gap 14 entre rows
-          - Row 1 : chips course dans un container à contour blanc, taille auto centrée
-          - Row 2 : [Pill Zoom 90] / [Bouton Go 140×60] / [Pill KM 90] avec space-between
-          Aucun wrapper sans dimension explicite — chaque élément a width fixe pour
-          garantir que Go! reste entièrement visible. ─── */}
+      {/* ─── ZONE Go! + ROULETTE ─── Go! chevauche le bas du viewer (moitie
+          dessus, moitie dessous : center au niveau du bord bas du viewer).
+          Course/Km en dessous, sur fond root (pas de bandeau noir). ─── */}
       <Animated.View
         pointerEvents="box-none"
         style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
+          position: 'absolute',
+          top: CAMERA_TOP + previewH - 30, // Go! top : half overlap viewer bottom
+          left: 0, right: 0,
           transform: [{ translateY: footerSlideY }],
           zIndex: 10,
         }}
       >
-        <View style={{
-          paddingHorizontal: 16,
-          paddingTop: 16,    // gap entre viewer (en haut) et Go! (en dessous)
-          paddingBottom: 6,
-          backgroundColor: '#000',
-          minHeight: Math.max(0, winH - (CAMERA_TOP + previewH)),
-        }}>
-          {/* Row 1 : Go!/Stop — moitie de la largeur viewer, centre, radius 16. */}
-          <TouchableOpacity
-            onPress={onCapturePress}
-            activeOpacity={0.9}
-            style={{
-              width: previewW / 2,
-              alignSelf: 'center',
-              height: 60,
-              borderRadius: 16,
-              backgroundColor: isAutoArmed ? '#FF3B30' : C.pinkPillActive,
-              alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Text style={{
-              color: '#fff',
-              fontSize: 22,
-              fontStyle: 'italic',
-              fontWeight: '800',
-              fontFamily: 'AVEstiana',
-              letterSpacing: 1,
-            }}>{isAutoArmed ? 'Stop' : 'Go!'}</Text>
-          </TouchableOpacity>
+        {/* Go!/Stop : moitie de la largeur viewer, centre, radius 16. */}
+        <TouchableOpacity
+          onPress={onCapturePress}
+          activeOpacity={0.9}
+          style={{
+            width: previewW / 2,
+            alignSelf: 'center',
+            height: 60,
+            borderRadius: 16,
+            backgroundColor: isAutoArmed ? '#FF3B30' : C.pinkPillActive,
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Text style={{
+            color: '#fff',
+            fontSize: 22,
+            fontStyle: 'italic',
+            fontWeight: '800',
+            fontFamily: 'AVEstiana',
+            letterSpacing: 1,
+          }}>{isAutoArmed ? 'Stop' : 'Go!'}</Text>
+        </TouchableOpacity>
 
-          {/* Row 2 : bandeau 2 sections (COURSE / KM) collé au Go!, edge-to-edge.
-              Quand une section est active, la roulette REMPLACE le texte de cette cellule. */}
-          <View style={{
-            flexDirection: 'row',
-            marginTop: 0,
-            marginHorizontal: -16,
-            backgroundColor: '#000',
-            alignItems: 'stretch',
-          }}>
+        {/* Row Course/Km, juste sous Go! (8px gap). Plus de fond noir : la
+            roulette s appuie sur le fond root (#000) sans bandeau dedie. */}
+        <View style={{
+          flexDirection: 'row',
+          marginTop: 8,
+          alignItems: 'stretch',
+        }}>
             {/* Section COURSE (gauche, 50%) — label + roulette 3-items toujours visible */}
             {(() => {
               const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: `${d.km} km`, value: d }))];
@@ -4736,8 +4727,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                 </View>
               );
             })()}
-          </View>
-
         </View>
       </Animated.View>
 
@@ -4749,9 +4738,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           pointerEvents="none"
           style={{
             position: 'absolute',
-            // Pill descend de 44px quand le panneau info est ouvert pour ne
-            // pas se faire couvrir par l aplat noir des compteurs.
-            top: CAMERA_TOP + 16 + (techExpanded ? 44 : 0),
+            // Pill chevauche le HAUT du viewer (16px au-dessus, ~14px
+            // au-dessous = half-overlap rounded corner). Quand techExpanded,
+            // descend de 36px pour clear l'aplat info qui sort du header.
+            top: CAMERA_TOP - 16 + (techExpanded ? 36 : 0),
             left: 0, right: 0,
             alignItems: 'center',
             zIndex: 5,
@@ -4775,13 +4765,12 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         </View>
       )}
 
-      {/* ─── Mini-galerie strip ─── flottante absolue juste au-dessus du
-          bottom panel. Chaque vignette a une opacite interpolee Animated
-          a partir du scroll horizontal : 100% quand son centre est au
-          milieu de l ecran, 10% quand il atteint les bords gauche/droite.
-          useNativeDriver active : pas de re-render JS par frame. */}
-      {myPhotos.length > 0 && (() => {
-        const BOTTOM_PANEL_H = 210;
+      {/* ─── Mini-galerie strip ─── flottante au-dessus du viewer (entre
+          header et viewer). Cachee quand techExpanded est ouvert (sinon
+          recouverte par l aplat info). Chaque vignette a une opacite
+          interpolee Animated a partir du scroll horizontal (fade 10% bords,
+          100% centre, useNativeDriver). */}
+      {myPhotos.length > 0 && !techExpanded && (() => {
         const visible = myPhotos.slice(0, 60);
         const PAD_L = 12;
         const ITEM_W = 44;
@@ -4789,7 +4778,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
         return (
           <View style={{
             position: 'absolute',
-            bottom: BOTTOM_PANEL_H + 6,
+            top: CAMERA_TOP - 56, // strip de 52 + 4 gap au-dessus du viewer
             left: 0, right: 0,
             height: 52,
             zIndex: 5,
