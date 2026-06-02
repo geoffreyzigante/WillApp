@@ -2673,7 +2673,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 <Text style={{
                   fontSize: small ? 12.5 : 13.5,
                   fontWeight: active ? '700' : '500',
-                  color: active ? '#fff' : C.textSoft,
+                  // Actif : blanc sur la pill. Inactif : couleur d accent
+                  // selon la row -> violet (race, principal) ou rose (km, sub).
+                  color: active ? '#fff' : (small ? C.pinkPill : C.primary),
                   fontFamily: 'Montserrat',
                   textAlign: 'center',
                 }}>{label}</Text>
