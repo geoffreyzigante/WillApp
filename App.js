@@ -346,7 +346,7 @@ const C = {
   pinkPill: '#D67CF8',
   pinkPillText: '#FFFFFF',
   pinkPillBg: '#FDECFF',
-  pinkPillActive: '#E673FF',
+  pinkPillActive: '#D67CF8',
   violetAccent: '#7C3AED',
   card: '#FFFFFF',
   shadow: 'rgba(123, 47, 255, 0.08)',
