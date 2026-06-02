@@ -2707,17 +2707,20 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
           const it = items[i];
           const isSel = i === visualIndex;
           const delta = i - visualIndex;
-          let opacity = 0.2;
+          // Non-selected items en gris fonce + Montserrat 300 (light) pour
+          // typo plus fine. Selected en rose brand, Montserrat 400.
+          let opacity = 0.18;
           if (isSel) opacity = 1;
-          else if (delta === -1) opacity = 0.35;
-          else if (delta === 1) opacity = 0.55;
+          else if (delta === -1) opacity = 0.3;
+          else if (delta === 1) opacity = 0.45;
           return (
             <View key={gi} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center' }}>
               <Text style={{
-                color: isSel ? PINK : '#fff',
+                color: isSel ? PINK : 'rgba(255,255,255,0.7)',
                 opacity,
                 fontSize: isSel ? 17 : 15,
-                fontWeight: isSel ? '500' : '400',
+                fontWeight: isSel ? '400' : '300',
+                fontFamily: 'Montserrat',
               }}>{it.label}</Text>
             </View>
           );
@@ -4629,26 +4632,26 @@ function PhotographerScreen({ session, onLogout, onExit }) {
           zIndex: 10,
         }}
       >
-        {/* Go!/Stop : moitie de la largeur viewer, centre, radius 24. */}
+        {/* Go!/Stop : cercle centre 84px. */}
         <TouchableOpacity
           onPress={onCapturePress}
           activeOpacity={0.9}
           style={{
-            width: previewW / 2,
+            width: 84,
+            height: 84,
+            borderRadius: 42,
             alignSelf: 'center',
-            height: 60,
-            borderRadius: 24,
             backgroundColor: isAutoArmed ? '#FF3B30' : C.pinkPillActive,
             alignItems: 'center', justifyContent: 'center',
           }}
         >
           <Text style={{
             color: '#fff',
-            fontSize: 30,
+            fontSize: 28,
             fontStyle: 'italic',
             fontWeight: '800',
             fontFamily: 'AVEstiana',
-            letterSpacing: 1,
+            letterSpacing: 0.5,
           }}>{isAutoArmed ? 'Stop' : 'Go!'}</Text>
         </TouchableOpacity>
 
@@ -4677,7 +4680,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                       fontSize: 10, fontWeight: '600', letterSpacing: 1.5,
                       fontFamily: 'Montserrat',
                       textTransform: 'uppercase',
-                    }}>Choix de la course</Text>
+                    }}>Course</Text>
                   </TouchableOpacity>
                   <OverlayWheel
                     items={courseItems}
@@ -4721,7 +4724,7 @@ function PhotographerScreen({ session, onLogout, onExit }) {
                       fontSize: 10, fontWeight: '600', letterSpacing: 1.5,
                       fontFamily: 'Montserrat',
                       textTransform: 'uppercase',
-                    }}>Km posté</Text>
+                    }}>Posté</Text>
                   </TouchableOpacity>
                   <OverlayWheel
                     items={kmItems}
@@ -4754,9 +4757,6 @@ function PhotographerScreen({ session, onLogout, onExit }) {
             backgroundColor: lightDot,
             paddingHorizontal: 22, paddingVertical: 7,
             borderRadius: 999,
-            shadowColor: '#000',
-            shadowOpacity: 0.3, shadowRadius: 6,
-            shadowOffset: { width: 0, height: 2 },
           }}>
             <Text style={{
               color: '#fff', fontSize: 13, fontWeight: '700',
