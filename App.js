@@ -3249,13 +3249,19 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               fontSize: 17, fontWeight: '800', color: '#1A1426',
               marginBottom: 10, textAlign: 'center',
             }}>
-              Ne plus suivre cet event ?
+              Retirer cet event des favoris ?
             </Text>
             <Text style={{
-              fontSize: 14, color: 'rgba(123,47,255,0.3)', lineHeight: 20,
+              fontSize: 14, color: C.text, lineHeight: 20,
+              marginBottom: 10, textAlign: 'center',
+            }}>
+              Will arrête de te reconnaître automatiquement sur les nouvelles photos de cet event. Les photos déjà identifiées restent dans ta galerie.
+            </Text>
+            <Text style={{
+              fontSize: 11, color: C.textSoft, lineHeight: 15,
               marginBottom: 20, textAlign: 'center',
             }}>
-              Tes données faciales sur cet event seront supprimées. Tu ne recevras plus tes photos.
+              Tes données biométriques pour cet event sont retirées de nos serveurs. Pour tout effacer (selfie + photos identifiées), utilise « Supprimer mes données faciales » dans ton profil.
             </Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity
@@ -3272,12 +3278,12 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 onPress={() => { setShowUnfollowConfirm(false); onToggleFollow(); }}
                 style={{
                   flex: 1, paddingVertical: 13, borderRadius: 999,
-                  backgroundColor: '#EF4444',
+                  backgroundColor: C.primary,
                   alignItems: 'center',
                 }}
                 activeOpacity={0.85}
               >
-                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Ne plus suivre</Text>
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Retirer</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -11773,8 +11779,8 @@ export default function App() {
   const deleteFaceData = useCallback(() => {
     if (!runnerSession?.token) return;
     Alert.alert(
-      'Supprimer tes données faciales ?',
-      'Ton selfie et ton visage seront retirés de tous les events que tu suis. Ton compte est conservé. Tu pourras tout recommencer en redéposant un selfie.',
+      'Supprimer toutes mes données faciales ?',
+      'Cela supprime ton selfie ET toutes les photos déjà identifiées de toi sur l\'app. Action définitive.\n\nDifférent du retrait d\'un event des favoris (qui garde les photos déjà identifiées). Ton compte reste actif, tu peux redéposer un selfie ensuite.',
       [
         { text: 'Annuler', style: 'cancel' },
         { text: 'Supprimer', style: 'destructive', onPress: async () => {
