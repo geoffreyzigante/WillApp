@@ -3618,6 +3618,15 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
 
 function PhotographerScreen({ session, onLogout, onExit }) {
   const { hasPermission, requestPermission } = useCameraPermission();
+  // Audit B13 : si iOS a deja denied une fois, requestPermission() devient
+  // inerte. On bascule le bouton vers Linking.openSettings() quand on
+  // detecte qu une 1ere tentative n a pas accorde la permission.
+  const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
+  const cameraPermissionDenied = hasRequestedCameraPermission && !hasPermission;
+  const requestCameraPermission = async () => {
+    setHasRequestedCameraPermission(true);
+    await requestPermission();
+  };
   // Capteur principal = .builtInWideAngleCamera singleton physique. On
   // utilise useCameraDevices() (liste exhaustive) + filtre strict pour
   // garantir le singleton et exclure les virtuels multi-cam
@@ -3976,7 +3985,10 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
   useEffect(() => {
     isMountedRef.current = true;
-    if (!hasPermission) requestPermission();
+    if (!hasPermission) {
+      setHasRequestedCameraPermission(true);
+      requestPermission();
+    }
     return () => {
       isMountedRef.current = false;
       // Annule le timer de retry pour ne pas declencher un drainQueue
@@ -5125,9 +5137,18 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   if (!hasPermission) {
     return (
       <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
-        <Text style={{ color: C.text, textAlign: 'center', marginBottom: 16 }}>Permission caméra requise</Text>
-        <TouchableOpacity style={s.btnPrimary} onPress={requestPermission}>
-          <Text style={s.btnPrimaryText}>Autoriser</Text>
+        <Text style={{ color: C.text, textAlign: 'center', marginBottom: 16 }}>
+          {cameraPermissionDenied
+            ? "L'accès à la caméra a été refusé. Ouvre les réglages pour l'autoriser."
+            : 'Permission caméra requise'}
+        </Text>
+        <TouchableOpacity
+          style={s.btnPrimary}
+          onPress={cameraPermissionDenied ? () => Linking.openSettings() : requestCameraPermission}
+        >
+          <Text style={s.btnPrimaryText}>
+            {cameraPermissionDenied ? 'Ouvrir les réglages' : 'Autoriser'}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -8162,9 +8183,18 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
     physicalDevices: ['wide-angle-camera'],
   });
   const [busy, setBusy] = useState(false);
+  // Audit B13 : meme pattern que PhotographerScreen pour gerer le cas
+  // permission deja denied de facon permanente cote iOS.
+  const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
+  const cameraPermissionDenied = hasRequestedCameraPermission && !hasPermission;
+  const requestCameraPermission = async () => {
+    setHasRequestedCameraPermission(true);
+    await requestPermission();
+  };
 
   useEffect(() => {
     if (visible && !hasPermission) {
+      setHasRequestedCameraPermission(true);
       requestPermission();
     }
   }, [visible, hasPermission]);
@@ -8223,11 +8253,18 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
             <Text style={{ color: '#fff', fontSize: 15, textAlign: 'center', marginBottom: 16 }}>
               {!device
                 ? "Aucune caméra avant disponible sur cet appareil."
-                : "Will a besoin d'accéder à la caméra pour prendre ton selfie."}
+                : cameraPermissionDenied
+                  ? "L'accès à la caméra a été refusé. Ouvre les réglages pour l'autoriser."
+                  : "Will a besoin d'accéder à la caméra pour prendre ton selfie."}
             </Text>
             {!hasPermission && (
-              <TouchableOpacity onPress={requestPermission} style={s.btnPrimary}>
-                <Text style={s.btnPrimaryText}>Autoriser</Text>
+              <TouchableOpacity
+                onPress={cameraPermissionDenied ? () => Linking.openSettings() : requestCameraPermission}
+                style={s.btnPrimary}
+              >
+                <Text style={s.btnPrimaryText}>
+                  {cameraPermissionDenied ? 'Ouvrir les réglages' : 'Autoriser'}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
