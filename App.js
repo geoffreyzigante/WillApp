@@ -3192,7 +3192,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         style={{
           position: 'absolute',
           left: 0, right: 0,
-          bottom: keyboardH > 0 ? keyboardH + 8 : 88,
+          bottom: keyboardH > 0 ? keyboardH + 8 : 68,
           alignItems: 'center',
           // zIndex 10 : passe au-dessus du degrade blanc bottom (zIndex 5)
           // et du bottom nav (zIndex 6). La pill flotte sur le fade-out.
