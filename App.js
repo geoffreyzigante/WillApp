@@ -3194,6 +3194,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           left: 0, right: 0,
           bottom: keyboardH > 0 ? keyboardH + 8 : 88,
           alignItems: 'center',
+          // zIndex 10 : passe au-dessus du degrade blanc bottom (zIndex 5)
+          // et du bottom nav (zIndex 6). La pill flotte sur le fade-out.
+          zIndex: 10,
+          elevation: 10,
         }}
       >
         <View style={{
@@ -3201,31 +3205,31 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           borderRadius: 22,
           overflow: 'hidden',
           shadowColor: '#000',
-          shadowOpacity: 0.12,
-          shadowRadius: 18,
-          shadowOffset: { width: 0, height: 6 },
-          elevation: 8,
+          shadowOpacity: 0.10,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 10,
         }}>
-          <BlurView intensity={60} tint="light" style={{
+          <BlurView intensity={45} tint="light" style={{
             flexDirection: 'row',
             alignItems: 'center',
             paddingHorizontal: 6,
             paddingVertical: 6,
             gap: 8,
-            backgroundColor: 'rgba(255,255,255,0.55)',
+            backgroundColor: 'rgba(255,255,255,0.28)',
             borderRadius: 22,
             borderWidth: StyleSheet.hairlineWidth,
-            borderColor: 'rgba(255,255,255,0.7)',
+            borderColor: 'rgba(255,255,255,0.55)',
           }}>
-            {/* Rond violet avec loupe blanche */}
+            {/* Rond violet avec loupe blanche style SF Symbols (traits fins) */}
             <View style={{
               width: 28, height: 28, borderRadius: 14,
               backgroundColor: C.primary,
               alignItems: 'center', justifyContent: 'center',
             }}>
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-                <Path d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" stroke="#fff" strokeWidth={2} />
+              <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+                <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
+                <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke="#fff" strokeWidth={1.7} />
               </Svg>
             </View>
             <TextInput
