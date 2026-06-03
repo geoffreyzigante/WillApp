@@ -2225,7 +2225,7 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
 // item passe doucement de accent (hors centre) a blanc (sur le cadre)
 // -> pas de "texte accent sur cadre accent" devenu invisible.
 const WHEEL_ITEM_W = 100;
-const WHEEL_H = 34;
+const WHEEL_H = 30;
 const WHEEL_LOOPS = 30;
 const ReAnimatedFlatList = ReAnimated.createAnimatedComponent(FlatList);
 
@@ -2934,9 +2934,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                       if (key === 'all') setActiveKmFilter('all');
                     }}
                     accent={C.primary}
-                    bg={C.pillBg}
+                    bg="#f5f3ff"
                   />
-                {/* Bouton inverser l ordre du tri (recente / ancien). */}
+                {/* Bouton inverser l ordre du tri (recente / ancien).
+                    Meme bg que la race row pour cohesion visuelle. */}
                 <TouchableOpacity
                   onPress={() => {
                     try { Haptics?.selectionAsync?.(); } catch {}
@@ -2946,7 +2947,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   activeOpacity={0.7}
                   accessibilityLabel={sortDesc ? 'Trier du plus ancien au plus recent' : 'Trier du plus recent au plus ancien'}
                   style={{
-                    width: 34, height: 34, borderRadius: 17,
+                    width: 30, height: 30, borderRadius: 15,
                     backgroundColor: '#f5f3ff',
                     alignItems: 'center', justifyContent: 'center',
                   }}
