@@ -1088,7 +1088,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         marginBottom: 8,
       }}>
         <View style={{
-          width: 40, height: 40, borderRadius: 16,
+          width: 40, height: 40, borderRadius: 12,
           backgroundColor: C.primary,
           alignItems: 'center', justifyContent: 'center',
         }}>
