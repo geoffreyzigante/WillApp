@@ -3201,7 +3201,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         }}
       >
         <View style={{
-          width: 240,
+          width: 200,
           borderRadius: 22,
           overflow: 'hidden',
           shadowColor: '#000',
@@ -3210,16 +3210,16 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           shadowOffset: { width: 0, height: 4 },
           elevation: 10,
         }}>
-          <BlurView intensity={45} tint="light" style={{
+          <BlurView intensity={45} tint="dark" style={{
             flexDirection: 'row',
             alignItems: 'center',
             paddingHorizontal: 6,
             paddingVertical: 6,
             gap: 8,
-            backgroundColor: 'rgba(255,255,255,0.28)',
+            backgroundColor: 'rgba(30,25,55,0.32)',
             borderRadius: 22,
             borderWidth: StyleSheet.hairlineWidth,
-            borderColor: 'rgba(255,255,255,0.55)',
+            borderColor: 'rgba(255,255,255,0.18)',
           }}>
             {/* Rond violet avec loupe blanche style SF Symbols (traits fins) */}
             <View style={{
@@ -3236,19 +3236,33 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               value={bibQuery}
               onChangeText={(v) => setBibQuery(v.replace(/\D/g, '').slice(0, 5))}
               placeholder="Numéro de dossard"
-              placeholderTextColor={C.textSoft}
+              placeholderTextColor="rgba(255,255,255,0.55)"
               keyboardType="number-pad"
-              returnKeyType="done"
+              returnKeyType="search"
               maxLength={5}
-              style={{ flex: 1, fontSize: 13.5, color: C.text, padding: 0, paddingVertical: 2 }}
+              onSubmitEditing={() => Keyboard.dismiss()}
+              style={{ flex: 1, fontSize: 13.5, color: '#fff', padding: 0, paddingVertical: 2 }}
             />
             {bibQuery.length > 0 && (
               <TouchableOpacity onPress={() => { setBibQuery(''); Keyboard.dismiss(); }} hitSlop={10} style={{ paddingHorizontal: 6 }}>
-                <Text style={{ color: C.textSoft, fontSize: 15 }}>✕</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 15 }}>✕</Text>
               </TouchableOpacity>
             )}
           </BlurView>
         </View>
+        {/* CTA "Chercher" rose, centre sous la pill. Tap = dismiss clavier
+            (la recherche tourne en continu via debounce, ce bouton est un
+            cue UX pour valider et fermer le clavier). */}
+        <TouchableOpacity
+          onPress={() => Keyboard.dismiss()}
+          activeOpacity={0.7}
+          hitSlop={10}
+          style={{ marginTop: 6, paddingHorizontal: 16, paddingVertical: 4 }}
+        >
+          <Text style={{ color: C.pinkPill, fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>
+            Chercher
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Confirm modal "Ne plus suivre" (Phase D3). Le toggle via le coeur
