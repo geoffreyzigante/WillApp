@@ -1420,7 +1420,14 @@ function PhotosUnauthScreen({ onSignup, onLogin }) {
   );
 }
 
-function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerToken, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false, isActive = true }) {
+function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerToken, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false, isActive = true }) {
+  // Cle de cache locale photos, scopee par userId. Sans le scope :
+  //  - user B sur le meme device verrait les photos de A apres logout/login (RGPD)
+  //  - on devait clear le cache au logout -> rechargement reseau a la reconnexion
+  //    qui faisait "tourner la recherche" pour des photos deja trouvees.
+  // Scopee : on garde le cache au logout, hydratation instantanee a la
+  // reconnexion du meme compte.
+  const photosCacheKey = runnerUserId ? `@will_photos_cache_${runnerUserId}` : '@will_photos_cache';
   const hasFollows = follows && follows.length > 0;
   // Photos agregees sur tous les follows + flag global "any event still searching"
   // pour decider d afficher le spinner / le sous-titre "recherche...".
@@ -1479,7 +1486,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     }).catch(() => { lastSeenLoadedRef.current = true; });
     // Hydrate la galerie depuis le cache local pour affichage immediat au
     // cold start. Le refresh API tourne en parallele et remplace si besoin.
-    AsyncStorage.getItem('@will_photos_cache').then(s => {
+    AsyncStorage.getItem(photosCacheKey).then(s => {
       if (!s) { setLoading(true); return; }
       try {
         const cached = JSON.parse(s);
@@ -1557,7 +1564,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     // Persiste pour hydratation au prochain cold start (V1 simple : tout le
     // tableau merge serialise en JSON, suffisant tant que < quelques centaines
     // de photos).
-    AsyncStorage.setItem('@will_photos_cache', JSON.stringify(merged)).catch(() => {});
+    AsyncStorage.setItem(photosCacheKey, JSON.stringify(merged)).catch(() => {});
     return merged;
   }, [follows, hasFollows, runnerToken, eventTintMap]);
 
@@ -11491,6 +11498,12 @@ export default function App() {
         setUserId(id);
       }
     });
+    // Migration one-shot : ancien cache photos global @will_photos_cache
+    // (non scope par userId) -> on le supprime au boot. Les sessions
+    // suivantes ecrivent dans @will_photos_cache_<userId>. Sans cleanup, le
+    // cache global pouvait contenir les photos du dernier user logge et
+    // hydrater un autre user au cold boot.
+    AsyncStorage.removeItem('@will_photos_cache').catch(() => {});
     // Sessions sensibles : migration AsyncStorage → SecureStore puis lecture.
     (async () => {
       await migrateSensitiveKeysToSecureStore();
@@ -11670,7 +11683,9 @@ export default function App() {
     setPhotoFavorites([]);
     Secure.removeItem('@will_runner').catch(() => {});
     AsyncStorage.removeItem('@will_selfie').catch(() => {});
-    AsyncStorage.removeItem('@will_photos_cache').catch(() => {});
+    // Cache photos NON vide au logout : il est scope par userId
+    // (@will_photos_cache_<userId>), pas de fuite cross-compte, et
+    // hydratation instantanee a la reconnexion du meme compte.
     AsyncStorage.removeItem('@will_last_seen_burst_ts').catch(() => {});
     AsyncStorage.removeItem('@will_follows').catch(() => {});
     if (prevUserId) {
@@ -11709,8 +11724,12 @@ export default function App() {
             // Cleanup local : selfie, follows, follow_started timestamps
             setSelfieUri(null);
             setFollows([]);
+            const uid = runnerSession?.profile?.userId;
             await AsyncStorage.removeItem('@will_selfie').catch(() => {});
             await AsyncStorage.removeItem('@will_follows').catch(() => {});
+            // Cache photos scope par userId : on supprime celui du user courant.
+            if (uid) await AsyncStorage.removeItem(`@will_photos_cache_${uid}`).catch(() => {});
+            // Legacy global cache (au cas ou il traine encore) :
             await AsyncStorage.removeItem('@will_photos_cache').catch(() => {});
             await AsyncStorage.removeItem('@will_last_seen_burst_ts').catch(() => {});
             // Purge tous les @will_follow_started_* presents
@@ -12256,6 +12275,7 @@ export default function App() {
                     onOpenProfile={() => setProfileMenu(true)}
                     follows={follows}
                     runnerToken={runnerSession?.token}
+                    runnerUserId={runnerSession?.profile?.userId}
                     onFindEvent={() => setBottomTab('home')}
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
                     photoFavoritesSet={photoFavoritesSet}
