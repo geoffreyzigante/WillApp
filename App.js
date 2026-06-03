@@ -1428,10 +1428,11 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   // Scopee : on garde le cache au logout, hydratation instantanee a la
   // reconnexion du meme compte.
   const photosCacheKey = runnerUserId ? `@will_photos_cache_${runnerUserId}` : '@will_photos_cache';
+  const knownEventsCacheKey = runnerUserId ? `@will_known_events_${runnerUserId}` : null;
   // knownEvents = events ou l user a un consent (actif OU revoke). Source
   // de verite pour /personal-gallery cote mobile : permet d afficher les
   // photos matchees meme apres un unfollow (decision produit 2026-06-03).
-  // Fetched depuis le worker au mount + a chaque refresh.
+  // Persiste en AsyncStorage pour hydratation instantanee au cold start.
   const [knownEvents, setKnownEvents] = useState([]);
   // Union (follows + knownEvents) pour ne pas perdre les events fraichement
   // follow tant que knownEvents n a pas encore ete refresh.
@@ -1504,6 +1505,18 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
         }
       } catch {}
     }).catch(() => {});
+    // Hydrate knownEvents depuis le cache aussi pour que la 1ere passe de
+    // refreshAll inclue deja tous les events (sinon 2 passes : 1 avec
+    // follows seul, 1 quand knownEvents arrive du reseau).
+    if (knownEventsCacheKey) {
+      AsyncStorage.getItem(knownEventsCacheKey).then(s => {
+        if (!s) return;
+        try {
+          const cached = JSON.parse(s);
+          if (Array.isArray(cached)) setKnownEvents(cached);
+        } catch {}
+      }).catch(() => {});
+    }
     return () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); };
   }, []);
 
@@ -1528,9 +1541,12 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
       const data = await r.json();
       const list = Array.isArray(data?.events) ? data.events : [];
       setKnownEvents(list);
+      if (knownEventsCacheKey) {
+        AsyncStorage.setItem(knownEventsCacheKey, JSON.stringify(list)).catch(() => {});
+      }
       return list;
     } catch { return []; }
-  }, [runnerToken]);
+  }, [runnerToken, knownEventsCacheKey]);
 
   // Au mount + sur token change : fetch knownEvents 1x.
   useEffect(() => { refreshKnownEvents(); }, [refreshKnownEvents]);
