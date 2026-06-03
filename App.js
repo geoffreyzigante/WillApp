@@ -953,6 +953,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
 
 function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   // Indicateur violet qui glisse entre les 3 pills. Mesure une fois la largeur
   // du conteneur (- padding), divise par 3 = largeur d un slot. Spring sur
   // translateX synchronise avec le state tab.
@@ -1073,57 +1074,64 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         </>
       )}
 
-      {/* Champ recherche : meme langage visuel que la pill recherche dossard
-          de la galerie publique -> loupe blanche dans un rond violet. */}
-      <View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        borderWidth: 1.5,
-        borderColor: '#E5E0FF',
-        paddingHorizontal: 6,
-        paddingVertical: 4,
-        gap: 8,
-        marginBottom: 8,
-      }}>
+      {/* Barre de recherche ouverte UNIQUEMENT quand searchOpen = true,
+          declenche par le bouton loupe a droite des pills (cf. plus bas).
+          Au close, on vide la query pour reset le filtre liste. */}
+      {searchOpen && (
         <View style={{
-          width: 40, height: 40, borderRadius: 12,
-          backgroundColor: C.primary,
-          alignItems: 'center', justifyContent: 'center',
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: '#fff',
+          borderRadius: 16,
+          borderWidth: 1.5,
+          borderColor: '#E5E0FF',
+          paddingHorizontal: 6,
+          paddingVertical: 4,
+          gap: 8,
+          marginBottom: 8,
         }}>
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-            <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
-            <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke="#fff" strokeWidth={1.7} />
-          </Svg>
-        </View>
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Rechercher un événement..."
-          placeholderTextColor="#c9beed"
-          style={{ flex: 1, fontSize: 14, color: '#c9beed', paddingVertical: 8 }}
-          returnKeyType="search"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={10} style={{ paddingHorizontal: 6 }}>
+          <View style={{
+            width: 40, height: 40, borderRadius: 12,
+            backgroundColor: C.primary,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
+              <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke="#fff" strokeWidth={1.7} />
+            </Svg>
+          </View>
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Rechercher un événement..."
+            placeholderTextColor="#c9beed"
+            style={{ flex: 1, fontSize: 14, color: '#c9beed', paddingVertical: 8 }}
+            returnKeyType="search"
+            autoFocus
+          />
+          <TouchableOpacity
+            onPress={() => { setSearchQuery(''); setSearchOpen(false); Keyboard.dismiss(); }}
+            hitSlop={10}
+            style={{ paddingHorizontal: 6 }}
+          >
             <Text style={{ color: C.textSoft, fontSize: 16 }}>✕</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
 
-      {/* Tabs row : indicateur violet animes qui glisse entre les 3 pills.
-          Plus de bg per-pill, plus de drop d opacite brutal au tap : tout
-          le feedback est dans le slide du fond. Separateur hairline entre
-          les deux pills non-actives adjacentes. */}
+      {/* Row tabs (flex:1) + bouton loupe a droite qui toggle searchOpen.
+          Le bouton loupe est en surface du meme fond C.pillBg pour rester
+          coherent avec la row pills, mais SQUARED (40x40 r:12) avec icone
+          loupe blanche dans rond violet, comme la pill recherche dossard. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
       <View
         onLayout={(e) => setTabsContainerW(e.nativeEvent.layout.width - 8)}
         style={{
+          flex: 1,
           flexDirection: 'row',
           backgroundColor: C.pillBg,
           borderRadius: 16,
           padding: 4,
-          marginBottom: 8,
           alignItems: 'center',
           position: 'relative',
         }}
@@ -1156,6 +1164,26 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         <TouchableOpacity onPress={() => setTab('follows')} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
           <Text style={[s.pillText, tab === 'follows' && s.pillTextActive]}>Favoris</Text>
         </TouchableOpacity>
+      </View>
+      {/* Bouton loupe a droite des tabs : toggle l affichage de la barre
+          de recherche. Au close, la query est videe pour reset le filtre. */}
+      <TouchableOpacity
+        onPress={() => {
+          if (searchOpen) { setSearchQuery(''); Keyboard.dismiss(); }
+          setSearchOpen(o => !o);
+        }}
+        activeOpacity={0.85}
+        style={{
+          width: 40, height: 40, borderRadius: 12,
+          backgroundColor: searchOpen ? C.primary : C.pillBg,
+          alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+          <Path d="M21 21l-4.35-4.35" stroke={searchOpen ? '#fff' : C.primary} strokeWidth={1.8} strokeLinecap="round" />
+          <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke={searchOpen ? '#fff' : C.primary} strokeWidth={1.7} />
+        </Svg>
+      </TouchableOpacity>
       </View>
 
       {/* Events list / état vide. Cas special : Favoris en deconnecte
