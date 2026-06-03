@@ -3182,49 +3182,69 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         {bibQuery.trim().length === 0 && renderFooter()}
       </ScrollView>
 
-      {/* Input sticky de recherche par dossard. Position absolute, monte
-          au-dessus du clavier quand focus (keyboardH > 0) sinon reste a
-          88px du bas pour clear le bottom nav (80px hauteur + 8 spacing).
-          Filet de secours pour les coureurs sans selfie + favori avant
-          la course : OCR cote worker, /search-bib renvoie les matches. */}
-      <View style={{
-        position: 'absolute',
-        left: 12, right: 12,
-        bottom: keyboardH > 0 ? keyboardH + 8 : 88,
-        backgroundColor: '#fff',
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: '#E5E0FF',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        shadowColor: '#000',
-        shadowOpacity: 0.08,
-        shadowRadius: 14,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 5,
-      }}>
-        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-          <Path d="M21 21l-4.35-4.35" stroke={C.primary} strokeWidth={2.2} strokeLinecap="round" />
-          <Path d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" stroke={C.primary} strokeWidth={1.8} />
-        </Svg>
-        <TextInput
-          value={bibQuery}
-          onChangeText={(v) => setBibQuery(v.replace(/\D/g, '').slice(0, 5))}
-          placeholder="Recherche par numéro de dossard"
-          placeholderTextColor={C.textSoft}
-          keyboardType="number-pad"
-          returnKeyType="done"
-          maxLength={5}
-          style={{ flex: 1, fontSize: 14, color: C.text, padding: 0, paddingVertical: 4 }}
-        />
-        {bibQuery.length > 0 && (
-          <TouchableOpacity onPress={() => { setBibQuery(''); Keyboard.dismiss(); }} hitSlop={10} style={{ paddingHorizontal: 4 }}>
-            <Text style={{ color: C.textSoft, fontSize: 16 }}>✕</Text>
-          </TouchableOpacity>
-        )}
+      {/* Pill recherche par dossard. Wrapper absolute centre horizontalement
+          (alignItems: 'center' sur le wrapper full-width permet a la pill
+          enfant largeur fixe d etre centree). Fond BlurView style iOS
+          systemMaterial + tile blanche translucide pour contraste. Loupe
+          dans un rond violet, placeholder court. */}
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          left: 0, right: 0,
+          bottom: keyboardH > 0 ? keyboardH + 8 : 88,
+          alignItems: 'center',
+        }}
+      >
+        <View style={{
+          width: 240,
+          borderRadius: 22,
+          overflow: 'hidden',
+          shadowColor: '#000',
+          shadowOpacity: 0.12,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 8,
+        }}>
+          <BlurView intensity={60} tint="light" style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 6,
+            paddingVertical: 6,
+            gap: 8,
+            backgroundColor: 'rgba(255,255,255,0.55)',
+            borderRadius: 22,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: 'rgba(255,255,255,0.7)',
+          }}>
+            {/* Rond violet avec loupe blanche */}
+            <View style={{
+              width: 28, height: 28, borderRadius: 14,
+              backgroundColor: C.primary,
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
+                <Path d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" stroke="#fff" strokeWidth={2} />
+              </Svg>
+            </View>
+            <TextInput
+              value={bibQuery}
+              onChangeText={(v) => setBibQuery(v.replace(/\D/g, '').slice(0, 5))}
+              placeholder="Numéro de dossard"
+              placeholderTextColor={C.textSoft}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              maxLength={5}
+              style={{ flex: 1, fontSize: 13.5, color: C.text, padding: 0, paddingVertical: 2 }}
+            />
+            {bibQuery.length > 0 && (
+              <TouchableOpacity onPress={() => { setBibQuery(''); Keyboard.dismiss(); }} hitSlop={10} style={{ paddingHorizontal: 6 }}>
+                <Text style={{ color: C.textSoft, fontSize: 15 }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </BlurView>
+        </View>
       </View>
 
       {/* Confirm modal "Ne plus suivre" (Phase D3). Le toggle via le coeur
