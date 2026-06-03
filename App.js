@@ -3224,8 +3224,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               gap: 8,
               backgroundColor: 'rgba(255,255,255,0.78)',
               borderRadius: 22,
-              borderWidth: StyleSheet.hairlineWidth,
-              borderColor: 'rgba(255,255,255,0.9)',
+              // Liseret violet fin des qu une frappe a commence (signal
+              // visuel "recherche active"). Sinon contour blanc subtil.
+              borderWidth: bibQuery.length > 0 ? 1.5 : StyleSheet.hairlineWidth,
+              borderColor: bibQuery.length > 0 ? C.primary : 'rgba(255,255,255,0.9)',
             }}>
               <View style={{
                 width: 28, height: 28, borderRadius: 14,
