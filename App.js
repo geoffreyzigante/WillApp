@@ -1073,6 +1073,10 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
           <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
         </>
       )}
+      {/* Si selfie deja pris, ajoute une marge respiratoire au-dessus du
+          toggle de tri (sinon les pills A venir / Passes / Favoris sont
+          collees au header Hello / + d infos). */}
+      {selfieUri && <View style={{ height: 18 }} />}
 
       {/* Barre de recherche : rendue plus bas, EN DESSOUS de la row tabs.
           Cf. apres la fermeture de </View> de la row tabs + bouton loupe. */}
