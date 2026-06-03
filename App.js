@@ -1428,12 +1428,20 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   // Scopee : on garde le cache au logout, hydratation instantanee a la
   // reconnexion du meme compte.
   const photosCacheKey = runnerUserId ? `@will_photos_cache_${runnerUserId}` : '@will_photos_cache';
-  const hasFollows = follows && follows.length > 0;
-  // Photos agregees sur tous les follows + flag global "any event still searching"
-  // pour decider d afficher le spinner / le sous-titre "recherche...".
-  // loading demarre a false : si on a un cache local @will_photos_cache, on
-  // l hydrate immediatement -> grille visible des le cold start, refresh
-  // tourne en background.
+  // knownEvents = events ou l user a un consent (actif OU revoke). Source
+  // de verite pour /personal-gallery cote mobile : permet d afficher les
+  // photos matchees meme apres un unfollow (decision produit 2026-06-03).
+  // Fetched depuis le worker au mount + a chaque refresh.
+  const [knownEvents, setKnownEvents] = useState([]);
+  // Union (follows + knownEvents) pour ne pas perdre les events fraichement
+  // follow tant que knownEvents n a pas encore ete refresh.
+  const eventsToQuery = useMemo(() => {
+    const set = new Set();
+    for (const c of follows) set.add(c);
+    for (const c of knownEvents) set.add(c);
+    return [...set];
+  }, [follows, knownEvents]);
+  const hasFollows = eventsToQuery.length > 0;
   const [photos, setPhotos] = useState([]);
   const [anySearching, setAnySearching] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1506,23 +1514,44 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     return map;
   }, [events]);
 
-  // Charge /personal-gallery sur tous les follows en parallele, fusionne, trie.
-  // anySearching = au moins un event en moins de 90s avec 0 photos -> polling.
-  // Retourne le tableau fusionne (utilise par onPullRefresh pour calculer le
-  // delta "X nouvelles photos" — E4).
+  // Refresh /runner/known-events (events avec consent actif OU revoque)
+  // pour avoir la liste complete des sources de photos, independante de
+  // follows[] (UI favoris). Permet d afficher les photos matchees apres
+  // un unfollow.
+  const refreshKnownEvents = useCallback(async () => {
+    if (!runnerToken) return [];
+    try {
+      const r = await fetch(`${API_URL}/runner/known-events`, {
+        headers: { Authorization: `Bearer ${runnerToken}` },
+      });
+      if (!r.ok) return [];
+      const data = await r.json();
+      const list = Array.isArray(data?.events) ? data.events : [];
+      setKnownEvents(list);
+      return list;
+    } catch { return []; }
+  }, [runnerToken]);
+
+  // Au mount + sur token change : fetch knownEvents 1x.
+  useEffect(() => { refreshKnownEvents(); }, [refreshKnownEvents]);
+
+  // Charge /personal-gallery sur tous les eventsToQuery (= follows U knownEvents)
+  // en parallele, fusionne, trie. anySearching = au moins un event recemment
+  // follow (< 90s) avec 0 photos -> polling.
   const refreshAll = useCallback(async () => {
-    if (!hasFollows || !runnerToken) {
+    const queryList = eventsToQuery;
+    if (queryList.length === 0 || !runnerToken) {
       setPhotos([]);
       setAnySearching(false);
       setLoading(false);
       return [];
     }
     const started = {};
-    for (const code of follows) {
+    for (const code of queryList) {
       const s = await AsyncStorage.getItem(`@will_follow_started_${code}`);
       started[code] = s ? parseInt(s, 10) : 0;
     }
-    const results = await Promise.all(follows.map(async (code) => {
+    const results = await Promise.all(queryList.map(async (code) => {
       try {
         const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}`, {
           headers: { Authorization: `Bearer ${runnerToken}` },
@@ -1566,7 +1595,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     // de photos).
     AsyncStorage.setItem(photosCacheKey, JSON.stringify(merged)).catch(() => {});
     return merged;
-  }, [follows, hasFollows, runnerToken, eventTintMap]);
+  }, [eventsToQuery, runnerToken, eventTintMap, photosCacheKey]);
 
   // E4 — baseline last_seen au premier load reussi : on aligne le marqueur
   // sur le max actuel pour que le 1er pull-to-refresh apres cold start
@@ -1618,6 +1647,10 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
       Animated.timing(toastOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
     ]).start();
 
+    // Refresh la liste known-events EN PREMIER (sinon refreshAll utiliserait
+    // une liste stale -> rate les nouveaux events follow ou les events
+    // recemment revoked).
+    await refreshKnownEvents();
     const merged = await refreshAll();
     setRefreshing(false);
 
