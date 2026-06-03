@@ -11551,16 +11551,28 @@ export default function App() {
 
   // Charge @will_follows_<userId> quand un runner est connecte. Scope par
   // userId pour survivre au logout/re-login du meme compte sans fuite
-  // cross-compte (User A logout -> cle <userA> reste, User B login -> sa
-  // cle <userB> est vide ou propre). Pas de chargement au boot
-  // inconditionnel : c est ce useEffect qui hydrate au login.
+  // cross-compte. Migration auto au passage : si la cle scopee est vide
+  // mais que l ancienne cle globale @will_follows existe encore (user qui
+  // n a pas logout depuis le pre-scoping), on copie vers la cle scopee
+  // puis on supprime la globale. Resultat : pas de favoris perdus pour
+  // les comptes existants au moment du deploy.
   useEffect(() => {
     const uid = runnerSession?.profile?.userId;
     if (!uid) return;
-    AsyncStorage.getItem(`@will_follows_${uid}`).then(v => {
-      if (!v) return;
-      try { setFollows(JSON.parse(v)); } catch {}
-    });
+    (async () => {
+      let raw = await AsyncStorage.getItem(`@will_follows_${uid}`).catch(() => null);
+      if (!raw) {
+        const legacy = await AsyncStorage.getItem('@will_follows').catch(() => null);
+        if (legacy) {
+          await AsyncStorage.setItem(`@will_follows_${uid}`, legacy).catch(() => {});
+          await AsyncStorage.removeItem('@will_follows').catch(() => {});
+          raw = legacy;
+        }
+      }
+      if (raw) {
+        try { setFollows(JSON.parse(raw)); } catch {}
+      }
+    })();
   }, [runnerSession?.profile?.userId]);
 
   const handleAuthSuccess = useCallback((session) => {
