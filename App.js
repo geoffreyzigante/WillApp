@@ -2179,8 +2179,8 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
           hitSlop={12}
           style={{ position: 'absolute', top: 6, right: 6 }}
         >
-          <Svg width={14} height={13} viewBox="-1 -1.5 22.78 20.61"
-            fill={fav ? '#fff' : 'none'}
+          <Svg width={16} height={14} viewBox="-1 -1.5 22.78 20.61"
+            fill={fav ? C.pinkPill : 'none'}
             stroke="#fff" strokeWidth={2.2}>
             <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
           </Svg>
