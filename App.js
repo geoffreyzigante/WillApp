@@ -1166,7 +1166,7 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             onChangeText={setSearchQuery}
             placeholder="Rechercher un événement..."
             placeholderTextColor="#c9beed"
-            style={{ flex: 1, fontSize: 14, color: '#c9beed', paddingVertical: 8 }}
+            style={{ flex: 1, fontSize: 14, color: C.primary, fontWeight: '600', paddingVertical: 8 }}
             returnKeyType="search"
             autoFocus
           />
