@@ -1073,7 +1073,8 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         </>
       )}
 
-      {/* Champ recherche : filtre la liste juste en dessous */}
+      {/* Champ recherche : meme langage visuel que la pill recherche dossard
+          de la galerie publique -> loupe blanche dans un rond violet. */}
       <View style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -1081,17 +1082,27 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         borderRadius: 16,
         borderWidth: 1.5,
         borderColor: '#E5E0FF',
-        paddingHorizontal: 16,
+        paddingHorizontal: 6,
         paddingVertical: 4,
+        gap: 8,
         marginBottom: 8,
       }}>
-        <Icon.Search size={18} color={C.primary} />
+        <View style={{
+          width: 28, height: 28, borderRadius: 14,
+          backgroundColor: C.primary,
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+            <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
+            <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke="#fff" strokeWidth={1.7} />
+          </Svg>
+        </View>
         <TextInput
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Rechercher un événement..."
           placeholderTextColor={C.textSoft}
-          style={{ flex: 1, marginLeft: 10, fontSize: 14, color: C.text, paddingVertical: 8 }}
+          style={{ flex: 1, fontSize: 14, color: C.text, paddingVertical: 8 }}
           returnKeyType="search"
         />
         {searchQuery.length > 0 && (
