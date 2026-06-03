@@ -2276,7 +2276,7 @@ function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName }) {
+function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -2293,52 +2293,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // Tri photos : true = recentes en haut (default, burstTs DESC), false = plus
   // anciennes en haut. Bouton sur la droite des pills permet de basculer.
   const [sortDesc, setSortDesc] = useState(true);
-  // Recherche par numero de dossard. Filet de secours pour les coureurs sans
-  // selfie + favori avant la course : OCR cote worker, fetch /search-bib ici.
-  // bibResults remplace la grille principale tant que bibQuery est non-vide.
-  const [bibQuery, setBibQuery] = useState('');
-  const [bibResults, setBibResults] = useState(null); // null = pas encore cherche, [] = aucun match
-  const [bibSearching, setBibSearching] = useState(false);
-  const [keyboardH, setKeyboardH] = useState(0);
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvt, (e) => setKeyboardH(e.endCoordinates?.height || 0));
-    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardH(0));
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
-  // Debounce 400ms : la requete part quand le user a fini de taper.
-  useEffect(() => {
-    const q = bibQuery.trim();
-    if (!/^\d{1,5}$/.test(q)) {
-      setBibResults(null);
-      setBibSearching(false);
-      return;
-    }
-    setBibSearching(true);
-    const t = setTimeout(async () => {
-      try {
-        const r = await fetch(`${API_URL}/search-bib?eventCode=${encodeURIComponent(event.code)}&bib=${encodeURIComponent(q)}`);
-        const data = r.ok ? await r.json() : { photos: [] };
-        const mapped = (data?.photos || []).map(p => ({
-          id: p.key,
-          key: p.key,
-          uri: p.url,
-          thumbUri: p.thumb_url || p.url,
-          race: p.race,
-          km: p.km,
-          confidence: p.confidence,
-          uploaded: p.uploaded,
-        }));
-        setBibResults(mapped);
-      } catch {
-        setBibResults([]);
-      } finally {
-        setBibSearching(false);
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [bibQuery, event.code]);
+  // Recherche par dossard : bibQuery/bibResults/bibSearching arrivent en
+  // props depuis App.js (state lifte pour rendre la pill au root, au-dessus
+  // du degrade blanc du footer). Cf. fetch debounced + listener clavier
+  // dans App.js (autour de la decl eventInPanel).
   // Bottom sheet "+ d'infos" sur le header de l event (courses, horaires,
   // bouton site organisateur).
   const [infoSheetOpen, setInfoSheetOpen] = useState(false);
@@ -3182,95 +3140,8 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         {bibQuery.trim().length === 0 && renderFooter()}
       </ScrollView>
 
-      {/* Pill recherche par dossard. Wrapper absolute centre horizontalement
-          (alignItems: 'center' sur le wrapper full-width permet a la pill
-          enfant largeur fixe d etre centree). Fond BlurView style iOS
-          systemMaterial + tile blanche translucide pour contraste. Loupe
-          dans un rond violet, placeholder court. */}
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: 'absolute',
-          left: 0, right: 0,
-          bottom: keyboardH > 0 ? keyboardH + 8 : 68,
-          alignItems: 'center',
-          // zIndex 10 : passe au-dessus du degrade blanc bottom (zIndex 5)
-          // et du bottom nav (zIndex 6). La pill flotte sur le fade-out.
-          zIndex: 10,
-          elevation: 10,
-        }}
-      >
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-        }}>
-          {/* Pill blanche translucide, texte violet.
-              Border + radius sur le wrapper externe UNIQUEMENT (et non sur
-              la BlurView interne) : sinon iOS rendait un eperon violet
-              parasite a gauche (artefact connu BlurView + radius). */}
-          <View style={{
-            width: 200,
-            borderRadius: 22,
-            overflow: 'hidden',
-            borderWidth: bibQuery.length > 0 ? 1.5 : StyleSheet.hairlineWidth,
-            borderColor: bibQuery.length > 0 ? C.primary : 'rgba(255,255,255,0.9)',
-            shadowColor: '#000',
-            shadowOpacity: 0.10,
-            shadowRadius: 14,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: 10,
-          }}>
-            <BlurView intensity={55} tint="light" style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingHorizontal: 6,
-              paddingVertical: 6,
-              gap: 8,
-              backgroundColor: 'rgba(255,255,255,0.78)',
-            }}>
-              <View style={{
-                width: 28, height: 28, borderRadius: 14,
-                backgroundColor: C.primary,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
-                  <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
-                  <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke="#fff" strokeWidth={1.7} />
-                </Svg>
-              </View>
-              <TextInput
-                value={bibQuery}
-                onChangeText={(v) => setBibQuery(v.replace(/\D/g, '').slice(0, 5))}
-                placeholder="Numéro de dossard"
-                placeholderTextColor={`${C.primary}80`}
-                keyboardType="number-pad"
-                returnKeyType="default"
-                maxLength={5}
-                style={{ flex: 1, fontSize: 13.5, color: C.primary, fontWeight: '600', padding: 0, paddingVertical: 2 }}
-              />
-            </BlurView>
-          </View>
-          {/* Bouton Go : visible UNIQUEMENT quand bibQuery a du contenu.
-              Pill vide -> pas de bouton, layout reste minimaliste. */}
-          {bibQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => Keyboard.dismiss()}
-              activeOpacity={0.85}
-              style={{
-                width: 48, height: 40, borderRadius: 20,
-                backgroundColor: C.primary,
-                alignItems: 'center', justifyContent: 'center',
-                shadowColor: C.primary, shadowOpacity: 0.25,
-                shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
-                elevation: 6,
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>Go</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+      {/* Pill recherche par dossard rendue au root App.js (zIndex au-dessus
+          du degrade blanc footer). Cf. App.js juste apres le bottom nav. */}
 
       {/* Confirm modal "Ne plus suivre" (Phase D3). Le toggle via le coeur
           top-right reste instantane (gestures rapides), seule la voie
@@ -11423,6 +11294,21 @@ export default function App() {
   const [selfieSkipped, setSelfieSkipped] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);  // Phase D reset modal au 1er boot
   const pendingActionRef = useRef(null); // action à exécuter après login
+  // Recherche par dossard : state lifte au root pour rendre la pill
+  // au-dessus du degrade blanc du footer (zIndex 5 root-level). Tant que la
+  // pill etait dans EventDetailScreen, elle restait coincee sous le degrade.
+  // Le fetch debounced + le rendu de la pill sont plus bas (apres eventInPanel).
+  const [bibQuery, setBibQuery] = useState('');
+  const [bibResults, setBibResults] = useState(null);
+  const [bibSearching, setBibSearching] = useState(false);
+  const [bibKeyboardH, setBibKeyboardH] = useState(0);
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => setBibKeyboardH(e.endCoordinates?.height || 0));
+    const hideSub = Keyboard.addListener(hideEvt, () => setBibKeyboardH(0));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
 
   const reloadEvents = useCallback(async () => {
     try {
@@ -12079,6 +11965,44 @@ export default function App() {
   // au callback de fin d animation.
   const [eventInPanel, setEventInPanel] = useState(null);
 
+  // Fetch debounced 400ms du /search-bib quand bibQuery a 1-5 chiffres.
+  // Reset des resultats quand bibQuery devient vide ou quand on ferme l event.
+  useEffect(() => {
+    const q = bibQuery.trim();
+    if (!eventInPanel?.code || !/^\d{1,5}$/.test(q)) {
+      setBibResults(null);
+      setBibSearching(false);
+      return;
+    }
+    setBibSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`${API_URL}/search-bib?eventCode=${encodeURIComponent(eventInPanel.code)}&bib=${encodeURIComponent(q)}`);
+        const data = r.ok ? await r.json() : { photos: [] };
+        const mapped = (data?.photos || []).map(p => ({
+          id: p.key, key: p.key,
+          uri: p.url, thumbUri: p.thumb_url || p.url,
+          race: p.race, km: p.km,
+          confidence: p.confidence, uploaded: p.uploaded,
+        }));
+        setBibResults(mapped);
+      } catch {
+        setBibResults([]);
+      } finally {
+        setBibSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [bibQuery, eventInPanel?.code]);
+
+  // Quand on ferme l event, vide la recherche pour repartir clean au prochain open.
+  useEffect(() => {
+    if (!eventInPanel) {
+      setBibQuery('');
+      setBibResults(null);
+    }
+  }, [eventInPanel]);
+
   // Anime translateX quand openedEvent change. Pas d anim au mount (init OK).
   useEffect(() => {
     if (openedEvent) {
@@ -12240,6 +12164,9 @@ export default function App() {
                     isFollowing={follows.includes(eventInPanel.code)}
                     onToggleFollow={() => requireAuth(() => toggleFollow(eventInPanel.code))}
                     runnerFirstName={runnerSession?.profile?.firstName}
+                    bibQuery={bibQuery}
+                    bibResults={bibResults}
+                    bibSearching={bibSearching}
                   />
                 </View>
               </GestureDetector>
@@ -12419,6 +12346,89 @@ export default function App() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Pill recherche par dossard — rendue APRES le bottom nav et le
+          degrade blanc footer, donc naturellement au-dessus dans l ordre
+          de rendu RN. Visible uniquement quand un EventDetailScreen est
+          ouvert. zIndex 20 + elevation 20 pour assurer le z-order Android. */}
+      {eventInPanel && (
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          left: 0, right: 0,
+          bottom: bibKeyboardH > 0 ? bibKeyboardH + 8 : 68,
+          alignItems: 'center',
+          zIndex: 20,
+          elevation: 20,
+        }}
+      >
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <View style={{
+            width: 200,
+            borderRadius: 22,
+            overflow: 'hidden',
+            borderWidth: bibQuery.length > 0 ? 1.5 : StyleSheet.hairlineWidth,
+            borderColor: bibQuery.length > 0 ? C.primary : 'rgba(255,255,255,0.9)',
+            shadowColor: '#000',
+            shadowOpacity: 0.10,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 10,
+          }}>
+            <BlurView intensity={55} tint="light" style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 6,
+              paddingVertical: 6,
+              gap: 8,
+              backgroundColor: 'rgba(255,255,255,0.78)',
+            }}>
+              <View style={{
+                width: 28, height: 28, borderRadius: 14,
+                backgroundColor: C.primary,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+                  <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
+                  <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke="#fff" strokeWidth={1.7} />
+                </Svg>
+              </View>
+              <TextInput
+                value={bibQuery}
+                onChangeText={(v) => setBibQuery(v.replace(/\D/g, '').slice(0, 5))}
+                placeholder="Numéro de dossard"
+                placeholderTextColor={`${C.primary}80`}
+                keyboardType="number-pad"
+                returnKeyType="default"
+                maxLength={5}
+                style={{ flex: 1, fontSize: 13.5, color: C.primary, fontWeight: '600', padding: 0, paddingVertical: 2 }}
+              />
+            </BlurView>
+          </View>
+          {bibQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => Keyboard.dismiss()}
+              activeOpacity={0.85}
+              style={{
+                width: 48, height: 40, borderRadius: 20,
+                backgroundColor: C.primary,
+                alignItems: 'center', justifyContent: 'center',
+                shadowColor: C.primary, shadowOpacity: 0.25,
+                shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+                elevation: 6,
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>Go</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+      )}
 
       <SearchModal
         visible={searchModal}
