@@ -3256,7 +3256,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             onPress={() => Keyboard.dismiss()}
             activeOpacity={0.85}
             style={{
-              width: 44, height: 36, borderRadius: 18,
+              width: 48, height: 40, borderRadius: 20,
               backgroundColor: C.primary,
               alignItems: 'center', justifyContent: 'center',
               shadowColor: C.primary, shadowOpacity: 0.25,
