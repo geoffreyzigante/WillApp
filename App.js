@@ -11941,51 +11941,77 @@ export default function App() {
     const uid = runnerSession?.profile?.userId;
     const followsKey = uid ? `@will_follows_${uid}` : '@will_follows';
     const isCurrentlyFollowing = follows.includes(eventCode);
+
+    // Optimistic update : on met a jour l etat local IMMEDIATEMENT pour que
+    // le coeur switche sans attendre la confirmation reseau (~500ms-2s a
+    // cause de IndexFaces AWS). Si le serveur refuse, on rollback en cas
+    // d echec non-rattrapable (autre que selfie_required).
     if (isCurrentlyFollowing) {
+      // UNFOLLOW : optimistic remove
+      setFollows(prev => {
+        const next = prev.filter(c => c !== eventCode);
+        AsyncStorage.setItem(followsKey, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+      AsyncStorage.removeItem(`@will_follow_started_${eventCode}`).catch(() => {});
       const r = await api.unfollow(eventCode, token);
-      if (r?.ok || r?.note === 'already_unfollowed') {
+      if (!r?.ok && r?.note !== 'already_unfollowed') {
+        // Rollback
         setFollows(prev => {
-          const next = prev.filter(c => c !== eventCode);
+          if (prev.includes(eventCode)) return prev;
+          const next = [...prev, eventCode];
           AsyncStorage.setItem(followsKey, JSON.stringify(next)).catch(() => {});
           return next;
         });
-        AsyncStorage.removeItem(`@will_follow_started_${eventCode}`).catch(() => {});
-      } else {
         Alert.alert('Erreur', r?.error || 'Impossible de retirer le suivi. Reessaie.');
       }
       return;
     }
-    // Follow
+
+    // FOLLOW : optimistic add
+    const wasEmpty = follows.length === 0;
+    setFollows(prev => {
+      if (prev.includes(eventCode)) return prev;
+      const next = [...prev, eventCode];
+      AsyncStorage.setItem(followsKey, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+    AsyncStorage.setItem(`@will_follow_started_${eventCode}`, String(Date.now())).catch(() => {});
     const r = await api.follow(eventCode, token);
     if (r?.ok || r?.note === 'already_following') {
-      const wasEmpty = follows.length === 0;
-      setFollows(prev => {
-        if (prev.includes(eventCode)) return prev;
-        const next = [...prev, eventCode];
-        AsyncStorage.setItem(followsKey, JSON.stringify(next)).catch(() => {});
-        return next;
-      });
-      AsyncStorage.setItem(`@will_follow_started_${eventCode}`, String(Date.now())).catch(() => {});
       // E2 — premier follow du coureur = bon moment pour demander la
       // permission notif. Sinon (deja des follows), on tente un register
       // silencieux au cas ou le token n a pas encore ete envoye.
       ensurePushRegistered(token, { ask: wasEmpty });
       return;
     }
+    // Le reseau a refuse : il faut rollback dans tous les cas EXCEPTE le
+    // selfie_required qui sera retente apres save selfie (pendingFollowRef).
+    const rollbackFollow = () => {
+      setFollows(prev => {
+        const next = prev.filter(c => c !== eventCode);
+        AsyncStorage.setItem(followsKey, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+      AsyncStorage.removeItem(`@will_follow_started_${eventCode}`).catch(() => {});
+    };
     // 400 "Selfie requis" → ouvre SelfieModal puis relance follow apres save
     if (r?.status === 400 && r?.error && r.error.toLowerCase().includes('selfie')) {
+      rollbackFollow();
       pendingFollowRef.current = eventCode;
       setSelfieModal(true);
       return;
     }
     // 400 "Aucun visage detecte" → message dedie
     if (r?.status === 400 && r?.error && r.error.toLowerCase().includes('visage')) {
+      rollbackFollow();
       Alert.alert('Selfie a refaire', r.error);
       return;
     }
     // Autre erreur
+    rollbackFollow();
     Alert.alert('Erreur', r?.error || 'Impossible de suivre cet event. Reessaie.');
-  }, [follows, runnerSession?.token]);
+  }, [follows, runnerSession?.token, runnerSession?.profile?.userId]);
 
   const photoFavoritesSet = useMemo(() => new Set(photoFavorites), [photoFavorites]);
   const togglePhotoFavorite = useCallback((photoId) => {
