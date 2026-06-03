@@ -345,15 +345,23 @@ const C = {
   textSoft: 'rgba(123,47,255,0.3)',
   white: '#FFFFFF',
   pillBg: '#EFE7FF',
-  // Brand officielle sRGB = #D67CF8. iOS rend sur ecran P3 et la pipette
-  // (Digital Color Meter / etc) lit ensuite #c882f1 = drift d environ
-  // (+14, -6, +7) par canal. On INJECTE la valeur compensee #E476FF dans
-  // le code pour que le rendu reel + le sampling tombent sur #D67CF8.
-  // Toute reference au "rose Will" doit utiliser C.pinkPill, pas le hex brut.
-  pinkPill: '#E476FF',
+  // Rose brand MOBILE = #f4a6ff depuis 2026-06-03 (scenario alpha C1.5).
+  // Desaligne volontairement de la brand officielle sRGB #D67CF8 utilisee
+  // par landing, dashboard et vitrine. Realignement cross-surface a
+  // planifier — cf ~/WILL/DECISIONS_PRODUIT_EN_ATTENTE.md BRAND-02.
+  //
+  // Pose en sRGB brut, AUCUNE compensation P3 appliquee pour l instant.
+  // Sur ecran P3 iOS, la couleur rendue sera legerement plus saturee/vive
+  // que la valeur sRGB brute (shift typique gamut P3, plus marque sur les
+  // magentas comme ici). Si la perception sur device s avere trop
+  // agressive, introduire une valeur compensee apres test reel a l oeil
+  // (comme cela avait ete fait pour #E476FF -> #D67CF8 en 2026-06-02).
+  //
+  // Toute reference au rose Will doit utiliser C.pinkPill, pas le hex brut.
+  pinkPill: '#f4a6ff',
   pinkPillText: '#FFFFFF',
   pinkPillBg: '#FDECFF',
-  pinkPillActive: '#E476FF',
+  pinkPillActive: '#f4a6ff',
   violetAccent: '#7C3AED',
   card: '#FFFFFF',
   shadow: 'rgba(123, 47, 255, 0.08)',
@@ -1904,7 +1912,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
                     accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
                     style={{
                       width: 30, height: 30, borderRadius: 15,
-                      backgroundColor: favOnly ? '#f4a6ff' : '#f5f3ff',
+                      backgroundColor: favOnly ? C.pinkPill : '#f5f3ff',
                       alignItems: 'center', justifyContent: 'center',
                     }}
                   >
@@ -3016,7 +3024,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
                     style={{
                       width: 30, height: 30, borderRadius: 15,
-                      backgroundColor: favOnly ? '#f4a6ff' : '#f5f3ff',
+                      backgroundColor: favOnly ? C.pinkPill : '#f5f3ff',
                       alignItems: 'center', justifyContent: 'center',
                       marginLeft: 6,
                     }}
@@ -3483,7 +3491,7 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
   const HEIGHT = 4 * ITEM_H;
   const PAD_V_TOP = Math.round(ITEM_H / 2);    // 12 : titre proche du slot select
   const PAD_V_BOTTOM = 2 * ITEM_H;             // 48 : 2 items visibles en-dessous
-  const PINK = '#E476FF'; // = C.pinkPill (compensation P3, cf. C)
+  const PINK = C.pinkPill;
   const HAIRLINE = StyleSheet.hairlineWidth;
   const REPEAT = 20;
   const N = items.length;
