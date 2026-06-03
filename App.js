@@ -2180,7 +2180,7 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
           style={{ position: 'absolute', top: 6, right: 6 }}
         >
           <Svg width={16} height={14} viewBox="-1 -1.5 22.78 20.61"
-            fill={fav ? C.pinkPill : 'none'}
+            fill={fav ? '#fff' : 'none'}
             stroke="#fff" strokeWidth={2.2}>
             <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
           </Svg>
@@ -9435,17 +9435,24 @@ function PhotoViewerModal({
   origin, eventTitle, eventDate,
 }) {
   const [busy, setBusy] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const winWidth = Dimensions.get('window').width;
   const winHeight = Dimensions.get('window').height;
 
-  // Index cible calcule synchroniquement depuis les props (pas d'attente post-paint).
-  // Sert a initialiser la FlatList AU MOUNT avec la bonne position.
+  // Index cible calcule synchroniquement depuis les props. Sert a initialiser
+  // currentIndex ET la FlatList au mount avec la bonne position.
   const targetIndex = React.useMemo(() => {
     if (!photo || !photos) return 0;
     const i = photos.findIndex(p => p.id === photo.id);
     return i >= 0 ? i : 0;
   }, [photo, photos]);
+  // Lazy init : currentIndex demarre directement sur targetIndex (pas 0).
+  // Sinon le 1er render utilise photos[0] qui peut avoir un etat favori
+  // different -> le coeur clignote en "favori" avant que useEffect re-sync.
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    if (!photo || !photos) return 0;
+    const i = photos.findIndex(p => p.id === photo.id);
+    return i >= 0 ? i : 0;
+  });
 
   // Compteur de session bumpe a chaque ouverture (visible false->true). Sert
   // de key sur la FlatList pour forcer un remount et donc appliquer
