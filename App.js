@@ -1088,11 +1088,11 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
         marginBottom: 8,
       }}>
         <View style={{
-          width: 36, height: 36, borderRadius: 16,
+          width: 40, height: 40, borderRadius: 16,
           backgroundColor: C.primary,
           alignItems: 'center', justifyContent: 'center',
         }}>
-          <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
             <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
             <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke="#fff" strokeWidth={1.7} />
           </Svg>
