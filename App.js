@@ -362,6 +362,9 @@ const C = {
   pinkPillText: '#FFFFFF',
   pinkPillBg: '#FDECFF',
   pinkPillActive: '#f4a6ff',
+  // Foreground icones sur fond pinkPill (blanc rose). Symetrique de
+  // pinkPillText pour le texte sur le meme fond.
+  pinkPillFg: '#FFF5FF',
   violetAccent: '#7C3AED',
   card: '#FFFFFF',
   shadow: 'rgba(123, 47, 255, 0.08)',
@@ -1058,15 +1061,16 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             activeOpacity={0.7}
             hitSlop={6}
           >
-            <Icon.GearOrg size={22} color={C.pinkPill} />
+            <Icon.GearOrg size={22} color={C.pinkPillFg} />
           </TouchableOpacity>
+          <View style={s.orgToggleDivider} />
           <TouchableOpacity
             style={s.orgToggleBtn}
             onPress={() => onOpenOrgRole('photographer')}
             activeOpacity={0.7}
             hitSlop={6}
           >
-            <Icon.CamOrg size={24} color={C.pinkPill} />
+            <Icon.CamOrg size={24} color={C.pinkPillFg} />
           </TouchableOpacity>
         </View>
       </View>
@@ -11333,15 +11337,16 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
             activeOpacity={0.7}
             hitSlop={6}
           >
-            <Icon.GearOrg size={22} color={C.pinkPill} />
+            <Icon.GearOrg size={22} color={C.pinkPillFg} />
           </TouchableOpacity>
+          <View style={s.orgToggleDivider} />
           <TouchableOpacity
             style={s.orgToggleBtn}
             onPress={() => onOpenOrgRole?.('photographer')}
             activeOpacity={0.7}
             hitSlop={6}
           >
-            <Icon.CamOrg size={24} color={C.pinkPill} />
+            <Icon.CamOrg size={24} color={C.pinkPillFg} />
           </TouchableOpacity>
         </View>
         <View
@@ -12880,18 +12885,21 @@ const s = StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   orgToggle: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(228, 118, 255, 0.2)', // = C.pinkPill compense (#E476FF) a 20%
-    borderRadius: 16,
-    padding: 4,
+    backgroundColor: C.pinkPill,
+    borderRadius: 14,
     alignItems: 'center',
-    gap: 4,
   },
   orgToggleBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  orgToggleDivider: {
+    width: 1,
+    height: 20,
+    // Separateur translucide clair, valeur independante (pas couplee a pinkPillFg).
+    backgroundColor: 'rgba(255, 245, 255, 0.5)',
   },
 
   welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 18, color: C.text, fontWeight: '700' },
