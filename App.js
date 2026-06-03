@@ -1457,6 +1457,13 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [downloading, setDownloading] = useState(false);
+  // Filtre favoris (galerie perso). Toggle pill coeur a cote de "Selectionner".
+  const [favOnly, setFavOnly] = useState(false);
+  const visiblePhotos = useMemo(() => (
+    favOnly && photoFavoritesSet
+      ? photos.filter(p => photoFavoritesSet.has(p.id))
+      : photos
+  ), [photos, favOnly, photoFavoritesSet]);
 
   const togglePhotoSelect = useCallback((id) => {
     setSelectedIds(prev => {
@@ -1887,7 +1894,27 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
                 </>
               ) : (
                 <>
-                  <View />
+                  <TouchableOpacity
+                    onPress={() => {
+                      try { Haptics?.selectionAsync?.(); } catch {}
+                      setFavOnly(v => !v);
+                    }}
+                    hitSlop={10}
+                    activeOpacity={0.7}
+                    accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
+                    style={{
+                      width: 30, height: 30, borderRadius: 15,
+                      backgroundColor: favOnly ? '#f4a6ff' : '#f5f3ff',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <FavStar
+                      size={14}
+                      fill={favOnly ? '#fff' : 'none'}
+                      stroke={favOnly ? '#fff' : C.primary}
+                      strokeWidth={1.8}
+                    />
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
                     <Text style={{ color: '#c9beed', fontSize: 13, fontWeight: '500' }}>Sélectionner</Text>
                   </TouchableOpacity>
@@ -1895,15 +1922,23 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
               )}
             </View>
           )}
-          <PhotoGrid
-            photos={photos.slice(0, visibleCount)}
-            onPress={(p, _i, _photos, origin) => onOpenPhoto?.(p, photos, { origin })}
-            photoFavoritesSet={photoFavoritesSet}
-            onToggleFavorite={onTogglePhotoFavorite}
-            selectionMode={selectionMode}
-            selectedIds={selectedIds}
-            onTogglePhotoSelect={togglePhotoSelect}
-          />
+          {favOnly && visiblePhotos.length === 0 ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center', paddingHorizontal: 24 }}>
+              <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center' }}>
+                Aucune photo en favoris pour le moment.
+              </Text>
+            </View>
+          ) : (
+            <PhotoGrid
+              photos={visiblePhotos.slice(0, visibleCount)}
+              onPress={(p, _i, _photos, origin) => onOpenPhoto?.(p, visiblePhotos, { origin })}
+              photoFavoritesSet={photoFavoritesSet}
+              onToggleFavorite={onTogglePhotoFavorite}
+              selectionMode={selectionMode}
+              selectedIds={selectedIds}
+              onTogglePhotoSelect={togglePhotoSelect}
+            />
+          )}
         </>
       )}
     </RefreshableScrollView>
@@ -1996,9 +2031,22 @@ function PhotosStepRow({ num, text, done = false }) {
   );
 }
 
+// Icone "favori photo" = etoile (Favoris_3.svg). Distingue les favoris de
+// PHOTOS (etoile) des favoris d EVENTS (coeur) pour eviter la confusion
+// visuelle entre les deux types de favoris.
+function FavStar({ size = 16, fill = '#fff', stroke = '#fff', strokeWidth = 1.6, style }) {
+  // viewBox elargi de 2px sur chaque cote pour ne pas rogner le stroke (le
+  // path Favoris_3.svg colle les bords 0,0 -> 18.42,17.61).
+  return (
+    <Svg width={size * (22.42 / 21.61)} height={size} viewBox="-2 -2 22.42 21.61" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" style={style}>
+      <Path d="M10.09.61l1.91,5.17,5.51.22c.87.03,1.23,1.14.55,1.68l-4.33,3.42,1.5,5.31c.24.84-.7,1.52-1.43,1.04l-4.59-3.06-4.59,3.06c-.73.49-1.66-.2-1.43-1.04l1.5-5.31L.36,7.69c-.69-.54-.33-1.64.55-1.68l5.51-.22,1.91-5.17c.3-.82,1.46-.82,1.76,0Z" />
+    </Svg>
+  );
+}
+
 // Cellule d'une thumbnail : memo + onError fallback. La taille est passee
 // pour pouvoir s'adapter au numColumns du parent.
-const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav }) {
+const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav, favIndicator = false }) {
   const [errored, setErrored] = React.useState(false);
   const cellRef = React.useRef(null);
   // size optionnel :
@@ -2059,12 +2107,13 @@ const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHear
           hitSlop={12}
           style={{ position: 'absolute', top: 6, right: 6 }}
         >
-          <Svg width={20} height={18} viewBox="-1 -1.5 22.78 20.61"
-            fill={isFav ? '#fff' : 'none'}
-            stroke="#fff" strokeWidth={1.6}>
-            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-          </Svg>
+          <FavStar size={18} fill={isFav ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.6} />
         </TouchableOpacity>
+      )}
+      {favIndicator && !showHeart && (
+        <View pointerEvents="none" style={{ position: 'absolute', top: 6, right: 6 }}>
+          <FavStar size={14} fill="#fff" stroke="rgba(0,0,0,0.25)" strokeWidth={1.4} />
+        </View>
       )}
     </TouchableOpacity>
   );
@@ -2167,26 +2216,15 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
         transition={100}
         recyclingKey={p.id}
       />
-      {showHearts && (
-        <TouchableOpacity
-          onPress={(e) => {
-            e.stopPropagation?.();
-            // En mode selection : le tap heart toggle la selection (pas le
-            // favori) pour ne pas perturber le geste principal du moment.
-            if (selectionMode) onToggleSelect?.(p.id);
-            else onToggleFavorite(p.id);
-          }}
-          hitSlop={12}
-          style={{ position: 'absolute', top: 6, right: 6 }}
-        >
-          <Svg width={16} height={14} viewBox="-1 -1.5 22.78 20.61"
-            fill={fav ? '#fff' : 'none'}
-            stroke="#fff" strokeWidth={2.2}>
-            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-          </Svg>
-        </TouchableOpacity>
+      {/* Etoile favori : indicateur READ-ONLY uniquement pour les photos deja
+          mises en favori. Le favoriting se fait uniquement depuis le viewer
+          (meme logique que la galerie publique, decision UX 2026-06-03). */}
+      {showHearts && fav && !selectionMode && (
+        <View pointerEvents="none" style={{ position: 'absolute', top: 6, right: 6 }}>
+          <FavStar size={14} fill="#fff" stroke="rgba(0,0,0,0.25)" strokeWidth={1.4} />
+        </View>
       )}
-      {/* Mode selection : pastille check en haut-GAUCHE (le coeur favori
+      {/* Mode selection : pastille check en haut-GAUCHE (l'etoile favori
           garde sa place a droite) + voile violet leger si selected. */}
       {selectionMode && (
         <>
@@ -2364,7 +2402,8 @@ function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false }) {
+function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false }) {
+  const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -2381,6 +2420,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // Tri photos : true = recentes en haut (default, burstTs DESC), false = plus
   // anciennes en haut. Bouton sur la droite des pills permet de basculer.
   const [sortDesc, setSortDesc] = useState(true);
+  // Filtre favoris : true = affiche uniquement les photos likees. Toggle pill
+  // coeur a cote du bouton tri. Reserve aux users logges (isAuthed).
+  const [favOnly, setFavOnly] = useState(false);
   // Recherche par dossard : bibQuery/bibResults/bibSearching arrivent en
   // props depuis App.js (state lifte pour rendre la pill au root, au-dessus
   // du degrade blanc du footer). Cf. fetch debounced + listener clavier
@@ -2572,6 +2614,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       if (activeKmFilter !== 'all') {
         list = list.filter(p => String(p.km) === activeKmFilter);
       }
+    }
+    if (favOnly && isAuthed && photoFavoritesSet) {
+      list = list.filter(p => photoFavoritesSet.has(p.id));
     }
     // photos est deja trie burstTs DESC dans loadPhotos. sortDesc=false ->
     // on inverse pour avoir les plus anciennes en premier.
@@ -2960,6 +3005,30 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     <Path d="M17 20V4M13 8l4-4 4 4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                   </Svg>
                 </TouchableOpacity>
+                {isAuthed && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      try { Haptics?.selectionAsync?.(); } catch {}
+                      setFavOnly(v => !v);
+                    }}
+                    hitSlop={10}
+                    activeOpacity={0.7}
+                    accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
+                    style={{
+                      width: 30, height: 30, borderRadius: 15,
+                      backgroundColor: favOnly ? '#f4a6ff' : '#f5f3ff',
+                      alignItems: 'center', justifyContent: 'center',
+                      marginLeft: 6,
+                    }}
+                  >
+                    <FavStar
+                      size={14}
+                      fill={favOnly ? '#fff' : 'none'}
+                      stroke={favOnly ? '#fff' : C.primary}
+                      strokeWidth={1.8}
+                    />
+                  </TouchableOpacity>
+                )}
                 </View>
 
                 {/* Row 2 : Posté centre sous la course, pill rose animee. */}
@@ -3037,6 +3106,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       // Pour la grille on utilise thumbUri (~25 KB) au lieu de uri (~2-5 MB).
       // Le viewer plein ecran recoit item entier (avec uri haute resolution).
       photo={{ ...item, uri: item.thumbUri || item.uri }}
+      favIndicator={isFav(item.id)}
       onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
         origin,
         eventTitle: event?.name,
@@ -3077,6 +3147,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         <PhotoCell
           photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
           size={{ width, height }}
+          favIndicator={isFav(photo.id)}
           onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
             origin,
             eventTitle: event?.name,
@@ -3099,6 +3170,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         <PhotoCell
           photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
           size={{ width, height }}
+          favIndicator={isFav(photo.id)}
           onPress={(origin) => onOpenPhoto?.(photo, bibResults, {
             origin,
             eventTitle: event?.name,
@@ -3225,7 +3297,13 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         {renderHeader()}
         {bibQuery.trim().length > 0
           ? renderBibResults()
-          : ((loading || upcoming) && visiblePhotos.length === 0 ? renderListEmpty() : renderChunks())}
+          : favOnly && visiblePhotos.length === 0 && !loading ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center', paddingHorizontal: 24 }}>
+              <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center' }}>
+                Aucune photo en favoris pour cet event.
+              </Text>
+            </View>
+          ) : ((loading || upcoming) && visiblePhotos.length === 0 ? renderListEmpty() : renderChunks())}
         {bibQuery.trim().length === 0 && renderFooter()}
       </ScrollView>
 
@@ -9464,6 +9542,10 @@ function PhotoViewerModal({
   const sessionKeyRef = useRef(0);
   if (visible && !prevVisibleRef.current) {
     sessionKeyRef.current += 1;
+    // Re-sync currentIndex sur targetIndex DURANT le render (pas en useEffect).
+    // Sinon le 1er render apres reouverture lit photos[ancien currentIndex] et
+    // affiche le fav state de la photo precedente le temps que useEffect rattrape.
+    if (currentIndex !== targetIndex) setCurrentIndex(targetIndex);
   }
   prevVisibleRef.current = visible;
 
@@ -10036,12 +10118,13 @@ function PhotoViewerModal({
                     style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
                     accessibilityLabel={fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
                   >
-                    <Svg width={26} height={26} viewBox="-1 -1.5 22.78 20.61"
-                      fill={fav ? '#fff' : 'none'} stroke="#fff" strokeWidth={2}
+                    <FavStar
+                      size={24}
+                      fill={fav ? '#fff' : 'none'}
+                      stroke="#fff"
+                      strokeWidth={2}
                       style={iconShadowWhiteStyle}
-                    >
-                      <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-                    </Svg>
+                    />
                   </TouchableOpacity>
                 </ReAnimated.View>
               </ReAnimated.View>
@@ -12322,6 +12405,8 @@ export default function App() {
                     bibQuery={bibQuery}
                     bibResults={bibResults}
                     bibSearching={bibSearching}
+                    photoFavoritesSet={photoFavoritesSet}
+                    isAuthed={!!runnerSession}
                   />
                 </View>
               </GestureDetector>
