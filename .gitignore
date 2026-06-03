@@ -44,3 +44,6 @@ yarn-error.*
 App.js.bak
 App.js.bak2
 .claude/
+
+# Rapports d audit ephemeres (regeneres par agent, ne pas versionner)
+AUDIT.md
