@@ -3249,23 +3249,24 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               />
             </BlurView>
           </View>
-          {/* Bouton Go : valide la recherche et ferme le clavier. La recherche
-              tourne en continu via debounce, mais ce bouton donne au user un
-              moyen explicite de fermer le clavier apres la frappe. */}
-          <TouchableOpacity
-            onPress={() => Keyboard.dismiss()}
-            activeOpacity={0.85}
-            style={{
-              width: 48, height: 40, borderRadius: 20,
-              backgroundColor: C.primary,
-              alignItems: 'center', justifyContent: 'center',
-              shadowColor: C.primary, shadowOpacity: 0.25,
-              shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
-              elevation: 6,
-            }}
-          >
-            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>Go</Text>
-          </TouchableOpacity>
+          {/* Bouton Go : visible UNIQUEMENT quand bibQuery a du contenu.
+              Pill vide -> pas de bouton, layout reste minimaliste. */}
+          {bibQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => Keyboard.dismiss()}
+              activeOpacity={0.85}
+              style={{
+                width: 48, height: 40, borderRadius: 20,
+                backgroundColor: C.primary,
+                alignItems: 'center', justifyContent: 'center',
+                shadowColor: C.primary, shadowOpacity: 0.25,
+                shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+                elevation: 6,
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>Go</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
