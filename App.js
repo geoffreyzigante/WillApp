@@ -3201,68 +3201,72 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         }}
       >
         <View style={{
-          width: 200,
-          borderRadius: 22,
-          overflow: 'hidden',
-          shadowColor: '#000',
-          shadowOpacity: 0.10,
-          shadowRadius: 14,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 10,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
         }}>
-          <BlurView intensity={45} tint="dark" style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: 6,
-            paddingVertical: 6,
-            gap: 8,
-            backgroundColor: 'rgba(30,25,55,0.32)',
+          {/* Pill blanche translucide, texte violet */}
+          <View style={{
+            width: 200,
             borderRadius: 22,
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: 'rgba(255,255,255,0.18)',
+            overflow: 'hidden',
+            shadowColor: '#000',
+            shadowOpacity: 0.10,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 10,
           }}>
-            {/* Rond violet avec loupe blanche style SF Symbols (traits fins) */}
-            <View style={{
-              width: 28, height: 28, borderRadius: 14,
+            <BlurView intensity={55} tint="light" style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 6,
+              paddingVertical: 6,
+              gap: 8,
+              backgroundColor: 'rgba(255,255,255,0.78)',
+              borderRadius: 22,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: 'rgba(255,255,255,0.9)',
+            }}>
+              <View style={{
+                width: 28, height: 28, borderRadius: 14,
+                backgroundColor: C.primary,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+                  <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
+                  <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke="#fff" strokeWidth={1.7} />
+                </Svg>
+              </View>
+              <TextInput
+                value={bibQuery}
+                onChangeText={(v) => setBibQuery(v.replace(/\D/g, '').slice(0, 5))}
+                placeholder="Numéro de dossard"
+                placeholderTextColor={`${C.primary}80`}
+                keyboardType="number-pad"
+                returnKeyType="default"
+                maxLength={5}
+                style={{ flex: 1, fontSize: 13.5, color: C.primary, fontWeight: '600', padding: 0, paddingVertical: 2 }}
+              />
+            </BlurView>
+          </View>
+          {/* Bouton Go : valide la recherche et ferme le clavier. La recherche
+              tourne en continu via debounce, mais ce bouton donne au user un
+              moyen explicite de fermer le clavier apres la frappe. */}
+          <TouchableOpacity
+            onPress={() => Keyboard.dismiss()}
+            activeOpacity={0.85}
+            style={{
+              width: 44, height: 36, borderRadius: 18,
               backgroundColor: C.primary,
               alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
-                <Path d="M21 21l-4.35-4.35" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" />
-                <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke="#fff" strokeWidth={1.7} />
-              </Svg>
-            </View>
-            <TextInput
-              value={bibQuery}
-              onChangeText={(v) => setBibQuery(v.replace(/\D/g, '').slice(0, 5))}
-              placeholder="Numéro de dossard"
-              placeholderTextColor="rgba(255,255,255,0.55)"
-              keyboardType="number-pad"
-              returnKeyType="search"
-              maxLength={5}
-              onSubmitEditing={() => Keyboard.dismiss()}
-              style={{ flex: 1, fontSize: 13.5, color: '#fff', padding: 0, paddingVertical: 2 }}
-            />
-            {bibQuery.length > 0 && (
-              <TouchableOpacity onPress={() => { setBibQuery(''); Keyboard.dismiss(); }} hitSlop={10} style={{ paddingHorizontal: 6 }}>
-                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 15 }}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </BlurView>
+              shadowColor: C.primary, shadowOpacity: 0.25,
+              shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+              elevation: 6,
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>Go</Text>
+          </TouchableOpacity>
         </View>
-        {/* CTA "Chercher" rose, centre sous la pill. Tap = dismiss clavier
-            (la recherche tourne en continu via debounce, ce bouton est un
-            cue UX pour valider et fermer le clavier). */}
-        <TouchableOpacity
-          onPress={() => Keyboard.dismiss()}
-          activeOpacity={0.7}
-          hitSlop={10}
-          style={{ marginTop: 6, paddingHorizontal: 16, paddingVertical: 4 }}
-        >
-          <Text style={{ color: C.pinkPill, fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>
-            Chercher
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {/* Confirm modal "Ne plus suivre" (Phase D3). Le toggle via le coeur
