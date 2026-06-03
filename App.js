@@ -1843,43 +1843,40 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
               </Text>
             </View>
           )}
-          {/* Barre selection : layered ABOVE l espace existant entre header
-              et grille (position absolute, hauteur 0 -> ne pousse rien).
-              Visuellement juste au-dessus de la grille, mais la grille
-              reste a sa position d origine. */}
+          {/* Barre selection en flow normal (occupe une vraie hauteur)
+              pour eviter le conflit visuel avec la SelfieBlock placee juste
+              au-dessus quand le selfie est absent. */}
           {photos.length > 1 && (
-            <View style={{ height: 0, overflow: 'visible' }}>
-              <View style={{
-                position: 'absolute', top: -22, left: 2, right: 2,
-                flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-              }}>
-                {selectionMode ? (
-                  <>
-                    <TouchableOpacity onPress={exitSelection} hitSlop={10} disabled={downloading}>
-                      <Text style={{ color: C.textSoft, fontSize: 13, fontWeight: '500' }}>Annuler</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={downloadSelected}
-                      hitSlop={10}
-                      disabled={selectedIds.size === 0 || downloading}
-                      style={{ opacity: (selectedIds.size === 0 || downloading) ? 0.35 : 1 }}
-                    >
-                      <Text style={{ color: C.primary, fontSize: 13, fontWeight: '700' }}>
-                        {downloading
-                          ? 'Téléchargement…'
-                          : `Télécharger${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <View />
-                    <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
-                      <Text style={{ color: '#c9beed', fontSize: 13, fontWeight: '500' }}>Sélectionner</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
+            <View style={{
+              flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+              paddingHorizontal: 2, paddingTop: 4, marginBottom: 8,
+            }}>
+              {selectionMode ? (
+                <>
+                  <TouchableOpacity onPress={exitSelection} hitSlop={10} disabled={downloading}>
+                    <Text style={{ color: C.textSoft, fontSize: 13, fontWeight: '500' }}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={downloadSelected}
+                    hitSlop={10}
+                    disabled={selectedIds.size === 0 || downloading}
+                    style={{ opacity: (selectedIds.size === 0 || downloading) ? 0.35 : 1 }}
+                  >
+                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '700' }}>
+                      {downloading
+                        ? 'Téléchargement…'
+                        : `Télécharger${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <View />
+                  <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
+                    <Text style={{ color: '#c9beed', fontSize: 13, fontWeight: '500' }}>Sélectionner</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           )}
           <PhotoGrid
