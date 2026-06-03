@@ -3205,11 +3205,16 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           alignItems: 'center',
           gap: 8,
         }}>
-          {/* Pill blanche translucide, texte violet */}
+          {/* Pill blanche translucide, texte violet.
+              Border + radius sur le wrapper externe UNIQUEMENT (et non sur
+              la BlurView interne) : sinon iOS rendait un eperon violet
+              parasite a gauche (artefact connu BlurView + radius). */}
           <View style={{
             width: 200,
             borderRadius: 22,
             overflow: 'hidden',
+            borderWidth: bibQuery.length > 0 ? 1.5 : StyleSheet.hairlineWidth,
+            borderColor: bibQuery.length > 0 ? C.primary : 'rgba(255,255,255,0.9)',
             shadowColor: '#000',
             shadowOpacity: 0.10,
             shadowRadius: 14,
@@ -3223,11 +3228,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               paddingVertical: 6,
               gap: 8,
               backgroundColor: 'rgba(255,255,255,0.78)',
-              borderRadius: 22,
-              // Liseret violet fin des qu une frappe a commence (signal
-              // visuel "recherche active"). Sinon contour blanc subtil.
-              borderWidth: bibQuery.length > 0 ? 1.5 : StyleSheet.hairlineWidth,
-              borderColor: bibQuery.length > 0 ? C.primary : 'rgba(255,255,255,0.9)',
             }}>
               <View style={{
                 width: 28, height: 28, borderRadius: 14,
