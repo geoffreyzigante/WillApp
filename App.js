@@ -12380,13 +12380,13 @@ export default function App() {
             shadowOffset: { width: 0, height: 4 },
             elevation: 10,
           }}>
-            <BlurView intensity={55} tint="light" style={{
+            <BlurView intensity={80} tint="light" style={{
               flexDirection: 'row',
               alignItems: 'center',
               paddingHorizontal: 6,
               paddingVertical: 6,
               gap: 8,
-              backgroundColor: 'rgba(255,255,255,0.78)',
+              backgroundColor: 'rgba(255,255,255,0.35)',
             }}>
               <View style={{
                 width: 28, height: 28, borderRadius: 14,
