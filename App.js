@@ -342,7 +342,7 @@ const C = {
   primaryDark: '#5A1FCC',
   primaryLight: '#E8DEFF',
   text: '#0A0A0A',
-  textSoft: '#6B6B7B',
+  textSoft: 'rgba(123,47,255,0.3)',
   white: '#FFFFFF',
   pillBg: '#EFE7FF',
   // Brand officielle sRGB = #D67CF8. iOS rend sur ecran P3 et la pipette
@@ -454,14 +454,14 @@ const Icon = {
     </Svg>
   ),
   // Œil ouvert : affiche le mot de passe
-  Eye: ({ size = 20, color = '#9CA3AF' }) => (
+  Eye: ({ size = 20, color = 'rgba(123,47,255,0.3)' }) => (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
       <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={1.8} />
     </Svg>
   ),
   // Œil barré : masque le mot de passe
-  EyeOff: ({ size = 20, color = '#9CA3AF' }) => (
+  EyeOff: ({ size = 20, color = 'rgba(123,47,255,0.3)' }) => (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
       <Path d="M10.73 5.08A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -655,7 +655,7 @@ class GridErrorBoundary extends React.Component {
           <Text style={{ color: '#1a1a1a', fontSize: 16, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>
             Impossible d'afficher cette page
           </Text>
-          <Text style={{ color: '#888', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+          <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
             {this.state.error?.message || 'Erreur de rendu inattendue.'}
           </Text>
           <TouchableOpacity onPress={this.reset} style={{ backgroundColor: '#7B2FFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10 }}>
@@ -1388,7 +1388,7 @@ function PhotosUnauthScreen({ onSignup, onLogin }) {
           style={{
             fontSize: 16,
             fontWeight: '400',
-            color: '#71717A',
+            color: 'rgba(123,47,255,0.3)',
             textAlign: 'center',
             lineHeight: 24,
             marginBottom: 48,
@@ -1879,7 +1879,7 @@ function PhotosEmptyState({ selfieUri, onFindEvent }) {
         Suis un event pour{'\n'}recevoir tes photos
       </Text>
       <Text style={{
-        fontSize: 14, color: '#5A5468', lineHeight: 20,
+        fontSize: 14, color: 'rgba(123,47,255,0.3)', lineHeight: 20,
         textAlign: 'center', marginBottom: 22,
         paddingHorizontal: 12,
       }}>
@@ -3197,7 +3197,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               Ne plus suivre cet event ?
             </Text>
             <Text style={{
-              fontSize: 14, color: '#5A5468', lineHeight: 20,
+              fontSize: 14, color: 'rgba(123,47,255,0.3)', lineHeight: 20,
               marginBottom: 20, textAlign: 'center',
             }}>
               Tes données faciales sur cet event seront supprimées. Tu ne recevras plus tes photos.
@@ -3211,7 +3211,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ color: '#5A5468', fontSize: 14, fontWeight: '600' }}>Annuler</Text>
+                <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 14, fontWeight: '600' }}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => { setShowUnfollowConfirm(false); onToggleFollow(); }}
@@ -5919,7 +5919,7 @@ function CropImageModal({ visible, asset, onCancel, onConfirm }) {
           </GestureDetector>
 
           <View style={{ flexDirection: 'row', padding: 20, gap: 12 }}>
-            <TouchableOpacity onPress={onCancel} disabled={busy} style={{ flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#555', alignItems: 'center' }}>
+            <TouchableOpacity onPress={onCancel} disabled={busy} style={{ flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(123,47,255,0.3)', alignItems: 'center' }}>
               <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Annuler</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={doConfirm} disabled={busy} style={{ flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center', opacity: busy ? 0.6 : 1 }}>
@@ -5955,7 +5955,7 @@ function SubModalInputText({ visible, title, value, onChangeText, placeholder, k
         <View style={{
           paddingTop: 56, paddingHorizontal: 16, paddingBottom: 12,
           flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E5E7EB',
+          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(123,47,255,0.3)',
           backgroundColor: '#fff',
         }}>
           <View style={{ width: 60 }} />
@@ -6900,7 +6900,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
   // via PUT /organizer/event/:slug (whitelist worker existante).
   if (isEdit) {
     const sectionHeaderStyle = {
-      color: '#6B7280', fontSize: 13, fontWeight: '700',
+      color: 'rgba(123,47,255,0.3)', fontSize: 13, fontWeight: '700',
       letterSpacing: 0.6, textTransform: 'uppercase',
       marginBottom: 8, marginLeft: 32, marginTop: 24,
     };
@@ -6913,12 +6913,12 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
       paddingHorizontal: 16, paddingVertical: 14, minHeight: 48,
     };
     const rowSeparatorStyle = {
-      height: StyleSheet.hairlineWidth, backgroundColor: '#E5E7EB', marginLeft: 16,
+      height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(123,47,255,0.3)', marginLeft: 16,
     };
     const subModalHeader = {
       paddingTop: 16, paddingHorizontal: 16, paddingBottom: 12,
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E5E7EB',
+      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(123,47,255,0.3)',
       backgroundColor: '#fff',
     };
     const saveBtnStyle = {
@@ -6972,10 +6972,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
       return (
         <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={rowStyle}>
           <Text style={{ color: C.text, fontSize: 16, fontWeight: '600', flex: 1 }}>{label}</Text>
-          <Text style={{ color: '#6B7280', fontSize: 14, marginRight: 8, maxWidth: 140 }} numberOfLines={1}>
+          <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 14, marginRight: 8, maxWidth: 140 }} numberOfLines={1}>
             {value || '—'}
           </Text>
-          <Text style={{ color: '#9CA3AF', fontSize: 18, fontWeight: '300' }}>›</Text>
+          <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 18, fontWeight: '300' }}>›</Text>
         </TouchableOpacity>
       );
     };
@@ -7426,21 +7426,21 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
                   <View key={idx} style={{ backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 10 }}>
                     <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-end' }}>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#6B7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DISTANCE</Text>
+                        <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DISTANCE</Text>
                         <TouchableOpacity onPress={() => setKmPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: d.km ? C.text : '#9CA3AF', fontSize: 14 }}>{d.km ? `${d.km} km` : '—'}</Text>
+                          <Text style={{ color: d.km ? C.text : 'rgba(123,47,255,0.3)', fontSize: 14 }}>{d.km ? `${d.km} km` : '—'}</Text>
                         </TouchableOpacity>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#6B7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉPART</Text>
+                        <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉPART</Text>
                         <TouchableOpacity onPress={() => setTimePickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: d.time ? C.text : '#9CA3AF', fontSize: 14 }}>{d.time || '—'}</Text>
+                          <Text style={{ color: d.time ? C.text : 'rgba(123,47,255,0.3)', fontSize: 14 }}>{d.time || '—'}</Text>
                         </TouchableOpacity>
                       </View>
                       <View style={{ flex: 1.2 }}>
-                        <Text style={{ color: '#6B7280', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉNIVELÉ</Text>
+                        <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉNIVELÉ</Text>
                         <TouchableOpacity onPress={() => setElevPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: d.elevation ? C.text : '#9CA3AF', fontSize: 14 }}>{d.elevation || '—'}</Text>
+                          <Text style={{ color: d.elevation ? C.text : 'rgba(123,47,255,0.3)', fontSize: 14 }}>{d.elevation || '—'}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -8183,7 +8183,7 @@ function PhaseDResetModal({ visible, onClose }) {
             Will respecte mieux ta vie privée
           </Text>
           <Text style={{
-            fontSize: 14, color: '#5A5468', lineHeight: 20,
+            fontSize: 14, color: 'rgba(123,47,255,0.3)', lineHeight: 20,
             textAlign: 'center', marginBottom: 22,
           }}>
             Tu dois maintenant <Text style={{ fontWeight: '700', color: '#1A1426' }}>Suivre</Text> explicitement chaque event pour recevoir tes photos. Tes anciens favoris ont été retirés. Tu peux les Suivre à nouveau pour réactiver l'envoi automatique.
