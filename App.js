@@ -11549,13 +11549,15 @@ export default function App() {
     });
   }, [userId, runnerSession]);
 
-  // Charge @will_follows uniquement quand un runner est connecte. Pas de
-  // pre-load au boot inconditionnel — le block phase D ne le fait plus —
-  // pour que la valeur en memoire colle a la regle "favoris uniquement
-  // si connecte". Au login, on relit ; au logout, logoutRunner purge.
+  // Charge @will_follows_<userId> quand un runner est connecte. Scope par
+  // userId pour survivre au logout/re-login du meme compte sans fuite
+  // cross-compte (User A logout -> cle <userA> reste, User B login -> sa
+  // cle <userB> est vide ou propre). Pas de chargement au boot
+  // inconditionnel : c est ce useEffect qui hydrate au login.
   useEffect(() => {
-    if (!runnerSession) return;
-    AsyncStorage.getItem('@will_follows').then(v => {
+    const uid = runnerSession?.profile?.userId;
+    if (!uid) return;
+    AsyncStorage.getItem(`@will_follows_${uid}`).then(v => {
       if (!v) return;
       try { setFollows(JSON.parse(v)); } catch {}
     });
@@ -11673,24 +11675,23 @@ export default function App() {
     // Sinon ce device continuerait de recevoir des notifs apres logout.
     const tk = runnerSession?.token;
     if (tk) { api.deletePushToken(tk); }
-    const prevUserId = runnerSession?.profile?.userId;
     setRunnerSession(null);
     setSelfieUri(null);
-    // Favoris (events suivis + photos likees) ne doivent persister QUE pour
-    // un user connecte. On purge l in-memory et le cache au logout : la
-    // prochaine connexion repart propre (pas de fuite d un compte a l autre).
+    // Purge in-memory uniquement : les caches @will_follows_<uid> et
+    // @will_photo_favorites_<uid> restent en storage, scopes par userId
+    // (pas de fuite cross-compte). Au re-login du meme user, les useEffects
+    // d hydratation relisent ces cles et restaurent l etat instantanement.
     setFollows([]);
     setPhotoFavorites([]);
     Secure.removeItem('@will_runner').catch(() => {});
     AsyncStorage.removeItem('@will_selfie').catch(() => {});
-    // Cache photos NON vide au logout : il est scope par userId
-    // (@will_photos_cache_<userId>), pas de fuite cross-compte, et
-    // hydratation instantanee a la reconnexion du meme compte.
+    // Caches scopes par userId NON vides au logout : @will_photos_cache_<uid>,
+    // @will_follows_<uid>, @will_photo_favorites_<uid>. Pas de fuite cross-compte
+    // (cle differente par user), hydratation immediate au re-login du meme compte.
     AsyncStorage.removeItem('@will_last_seen_burst_ts').catch(() => {});
+    // Legacy global @will_follows : on supprime au cas ou il traine d une
+    // version pre-scoping.
     AsyncStorage.removeItem('@will_follows').catch(() => {});
-    if (prevUserId) {
-      AsyncStorage.removeItem(`@will_photo_favorites_${prevUserId}`).catch(() => {});
-    }
   }, [runnerSession]);
 
   const handleOrganizerAuthSuccess = useCallback((session) => {
@@ -11873,13 +11874,15 @@ export default function App() {
       Alert.alert('Connexion requise', 'Connecte-toi a ton compte coureur pour suivre un event.');
       return;
     }
+    const uid = runnerSession?.profile?.userId;
+    const followsKey = uid ? `@will_follows_${uid}` : '@will_follows';
     const isCurrentlyFollowing = follows.includes(eventCode);
     if (isCurrentlyFollowing) {
       const r = await api.unfollow(eventCode, token);
       if (r?.ok || r?.note === 'already_unfollowed') {
         setFollows(prev => {
           const next = prev.filter(c => c !== eventCode);
-          AsyncStorage.setItem('@will_follows', JSON.stringify(next)).catch(() => {});
+          AsyncStorage.setItem(followsKey, JSON.stringify(next)).catch(() => {});
           return next;
         });
         AsyncStorage.removeItem(`@will_follow_started_${eventCode}`).catch(() => {});
@@ -11895,7 +11898,7 @@ export default function App() {
       setFollows(prev => {
         if (prev.includes(eventCode)) return prev;
         const next = [...prev, eventCode];
-        AsyncStorage.setItem('@will_follows', JSON.stringify(next)).catch(() => {});
+        AsyncStorage.setItem(followsKey, JSON.stringify(next)).catch(() => {});
         return next;
       });
       AsyncStorage.setItem(`@will_follow_started_${eventCode}`, String(Date.now())).catch(() => {});
