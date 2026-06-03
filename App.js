@@ -12357,7 +12357,7 @@ export default function App() {
         style={{
           position: 'absolute',
           left: 0, right: 0,
-          bottom: bibKeyboardH > 0 ? bibKeyboardH + 8 : 68,
+          bottom: bibKeyboardH > 0 ? bibKeyboardH + 48 : 108,
           alignItems: 'center',
           zIndex: 20,
           elevation: 20,
