@@ -11369,19 +11369,12 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
           que la search bar de HomeScreen). */}
       <View style={{ height: 14 }} />
 
-      <TouchableOpacity
-        onPress={onCreateEvent}
-        style={{ backgroundColor: C.pinkPill, paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginBottom: 18 }}
-      >
-        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>+ Créer un événement</Text>
-      </TouchableOpacity>
-
       {loading ? (
         <ActivityIndicator color={C.primary} style={{ marginVertical: 24 }} />
       ) : events.length === 0 ? (
         <View style={{ paddingVertical: 30, alignItems: 'center' }}>
           <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center' }}>
-            Tu n'as pas encore créé d'événement.{'\n'}Clique sur le bouton ci-dessus pour démarrer.
+            Tu n'as pas encore créé d'événement.{'\n'}Clique sur le bouton ci-dessous pour démarrer.
           </Text>
         </View>
       ) : (
@@ -11446,6 +11439,13 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
           );
         })
       )}
+
+      <TouchableOpacity
+        onPress={onCreateEvent}
+        style={{ backgroundColor: C.pinkPill, paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 4 }}
+      >
+        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>+ Créer un événement</Text>
+      </TouchableOpacity>
     </RefreshableScrollView>
   );
 }
