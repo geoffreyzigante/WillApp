@@ -3716,7 +3716,7 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
   );
 }
 
-function PhotographerScreen({ session, onLogout, onExit }) {
+function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch }) {
   const { hasPermission, requestPermission } = useCameraPermission();
   // Audit B13 : si iOS a deja denied une fois, requestPermission() devient
   // inerte. On bascule le bouton vers Linking.openSettings() quand on
@@ -4405,9 +4405,9 @@ function PhotographerScreen({ session, onLogout, onExit }) {
     myPhotosFetchInFlightRef.current = true;
     if (isMountedRef.current) setMyPhotosLoading(true);
     try {
-      const r = await fetch(
-        `${API_URL}/photographer/my-photos?eventCode=${encodeURIComponent(session.event.code)}`,
-        { headers: { Authorization: `Bearer ${session.token}` } },
+      // UI-11 : migre vers photographerApiFetch (auto-Bearer + humanise erreurs reseau + garde 401)
+      const r = await photographerApiFetch(
+        `/photographer/my-photos?eventCode=${encodeURIComponent(session.event.code)}`,
       );
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
@@ -12718,6 +12718,7 @@ export default function App() {
       <StatusBar barStyle="light-content" backgroundColor="#000" translucent />
       <PhotographerScreen
         session={session}
+        photographerApiFetch={photographerApiFetch}
         // Bouton retour : sort du mode sans effacer la session — le
         // photographe peut revenir avec un seul tap (pas de re-saisie mdp).
         onExit={() => setInPhotographerMode(false)}
