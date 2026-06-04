@@ -10490,7 +10490,8 @@ function passwordStrength(pwd) {
 }
 
 function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' }) {
-  const [mode, setMode] = useState(initialMode); // 'login' | 'register'
+  const [mode, setMode] = useState(initialMode); // 'login' | 'register' | 'forgot'
+  const [forgotEmailSent, setForgotEmailSent] = useState(false); // B4 : success state apres POST /runner/forgot-password
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -10509,6 +10510,7 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
   useEffect(() => {
     if (!visible) return;
     setMode(initialMode);
+    setForgotEmailSent(false); // B4 : reset state success a chaque ouverture
     AsyncStorage.getItem('@will_last_email_runner').then(v => {
       if (v) setEmail(prev => prev || v);
     }).catch(() => {});
@@ -10517,7 +10519,7 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
   const reset = () => {
     setEmail(''); setPassword(''); setFirstName(''); setLastName('');
     setPostalCode(''); setCity(''); setCitySuggestions([]);
-    setError(''); setBusy(false);
+    setError(''); setBusy(false); setForgotEmailSent(false);
   };
 
   const pwdStrength = passwordStrength(password);
@@ -10560,6 +10562,29 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
 
   const submit = async () => {
     setError('');
+    // B4 : mode forgot = POST /runner/forgot-password. Worker retourne toujours
+    // ok=true (anti-enumeration), on affiche toujours le message de succes.
+    if (mode === 'forgot') {
+      const cleanEmail = email.trim().toLowerCase();
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        setError('Email invalide');
+        return;
+      }
+      setBusy(true);
+      try {
+        await fetch(`${API_URL}/runner/forgot-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail }),
+        });
+        setForgotEmailSent(true);
+      } catch (e) {
+        setError('Connexion impossible. Verifie ton reseau.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     setBusy(true);
     try {
       const url = mode === 'login' ? '/runner/login' : '/runner/register';
@@ -10604,10 +10629,12 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
                   </Text>
                 )}
                 <Text style={[s.welcome, { color: C.primary, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
-                  {mode === 'login' ? 'Connexion' : 'Inscription'}
+                  {mode === 'login' ? 'Connexion' : mode === 'forgot' ? 'Mot de passe oublié' : 'Inscription'}
                 </Text>
                 <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }}>
-                  {mode === 'login' ? 'Connecte-toi à ton compte' : 'Crée ton compte coureur'}
+                  {mode === 'login' ? 'Connecte-toi à ton compte'
+                    : mode === 'forgot' ? "On t'envoie un lien par email pour le réinitialiser."
+                    : 'Crée ton compte coureur'}
                 </Text>
 
                 <ScrollView
@@ -10674,7 +10701,23 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
                     </>
                   )}
                   <TextInput placeholder="Email" placeholderTextColor={C.textSoft} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={formSectionStyle.input} />
-                  <PasswordInput placeholder="Mot de passe" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} style={formSectionStyle.input} />
+                  {mode !== 'forgot' && (
+                    <PasswordInput placeholder="Mot de passe" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} style={formSectionStyle.input} />
+                  )}
+                  {mode === 'login' && (
+                    // B4 : lien vers mode 'forgot' sous le champ password.
+                    <TouchableOpacity
+                      onPress={() => { setMode('forgot'); setError(''); setForgotEmailSent(false); }}
+                      style={{ alignSelf: 'flex-end', paddingVertical: 4, marginTop: -4, marginBottom: 4 }}
+                    >
+                      <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600' }}>Mot de passe oublié ?</Text>
+                    </TouchableOpacity>
+                  )}
+                  {mode === 'forgot' && forgotEmailSent && (
+                    <Text style={{ color: '#166534', fontSize: 13, marginTop: 8, marginBottom: 4, lineHeight: 18 }}>
+                      Si un compte existe avec cet email, un lien de réinitialisation t'a été envoyé. Vérifie ta boîte (et les spams). Le lien est valable 24h.
+                    </Text>
+                  )}
                   {mode === 'register' && password ? (
                     <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
                       <View style={{ flexDirection: 'row', gap: 4, marginBottom: 6 }}>
@@ -10688,13 +10731,29 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
                   {error ? <Text style={{ color: '#ff6b6b', fontSize: 13, marginTop: 4, marginBottom: 8 }}>{error}</Text> : null}
                 </ScrollView>
 
-                <TouchableOpacity onPress={submit} disabled={busy} style={{ backgroundColor: C.primary, paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 12, opacity: busy ? 0.6 : 1 }}>
-                  {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{mode === 'login' ? 'Se connecter' : "S'inscrire"}</Text>}
+                <TouchableOpacity onPress={submit} disabled={busy || (mode === 'forgot' && forgotEmailSent)} style={{ backgroundColor: C.primary, paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 12, opacity: (busy || (mode === 'forgot' && forgotEmailSent)) ? 0.6 : 1 }}>
+                  {busy
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                        {mode === 'login' ? 'Se connecter'
+                          : mode === 'forgot' ? (forgotEmailSent ? 'Email envoyé' : 'Recevoir le lien')
+                          : "S'inscrire"}
+                      </Text>}
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }} style={{ marginTop: 14, alignItems: 'center', paddingVertical: 6 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (mode === 'forgot') { setMode('login'); }
+                    else { setMode(mode === 'login' ? 'register' : 'login'); }
+                    setError('');
+                    setForgotEmailSent(false);
+                  }}
+                  style={{ marginTop: 14, alignItems: 'center', paddingVertical: 6 }}
+                >
                   <Text style={{ color: C.textSoft, fontSize: 13 }}>
-                    {mode === 'login' ? "Pas encore de compte ? S'inscrire" : 'Déjà un compte ? Se connecter'}
+                    {mode === 'forgot' ? '← Retour à la connexion'
+                      : mode === 'login' ? "Pas encore de compte ? S'inscrire"
+                      : 'Déjà un compte ? Se connecter'}
                   </Text>
                 </TouchableOpacity>
               </TouchableOpacity>
