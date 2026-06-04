@@ -16,6 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.geoffreyzigante.will",
       "infoPlist": {
+        "CFBundleDisplayName": "Will",
         "NSCameraUsageDescription": "Will utilise la camera pour detecter les coureurs et prendre des photos automatiquement.",
         "NSPhotoLibraryUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
         "NSPhotoLibraryAddUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
