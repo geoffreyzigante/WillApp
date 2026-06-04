@@ -8787,7 +8787,10 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
     }
   }, [visible]);
 
-  const upcoming = events.filter(e => isUpcoming(e.event_date, e.event_date_end));
+  // Tri ASC strict (decision user 2026-06-04, toutes les listes d'events).
+  const upcoming = events
+    .filter(e => isUpcoming(e.event_date, e.event_date_end))
+    .sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
 
   const doLogin = async (pwdOverride) => {
     const pwd = (pwdOverride ?? password).trim();
@@ -9101,7 +9104,10 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
 }
 
 function SearchModal({ visible, events, onClose, onPick }) {
-  const upcoming = events.filter(e => isUpcoming(e.event_date, e.event_date_end));
+  // Tri ASC strict (decision user 2026-06-04, toutes les listes d'events).
+  const upcoming = events
+    .filter(e => isUpcoming(e.event_date, e.event_date_end))
+    .sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
