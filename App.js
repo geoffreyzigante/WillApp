@@ -8539,10 +8539,11 @@ function SelfieModal({ visible, onClose, onSaved, userId, signupMode = false, on
     try {
       // 1. Sauvegarde locale (réactivité immédiate)
       await AsyncStorage.setItem('@will_selfie', uri);
-      // Audit B15 : pas d upload IIFE non-suivi ici. App.js orchestre l upload
-      // R2 via onSaved -> runSelfieUpload et tracke selfieUploadState.
-      onSaved?.(uri);
-
+      // Audit B14a followup : await onSaved pour attendre la confirmation
+      // R2 cote App avant de fermer la modal. Sinon le pendingFollow relance
+      // toggleFollow alors que le PUT R2 n est pas encore propage serveur,
+      // worker repond selfie_required, et la SelfieModal se rouvre.
+      await onSaved?.(uri);
       onClose();
     } catch (e) {
       Alert.alert('Erreur', e.message);
@@ -13056,20 +13057,23 @@ export default function App() {
       <SelfieModal
         visible={selfieModal}
         onClose={() => { setSelfieModal(false); setSignupSelfieStep(false); pendingFollowRef.current = null; }}
-        onSaved={(uri) => {
+        onSaved={async (uri) => {
           setSelfieUri(uri);
-          // Audit B15 — tracke l upload R2 (etat 'uploading' -> 'ok'/'failed').
-          runSelfieUpload(uri);
           // Selfie pris → on retire la pastille "selfie manquant" sur l'accueil.
           AsyncStorage.removeItem('@will_selfie_skipped').catch(() => {});
           setSelfieSkipped(false);
           setSignupSelfieStep(false);
+          // Audit B14a followup — await la confirmation R2 avant de relancer
+          // pendingFollow. Sans await, toggleFollow part avec un selfie pas
+          // encore propage cote worker -> 400 selfie_required -> re-ouvre la
+          // SelfieModal en boucle.
+          await runSelfieUpload(uri);
           // Phase D : si un follow attendait le selfie, relance-le maintenant.
           const pendingEvent = pendingFollowRef.current;
           if (pendingEvent) {
             pendingFollowRef.current = null;
             // setTimeout pour laisser le modal se fermer proprement avant le toast eventuel
-            setTimeout(() => { toggleFollow(pendingEvent); }, 200);
+            setTimeout(() => { toggleFollowStable(pendingEvent); }, 200);
           }
         }}
         userId={userId}
