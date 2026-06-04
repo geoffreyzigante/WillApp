@@ -1094,9 +1094,10 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
     return true;
   });
   const q = searchQuery.trim().toLowerCase();
-  const filtered = q
+  const filtered = (q
     ? tabFiltered.filter(e => (e.name || '').toLowerCase().includes(q))
-    : tabFiltered;
+    : tabFiltered
+  ).slice().sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
   const scrollRef = useRef(null);
 
   // Quand le clavier se ferme : remonter le scroll en haut
@@ -11466,7 +11467,11 @@ function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout, onCrea
     try {
       const r = await organizerApiFetch(`/organizer/my-events`);
       const data = await r.json();
-      setEvents(Array.isArray(data) ? data : []);
+      // Tri ASC strict (decision user 2026-06-04, applique a toutes les listes events).
+      const sorted = Array.isArray(data)
+        ? [...data].sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''))
+        : [];
+      setEvents(sorted);
     } catch {} finally { setLoading(false); }
   };
 
