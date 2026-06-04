@@ -9285,7 +9285,7 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                         <TouchableOpacity onPress={onView}>
                           <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Voir</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => { onClose(); onDelete(); }}>
+                        <TouchableOpacity onPress={onDelete}>
                           <Text style={{ color: C.error, fontWeight: '600', fontSize: 14 }}>Supprimer</Text>
                         </TouchableOpacity>
                       </View>
@@ -13164,7 +13164,13 @@ export default function App() {
           setProfileMenu(false);
           setTimeout(() => requireAuth(() => setSelfieModal(true)), 200);
         }}
-        onDelete={deleteSelfie}
+        onDelete={() => {
+          // Audit modal-stacking iOS : Alert.alert (dans deleteSelfie) ne saffiche
+          // pas si ProfileMenuModal est encore en train de se fermer. Pattern
+          // identique a onView et onRetake L13123-L13130.
+          setProfileMenu(false);
+          setTimeout(() => deleteSelfie(), 200);
+        }}
         runnerSession={runnerSession}
         runnerApiFetch={runnerApiFetch}
         onLogout={logoutRunner}
