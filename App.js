@@ -6032,7 +6032,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
 
 
 const formSectionStyle = StyleSheet.create({
-  heading: { fontSize: 13, fontWeight: '700', color: C.textSoft, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 14, marginBottom: 8 },
+  // Audit UI : titres de sections en violet charte 100% (retour user create event).
+  heading: { fontSize: 13, fontWeight: '700', color: C.primary, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 14, marginBottom: 8 },
+  // Sous-titres explicateurs en violet plus fonce que C.textSoft (rgba 30%
+  // = trop pale). #5E1AD6 deja utilise pour le texte "Will recherche...".
+  subheading: { fontSize: 12, color: '#5E1AD6', marginBottom: 8, lineHeight: 17 },
   input: { backgroundColor: '#faf9ff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: C.text, marginBottom: 8 },
 });
 
@@ -7791,7 +7795,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     <Text style={formSectionStyle.heading}>Type d'épreuve *</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                       {types.map(t => (
-                        <TouchableOpacity key={t} onPress={() => setEventType(t)} style={[s.typePill, eventType === t && s.typePillActive]}>
+                        <TouchableOpacity key={t} onPress={() => setEventType(t)} style={[s.typePill, eventType === t && { backgroundColor: colorForType(t) }]}>
                           <Text style={[s.typePillText, eventType === t && { color: '#fff' }]}>{displayEventType(t)}</Text>
                         </TouchableOpacity>
                       ))}
@@ -7906,7 +7910,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     <Text style={formSectionStyle.heading}>Contact</Text>
                     <TextInput placeholder="Site web (optionnel)" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
                     <TextInput placeholder="Email de contact *" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
-                    <Text style={{ color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
+                    <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -4, marginLeft: 4 }]}>
                       Cet email sera affiché publiquement sur la page de ton événement.
                     </Text>
                     {showErr[3] && !emailOk && <Text style={errStyle}>Email invalide</Text>}
@@ -7918,7 +7922,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                 <View style={{ width: sheetW }}>
                   <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
                     <Text style={formSectionStyle.heading}>Code PIN photographe</Text>
-                    <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 22, marginLeft: 4, lineHeight: 18 }}>
+                    <Text style={[formSectionStyle.subheading, { fontSize: 13, marginBottom: 22, marginLeft: 4, lineHeight: 18 }]}>
                       4 chiffres à transmettre à tes photographes le jour J. Ils l'utiliseront pour se connecter à ton event sur l'app Will.
                     </Text>
                     {!isEdit && (
