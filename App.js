@@ -7867,6 +7867,11 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                       style={formSectionStyle.input}
                     />
                     {showErr[2] && !/^\d{5}$/.test(postalCode) && <Text style={errStyle}>5 chiffres requis</Text>}
+                    {cityFetchFailed && !city && (
+                      <Text style={{ color: C.textSoft, fontSize: 12, marginBottom: 8, marginLeft: 4 }}>
+                        Recherche de villes indisponible. Saisis ta ville manuellement.
+                      </Text>
+                    )}
                     {citySuggestions.length > 0 && !city && (
                       <ScrollView
                         style={{ maxHeight: 140, marginBottom: 8, borderRadius: 12, backgroundColor: '#f5f3ff' }}
