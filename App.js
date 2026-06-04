@@ -9218,7 +9218,7 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                   <TouchableOpacity
                     activeOpacity={0.85}
-                    onPress={() => { onClose(); onRetake(); }}
+                    onPress={onRetake}
                     style={{ width: 56, height: 56 }}
                     hitSlop={6}
                   >
