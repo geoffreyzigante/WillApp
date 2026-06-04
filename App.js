@@ -927,7 +927,9 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, uploadStat
             <>
               <Text style={[s.selfieDoneTitle, { color: '#DC2626' }]}>Envoi du selfie échoué</Text>
               <TouchableOpacity onPress={onRetryUpload} hitSlop={6}>
-                <Text style={[s.selfieDoneSub, { color: '#DC2626', fontWeight: '700' }]}>Réessayer l'envoi</Text>
+                <Text style={[s.selfieDoneSub, { color: '#DC2626', fontWeight: '700' }]}>
+                  Réessayer l'envoi (ou supprimer pour reprendre)
+                </Text>
               </TouchableOpacity>
             </>
           ) : uploadState === 'uploading' ? (
@@ -9199,21 +9201,26 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                     <TouchableOpacity onPress={onRetake}>
                       <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Ajouter</Text>
                     </TouchableOpacity>
-                  ) : uploadState === 'failed' ? (
-                    // Audit B15 — Selfie local mais R2 non confirme.
-                    <TouchableOpacity onPress={onRetryUpload}>
-                      <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>
-                        Échec envoi · Réessayer
-                      </Text>
-                    </TouchableOpacity>
                   ) : (
-                    <View style={{ flexDirection: 'row', gap: 18 }}>
-                      <TouchableOpacity onPress={onView}>
-                        <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Voir</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => { onClose(); onDelete(); }}>
-                        <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Supprimer</Text>
-                      </TouchableOpacity>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <View style={{ flexDirection: 'row', gap: 18 }}>
+                        <TouchableOpacity onPress={onView}>
+                          <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Voir</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => { onClose(); onDelete(); }}>
+                          <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Supprimer</Text>
+                        </TouchableOpacity>
+                      </View>
+                      {uploadState === 'failed' && (
+                        // Audit B15 fix : Reessayer affiche EN PLUS de Voir/Supprimer
+                        // (pas a la place) pour ne pas bloquer le user dans le cycle
+                        // failed -> retry failed sans pouvoir reprendre un selfie propre.
+                        <TouchableOpacity onPress={onRetryUpload} style={{ marginTop: 6 }}>
+                          <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 12 }}>
+                            Échec envoi · Réessayer
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   )}
                 </View>
