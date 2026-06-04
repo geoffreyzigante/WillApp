@@ -9065,6 +9065,8 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
   const [postalCode, setPostalCode] = useState('');
   const [city, setCity] = useState('');
   const [citySuggestions, setCitySuggestions] = useState([]);
+  // Audit B12b — geo.api.gouv.fr KO/timeout/sans match -> fallback saisie manuelle.
+  const [cityFetchFailed, setCityFetchFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [changingPwd, setChangingPwd] = useState(false);
   const [currentPwd, setCurrentPwd] = useState('');
@@ -9120,19 +9122,35 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
     if (!editing) return;
     if (!/^\d{5}$/.test(postalCode)) {
       setCitySuggestions([]);
+      setCityFetchFailed(false);
       return;
     }
     let cancelled = false;
+    // Audit B12b — meme pattern que vitrine B12a : ctl.timedOut porte sur
+    // le controller pour distinguer abort par timeout d abort par cleanup
+    // useEffect, scope-local immune a la pollution si deux fetches en vol.
+    const ctl = new AbortController();
+    ctl.timedOut = false;
+    const timeoutId = setTimeout(() => { ctl.timedOut = true; ctl.abort(); }, 3000);
     (async () => {
       try {
-        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`);
-        if (!r.ok) return;
+        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`, { signal: ctl.signal });
+        clearTimeout(timeoutId);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
         if (cancelled) return;
-        setCitySuggestions((data || []).map(c => c.nom));
-      } catch {}
+        const cities = (data || []).map(c => c.nom);
+        setCitySuggestions(cities);
+        setCityFetchFailed(cities.length === 0);
+      } catch (e) {
+        clearTimeout(timeoutId);
+        if (cancelled) return;
+        if (e?.name === 'AbortError' && !ctl.timedOut) return; // cleanup useEffect
+        setCitySuggestions([]);
+        setCityFetchFailed(true);
+      }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; ctl.abort(); clearTimeout(timeoutId); };
   }, [postalCode, editing]);
 
   const save = async () => {
@@ -9278,6 +9296,22 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
+                )}
+                {cityFetchFailed && !city && (
+                  // Audit B12b — geo.api KO ou pas de match : saisie manuelle.
+                  <View style={{ marginBottom: 10 }}>
+                    <Text style={{ color: C.textSoft, fontSize: 12, marginBottom: 4 }}>
+                      Recherche de villes indisponible. Saisis ta ville manuellement.
+                    </Text>
+                    <TextInput
+                      placeholder="Ta ville"
+                      placeholderTextColor={C.textSoft}
+                      value={city}
+                      onChangeText={setCity}
+                      autoCapitalize="words"
+                      style={authStyles.input}
+                    />
+                  </View>
                 )}
                 {city ? (
                   <TouchableOpacity
@@ -10386,6 +10420,8 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
   const [postalCode, setPostalCode] = useState('');
   const [city, setCity] = useState('');
   const [citySuggestions, setCitySuggestions] = useState([]);
+  // Audit B12b — geo.api.gouv.fr KO/timeout/sans match -> fallback saisie manuelle.
+  const [cityFetchFailed, setCityFetchFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { sheetTranslate, handlePanHandlers } = useDismissibleSheet(visible, onClose);
@@ -10413,22 +10449,35 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
     if (mode !== 'register') return;
     if (!/^\d{5}$/.test(postalCode)) {
       setCitySuggestions([]);
+      setCityFetchFailed(false);
       return;
     }
     let cancelled = false;
+    // Audit B12b — meme pattern que B12a/ProfileMenuModal : ctl.timedOut.
+    const ctl = new AbortController();
+    ctl.timedOut = false;
+    const timeoutId = setTimeout(() => { ctl.timedOut = true; ctl.abort(); }, 3000);
     (async () => {
       try {
-        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`);
-        if (!r.ok) return;
+        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`, { signal: ctl.signal });
+        clearTimeout(timeoutId);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
         if (cancelled) return;
         const cities = (data || []).map(c => c.nom);
         setCitySuggestions(cities);
+        setCityFetchFailed(cities.length === 0);
         // Auto-sélectionne si 1 seule ville pour ce code postal
         if (cities.length === 1 && !city) setCity(cities[0]);
-      } catch {}
+      } catch (e) {
+        clearTimeout(timeoutId);
+        if (cancelled) return;
+        if (e?.name === 'AbortError' && !ctl.timedOut) return;
+        setCitySuggestions([]);
+        setCityFetchFailed(true);
+      }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; ctl.abort(); clearTimeout(timeoutId); };
   }, [postalCode, mode]);
 
   const submit = async () => {
@@ -10518,6 +10567,22 @@ function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' })
                             </TouchableOpacity>
                           ))}
                         </ScrollView>
+                      )}
+                      {cityFetchFailed && !city && (
+                        // Audit B12b — geo.api KO ou pas de match : saisie manuelle.
+                        <View style={{ marginBottom: 10 }}>
+                          <Text style={{ color: C.textSoft, fontSize: 12, marginBottom: 4 }}>
+                            Recherche de villes indisponible. Saisis ta ville manuellement.
+                          </Text>
+                          <TextInput
+                            placeholder="Ta ville"
+                            placeholderTextColor={C.textSoft}
+                            value={city}
+                            onChangeText={setCity}
+                            autoCapitalize="words"
+                            style={formSectionStyle.input}
+                          />
+                        </View>
                       )}
                       {city ? (
                         <TouchableOpacity
