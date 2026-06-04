@@ -397,11 +397,21 @@ const displayEventType = (t) => (t === 'Velo' ? 'Vélo' : t);
 // SelfieModal.save (1ere tentative declenchee par onSaved cote App) et depuis
 // le retry manuel. Throw explicite si HTTP non-OK pour que le caller bascule
 // le state d upload en 'failed'.
-async function uploadSelfieToR2(uri, userId, runnerApiFetch) {
+// Audit B14a followup — apiFetch direct (sans onAuthFailure) au lieu de
+// runnerApiFetch. Cas edge identifie : PUT /selfie/{userId} juste apres
+// signup avec un token frais peut renvoyer 401 le temps de la propagation
+// cote serveur. Si on declenche handle*AuthFailure sur ce 401, l utilisateur
+// est deloggue au milieu de l onboarding selfie -> boucle login/save/logout.
+// Le 401 propage comme erreur normale, runSelfieUpload catch et bascule en
+// 'failed' (etat visuel B15) sans logout.
+async function uploadSelfieToR2(uri, userId, runnerToken) {
   const blob = await (await fetch(uri)).blob();
-  const r = await runnerApiFetch(`/selfie/${userId}`, {
+  const r = await apiFetch(`/selfie/${userId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'image/jpeg' },
+    headers: {
+      'Content-Type': 'image/jpeg',
+      Authorization: `Bearer ${runnerToken}`,
+    },
     body: blob,
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -12452,14 +12462,15 @@ export default function App() {
   // SelfieBlock / lien ProfileMenu).
   const runSelfieUpload = useCallback(async (uri) => {
     if (!uri) return;
-    // Audit B15 fix : path correct = runnerSession.profile.userId (cf 6 autres
-    // occurrences L11789, L11821, L12027, L12176, L12249). runnerSession.userId
-    // (sans profile) est undefined, return silencieux qui bloquait le retry.
+    // path correct = runnerSession.profile.userId (cf 6 autres occurrences).
     const userId = runnerSession?.profile?.userId;
     const token = runnerSession?.token;
     if (!userId || !token) return;
     setSelfieUploadState('uploading');
     try {
+      // Audit B14a followup : token manuel (pas runnerApiFetch) pour ne pas
+      // declencher auto-logout sur 401 PUT (cas edge signup, cf commentaire
+      // uploadSelfieToR2).
       await uploadSelfieToR2(uri, userId, token);
       setSelfieUploadState('ok');
     } catch (e) {
