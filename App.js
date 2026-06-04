@@ -8536,6 +8536,11 @@ function SelfieModal({ visible, onClose, onSaved, userId, signupMode = false, on
 
   useEffect(() => {
     if (!visible) return;
+    // Reset uri local a louverture : le component SelfieModal reste monte
+    // entre les ouvertures (Modal cache != unmount). Sans ce reset, apres
+    // une suppression de selfie suivie de la reouverture du modal, le state
+    // uri local garde lancienne photo et la preview montre lancien selfie.
+    setUri(null);
     Secure.getItem(BIOMETRIC_CONSENT_KEY).then(v => {
       setConsentGiven(!!v);
       setConsentChecked(false);
