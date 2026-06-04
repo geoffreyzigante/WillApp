@@ -1955,18 +1955,9 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
         </View>
       ) : (
         <>
-          {anySearching && (
-            <View style={{
-              flexDirection: 'row', alignItems: 'center', gap: 8,
-              paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10,
-              backgroundColor: '#F5F3FF', borderRadius: 999, alignSelf: 'flex-start',
-            }}>
-              <SpinningLoader size={12} color="#7B2FFF" />
-              <Text style={{ color: '#5E1AD6', fontSize: 12, fontWeight: '600' }}>
-                Will continue de chercher…
-              </Text>
-            </View>
-          )}
+          {/* Pill "Will continue de chercher" retiree (retour user) : le polling
+              continue en arriere-plan, le pull-to-refresh permet a l utilisateur
+              de forcer un refresh quand il le souhaite. */}
           {/* Barre selection en flow normal (occupe une vraie hauteur)
               pour eviter le conflit visuel avec la SelfieBlock placee juste
               au-dessus quand le selfie est absent. */}
