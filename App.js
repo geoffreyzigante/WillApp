@@ -12419,6 +12419,20 @@ export default function App() {
     Alert.alert('Erreur', r?.error || 'Impossible de suivre cet event. Reessaie.');
   }, [follows, runnerSession?.token, runnerSession?.profile?.userId, runnerApiFetch]);
 
+  // Audit B14a followup — Wrapper STABLE pour toggleFollow, qui dispatche vers
+  // la derniere version via useRef. Les closures stockees dans pendingActionRef
+  // (cf requireAuth -> login -> setTimeout(action, 100)) capturent toggleFollow
+  // au moment de leur creation, AVANT le login. Avec un wrapper stable, la
+  // closure capture toggleFollowStable (ne change jamais) qui resout la latest
+  // version au moment de l appel post-login. Sans ca, le pendingAction
+  // invoquait l ancien toggleFollow ferme sur runnerSession=null et affichait
+  // "Connexion requise" alors que l utilisateur venait de se loguer.
+  const toggleFollowLatestRef = useRef(toggleFollow);
+  toggleFollowLatestRef.current = toggleFollow;
+  const toggleFollowStable = useCallback((code) => {
+    return toggleFollowLatestRef.current?.(code);
+  }, []);
+
   const photoFavoritesSet = useMemo(() => new Set(photoFavorites), [photoFavorites]);
   const togglePhotoFavorite = useCallback((photoId) => {
     // Garde-fou : seul un runner connecte peut likeer une photo. Le caller
@@ -12733,7 +12747,7 @@ export default function App() {
                     }}
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
                     isFollowing={follows.includes(eventInPanel.code)}
-                    onToggleFollow={() => requireAuth(() => toggleFollow(eventInPanel.code))}
+                    onToggleFollow={() => requireAuth(() => toggleFollowStable(eventInPanel.code))}
                     runnerFirstName={runnerSession?.profile?.firstName}
                     bibQuery={bibQuery}
                     bibResults={bibResults}
@@ -12780,7 +12794,7 @@ export default function App() {
                     else { setAuthInitialMode('login'); setAuthModalVisible(true); }
                   }}
                   follows={follows}
-                  onToggleFollow={(code) => requireAuth(() => toggleFollow(code))}
+                  onToggleFollow={(code) => requireAuth(() => toggleFollowStable(code))}
                   onRefresh={reloadEvents}
                   runnerFirstName={runnerSession?.profile?.firstName}
                   selfieSkipped={!!runnerSession && selfieSkipped && !selfieUri}
