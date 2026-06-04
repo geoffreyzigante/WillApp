@@ -18,6 +18,7 @@
       "infoPlist": {
         "CFBundleDisplayName": "Will",
         "NSCameraUsageDescription": "Will utilise la camera pour detecter les coureurs et prendre des photos automatiquement.",
+        "NSMicrophoneUsageDescription": "Will n'enregistre pas d'audio. Cette permission est requise par la librairie camera mais n'est pas utilisee par l'application.",
         "NSPhotoLibraryUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
         "NSPhotoLibraryAddUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
         "ITSAppUsesNonExemptEncryption": false
