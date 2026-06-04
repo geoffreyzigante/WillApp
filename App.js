@@ -6903,7 +6903,16 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     }
   };
 
-  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((contact || '').trim());
+  const emailPublicFormat = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((contact || '').trim());
+  const emailAdminFormat = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((contactAdmin || '').trim());
+  // UI-12 v2 (decision user 2026-06-04) : contact public = au moins UNE des
+  // 3 infos (email valide, telephone non vide, site web non vide). Aucune
+  // n est individuellement obligatoire.
+  const hasPublicContact = (contact?.trim() && emailPublicFormat) || !!phone?.trim() || !!website?.trim();
+  // emailOk : utilise dans l affichage erreur en bas du form (le seul cas
+  // ou on affiche "Email invalide" est si le user a tape un email public
+  // mal forme — un email vide est OK puisqu il y a tel/web possible).
+  const emailOk = !contact?.trim() || emailPublicFormat;
   const locationOk = /^\d{5}$/.test(postalCode) && !!city?.trim();
   const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
   const dateOk = !!eventDate && eventDate >= todayMidnight;
@@ -6913,10 +6922,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   const distancesOk = distances.length === 0 || distances.every(d => parseFloat(d.km) > 0);
   const step1Ok = !!name?.trim() && !!eventType && dateOk;
   const step2Ok = locationOk && distancesOk;
-  // En creation : step 3 valide uniquement le contact (email). Le PIN photographe
-  // a sa propre etape dediee (step 4). En edition : le PIN est gere dans le
-  // drill-down dedie, donc on n'exige rien ici.
-  const step3Ok = emailOk && (isEdit || !!code?.trim());
+  // Step 3 : contact admin valide ET au moins un contact public (email valide,
+  // telephone, ou site web). + code event en creation.
+  const step3Ok = emailAdminFormat && emailOk && hasPublicContact && (isEdit || !!code?.trim());
   // Step 4 (PIN photographe) : 4 chiffres exactement, obligatoire en creation.
   // En edition, le PIN s'edite via le drill-down — etape inexistante dans le wizard.
   const step4Ok = isEdit || isValidPin(password);
@@ -7954,15 +7962,17 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                       Email interne pour la validation de ton event et les messages d'admin Will. NON affiché publiquement.
                     </Text>
                     <TextInput placeholder="Email administratif *" placeholderTextColor={C.textSoft} value={contactAdmin} onChangeText={setContactAdmin} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
+                    {showErr[3] && !emailAdminFormat && <Text style={errStyle}>Email administratif invalide</Text>}
 
                     <Text style={[formSectionStyle.heading, { marginTop: 12 }]}>Contact public</Text>
                     <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -8, marginBottom: 8, marginLeft: 4, lineHeight: 16 }]}>
-                      Ces infos seront affichées sur la page publique de ton événement.
+                      Au moins UNE info parmi email, téléphone et site web. Affichées sur la page publique de ton événement.
                     </Text>
-                    <TextInput placeholder="Email de contact public *" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
-                    {showErr[3] && !emailOk && <Text style={errStyle}>Email invalide</Text>}
-                    <TextInput placeholder="Téléphone (optionnel)" placeholderTextColor={C.textSoft} value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
-                    <TextInput placeholder="Site web (optionnel)" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
+                    <TextInput placeholder="Email de contact public" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
+                    {showErr[3] && contact?.trim() && !emailPublicFormat && <Text style={errStyle}>Email public invalide</Text>}
+                    <TextInput placeholder="Téléphone" placeholderTextColor={C.textSoft} value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
+                    <TextInput placeholder="Site web" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
+                    {showErr[3] && !hasPublicContact && <Text style={errStyle}>Renseigne au moins une info de contact public.</Text>}
                   </ScrollView>
                 </View>
 
