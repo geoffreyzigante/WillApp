@@ -8584,7 +8584,9 @@ function SelfieModal({ visible, onClose, onSaved, userId, signupMode = false, on
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
+      {/* Backdrop frosted glass (alignement UX modaux auth photographe/orga). */}
+      <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+      <TouchableOpacity activeOpacity={1} style={[s.modalBackdrop, { backgroundColor: 'transparent' }]} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={[s.modalSheet, { paddingBottom: 32 }]} onPress={() => {}}>
           <TouchableOpacity onPress={onClose} hitSlop={20}>
             <View style={s.modalHandle} />
@@ -9233,7 +9235,9 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
+        {/* Backdrop frosted glass (alignement UX modaux auth photographe/orga). */}
+        <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+        <TouchableOpacity activeOpacity={1} style={[s.modalBackdrop, { backgroundColor: 'transparent' }]} onPress={onClose}>
           <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
             <TouchableOpacity onPress={onClose} hitSlop={20}>
               <View style={s.modalHandle} />
@@ -9542,7 +9546,9 @@ function OrganizerProfileMenuModal({ visible, onClose, organizerSession, organiz
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
+        {/* Backdrop frosted glass (alignement UX modaux auth photographe/orga). */}
+        <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+        <TouchableOpacity activeOpacity={1} style={[s.modalBackdrop, { backgroundColor: 'transparent' }]} onPress={onClose}>
           <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
             <TouchableOpacity onPress={onClose} hitSlop={20}>
               <View style={s.modalHandle} />
