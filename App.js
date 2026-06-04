@@ -397,17 +397,41 @@ const displayEventType = (t) => (t === 'Velo' ? 'Vélo' : t);
 // SelfieModal.save (1ere tentative declenchee par onSaved cote App) et depuis
 // le retry manuel. Throw explicite si HTTP non-OK pour que le caller bascule
 // le state d upload en 'failed'.
-async function uploadSelfieToR2(uri, userId, runnerToken) {
+async function uploadSelfieToR2(uri, userId, runnerApiFetch) {
   const blob = await (await fetch(uri)).blob();
-  const r = await fetch(`${API_URL}/selfie/${userId}`, {
+  const r = await runnerApiFetch(`/selfie/${userId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'image/jpeg',
-      Authorization: `Bearer ${runnerToken}`,
-    },
+    headers: { 'Content-Type': 'image/jpeg' },
     body: blob,
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);
+}
+
+// Audit B14 — Wrapper fetch qui :
+// 1) Detecte les erreurs reseau (fetch throw : TypeError "Network request
+//    failed" sur RN) et les normalise en Error("Connexion impossible.
+//    Verifie ton reseau.").
+// 2) Detecte les 401 (session expiree cote serveur) et appelle onAuthFailure
+//    (caller fournit l Alert + logout adapte a la session).
+//
+// Retourne la Response standard si OK. Le caller gere r.ok / r.json comme
+// avant — pas de refacto des call-sites au-dela de l URL/headers.
+//
+// Pour les call-sites SANS session (ex /auth/submit-event anonyme), appeler
+// apiFetch directement sans onAuthFailure : normalisation reseau seule.
+async function apiFetch(path, options = {}, { onAuthFailure } = {}) {
+  let r;
+  try {
+    r = await fetch(`${API_URL}${path}`, options);
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e;
+    throw new Error('Connexion impossible. Vérifie ton réseau.');
+  }
+  if (r.status === 401 && onAuthFailure) {
+    onAuthFailure();
+    throw new Error('Session expirée');
+  }
+  return r;
 }
 
 // Couleur pastille selfie derivee de l etat d upload. Hex alignes sur les
@@ -828,10 +852,11 @@ const api = {
 
   // RGPD biométrie — Suivre un event = geste de consentement explicite.
   // 400 'selfie_required' si pas de selfie deposé → l'UI ouvre SelfieModal puis relance.
-  async follow(eventCode, token) {
-    const r = await fetch(`${API_URL}/runner/follow/${encodeURIComponent(eventCode)}`, {
+  // Audit B14 : signature (eventCode, runnerApiFetch) - le fetcher injecte le Bearer.
+  async follow(eventCode, runnerApiFetch) {
+    const r = await runnerApiFetch(`/runner/follow/${encodeURIComponent(eventCode)}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ consent: true }),
     });
     if (r.ok) return r.json();
@@ -839,10 +864,9 @@ const api = {
     try { error = (await r.json())?.error || ''; } catch {}
     return { status: r.status, error };
   },
-  async unfollow(eventCode, token) {
-    const r = await fetch(`${API_URL}/runner/follow/${encodeURIComponent(eventCode)}`, {
+  async unfollow(eventCode, runnerApiFetch) {
+    const r = await runnerApiFetch(`/runner/follow/${encodeURIComponent(eventCode)}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
     });
     if (r.ok) return r.json();
     let error = '';
@@ -850,10 +874,9 @@ const api = {
     return { status: r.status, error };
   },
   // Wipe biometrique chirurgical : supprime selfie + empreintes sans toucher au compte.
-  async deleteFaceData(token) {
-    const r = await fetch(`${API_URL}/runner/face-data`, {
+  async deleteFaceData(runnerApiFetch) {
+    const r = await runnerApiFetch(`/runner/face-data`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
     });
     if (r.ok) return r.json();
     let error = '';
@@ -1483,7 +1506,7 @@ function PhotosUnauthScreen({ onSignup, onLogin }) {
   );
 }
 
-function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerToken, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload }) {
+function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerApiFetch, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload }) {
   // Cle de cache locale photos, scopee par userId. Sans le scope :
   //  - user B sur le meme device verrait les photos de A apres logout/login (RGPD)
   //  - on devait clear le cache au logout -> rechargement reseau a la reconnexion
@@ -1602,11 +1625,9 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   // follows[] (UI favoris). Permet d afficher les photos matchees apres
   // un unfollow.
   const refreshKnownEvents = useCallback(async () => {
-    if (!runnerToken) return [];
+    if (!runnerApiFetch) return [];
     try {
-      const r = await fetch(`${API_URL}/runner/known-events`, {
-        headers: { Authorization: `Bearer ${runnerToken}` },
-      });
+      const r = await runnerApiFetch(`/runner/known-events`);
       if (!r.ok) return [];
       const data = await r.json();
       const list = Array.isArray(data?.events) ? data.events : [];
@@ -1616,7 +1637,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
       }
       return list;
     } catch { return []; }
-  }, [runnerToken, knownEventsCacheKey]);
+  }, [runnerApiFetch, knownEventsCacheKey]);
 
   // Au mount + sur token change : fetch knownEvents 1x.
   useEffect(() => { refreshKnownEvents(); }, [refreshKnownEvents]);
@@ -1626,7 +1647,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   // follow (< 90s) avec 0 photos -> polling.
   const refreshAll = useCallback(async () => {
     const queryList = eventsToQuery;
-    if (queryList.length === 0 || !runnerToken) {
+    if (queryList.length === 0 || !runnerApiFetch) {
       setPhotos([]);
       setAnySearching(false);
       setLoading(false);
@@ -1639,9 +1660,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     }
     const results = await Promise.all(queryList.map(async (code) => {
       try {
-        const r = await fetch(`${API_URL}/personal-gallery/${encodeURIComponent(code)}`, {
-          headers: { Authorization: `Bearer ${runnerToken}` },
-        });
+        const r = await runnerApiFetch(`/personal-gallery/${encodeURIComponent(code)}`);
         if (!r.ok) return { code, photos: [] };
         const data = await r.json();
         return { code, photos: Array.isArray(data.photos) ? data.photos : [] };
@@ -1681,7 +1700,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     // de photos).
     AsyncStorage.setItem(photosCacheKey, JSON.stringify(merged)).catch(() => {});
     return merged;
-  }, [eventsToQuery, runnerToken, eventTintMap, photosCacheKey]);
+  }, [eventsToQuery, runnerApiFetch, eventTintMap, photosCacheKey]);
 
   // E4 — baseline last_seen au premier load reussi : on aligne le marqueur
   // sur le max actuel pour que le 1er pull-to-refresh apres cold start
@@ -8458,7 +8477,7 @@ function PhaseDResetModal({ visible, onClose }) {
   );
 }
 
-function SelfieModal({ visible, onClose, onSaved, userId, runnerToken, signupMode = false, onSkip }) {
+function SelfieModal({ visible, onClose, onSaved, userId, signupMode = false, onSkip }) {
   const [uri, setUri] = useState(null);
   const [busy, setBusy] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -9058,7 +9077,7 @@ function SearchModal({ visible, events, onClose, onPick }) {
 }
 
 // ---------- ROOT ----------
-function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload }) {
+function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload }) {
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -9083,9 +9102,9 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
     if (newPwd.length < 10) { setPwdError('Mot de passe : 10 caractères minimum.'); return; }
     setPwdBusy(true);
     try {
-      const r = await fetch(`${API_URL}/runner/change-password`, {
+      const r = await runnerApiFetch(`/runner/change-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${runnerSession.token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ current_password: currentPwd, new_password: newPwd }),
       });
       const data = await r.json().catch(() => ({}));
@@ -11947,9 +11966,10 @@ export default function App() {
     if (hasLocalSelfie) setSelfieUploadState('uploading');
 
     let cancelled = false;
-    fetch(`${API_URL}/runner/selfie`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    // Audit B14 — migration via runnerApiFetch (token injecte). runnerApiFetch
+    // est dans les deps, le ref guard selfieConfirmDoneRef empeche la boucle
+    // meme si le wrapper change pour autre raison que token.
+    runnerApiFetch(`/runner/selfie`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (cancelled) return;
@@ -11973,7 +11993,7 @@ export default function App() {
         if (hasLocalSelfie) setSelfieUploadState('failed');
       });
     return () => { cancelled = true; };
-  }, [runnerSession?.token]);
+  }, [runnerSession?.token, runnerApiFetch]);
 
   // E2 — register silencieux du token push au boot si l utilisateur a
   // deja accorde la permission (ex. reinstall, nouveau token Expo apres
@@ -12073,6 +12093,98 @@ export default function App() {
     setBottomTab('home');
   }, [organizerSession]);
 
+  // Audit B14 — Factor logoutPhotographer pour qu il puisse etre appele depuis
+  // handlePhotographerAuthFailure (parite avec logoutRunner / logoutOrganizer).
+  // Le rendu PhotographerScreen.onLogout l utilise aussi.
+  const logoutPhotographer = useCallback(async () => {
+    try { await AsyncStorage.multiRemove([UPLOAD_QUEUE_KEY, LAST_CAPTURE_KEY]); } catch {}
+    try { const d = pendingDir(); if (d.exists) d.delete(); } catch {}
+    setSession(null);
+    setInPhotographerMode(false);
+    Secure.removeItem('@will_photographer_session').catch(() => {});
+  }, []);
+
+  // Audit B14 — UN ref de garde-fou PAR session (Alert "session expiree" n est
+  // affiche qu une fois pour les 401 paralleles d une meme session). Reset au
+  // login isole par dep dans 3 useEffect : un flag partage serait reset par
+  // n importe quel token valide, neutralisant le garde-fou (interference
+  // croisee entre sessions coexistantes).
+  const runnerAuthHandledRef = useRef(false);
+  const organizerAuthHandledRef = useRef(false);
+  const photographerAuthHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (runnerSession?.token) runnerAuthHandledRef.current = false;
+  }, [runnerSession?.token]);
+
+  useEffect(() => {
+    if (organizerSession?.token) organizerAuthHandledRef.current = false;
+  }, [organizerSession?.token]);
+
+  useEffect(() => {
+    if (session?.token) photographerAuthHandledRef.current = false;
+  }, [session?.token]);
+
+  const handleRunnerAuthFailure = useCallback(() => {
+    if (runnerAuthHandledRef.current) return;
+    runnerAuthHandledRef.current = true;
+    Alert.alert(
+      'Session expirée',
+      'Reconnecte-toi pour continuer.',
+      [{ text: 'OK', onPress: () => logoutRunner() }]
+    );
+  }, [logoutRunner]);
+
+  const handleOrganizerAuthFailure = useCallback(() => {
+    if (organizerAuthHandledRef.current) return;
+    organizerAuthHandledRef.current = true;
+    Alert.alert(
+      'Session expirée',
+      'Reconnecte-toi pour continuer.',
+      [{ text: 'OK', onPress: () => logoutOrganizer() }]
+    );
+  }, [logoutOrganizer]);
+
+  const handlePhotographerAuthFailure = useCallback(() => {
+    if (photographerAuthHandledRef.current) return;
+    photographerAuthHandledRef.current = true;
+    Alert.alert(
+      'Session expirée',
+      'Reconnecte-toi pour continuer.',
+      [{ text: 'OK', onPress: () => logoutPhotographer() }]
+    );
+  }, [logoutPhotographer]);
+
+  // Wrappers session : token injecte automatiquement via closure (pas de
+  // redondance signature/headers). Le caller peut override Authorization
+  // s il en a besoin (cas rare type refresh).
+  const runnerApiFetch = useCallback((path, options = {}) => {
+    const token = runnerSession?.token;
+    const headers = {
+      ...(options.headers || {}),
+      ...(token && !options.headers?.Authorization ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    return apiFetch(path, { ...options, headers }, { onAuthFailure: handleRunnerAuthFailure });
+  }, [runnerSession?.token, handleRunnerAuthFailure]);
+
+  const organizerApiFetch = useCallback((path, options = {}) => {
+    const token = organizerSession?.token;
+    const headers = {
+      ...(options.headers || {}),
+      ...(token && !options.headers?.Authorization ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    return apiFetch(path, { ...options, headers }, { onAuthFailure: handleOrganizerAuthFailure });
+  }, [organizerSession?.token, handleOrganizerAuthFailure]);
+
+  const photographerApiFetch = useCallback((path, options = {}) => {
+    const token = session?.token;
+    const headers = {
+      ...(options.headers || {}),
+      ...(token && !options.headers?.Authorization ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    return apiFetch(path, { ...options, headers }, { onAuthFailure: handlePhotographerAuthFailure });
+  }, [session?.token, handlePhotographerAuthFailure]);
+
   // RGPD chirurgical : supprime selfie + empreintes biometriques sur TOUS
   // les events suivis, sans toucher au compte. Le coureur peut redeposer
   // un selfie et re-suivre des events ensuite. Cf DELETE /runner/face-data.
@@ -12084,7 +12196,7 @@ export default function App() {
       [
         { text: 'Annuler', style: 'cancel' },
         { text: 'Supprimer', style: 'destructive', onPress: async () => {
-          const r = await api.deleteFaceData(runnerSession.token);
+          const r = await api.deleteFaceData(runnerApiFetch);
           if (r?.success) {
             // Cleanup local : selfie, follows, follow_started timestamps
             setSelfieUri(null);
@@ -12123,10 +12235,7 @@ export default function App() {
         { text: 'Annuler', style: 'cancel' },
         { text: 'Supprimer', style: 'destructive', onPress: async () => {
           try {
-            const r = await fetch(`${API_URL}/runner/account`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${runnerSession.token}` },
-            });
+            const r = await runnerApiFetch(`/runner/account`, { method: 'DELETE' });
             if (!r.ok) {
               const data = await r.json().catch(() => ({}));
               Alert.alert('Erreur', data.error || 'Impossible de supprimer le compte. Réessaie plus tard.');
@@ -12182,12 +12291,9 @@ export default function App() {
   const updateRunnerProfile = useCallback(async (changes) => {
     if (!runnerSession?.token) return;
     try {
-      const r = await fetch(`${API_URL}/runner/profile`, {
+      const r = await runnerApiFetch(`/runner/profile`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${runnerSession.token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(changes),
       });
       const data = await r.json();
@@ -12254,7 +12360,7 @@ export default function App() {
         return next;
       });
       AsyncStorage.removeItem(`@will_follow_started_${eventCode}`).catch(() => {});
-      const r = await api.unfollow(eventCode, token);
+      const r = await api.unfollow(eventCode, runnerApiFetch);
       if (!r?.ok && r?.note !== 'already_unfollowed') {
         // Rollback
         setFollows(prev => {
@@ -12277,7 +12383,7 @@ export default function App() {
       return next;
     });
     AsyncStorage.setItem(`@will_follow_started_${eventCode}`, String(Date.now())).catch(() => {});
-    const r = await api.follow(eventCode, token);
+    const r = await api.follow(eventCode, runnerApiFetch);
     if (r?.ok || r?.note === 'already_following') {
       // E2 — premier follow du coureur = bon moment pour demander la
       // permission notif. Sinon (deja des follows), on tente un register
@@ -12311,7 +12417,7 @@ export default function App() {
     // Autre erreur
     rollbackFollow();
     Alert.alert('Erreur', r?.error || 'Impossible de suivre cet event. Reessaie.');
-  }, [follows, runnerSession?.token, runnerSession?.profile?.userId]);
+  }, [follows, runnerSession?.token, runnerSession?.profile?.userId, runnerApiFetch]);
 
   const photoFavoritesSet = useMemo(() => new Set(photoFavorites), [photoFavorites]);
   const togglePhotoFavorite = useCallback((photoId) => {
@@ -12359,13 +12465,9 @@ export default function App() {
         // 1. Supprime le selfie cote serveur en premier. Sinon le useEffect
         //    refetch (GET /runner/selfie) restaurerait la pastille verte
         //    instantanement apres le clear local.
-        const token = runnerSession?.token;
-        if (token) {
+        if (runnerSession?.token) {
           try {
-            await fetch(`${API_URL}/runner/selfie`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
-            });
+            await runnerApiFetch(`/runner/selfie`, { method: 'DELETE' });
           } catch (e) { console.warn('delete selfie', e?.message); }
         }
         // 2. Clear local. RGPD : revoque aussi le consentement biometrique.
@@ -12593,13 +12695,9 @@ export default function App() {
         // Vraie déconnexion : efface la session SecureStore + queue locale.
         // Au prochain login (meme event ou autre), la galerie repart vide :
         // les photos uploadees restent consultables via le dashboard orga.
-        onLogout={async () => {
-          try { await AsyncStorage.multiRemove([UPLOAD_QUEUE_KEY, LAST_CAPTURE_KEY]); } catch {}
-          try { const d = pendingDir(); if (d.exists) d.delete(); } catch {}
-          setSession(null);
-          setInPhotographerMode(false);
-          Secure.removeItem('@will_photographer_session').catch(() => {});
-        }}
+        // Audit B14 : factor en logoutPhotographer (reuse aussi pour
+        // handlePhotographerAuthFailure).
+        onLogout={logoutPhotographer}
       />
     </View>
   ) : null;
@@ -12699,7 +12797,7 @@ export default function App() {
                     onDeleteSelfie={deleteSelfie}
                     onOpenProfile={() => setProfileMenu(true)}
                     follows={follows}
-                    runnerToken={runnerSession?.token}
+                    runnerApiFetch={runnerApiFetch}
                     runnerUserId={runnerSession?.profile?.userId}
                     onFindEvent={() => setBottomTab('home')}
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
@@ -12950,7 +13048,6 @@ export default function App() {
           }
         }}
         userId={userId}
-        runnerToken={runnerSession?.token}
         signupMode={signupSelfieStep}
         onSkip={() => {
           AsyncStorage.setItem('@will_selfie_skipped', '1').catch(() => {});
@@ -13026,6 +13123,7 @@ export default function App() {
         }}
         onDelete={deleteSelfie}
         runnerSession={runnerSession}
+        runnerApiFetch={runnerApiFetch}
         onLogout={logoutRunner}
         onUpdateProfile={updateRunnerProfile}
         onDeleteAccount={() => { setProfileMenu(false); deleteRunnerAccount(); }}
