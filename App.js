@@ -6682,6 +6682,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   const [postalCode, setPostalCode] = useState('');
   const [city, setCity] = useState('');
   const [citySuggestions, setCitySuggestions] = useState([]);
+  // Audit B12b / UI-10 — geo.api.gouv.fr KO/timeout/sans match -> fallback saisie manuelle.
+  const [cityFetchFailed, setCityFetchFailed] = useState(false);
   const [eventType, setEventType] = useState('');
   const [website, setWebsite] = useState('');
   const [contact, setContact] = useState('');
@@ -6798,25 +6800,37 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     setCode(slug);
   }, [name, isEdit, userEditedCode]);
 
-  // Suggestions de villes selon code postal
+  // Suggestions de villes selon code postal (pattern B12b - UI-10)
   useEffect(() => {
     if (!/^\d{5}$/.test(postalCode)) {
       setCitySuggestions([]);
+      setCityFetchFailed(false);
       return;
     }
     let cancelled = false;
+    const ctl = new AbortController();
+    ctl.timedOut = false;
+    const timeoutId = setTimeout(() => { ctl.timedOut = true; ctl.abort(); }, 3000);
     (async () => {
       try {
-        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`);
-        if (!r.ok) return;
+        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`, { signal: ctl.signal });
+        clearTimeout(timeoutId);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
         if (cancelled) return;
         const cities = (data || []).map(c => c.nom);
         setCitySuggestions(cities);
+        setCityFetchFailed(cities.length === 0);
         if (cities.length === 1 && !city) setCity(cities[0]);
-      } catch {}
+      } catch (e) {
+        clearTimeout(timeoutId);
+        if (cancelled) return;
+        if (e?.name === 'AbortError' && !ctl.timedOut) return; // cleanup useEffect, pas vraie erreur
+        setCitySuggestions([]);
+        setCityFetchFailed(true);
+      }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; ctl.abort(); clearTimeout(timeoutId); };
   }, [postalCode]);
 
   const addDistance = () => setDistances(d => [...d, { km: '', time: '', elevation: '' }]);
@@ -7571,6 +7585,11 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                   />
                 </View>
                 <Text style={sectionHeaderStyle}>VILLE</Text>
+                {cityFetchFailed && (
+                  <Text style={{ color: C.textSoft, fontSize: 12, marginHorizontal: 32, marginBottom: 6 }}>
+                    Recherche de villes indisponible. Saisis ta ville manuellement.
+                  </Text>
+                )}
                 <View style={sectionCardStyle}>
                   <TextInput
                     value={city}
