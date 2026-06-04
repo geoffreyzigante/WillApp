@@ -6664,7 +6664,7 @@ function PinDisplay({ pin, masked = true }) {
   );
 }
 
-function CreateEventModal({ visible, onClose, onCreated, organizerSession, editEvent }) {
+function CreateEventModal({ visible, onClose, onCreated, organizerSession, organizerApiFetch, editEvent }) {
   const isEdit = !!editEvent;
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
@@ -6852,12 +6852,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
       try {
         const res = await fetch(localUri);
         const blob = await res.blob();
-        const up = await fetch(`${API_URL}/organizer/cover/${editEvent.code}`, {
+        const up = await organizerApiFetch(`/organizer/cover/${editEvent.code}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'image/jpeg',
-            Authorization: `Bearer ${organizerSession.token}`,
-          },
+          headers: { 'Content-Type': 'image/jpeg' },
           body: blob,
         });
         const data = await up.json();
@@ -6945,7 +6942,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
         payload.code = code;
         payload.password = password;
       }
-      const r = await fetch(`${API_URL}${url}`, {
+      // Audit B14b — O2 : /auth/submit-event peut etre appele sans organizerSession
+      // (cf handlePickRole role='create'). apiFetch direct sans onAuthFailure,
+      // Bearer conditionnel. Le 401 propage comme erreur HTTP normale.
+      const r = await apiFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -6968,11 +6968,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
             const res = await fetch(pendingCoverLocal);
             const blob = await res.blob();
             console.log('[create-event] cover blob ready', { size: blob?.size, type: blob?.type });
-            const up = await fetch(`${API_URL}/organizer/cover/${slug}`, {
+            // Audit B14b — O3 : post-submit cover upload. Si le submit etait
+            // anonyme (cf O2), organizerSession peut etre null. apiFetch direct
+            // + Bearer conditionnel.
+            const up = await apiFetch(`/organizer/cover/${slug}`, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'image/jpeg',
-                Authorization: `Bearer ${organizerSession.token}`,
+                ...(organizerSession?.token ? { Authorization: `Bearer ${organizerSession.token}` } : {}),
               },
               body: blob,
             });
@@ -7207,12 +7210,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, editE
       if (!editEvent?.code) return false;
       setPartialBusy(true);
       try {
-        const r = await fetch(`${API_URL}/organizer/event/${editEvent.code}`, {
+        const r = await organizerApiFetch(`/organizer/event/${editEvent.code}`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(organizerSession?.token ? { Authorization: `Bearer ${organizerSession.token}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(patch),
         });
         const data = await r.json().catch(() => ({}));
@@ -9447,7 +9447,7 @@ function InfoRow({ label, value, last }) {
   );
 }
 
-function OrganizerProfileMenuModal({ visible, onClose, organizerSession, onLogout, onUpdate, onDeleteAccount }) {
+function OrganizerProfileMenuModal({ visible, onClose, organizerSession, organizerApiFetch, onLogout, onUpdate, onDeleteAccount }) {
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -9466,9 +9466,9 @@ function OrganizerProfileMenuModal({ visible, onClose, organizerSession, onLogou
     if (newPwd.length < 10) { setPwdError('Mot de passe : 10 caractères minimum.'); return; }
     setPwdBusy(true);
     try {
-      const r = await fetch(`${API_URL}/organizer/change-password`, {
+      const r = await organizerApiFetch(`/organizer/change-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${organizerSession.token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
       });
       const data = await r.json();
@@ -10774,7 +10774,7 @@ function AuthOrganizerModal({ visible, onClose, onSuccess }) {
 // Détail événement (vue orga). Reproduit la card expanded du dashboard /orga :
 // bandeau coloré + statut + actions + identifiants + facturation + lien delete.
 // ─────────────────────────────────────────────────────────────────────────────
-function OrganizerEventDetailScreen({ session, event, onClose, onEdit, onOpenPhotos, onDeleted }) {
+function OrganizerEventDetailScreen({ session, organizerApiFetch, event, onClose, onEdit, onOpenPhotos, onDeleted }) {
   const tint = colorForType(event.event_type);
   const [revealPwd, setRevealPwd] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -10824,9 +10824,8 @@ function OrganizerEventDetailScreen({ session, event, onClose, onEdit, onOpenPho
           onPress: async () => {
             setDeleting(true);
             try {
-              const r = await fetch(`${API_URL}/organizer/event/${event.code}`, {
+              const r = await organizerApiFetch(`/organizer/event/${event.code}`, {
                 method: 'DELETE',
-                headers: { Authorization: `Bearer ${session.token}` },
               });
               if (!r.ok) {
                 const data = await r.json().catch(() => ({}));
@@ -10957,7 +10956,7 @@ function OrganizerEventDetailScreen({ session, event, onClose, onEdit, onOpenPho
   );
 }
 
-function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
+function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose, onOpenPhoto }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -10975,9 +10974,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
     setLoading(true);
     setVisibleCount(20);
     try {
-      const r = await fetch(`${API_URL}/organizer/event-photos/${event.code}`, {
-        headers: { Authorization: `Bearer ${session.token}` },
-      });
+      const r = await organizerApiFetch(`/organizer/event-photos/${event.code}`);
       const data = r.ok ? await r.json() : { before_event: [], during_event: [], hidden_count: 0 };
       // Le worker separe les photos en before_event (setup/test avant l'heure
       // de depart) et during_event (course). Cote mobile on les fusionne et
@@ -11083,12 +11080,9 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
           onPress: async () => {
             setDeleting(true);
             try {
-              const r = await fetch(`${API_URL}/organizer/delete-photos`, {
+              const r = await organizerApiFetch(`/organizer/delete-photos`, {
                 method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${session.token}`,
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ keys: Array.from(selectedKeys) }),
               });
               if (r.ok) {
@@ -11113,12 +11107,9 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   const deleteFromViewer = async (keys) => {
     if (!keys || keys.length === 0) return;
     try {
-      const r = await fetch(`${API_URL}/organizer/delete-photos`, {
+      const r = await organizerApiFetch(`/organizer/delete-photos`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keys }),
       });
       if (r.ok) {
@@ -11248,12 +11239,9 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
     if (busyKey) return false;
     setBusyKey(photoKey);
     try {
-      const r = await fetch(`${API_URL}/organizer/photo-visibility`, {
+      const r = await organizerApiFetch(`/organizer/photo-visibility`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: photoKey, visible: currentlyHidden }), // currentlyHidden=true -> visible=true (publier)
       });
       if (!r.ok) {
@@ -11418,7 +11406,7 @@ function OrganizerEventPhotosScreen({ session, event, onClose, onOpenPhoto }) {
   );
 }
 
-function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos, onOpenEventDetail, onOpenOrgRole, refreshKey = 0 }) {
+function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos, onOpenEventDetail, onOpenOrgRole, refreshKey = 0 }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(null); // slug en cours de paiement
@@ -11426,9 +11414,7 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
   const reload = async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API_URL}/organizer/my-events`, {
-        headers: { Authorization: `Bearer ${session.token}` },
-      });
+      const r = await organizerApiFetch(`/organizer/my-events`);
       const data = await r.json();
       setEvents(Array.isArray(data) ? data : []);
     } catch {} finally { setLoading(false); }
@@ -11439,9 +11425,8 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
   const pay = async (slug) => {
     setPaying(slug);
     try {
-      const r = await fetch(`${API_URL}/organizer/pay-event/${slug}`, {
+      const r = await organizerApiFetch(`/organizer/pay-event/${slug}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session.token}` },
       });
       if (r.ok) {
         Alert.alert('Paiement réussi', 'Ton événement est maintenant en ligne !');
@@ -11464,9 +11449,8 @@ function OrganizerDashboardScreen({ session, onLogout, onCreateEvent, onEditEven
           style: 'destructive',
           onPress: async () => {
             try {
-              const r = await fetch(`${API_URL}/organizer/event/${e.code}`, {
+              const r = await organizerApiFetch(`/organizer/event/${e.code}`, {
                 method: 'DELETE',
-                headers: { Authorization: `Bearer ${session.token}` },
               });
               if (r.ok) reload();
               else {
@@ -12269,10 +12253,7 @@ export default function App() {
         { text: 'Annuler', style: 'cancel' },
         { text: 'Supprimer', style: 'destructive', onPress: async () => {
           try {
-            const r = await fetch(`${API_URL}/organizer/account`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${organizerSession.token}` },
-            });
+            const r = await organizerApiFetch(`/organizer/account`, { method: 'DELETE' });
             if (!r.ok) {
               const data = await r.json().catch(() => ({}));
               Alert.alert('Erreur', data.error || 'Impossible de supprimer le compte. Réessaie plus tard.');
@@ -12314,12 +12295,9 @@ export default function App() {
   const updateOrganizerProfile = useCallback(async (changes) => {
     if (!organizerSession?.token) return;
     try {
-      const r = await fetch(`${API_URL}/organizer/profile`, {
+      const r = await organizerApiFetch(`/organizer/profile`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${organizerSession.token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(changes),
       });
       const data = await r.json();
@@ -12836,6 +12814,7 @@ export default function App() {
                 <View style={{ width: SCREEN_W }}>
                   <OrganizerDashboardScreen
                     session={organizerSession}
+                    organizerApiFetch={organizerApiFetch}
                     onLogout={logoutOrganizer}
                     onCreateEvent={() => setCreateEventModal(true)}
                     onEditEvent={(e) => setEditEventTarget(e)}
@@ -12858,6 +12837,7 @@ export default function App() {
       {organizerEventPhotosTarget && bottomTab === 'events' && organizerSession && (
         <OrganizerEventPhotosScreen
           session={organizerSession}
+          organizerApiFetch={organizerApiFetch}
           event={organizerEventPhotosTarget}
           onClose={() => setOrganizerEventPhotosTarget(null)}
           onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...opts })}
@@ -12867,6 +12847,7 @@ export default function App() {
       {organizerEventDetailTarget && bottomTab === 'events' && organizerSession && (
         <OrganizerEventDetailScreen
           session={organizerSession}
+          organizerApiFetch={organizerApiFetch}
           event={organizerEventDetailTarget}
           onClose={() => setOrganizerEventDetailTarget(null)}
           onEdit={() => {
@@ -13114,6 +13095,7 @@ export default function App() {
         visible={createEventModal}
         onClose={() => setCreateEventModal(false)}
         organizerSession={organizerSession}
+        organizerApiFetch={organizerApiFetch}
         onCreated={() => setOrgRefreshKey(k => k + 1)}
       />
 
@@ -13121,6 +13103,7 @@ export default function App() {
         visible={!!editEventTarget}
         onClose={() => setEditEventTarget(null)}
         organizerSession={organizerSession}
+        organizerApiFetch={organizerApiFetch}
         editEvent={editEventTarget}
         onCreated={() => setOrgRefreshKey(k => k + 1)}
       />
@@ -13207,6 +13190,7 @@ export default function App() {
         visible={organizerProfileMenu}
         onClose={() => setOrganizerProfileMenu(false)}
         organizerSession={organizerSession}
+        organizerApiFetch={organizerApiFetch}
         onLogout={logoutOrganizer}
         onUpdate={updateOrganizerProfile}
         onDeleteAccount={() => { setOrganizerProfileMenu(false); deleteOrganizerAccount(); }}
