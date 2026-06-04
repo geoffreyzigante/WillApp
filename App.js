@@ -9147,7 +9147,7 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                   <Text style={profileCardStyles.label}>Selfie</Text>
                   <View style={{ flex: 1 }} />
                   {!selfieUri ? (
-                    <TouchableOpacity onPress={() => { onClose(); onRetake(); }}>
+                    <TouchableOpacity onPress={onRetake}>
                       <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Ajouter</Text>
                     </TouchableOpacity>
                   ) : (
@@ -12819,8 +12819,18 @@ export default function App() {
         visible={profileMenu}
         onClose={() => setProfileMenu(false)}
         selfieUri={selfieUri}
-        onView={() => { setProfileMenu(false); setSelfieViewer(true); }}
-        onRetake={() => requireAuth(() => setSelfieModal(true))}
+        // Audit UI-04 : iOS modal stacking interdit d ouvrir un <Modal transparent>
+        // au-dessus de ProfileMenuModal en train de se fermer (second invisible,
+        // cf memory feedback_rn_modal_stacking.md). setTimeout 200ms aligne sur
+        // le pattern L12756 (toggleFollow defere apres SelfieModal close).
+        onView={() => {
+          setProfileMenu(false);
+          setTimeout(() => setSelfieViewer(true), 200);
+        }}
+        onRetake={() => {
+          setProfileMenu(false);
+          setTimeout(() => requireAuth(() => setSelfieModal(true)), 200);
+        }}
         onDelete={deleteSelfie}
         runnerSession={runnerSession}
         onLogout={logoutRunner}
