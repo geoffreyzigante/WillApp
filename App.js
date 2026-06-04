@@ -393,6 +393,31 @@ const colorForType = (eventType) => {
 // Label affiché pour event_type ; la valeur stockée reste sans accent ("Velo").
 const displayEventType = (t) => (t === 'Velo' ? 'Vélo' : t);
 
+// Audit B15 — Upload selfie sur R2, factorise pour permettre l usage depuis
+// SelfieModal.save (1ere tentative declenchee par onSaved cote App) et depuis
+// le retry manuel. Throw explicite si HTTP non-OK pour que le caller bascule
+// le state d upload en 'failed'.
+async function uploadSelfieToR2(uri, userId, runnerToken) {
+  const blob = await (await fetch(uri)).blob();
+  const r = await fetch(`${API_URL}/selfie/${userId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'image/jpeg',
+      Authorization: `Bearer ${runnerToken}`,
+    },
+    body: blob,
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+}
+
+// Couleur pastille selfie derivee de l etat d upload. Hex alignes sur les
+// occurrences existantes du code (cf UI-09 backlog pour tokeniser plus tard).
+function selfieDotColor(state) {
+  if (state === 'failed') return '#DC2626';
+  if (state === 'ok') return '#10B981';
+  return '#F59E0B'; // 'uploading' ou 'idle' avec selfieUri local non confirme
+}
+
 // ---------- ICONS (custom SVG) ----------
 const Icon = {
   User: ({ size = 22, color = '#FFFFFF' }) => (
@@ -888,7 +913,7 @@ async function ensurePushRegistered(runnerToken, { ask = false } = {}) {
 
 // ---------- SCREENS ----------
 
-function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
+function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, uploadState = 'idle', onRetryUpload }) {
   if (selfieUri) {
     return (
       <View style={s.selfieDoneBanner}>
@@ -898,8 +923,24 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
           contentFit="cover"
         />
         <View style={{ flex: 1 }}>
-          <Text style={s.selfieDoneTitle}>Selfie enregistré</Text>
-          <Text style={s.selfieDoneSub}>Will t'envoie tes photos automatiquement</Text>
+          {uploadState === 'failed' ? (
+            <>
+              <Text style={[s.selfieDoneTitle, { color: '#DC2626' }]}>Envoi du selfie échoué</Text>
+              <TouchableOpacity onPress={onRetryUpload} hitSlop={6}>
+                <Text style={[s.selfieDoneSub, { color: '#DC2626', fontWeight: '700' }]}>Réessayer l'envoi</Text>
+              </TouchableOpacity>
+            </>
+          ) : uploadState === 'uploading' ? (
+            <>
+              <Text style={s.selfieDoneTitle}>Envoi en cours…</Text>
+              <Text style={s.selfieDoneSub}>Confirmation serveur…</Text>
+            </>
+          ) : (
+            <>
+              <Text style={s.selfieDoneTitle}>Selfie enregistré</Text>
+              <Text style={s.selfieDoneSub}>Will t'envoie tes photos automatiquement</Text>
+            </>
+          )}
         </View>
         <TouchableOpacity onPress={onDelete} hitSlop={10} style={s.selfieDelete}>
           <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
@@ -962,7 +1003,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false }) {
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin }) {
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   // Indicateur violet qui glisse entre les 3 pills. Mesure une fois la largeur
@@ -1028,17 +1069,25 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
           <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
             <Icon.User size={30} color="#c9beed" />
             {selfieUri && (
-              <View style={{
-                position: 'absolute',
-                top: -2,
-                right: -2,
-                width: 10,
-                height: 10,
-                borderRadius: 5,
-                backgroundColor: '#10B981',
-                borderWidth: 2,
-                borderColor: C.bg,
-              }} />
+              <TouchableOpacity
+                onPress={(e) => {
+                  if (selfieUploadState === 'failed') { e.stopPropagation?.(); onRetryUpload?.(); }
+                }}
+                disabled={selfieUploadState !== 'failed'}
+                activeOpacity={selfieUploadState === 'failed' ? 0.6 : 1}
+                hitSlop={8}
+                style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  backgroundColor: selfieDotColor(selfieUploadState),
+                  borderWidth: 2,
+                  borderColor: C.bg,
+                }}
+              />
             )}
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
@@ -1432,7 +1481,7 @@ function PhotosUnauthScreen({ onSignup, onLogin }) {
   );
 }
 
-function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerToken, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false, isActive = true }) {
+function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerToken, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload }) {
   // Cle de cache locale photos, scopee par userId. Sans le scope :
   //  - user B sur le meme device verrait les photos de A apres logout/login (RGPD)
   //  - on devait clear le cache au logout -> rechargement reseau a la reconnexion
@@ -1801,11 +1850,20 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
           >
             <Icon.User size={30} color="#c9beed" />
             {selfieUri && (
-              <View style={{
-                position: 'absolute', top: 4, right: 4,
-                width: 10, height: 10, borderRadius: 5,
-                backgroundColor: '#10B981', borderWidth: 2, borderColor: C.bg,
-              }} />
+              <TouchableOpacity
+                onPress={(e) => {
+                  if (selfieUploadState === 'failed') { e.stopPropagation?.(); onRetryUpload?.(); }
+                }}
+                disabled={selfieUploadState !== 'failed'}
+                activeOpacity={selfieUploadState === 'failed' ? 0.6 : 1}
+                hitSlop={8}
+                style={{
+                  position: 'absolute', top: 4, right: 4,
+                  width: 10, height: 10, borderRadius: 5,
+                  backgroundColor: selfieDotColor(selfieUploadState),
+                  borderWidth: 2, borderColor: C.bg,
+                }}
+              />
             )}
           </TouchableOpacity>
         </View>
@@ -2414,7 +2472,7 @@ function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false }) {
+function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload }) {
   const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2666,10 +2724,19 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
             <Icon.User size={30} color="#c9beed" />
             {selfieUri && (
-              <View style={{
-                position: 'absolute', top: -2, right: -2, width: 10, height: 10,
-                borderRadius: 5, backgroundColor: '#10B981', borderWidth: 2, borderColor: C.bg,
-              }} />
+              <TouchableOpacity
+                onPress={(e) => {
+                  if (selfieUploadState === 'failed') { e.stopPropagation?.(); onRetryUpload?.(); }
+                }}
+                disabled={selfieUploadState !== 'failed'}
+                activeOpacity={selfieUploadState === 'failed' ? 0.6 : 1}
+                hitSlop={8}
+                style={{
+                  position: 'absolute', top: -2, right: -2, width: 10, height: 10,
+                  borderRadius: 5, backgroundColor: selfieDotColor(selfieUploadState),
+                  borderWidth: 2, borderColor: C.bg,
+                }}
+              />
             )}
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
@@ -8441,27 +8508,9 @@ function SelfieModal({ visible, onClose, onSaved, userId, runnerToken, signupMod
     try {
       // 1. Sauvegarde locale (réactivité immédiate)
       await AsyncStorage.setItem('@will_selfie', uri);
+      // Audit B15 : pas d upload IIFE non-suivi ici. App.js orchestre l upload
+      // R2 via onSaved -> runSelfieUpload et tracke selfieUploadState.
       onSaved?.(uri);
-
-      // 2. Upload sur R2 pour la reconnaissance faciale (en background, non bloquant)
-      // Auth runner obligatoire : le worker exige Bearer + match userId === token.userId
-      if (userId && runnerToken) {
-        (async () => {
-          try {
-            const blob = await (await fetch(uri)).blob();
-            await fetch(`${API_URL}/selfie/${userId}`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'image/jpeg',
-                Authorization: `Bearer ${runnerToken}`,
-              },
-              body: blob,
-            });
-          } catch (e) {
-            console.warn('selfie upload R2', e);
-          }
-        })();
-      }
 
       onClose();
     } catch (e) {
@@ -9007,7 +9056,7 @@ function SearchModal({ visible, events, onClose, onPick }) {
 }
 
 // ---------- ROOT ----------
-function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData }) {
+function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload }) {
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -9149,6 +9198,13 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                   {!selfieUri ? (
                     <TouchableOpacity onPress={onRetake}>
                       <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Ajouter</Text>
+                    </TouchableOpacity>
+                  ) : uploadState === 'failed' ? (
+                    // Audit B15 — Selfie local mais R2 non confirme.
+                    <TouchableOpacity onPress={onRetryUpload}>
+                      <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>
+                        Échec envoi · Réessayer
+                      </Text>
                     </TouchableOpacity>
                   ) : (
                     <View style={{ flexDirection: 'row', gap: 18 }}>
@@ -11502,6 +11558,11 @@ export default function App() {
   const [orgRefreshKey, setOrgRefreshKey] = useState(0);
   const [loginRole, setLoginRole] = useState(null);
   const [selfieUri, setSelfieUri] = useState(null);
+  // Audit B15 — etat d upload selfie R2. Pas de pastille verte sans confirmation
+  // serveur (PUT 2xx ou GET /runner/selfie exists=true).
+  const [selfieUploadState, setSelfieUploadState] = useState('idle');
+  // 'idle' | 'uploading' | 'ok' | 'failed'
+  const selfieConfirmDoneRef = useRef(false);
   const [session, setSession] = useState(null);
   // Distinct de `session` : permet de sortir du mode plein écran sans effacer
   // la session SecureStore (le photographe revient sans re-saisir son mdp).
@@ -11798,8 +11859,21 @@ export default function App() {
   //    AsyncStorage absent.
   // Idempotent : early-return si selfieUri deja set, donc pas de boucle.
   useEffect(() => {
+    // Audit B15 — Source de verite serveur pour selfieUploadState.
+    // L effect ne depend QUE de [token] : le ref guard empeche le double-fetch
+    // sans creer de cycle via les deps (set state ne re-declenche pas l effect).
     const token = runnerSession?.token;
-    if (!token || selfieUri) return;
+    if (!token) {
+      selfieConfirmDoneRef.current = false;   // reset au logout
+      return;
+    }
+    if (selfieConfirmDoneRef.current) return;  // deja confirme cette session
+    selfieConfirmDoneRef.current = true;
+
+    // Snapshot de l etat local AU MOMENT du fire (immune aux changements).
+    const hasLocalSelfie = !!selfieUri;
+    if (hasLocalSelfie) setSelfieUploadState('uploading');
+
     let cancelled = false;
     fetch(`${API_URL}/runner/selfie`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -11808,13 +11882,26 @@ export default function App() {
       .then(data => {
         if (cancelled) return;
         if (data?.exists && data?.uri) {
-          setSelfieUri(data.uri);
-          AsyncStorage.setItem('@will_selfie', data.uri).catch(() => {});
+          if (!hasLocalSelfie) {
+            setSelfieUri(data.uri);
+            AsyncStorage.setItem('@will_selfie', data.uri).catch(() => {});
+          }
+          setSelfieUploadState('ok');
+        } else if (hasLocalSelfie) {
+          // Selfie local mais serveur dit non : upload R2 a foire OU TTL
+          // R2 a purge l objet. Dans les 2 cas, UI propose retry.
+          setSelfieUploadState('failed');
         }
+        // Sinon (pas selfieUri local + serveur exists=false) : state reste 'idle'.
       })
-      .catch(() => {});
+      .catch(() => {
+        if (cancelled) return;
+        // GET echoue (reseau, etc.) : si selfieUri local on ne peut pas
+        // confirmer -> failed.
+        if (hasLocalSelfie) setSelfieUploadState('failed');
+      });
     return () => { cancelled = true; };
-  }, [runnerSession?.token, selfieUri]);
+  }, [runnerSession?.token]);
 
   // E2 — register silencieux du token push au boot si l utilisateur a
   // deja accorde la permission (ex. reinstall, nouveau token Expo apres
@@ -12168,6 +12255,28 @@ export default function App() {
     });
   }, [userId, runnerSession]);
 
+  // Audit B15 — Upload R2 traque via selfieUploadState. Appele par onSaved
+  // (nouveau selfie) et par retrySelfieUpload (tap pastille rouge / bouton
+  // SelfieBlock / lien ProfileMenu).
+  const runSelfieUpload = useCallback(async (uri) => {
+    if (!uri) return;
+    const userId = runnerSession?.userId;
+    const token = runnerSession?.token;
+    if (!userId || !token) return;
+    setSelfieUploadState('uploading');
+    try {
+      await uploadSelfieToR2(uri, userId, token);
+      setSelfieUploadState('ok');
+    } catch (e) {
+      console.warn('selfie upload R2', e?.message || e);
+      setSelfieUploadState('failed');
+    }
+  }, [runnerSession?.userId, runnerSession?.token]);
+
+  const retrySelfieUpload = useCallback(() => {
+    if (selfieUri) runSelfieUpload(selfieUri);
+  }, [selfieUri, runSelfieUpload]);
+
   const deleteSelfie = useCallback(() => {
     Alert.alert('Supprimer le selfie ?', 'Tu pourras en reprendre un nouveau.', [
       { text: 'Annuler', style: 'cancel' },
@@ -12190,6 +12299,7 @@ export default function App() {
           Secure.removeItem(BIOMETRIC_CONSENT_KEY),
         ]);
         setSelfieUri(null);
+        setSelfieUploadState('idle');   // audit B15 — reset etat upload
       }},
     ]);
   }, [runnerSession]);
@@ -12457,6 +12567,8 @@ export default function App() {
                     bibSearching={bibSearching}
                     photoFavoritesSet={photoFavoritesSet}
                     isAuthed={!!runnerSession}
+                    selfieUploadState={selfieUploadState}
+                    onRetryUpload={retrySelfieUpload}
                   />
                 </View>
               </GestureDetector>
@@ -12499,6 +12611,8 @@ export default function App() {
                   onRefresh={reloadEvents}
                   runnerFirstName={runnerSession?.profile?.firstName}
                   selfieSkipped={!!runnerSession && selfieSkipped && !selfieUri}
+                  selfieUploadState={selfieUploadState}
+                  onRetryUpload={retrySelfieUpload}
                 />
               </View>
               <View style={{ width: SCREEN_W }}>
@@ -12518,6 +12632,8 @@ export default function App() {
                     onTogglePhotoFavorite={togglePhotoFavorite}
                     isActive={bottomTab === 'photos'}
                     selfieSkipped={selfieSkipped && !selfieUri}
+                    selfieUploadState={selfieUploadState}
+                    onRetryUpload={retrySelfieUpload}
                   />
                 ) : (
                   <PhotosUnauthScreen
@@ -12744,6 +12860,8 @@ export default function App() {
         onClose={() => { setSelfieModal(false); setSignupSelfieStep(false); pendingFollowRef.current = null; }}
         onSaved={(uri) => {
           setSelfieUri(uri);
+          // Audit B15 — tracke l upload R2 (etat 'uploading' -> 'ok'/'failed').
+          runSelfieUpload(uri);
           // Selfie pris → on retire la pastille "selfie manquant" sur l'accueil.
           AsyncStorage.removeItem('@will_selfie_skipped').catch(() => {});
           setSelfieSkipped(false);
@@ -12837,6 +12955,8 @@ export default function App() {
         onUpdateProfile={updateRunnerProfile}
         onDeleteAccount={() => { setProfileMenu(false); deleteRunnerAccount(); }}
         onDeleteFaceData={() => { setProfileMenu(false); deleteFaceData(); }}
+        uploadState={selfieUploadState}
+        onRetryUpload={retrySelfieUpload}
       />
 
       <SelfieViewerModal
