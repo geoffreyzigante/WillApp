@@ -12267,7 +12267,10 @@ export default function App() {
   // SelfieBlock / lien ProfileMenu).
   const runSelfieUpload = useCallback(async (uri) => {
     if (!uri) return;
-    const userId = runnerSession?.userId;
+    // Audit B15 fix : path correct = runnerSession.profile.userId (cf 6 autres
+    // occurrences L11789, L11821, L12027, L12176, L12249). runnerSession.userId
+    // (sans profile) est undefined, return silencieux qui bloquait le retry.
+    const userId = runnerSession?.profile?.userId;
     const token = runnerSession?.token;
     if (!userId || !token) return;
     setSelfieUploadState('uploading');
@@ -12278,7 +12281,7 @@ export default function App() {
       console.warn('selfie upload R2', e?.message || e);
       setSelfieUploadState('failed');
     }
-  }, [runnerSession?.userId, runnerSession?.token]);
+  }, [runnerSession?.profile?.userId, runnerSession?.token]);
 
   const retrySelfieUpload = useCallback(() => {
     if (selfieUri) runSelfieUpload(selfieUri);
