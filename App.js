@@ -6699,6 +6699,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   const [eventType, setEventType] = useState('');
   const [website, setWebsite] = useState('');
   const [contact, setContact] = useState('');
+  // UI-12 : contact administratif separe du contact public. Pre-rempli avec
+  // l email de login orga (pattern existant) mais editable independamment.
+  const [contactAdmin, setContactAdmin] = useState('');
   const [phone, setPhone] = useState('');
   const [distances, setDistances] = useState([]); // [{km, time, elevation}]
   const [timePickerIdx, setTimePickerIdx] = useState(null);
@@ -6767,6 +6770,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         // Fallback en cascade : contact (email saisi à la creation) -> email orga -> ''.
         // organizerSession est structuré { token, profile } — l'email est sous profile.
         setContact(editEvent.contact || organizerSession?.profile?.email || '');
+        setContactAdmin(editEvent.contact_admin || editEvent.organizer_email || organizerSession?.profile?.email || '');
         setPhone(editEvent.phone || '');
         setDistances(Array.isArray(editEvent.distances) ? editEvent.distances.map(d => ({
           km: String(d.km || ''), time: d.time || '', elevation: d.elevation || '',
@@ -6784,7 +6788,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         // la session arrive de manière asynchrone après l'ouverture du modal, un
         // second useEffect ci-dessous (deps [visible, isEdit, organizerSession])
         // re-tire l'email tant que l'utilisateur n'a rien saisi.
-        setWebsite(''); setContact(organizerSession?.profile?.email || ''); setPhone(''); setDistances([]);
+        setWebsite(''); setContact(organizerSession?.profile?.email || ''); setContactAdmin(organizerSession?.profile?.email || ''); setPhone(''); setDistances([]);
         setCoverImage(null); setPendingCoverLocal(null);
       }
     }
@@ -6797,6 +6801,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     if (!visible || isEdit) return;
     const email = organizerSession?.profile?.email;
     if (email && !contact) setContact(email);
+    if (email && !contactAdmin) setContactAdmin(email);
     // contact est volontairement hors deps : on ne veut pas écraser une saisie
     // user. Le check `&& !contact` dans le corps de l'effet suffit.
   }, [visible, isEdit, organizerSession]);
@@ -6954,6 +6959,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       const payload = {
         name,
         contact,
+        contact_admin: contactAdmin.trim().toLowerCase(), // UI-12
         phone: phone.trim(),
         event_date: eventDate ? eventDate.toISOString().slice(0, 10) : '',
         event_date_end: eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : '',
@@ -7940,17 +7946,23 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                   </ScrollView>
                 </View>
 
-                {/* ===== STEP 3 : Contact ===== */}
+                {/* ===== STEP 3 : Contact (UI-12 : 2 sections admin/public) ===== */}
                 <View style={{ width: sheetW }}>
                   <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
-                    <Text style={formSectionStyle.heading}>Contact</Text>
-                    <TextInput placeholder="Site web (optionnel)" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
-                    <TextInput placeholder="Email de contact *" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
-                    <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -4, marginLeft: 4 }]}>
-                      Cet email sera affiché publiquement sur la page de ton événement.
+                    <Text style={formSectionStyle.heading}>Contact administratif</Text>
+                    <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -8, marginBottom: 8, marginLeft: 4, lineHeight: 16 }]}>
+                      Email interne pour la validation de ton event et les messages d'admin Will. NON affiché publiquement.
                     </Text>
+                    <TextInput placeholder="Email administratif *" placeholderTextColor={C.textSoft} value={contactAdmin} onChangeText={setContactAdmin} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
+
+                    <Text style={[formSectionStyle.heading, { marginTop: 12 }]}>Contact public</Text>
+                    <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -8, marginBottom: 8, marginLeft: 4, lineHeight: 16 }]}>
+                      Ces infos seront affichées sur la page publique de ton événement.
+                    </Text>
+                    <TextInput placeholder="Email de contact public *" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
                     {showErr[3] && !emailOk && <Text style={errStyle}>Email invalide</Text>}
-                    <TextInput placeholder="Téléphone de contact (optionnel)" placeholderTextColor={C.textSoft} value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
+                    <TextInput placeholder="Téléphone (optionnel)" placeholderTextColor={C.textSoft} value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
+                    <TextInput placeholder="Site web (optionnel)" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
                   </ScrollView>
                 </View>
 
