@@ -368,6 +368,14 @@ const C = {
   violetAccent: '#7C3AED',
   card: '#FFFFFF',
   shadow: 'rgba(123, 47, 255, 0.08)',
+  // Semantiques UI-09 (2026-06-04). Rouge canonique = #DC2626 (utilise plus
+  // largement que #EF4444 dans le code). Toute reference success/error/warning
+  // doit utiliser ces tokens, pas les hex bruts. Exception : TYPE_COLORS.autre
+  // qui conserve #EF4444 comme couleur decorative event_type, distincte
+  // semantiquement.
+  success: '#10B981',
+  error: '#DC2626',
+  warning: '#F59E0B',
 };
 
 // Palette arc-en-ciel synchronisée avec dashboard (src/orga/pages/EventCard.js
@@ -383,6 +391,9 @@ const TYPE_COLORS = {
   triathlon: '#6366F1',
   velo: '#F97316',
   marche: '#EAB308',
+  // Palette decorative TYPE_COLORS, distinct du C.error semantique (UI-09).
+  // "autre" garde son rouge dedie #EF4444 ; n est pas une signalisation
+  // d erreur mais une categorie d event_type non classifiee.
   autre: '#EF4444',
 };
 const colorForType = (eventType) => {
@@ -447,9 +458,9 @@ async function apiFetch(path, options = {}, { onAuthFailure } = {}) {
 // Couleur pastille selfie derivee de l etat d upload. Hex alignes sur les
 // occurrences existantes du code (cf UI-09 backlog pour tokeniser plus tard).
 function selfieDotColor(state) {
-  if (state === 'failed') return '#DC2626';
-  if (state === 'ok') return '#10B981';
-  return '#F59E0B'; // 'uploading' ou 'idle' avec selfieUri local non confirme
+  if (state === 'failed') return C.error;
+  if (state === 'ok') return C.success;
+  return C.warning; // 'uploading' ou 'idle' avec selfieUri local non confirme
 }
 
 // ---------- ICONS (custom SVG) ----------
@@ -958,9 +969,9 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, uploadStat
         <View style={{ flex: 1 }}>
           {uploadState === 'failed' ? (
             <>
-              <Text style={[s.selfieDoneTitle, { color: '#DC2626' }]}>Envoi du selfie échoué</Text>
+              <Text style={[s.selfieDoneTitle, { color: C.error }]}>Envoi du selfie échoué</Text>
               <TouchableOpacity onPress={onRetryUpload} hitSlop={6}>
-                <Text style={[s.selfieDoneSub, { color: '#DC2626', fontWeight: '700' }]}>
+                <Text style={[s.selfieDoneSub, { color: C.error, fontWeight: '700' }]}>
                   Réessayer l'envoi (ou supprimer pour reprendre)
                 </Text>
               </TouchableOpacity>
@@ -994,7 +1005,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, uploadStat
           colors={['#8B3FFF', '#5A1FCC']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={[s.selfieCard, { borderWidth: 2, borderColor: '#F59E0B', flexDirection: 'column', alignItems: 'stretch' }]}
+          style={[s.selfieCard, { borderWidth: 2, borderColor: C.warning, flexDirection: 'column', alignItems: 'stretch' }]}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <View style={[s.selfieAvatar, { width: 56, height: 56, borderRadius: 14 }]}>
@@ -2107,7 +2118,7 @@ function PhotosStepRow({ num, text, done = false }) {
     }}>
       <View style={{
         width: 28, height: 28, borderRadius: 14,
-        backgroundColor: done ? '#10B981' : '#EDE4FF',
+        backgroundColor: done ? C.success : '#EDE4FF',
         alignItems: 'center', justifyContent: 'center',
       }}>
         {done ? (
@@ -5255,11 +5266,11 @@ function PhotographerScreen({ session, onLogout, onExit }) {
   // État neutre / par défaut : PRÊT vert dès que la caméra est ouverte et online.
   // Capture rouge pendant rafale ; Hors ligne orange si offline.
   const statusInfo = isShooting
-    ? { label: 'Capture', dot: '#EF4444', bg: 'rgba(239,68,68,0.2)', text: '#EF4444' }
+    ? { label: 'Capture', dot: C.error, bg: 'rgba(239,68,68,0.2)', text: C.error }
     : !isOnline
       ? {
           label: queueStats.total > 0 ? `Hors ligne · ${queueStats.total}` : 'Hors ligne',
-          dot: '#F59E0B', bg: 'rgba(245,158,11,0.2)', text: '#F59E0B',
+          dot: C.warning, bg: 'rgba(245,158,11,0.2)', text: C.warning,
         }
       : { label: 'Prêt', dot: '#22C55E', bg: 'rgba(34,197,94,0.2)', text: '#22C55E' };
 
@@ -6542,7 +6553,7 @@ function PinInputRow({ value, onChange, onComplete, autoFocus = true, focusTrigg
                   width: boxW, height: boxH,
                   borderRadius: 14,
                   borderWidth: 1.5,
-                  borderColor: error ? '#DC2626' : (filled ? C.primary : '#e8defc'),
+                  borderColor: error ? C.error : (filled ? C.primary : '#e8defc'),
                   backgroundColor: filled ? '#faf9ff' : '#fff',
                   alignItems: 'center', justifyContent: 'center',
                 }}
@@ -6629,7 +6640,7 @@ function PinInputRow({ value, onChange, onComplete, autoFocus = true, focusTrigg
               width: boxW, height: boxH,
               borderRadius: 14,
               borderWidth: 1.5,
-              borderColor: error ? '#DC2626' : (filled ? C.primary : '#e8defc'),
+              borderColor: error ? C.error : (filled ? C.primary : '#e8defc'),
               backgroundColor: filled ? '#faf9ff' : '#fff',
               fontSize, fontWeight: '700',
               fontFamily: 'AVEstiana',
@@ -6931,7 +6942,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     if (!step4Ok) { setShowErr(e => ({ ...e, 4: true })); goStep(4); return; }
     submit();
   };
-  const errStyle = { color: '#DC2626', fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 };
+  const errStyle = { color: C.error, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 };
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -7730,7 +7741,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                       </View>
                     </View>
                     <TouchableOpacity onPress={() => removeDistance(idx)} style={{ alignSelf: 'flex-end', marginTop: 8 }}>
-                      <Text style={{ color: '#DC2626', fontSize: 12, fontWeight: '600' }}>Supprimer</Text>
+                      <Text style={{ color: C.error, fontSize: 12, fontWeight: '600' }}>Supprimer</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -7907,7 +7918,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                           </View>
                         </View>
                         <TouchableOpacity onPress={() => removeDistance(idx)} style={{ alignSelf: 'flex-end', marginTop: 6 }}>
-                          <Text style={{ color: '#DC2626', fontSize: 12, fontWeight: '600' }}>Supprimer</Text>
+                          <Text style={{ color: C.error, fontSize: 12, fontWeight: '600' }}>Supprimer</Text>
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -8942,7 +8953,7 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         }}
                       />
                       {pinError ? (
-                        <Text style={{ color: '#DC2626', fontSize: 13, textAlign: 'center', marginTop: 12, fontWeight: '500' }}>
+                        <Text style={{ color: C.error, fontSize: 13, textAlign: 'center', marginTop: 12, fontWeight: '500' }}>
                           {pinError}
                         </Text>
                       ) : null}
@@ -9270,7 +9281,7 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                           <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Voir</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => { onClose(); onDelete(); }}>
-                          <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Supprimer</Text>
+                          <Text style={{ color: C.error, fontWeight: '600', fontSize: 14 }}>Supprimer</Text>
                         </TouchableOpacity>
                       </View>
                       {uploadState === 'failed' && (
@@ -9278,7 +9289,7 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
                         // (pas a la place) pour ne pas bloquer le user dans le cycle
                         // failed -> retry failed sans pouvoir reprendre un selfie propre.
                         <TouchableOpacity onPress={onRetryUpload} style={{ marginTop: 6 }}>
-                          <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 12 }}>
+                          <Text style={{ color: C.error, fontWeight: '600', fontSize: 12 }}>
                             Échec envoi · Réessayer
                           </Text>
                         </TouchableOpacity>
@@ -9430,7 +9441,7 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
 
             {profile && (
               <TouchableOpacity onPress={() => { onClose(); onLogout?.(); }} style={{ alignItems: 'center', marginTop: 12, paddingVertical: 12 }}>
-                <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
+                <Text style={{ color: C.error, fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
               </TouchableOpacity>
             )}
 
@@ -9625,7 +9636,7 @@ function OrganizerProfileMenuModal({ visible, onClose, organizerSession, organiz
 
               {profile && (
                 <TouchableOpacity onPress={() => { onClose(); onLogout?.(); }} style={{ alignItems: 'center', marginTop: 12, paddingVertical: 12 }}>
-                  <Text style={{ color: '#DC2626', fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
+                  <Text style={{ color: C.error, fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
                 </TouchableOpacity>
               )}
 
@@ -10449,9 +10460,9 @@ function passwordStrength(pwd) {
   if (/\d/.test(pwd)) score++;
   if (/[^A-Za-z0-9]/.test(pwd)) score++;
   // 0-1: faible, 2: moyen, 3-4: fort, 5: très fort
-  if (score <= 1) return { score: 1, label: 'Faible', color: '#EF4444' };
-  if (score === 2) return { score: 2, label: 'Moyen', color: '#F59E0B' };
-  if (score <= 4) return { score: 3, label: 'Fort', color: '#10B981' };
+  if (score <= 1) return { score: 1, label: 'Faible', color: C.error };
+  if (score === 2) return { score: 2, label: 'Moyen', color: C.warning };
+  if (score <= 4) return { score: 3, label: 'Fort', color: C.success };
   return { score: 4, label: 'Très fort', color: '#059669' };
 }
 
@@ -10968,7 +10979,7 @@ function OrganizerEventDetailScreen({ session, organizerApiFetch, event, onClose
           {/* Lien Supprimer */}
           <View style={{ marginTop: 36, alignItems: 'center' }}>
             <TouchableOpacity onPress={confirmDelete} disabled={deleting} hitSlop={12}>
-              <Text style={{ color: deleting ? C.textSoft : '#DC2626', fontSize: 14, fontWeight: '500' }}>
+              <Text style={{ color: deleting ? C.textSoft : C.error, fontSize: 14, fontWeight: '500' }}>
                 {deleting ? 'Suppression…' : 'Supprimer cet événement'}
               </Text>
             </TouchableOpacity>
@@ -11236,7 +11247,7 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
       <Text style={[s.sectionTitle, { marginVertical: 10 }]}>
         Photos {photos.length > 0 ? `(${filteredPhotos.length})` : ''}
         {hiddenCount > 0 && (
-          <Text style={{ color: '#EF4444', fontSize: 13, fontWeight: '600' }}>
+          <Text style={{ color: C.error, fontSize: 13, fontWeight: '600' }}>
             {'  · '}{hiddenCount} masquée{hiddenCount > 1 ? 's' : ''}
           </Text>
         )}
@@ -11333,7 +11344,7 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
               style={{
                 position: 'absolute', top: 6, left: 6,
                 width: 10, height: 10, borderRadius: 5,
-                backgroundColor: '#EF4444',
+                backgroundColor: C.error,
                 borderWidth: 2, borderColor: '#fff',
               }}
             />
@@ -11395,7 +11406,7 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
               onPress={deleteSelected}
               disabled={deleting}
               style={{
-                backgroundColor: '#DC2626',
+                backgroundColor: C.error,
                 paddingVertical: 16,
                 borderRadius: 14,
                 alignItems: 'center',
@@ -11497,12 +11508,12 @@ function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout, onCrea
   //   paid              → réglé, en ligne
   //   rejected          → refusé par admin
   const statusInfo = (st) => {
-    if (st === 'pending') return { label: 'En cours de validation', color: '#F59E0B', bg: '#FEF3C7' };
+    if (st === 'pending') return { label: 'En cours de validation', color: C.warning, bg: '#FEF3C7' };
     if (st === 'validated') return { label: 'En cours d\'activation', color: '#8B5CF6', bg: '#EDE9FE' };
     if (st === 'pending_payment') return { label: 'À régler', color: '#EC4899', bg: '#FCE7F3' };
-    if (st === 'free') return { label: 'En ligne · gratuit', color: '#10B981', bg: '#D1FAE5' };
-    if (st === 'paid') return { label: 'En ligne', color: '#10B981', bg: '#D1FAE5' };
-    if (st === 'rejected') return { label: 'Refusé', color: '#DC2626', bg: '#FEE2E2' };
+    if (st === 'free') return { label: 'En ligne · gratuit', color: C.success, bg: '#D1FAE5' };
+    if (st === 'paid') return { label: 'En ligne', color: C.success, bg: '#D1FAE5' };
+    if (st === 'rejected') return { label: 'Refusé', color: C.error, bg: '#FEE2E2' };
     return { label: st, color: C.textSoft, bg: '#f5f3ff' };
   };
 
@@ -11622,9 +11633,9 @@ function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout, onCrea
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => deleteEvent(e)}
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#DC2626' }}
+                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: C.error }}
                   >
-                    <Text style={{ color: '#DC2626', fontSize: 13, fontWeight: '600' }}>Supprimer</Text>
+                    <Text style={{ color: C.error, fontSize: 13, fontWeight: '600' }}>Supprimer</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -12926,7 +12937,7 @@ export default function App() {
                 position: 'absolute', top: -3, right: -8,
                 minWidth: 16, height: 16, borderRadius: 8,
                 paddingHorizontal: 4,
-                backgroundColor: '#EF4444',
+                backgroundColor: C.error,
                 alignItems: 'center', justifyContent: 'center',
                 borderWidth: 1.5, borderColor: C.bg,
               }}>
