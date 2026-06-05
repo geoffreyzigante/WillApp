@@ -2906,14 +2906,15 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
               }}
             >
-              {/* Titre unique : coeur + phrase fusionnee (sub mergee dans le
-                  titre). Cleanup aligne sur le web (event/index.html). */}
+              {/* Titre 2 lignes : ligne 1 bold (action) + ligne 2 regular
+                  (consequence). Aligne sur le web (.fav-title-reg). */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                 <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
                   <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
                 </Svg>
                 <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', flexShrink: 1 }}>
-                  Ajoute-le en favoris avant le départ pour recevoir tes photos automatiquement
+                  Mets ton event en favoris avant le départ,{'\n'}
+                  <Text style={{ fontWeight: '400' }}>reçois tes photos automatiquement</Text>
                 </Text>
               </View>
             </LinearGradient>
