@@ -3470,23 +3470,17 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 <Text style={[s.welcome, { color: C.text, fontSize: 22, marginTop: 4, marginBottom: 2, textAlign: 'center' }]} numberOfLines={1}>
                   {event.name}
                 </Text>
-                <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }} numberOfLines={1}>
+                <Text style={{ color: 'rgba(123,47,255,0.7)', fontSize: 13, marginBottom: 18, textAlign: 'center' }} numberOfLines={1}>
                   {formatDateLong(event.event_date, event.event_date_end)}
                   {cityLabel(event.location) ? ` · ${cityLabel(event.location)}` : ''}
                 </Text>
 
                 {distances.length > 0 && (
                   <>
-                    <Text style={{
-                      color: C.textSoft, fontSize: 10, fontWeight: '700', letterSpacing: 1,
-                      textTransform: 'uppercase', fontFamily: 'Montserrat',
-                      marginBottom: 8,
-                    }}>
-                      {distances.length > 1 ? 'Courses' : 'Course'}
-                    </Text>
                     {/* Header colonnes (aligne sur le contenu : 8 bullet + 10 gap
                         avant la 1ere colonne, fixed widths sur km et D+, centre
-                        pour le depart). */}
+                        pour le depart). Couleur violet accentuee (au lieu de
+                        textSoft 0.3) pour ressortir la hierarchie. */}
                     <View style={{
                       flexDirection: 'row', alignItems: 'center',
                       paddingLeft: 18, paddingBottom: 6,
@@ -3494,16 +3488,16 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     }}>
                       <Text style={{
                         width: 60, fontSize: 10, fontWeight: '600', letterSpacing: 0.6,
-                        textTransform: 'uppercase', color: C.textSoft, fontFamily: 'Montserrat',
+                        textTransform: 'uppercase', color: 'rgba(123,47,255,0.7)', fontFamily: 'Montserrat',
                       }}>Distance</Text>
                       <Text style={{
                         flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600',
-                        letterSpacing: 0.6, textTransform: 'uppercase', color: C.textSoft,
+                        letterSpacing: 0.6, textTransform: 'uppercase', color: 'rgba(123,47,255,0.7)',
                         fontFamily: 'Montserrat',
                       }}>Départ</Text>
                       <Text style={{
                         width: 70, textAlign: 'right', fontSize: 10, fontWeight: '600',
-                        letterSpacing: 0.6, textTransform: 'uppercase', color: C.textSoft,
+                        letterSpacing: 0.6, textTransform: 'uppercase', color: 'rgba(123,47,255,0.7)',
                         fontFamily: 'Montserrat',
                       }}>Dénivelé</Text>
                     </View>
@@ -3521,10 +3515,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                         <Text style={{ color: C.text, fontSize: 15, fontWeight: '600', width: 60 }}>
                           {d.km} km
                         </Text>
-                        <Text style={{ flex: 1, textAlign: 'center', color: C.textSoft, fontSize: 13 }}>
+                        <Text style={{ flex: 1, textAlign: 'center', color: 'rgba(123,47,255,0.7)', fontSize: 13 }}>
                           {d.time || '—'}
                         </Text>
-                        <Text style={{ width: 70, textAlign: 'right', color: C.textSoft, fontSize: 13 }}>
+                        <Text style={{ width: 70, textAlign: 'right', color: 'rgba(123,47,255,0.7)', fontSize: 13 }}>
                           {d.elevation || '—'}
                         </Text>
                       </View>
