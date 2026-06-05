@@ -2906,41 +2906,14 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
               }}
             >
-              {/* Titre : coeur + texte */}
+              {/* Titre unique : coeur + phrase fusionnee (sub mergee dans le
+                  titre). Cleanup aligne sur le web (event/index.html). */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                 <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
                   <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
                 </Svg>
-                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
-                  Ajoute-le en favoris avant le départ
-                </Text>
-              </View>
-              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 4, textAlign: 'center' }}>
-                Pour recevoir tes photos automatiquement
-              </Text>
-
-              {/* Divider hairline blanc transparent */}
-              <View style={{
-                height: StyleSheet.hairlineWidth,
-                backgroundColor: 'rgba(255,255,255,0.25)',
-                marginVertical: 12,
-              }} />
-
-              {/* Sous-sous-titre : lien direct vers la page confidentialite,
-                  precede de l icone biometrique pour le contexte visuel. */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2}>
-                  <Circle cx="12" cy="8" r="4" />
-                  <Path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
-                </Svg>
-                <Text
-                  style={{
-                    color: '#fff', fontSize: 11, fontWeight: '600',
-                    textDecorationLine: 'underline',
-                  }}
-                  onPress={() => Linking.openURL('https://will-app.com/confidentialite').catch(() => {})}
-                >
-                  En savoir plus sur la reconnaissance faciale
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', flexShrink: 1 }}>
+                  Ajoute-le en favoris avant le départ pour recevoir tes photos automatiquement
                 </Text>
               </View>
             </LinearGradient>
@@ -3129,7 +3102,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
                     style={{
                       width: 30, height: 30, borderRadius: 15,
-                      backgroundColor: favOnly ? C.pinkPill : '#f5f3ff',
+                      backgroundColor: favOnly ? C.primary : '#f5f3ff',
                       alignItems: 'center', justifyContent: 'center',
                       marginLeft: 6,
                     }}
