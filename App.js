@@ -13145,41 +13145,51 @@ export default function App() {
         }}
       >
         <View style={{
+          position: 'relative',
           flexDirection: 'row',
           alignItems: 'center',
           gap: 8,
         }}>
-          {/* Arrow back-to-top : visible uniquement apres scroll > 50px,
-              meme fond frosted que la pill bib (BlurView 80 + white 0.35) et
-              meme taille que la pill loupe home (40x40 borderRadius 16).
-              Icone violet pour ressortir sur le fond blanc translucide. */}
+          {/* Arrow back-to-top : position absolute a GAUCHE du row pour ne
+              pas decaler la pill bib (le row reste centre comme s il n y
+              avait pas la fleche). right:100% colle son edge droit au bord
+              gauche du parent. Meme style que la pill bib (frosted blur 40x40
+              borderRadius 16). Visible apres scroll > 50px uniquement. */}
           {eventPanelHasScrolled && (
-            <TouchableOpacity
-              onPress={() => setScrollToTopSignal(s => s + 1)}
-              activeOpacity={0.8}
-              accessibilityLabel="Retour en haut de page"
-              style={{
-                width: 40, height: 40, borderRadius: 16,
-                overflow: 'hidden',
-                borderWidth: StyleSheet.hairlineWidth,
-                borderColor: 'rgba(255,255,255,0.9)',
-                shadowColor: '#000',
-                shadowOpacity: 0.10,
-                shadowRadius: 14,
-                shadowOffset: { width: 0, height: 4 },
-                elevation: 10,
-              }}
-            >
-              <BlurView intensity={80} tint="light" style={{
-                flex: 1, alignItems: 'center', justifyContent: 'center',
-                backgroundColor: 'rgba(255,255,255,0.35)',
-              }}>
-                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={C.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                  <Path d="M12 19V5" />
-                  <Path d="M5 12l7-7 7 7" />
-                </Svg>
-              </BlurView>
-            </TouchableOpacity>
+            <View pointerEvents="box-none" style={{
+              position: 'absolute',
+              right: '100%',
+              marginRight: 8,
+              top: 0, bottom: 0,
+              justifyContent: 'center',
+            }}>
+              <TouchableOpacity
+                onPress={() => setScrollToTopSignal(s => s + 1)}
+                activeOpacity={0.8}
+                accessibilityLabel="Retour en haut de page"
+                style={{
+                  width: 40, height: 40, borderRadius: 16,
+                  overflow: 'hidden',
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: 'rgba(255,255,255,0.9)',
+                  shadowColor: '#000',
+                  shadowOpacity: 0.10,
+                  shadowRadius: 14,
+                  shadowOffset: { width: 0, height: 4 },
+                  elevation: 10,
+                }}
+              >
+                <BlurView intensity={80} tint="light" style={{
+                  flex: 1, alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: 'rgba(255,255,255,0.35)',
+                }}>
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={C.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M12 19V5" />
+                    <Path d="M5 12l7-7 7 7" />
+                  </Svg>
+                </BlurView>
+              </TouchableOpacity>
+            </View>
           )}
           <View style={{
             width: 200,
