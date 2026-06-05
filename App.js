@@ -2506,7 +2506,7 @@ function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload }) {
+function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange }) {
   const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3357,9 +3357,23 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     );
   };
 
+  // Ref scroll pour back-to-top trigger depuis App.js (bib pill arrow).
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    if (scrollToTopSignal > 0) {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  }, [scrollToTopSignal]);
+  // Remonte le count photos au parent pour conditionner l affichage de la
+  // pill bib (cachee sur les events sans photos).
+  useEffect(() => {
+    if (onPhotosCountChange) onPhotosCountChange(photos.length, loading);
+  }, [photos.length, loading, onPhotosCountChange]);
+
   return (
     <>
       <ScrollView
+        ref={scrollRef}
         style={s.scroll}
         contentContainerStyle={{ paddingBottom: 180 }}
         refreshControl={
@@ -11785,6 +11799,11 @@ export default function App() {
   const [bibResults, setBibResults] = useState(null);
   const [bibSearching, setBibSearching] = useState(false);
   const [bibKeyboardH, setBibKeyboardH] = useState(0);
+  // EventDetailScreen photo count -> conditionne l affichage de la pill bib
+  // (hide sur events sans photos). Reset a chaque change d event.
+  const [eventPanelHasPhotos, setEventPanelHasPhotos] = useState(false);
+  // Trigger scroll-to-top du EventDetailScreen depuis la pill bib (arrow).
+  const [scrollToTopSignal, setScrollToTopSignal] = useState(0);
   useEffect(() => {
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
@@ -12731,7 +12750,10 @@ export default function App() {
       setBibQuery('');
       setBibResults(null);
     }
-  }, [eventInPanel]);
+    // Reset hasPhotos a chaque change d event : evite que la pill bib reste
+    // visible pendant la transition d un event A (avec photos) vers B (sans).
+    setEventPanelHasPhotos(false);
+  }, [eventInPanel?.code]);
 
   // Anime translateX quand openedEvent change. Pas d anim au mount (init OK).
   useEffect(() => {
@@ -12898,6 +12920,8 @@ export default function App() {
                     isAuthed={!!runnerSession}
                     selfieUploadState={selfieUploadState}
                     onRetryUpload={retrySelfieUpload}
+                    scrollToTopSignal={scrollToTopSignal}
+                    onPhotosCountChange={(n, loading) => setEventPanelHasPhotos(!loading && n > 0)}
                   />
                 </View>
               </GestureDetector>
@@ -13089,8 +13113,9 @@ export default function App() {
       {/* Pill recherche par dossard — rendue APRES le bottom nav et le
           degrade blanc footer, donc naturellement au-dessus dans l ordre
           de rendu RN. Visible uniquement quand un EventDetailScreen est
-          ouvert. zIndex 20 + elevation 20 pour assurer le z-order Android. */}
-      {eventInPanel && (
+          ouvert ET que l event a au moins une photo (sinon recherche
+          dossard inutile). zIndex 20 + elevation 20 pour le z-order Android. */}
+      {eventInPanel && eventPanelHasPhotos && (
       <View
         pointerEvents="box-none"
         style={{
@@ -13107,6 +13132,26 @@ export default function App() {
           alignItems: 'center',
           gap: 8,
         }}>
+          {/* Arrow back-to-top : trigger scroll vers le haut du EventDetail
+              via signal increment. A gauche de la pill search. */}
+          <TouchableOpacity
+            onPress={() => setScrollToTopSignal(s => s + 1)}
+            activeOpacity={0.8}
+            accessibilityLabel="Retour en haut de page"
+            style={{
+              width: 40, height: 40, borderRadius: 20,
+              backgroundColor: C.primary,
+              alignItems: 'center', justifyContent: 'center',
+              shadowColor: C.primary, shadowOpacity: 0.25,
+              shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+              elevation: 6,
+            }}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M12 19V5" />
+              <Path d="M5 12l7-7 7 7" />
+            </Svg>
+          </TouchableOpacity>
           <View style={{
             width: 200,
             borderRadius: 22,
