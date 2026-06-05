@@ -2506,7 +2506,7 @@ function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange }) {
+function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange }) {
   const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3369,6 +3369,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   useEffect(() => {
     if (onPhotosCountChange) onPhotosCountChange(photos.length, loading);
   }, [photos.length, loading, onPhotosCountChange]);
+  // Reset onScrolledChange a false quand le ScrollView retombe au top
+  // (apres scroll-to-top). Tracked via hasScrolledRef pour eviter les emits
+  // redondants sur chaque tick onScroll. Threshold 50px (souple).
+  const hasScrolledRef = useRef(false);
 
   return (
     <>
@@ -3385,8 +3389,15 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           />
         }
         onScroll={({ nativeEvent }) => {
-          if (!hasMore) return;
           const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          // Detect crossing du seuil 50px -> emit toggle au parent pour
+          // afficher/cacher la fleche back-to-top dans la pill bib.
+          const scrolled = contentOffset.y > 50;
+          if (scrolled !== hasScrolledRef.current) {
+            hasScrolledRef.current = scrolled;
+            onScrolledChange?.(scrolled);
+          }
+          if (!hasMore) return;
           const distFromBottom = contentSize.height - (layoutMeasurement.height + contentOffset.y);
           if (distFromBottom < 600) {
             setVisibleCount(c => Math.min(c + PAGE_SIZE, filteredPhotos.length));
@@ -11802,6 +11813,9 @@ export default function App() {
   // EventDetailScreen photo count -> conditionne l affichage de la pill bib
   // (hide sur events sans photos). Reset a chaque change d event.
   const [eventPanelHasPhotos, setEventPanelHasPhotos] = useState(false);
+  // Scroll state -> conditionne l affichage de la fleche back-to-top
+  // (visible uniquement apres scroll > 50px). Reset a chaque change d event.
+  const [eventPanelHasScrolled, setEventPanelHasScrolled] = useState(false);
   // Trigger scroll-to-top du EventDetailScreen depuis la pill bib (arrow).
   const [scrollToTopSignal, setScrollToTopSignal] = useState(0);
   useEffect(() => {
@@ -12753,6 +12767,8 @@ export default function App() {
     // Reset hasPhotos a chaque change d event : evite que la pill bib reste
     // visible pendant la transition d un event A (avec photos) vers B (sans).
     setEventPanelHasPhotos(false);
+    // Reset hasScrolled : nouvelle vue commence en haut.
+    setEventPanelHasScrolled(false);
   }, [eventInPanel?.code]);
 
   // Anime translateX quand openedEvent change. Pas d anim au mount (init OK).
@@ -12922,6 +12938,7 @@ export default function App() {
                     onRetryUpload={retrySelfieUpload}
                     scrollToTopSignal={scrollToTopSignal}
                     onPhotosCountChange={(n, loading) => setEventPanelHasPhotos(!loading && n > 0)}
+                    onScrolledChange={setEventPanelHasScrolled}
                   />
                 </View>
               </GestureDetector>
@@ -13132,26 +13149,38 @@ export default function App() {
           alignItems: 'center',
           gap: 8,
         }}>
-          {/* Arrow back-to-top : trigger scroll vers le haut du EventDetail
-              via signal increment. A gauche de la pill search. */}
-          <TouchableOpacity
-            onPress={() => setScrollToTopSignal(s => s + 1)}
-            activeOpacity={0.8}
-            accessibilityLabel="Retour en haut de page"
-            style={{
-              width: 40, height: 40, borderRadius: 20,
-              backgroundColor: C.primary,
-              alignItems: 'center', justifyContent: 'center',
-              shadowColor: C.primary, shadowOpacity: 0.25,
-              shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
-              elevation: 6,
-            }}
-          >
-            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-              <Path d="M12 19V5" />
-              <Path d="M5 12l7-7 7 7" />
-            </Svg>
-          </TouchableOpacity>
+          {/* Arrow back-to-top : visible uniquement apres scroll > 50px,
+              meme fond frosted que la pill bib (BlurView 80 + white 0.35) et
+              meme taille que la pill loupe home (40x40 borderRadius 16).
+              Icone violet pour ressortir sur le fond blanc translucide. */}
+          {eventPanelHasScrolled && (
+            <TouchableOpacity
+              onPress={() => setScrollToTopSignal(s => s + 1)}
+              activeOpacity={0.8}
+              accessibilityLabel="Retour en haut de page"
+              style={{
+                width: 40, height: 40, borderRadius: 16,
+                overflow: 'hidden',
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: 'rgba(255,255,255,0.9)',
+                shadowColor: '#000',
+                shadowOpacity: 0.10,
+                shadowRadius: 14,
+                shadowOffset: { width: 0, height: 4 },
+                elevation: 10,
+              }}
+            >
+              <BlurView intensity={80} tint="light" style={{
+                flex: 1, alignItems: 'center', justifyContent: 'center',
+                backgroundColor: 'rgba(255,255,255,0.35)',
+              }}>
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={C.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M12 19V5" />
+                  <Path d="M5 12l7-7 7 7" />
+                </Svg>
+              </BlurView>
+            </TouchableOpacity>
+          )}
           <View style={{
             width: 200,
             borderRadius: 22,
