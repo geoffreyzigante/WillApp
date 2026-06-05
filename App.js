@@ -2800,7 +2800,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             <Path d="M12 8h.01M11 12h1v4h1" stroke={C.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
             <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke={C.primary} strokeWidth={1.8} />
           </Svg>
-          <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700', fontFamily: 'Montserrat' }}>+ d'infos</Text>
+          <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700', fontFamily: 'Montserrat' }}>Infos pratiques</Text>
         </TouchableOpacity>
       </View>
 
@@ -3110,7 +3110,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   >
                     <FavStar
                       size={14}
-                      fill={favOnly ? '#fff' : 'none'}
+                      fill={favOnly ? '#fff' : C.primary}
                       stroke={favOnly ? '#fff' : C.primary}
                       strokeWidth={1.8}
                     />
