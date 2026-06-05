@@ -12004,23 +12004,50 @@ export default function App() {
     }
   }, [runnerSession?.profile?.userId]);
 
-  // Favoris photos perso (locaux par device, scopés par userId).
-  // Rechargés quand userId change (ex: login runner → userId aligne sur runner.userId).
-  // Conditionne au runnerSession : les favoris ne doivent EXISTER en cache
-  // que pour un compte connecte (cf. requete utilisateur, deconnecte = 0 favoris).
+  // Favoris photos perso. Source de verite = server (sync mobile<->web depuis
+  // l ajout des endpoints /runner/photo-favorite[s]). AsyncStorage sert de
+  // cache local pour affichage immediat avant le fetch reseau, et de fallback
+  // offline. Sync flow :
+  //  1. Hydrate depuis AsyncStorage (instant) -> UI reactive.
+  //  2. GET /runner/photo-favorites -> merge union avec local (migration des
+  //     favs pre-sync), push union au server, ecrit AsyncStorage final.
   useEffect(() => {
     if (!userId || !runnerSession) {
       setPhotoFavorites([]);
       return;
     }
-    AsyncStorage.getItem(`@will_photo_favorites_${userId}`).then(v => {
-      if (v) {
-        try { setPhotoFavorites(JSON.parse(v)); } catch { setPhotoFavorites([]); }
-      } else {
-        setPhotoFavorites([]);
-      }
-    });
-  }, [userId, runnerSession]);
+    let cancelled = false;
+    (async () => {
+      const cachedRaw = await AsyncStorage.getItem(`@will_photo_favorites_${userId}`).catch(() => null);
+      let local = [];
+      if (cachedRaw) { try { local = JSON.parse(cachedRaw); } catch {} }
+      if (!cancelled) setPhotoFavorites(Array.isArray(local) ? local : []);
+      try {
+        const r = await runnerApiFetch('/runner/photo-favorites');
+        if (cancelled) return;
+        if (!r?.ok) return;
+        const data = await r.json().catch(() => ({}));
+        const remote = Array.isArray(data?.keys) ? data.keys : [];
+        const merged = Array.from(new Set([...(Array.isArray(local) ? local : []), ...remote]));
+        const localSet = new Set(local || []);
+        const needsServerPush = merged.some(k => !remote.includes(k));
+        setPhotoFavorites(merged);
+        AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(merged)).catch(() => {});
+        if (needsServerPush) {
+          for (const k of merged) {
+            if (!remote.includes(k)) {
+              runnerApiFetch('/runner/photo-favorite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: k }),
+              }).catch(() => {});
+            }
+          }
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [userId, runnerSession, runnerApiFetch]);
 
   // Charge @will_follows_<userId> quand un runner est connecte. Scope par
   // userId pour survivre au logout/re-login du meme compte sans fuite
@@ -12560,14 +12587,37 @@ export default function App() {
     // Garde-fou : seul un runner connecte peut likeer une photo. Le caller
     // doit deja wrapper avec requireAuth pour ouvrir le modal de login si non.
     if (!photoId || !userId || !runnerSession) return;
+    let wasFav = false;
     setPhotoFavorites(prev => {
-      const next = prev.includes(photoId)
-        ? prev.filter(k => k !== photoId)
-        : [...prev, photoId];
+      wasFav = prev.includes(photoId);
+      const next = wasFav ? prev.filter(k => k !== photoId) : [...prev, photoId];
       AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(next)).catch(() => {});
       return next;
     });
-  }, [userId, runnerSession]);
+    // Sync server (best-effort, rollback en cas d echec). Le state local est
+    // deja a jour : l UI reagit immediatement. Si le server refuse, on
+    // restaure l etat anterieur et on re-ecrit AsyncStorage.
+    const method = wasFav ? 'DELETE' : 'POST';
+    runnerApiFetch('/runner/photo-favorite', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: photoId }),
+    }).then(r => {
+      if (r && !r.ok) {
+        setPhotoFavorites(prev => {
+          const restored = wasFav ? [...prev, photoId] : prev.filter(k => k !== photoId);
+          AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(restored)).catch(() => {});
+          return restored;
+        });
+      }
+    }).catch(() => {
+      setPhotoFavorites(prev => {
+        const restored = wasFav ? [...prev, photoId] : prev.filter(k => k !== photoId);
+        AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(restored)).catch(() => {});
+        return restored;
+      });
+    });
+  }, [userId, runnerSession, runnerApiFetch]);
 
   // Audit B15 — Upload R2 traque via selfieUploadState. Appele par onSaved
   // (nouveau selfie) et par retrySelfieUpload (tap pastille rouge / bouton
