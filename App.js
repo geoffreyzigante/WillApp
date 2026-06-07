@@ -3913,6 +3913,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const [isShooting, setIsShooting] = useState(false);
   const [isAutoArmed, setIsAutoArmed] = useState(false);
   const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
+  // Caméra physique (prop isActive de <VisionCamera>). Distincte de
+  // isAutoArmed (intention de capturer). Pilotée par AppState : iOS suspend
+  // l'AVCaptureSession en background ; on toggle false→true au retour
+  // foreground pour forcer vision-camera à réattacher caméra + frame processor
+  // (sans ce toggle, onHumansDetectedJS n'est plus appelé même si Go! reste actif).
+  const [cameraActive, setCameraActive] = useState(true);
   // Compteur de session "Capturees" -- incremente a chaque enqueue (succes
   // takePhoto + write disque). Reset au mount du screen (session photographe).
   // Ref pour l'increment cote captureOne, state pour le rendu du badge UI.
@@ -4341,9 +4347,21 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // AppState : retour foreground → kick les deux workers (au cas où la
   // connexion soit revenue pendant que l'app était en background, ou que des
   // brut n'aient pas eu le temps d'etre traites avant la mise en background).
+  // Pilote aussi cameraActive (prop isActive de <VisionCamera>) : sans le
+  // toggle false→true, le frame processor ne reprend pas après suspension iOS
+  // et la capture auto reste gelée alors que le bouton Go! affiche actif.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active') { processQueue(); drainQueue(); }
+      if (next === 'active') {
+        processQueue();
+        drainQueue();
+        // Reset throttles : sinon la 1ère frame post-foreground peut être
+        // filtrée (frameSkipSV % 3) et retarder la 1ère détection de ~100ms.
+        try { frameSkipSV.value = 0; isoTickSV.value = 0; } catch {}
+        setCameraActive(true);
+      } else if (next === 'background' || next === 'inactive') {
+        setCameraActive(false);
+      }
     });
     return () => sub.remove();
   }, []);
@@ -5367,7 +5385,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         }}
         device={device}
         format={format}
-        isActive={true}
+        isActive={cameraActive}
         // video=true pour le frame processor (detection humains Apple Vision).
         // photo=true + photoQualityBalance="speed" : AVCapturePhotoOutput skip
         // Deep Fusion + Night mode -> capture en 80-200 ms au lieu de 300-800 ms.
