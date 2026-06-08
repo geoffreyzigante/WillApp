@@ -10585,7 +10585,12 @@ function PhotoViewerModal({
                             source={{ uri: item.uri }}
                             placeholder={{ uri: item.uri }}
                             style={{ flex: 1 }}
-                            contentFit="cover"
+                            // contain (vs cover) : preserve le cadrage entier
+                            // de la photo source = identique au fichier
+                            // telecharge + au cadrage photographe. Sinon le
+                            // viewer crop et le watermark bord droit risque
+                            // d'etre coupe.
+                            contentFit="contain"
                             cachePolicy="memory-disk"
                             priority="high"
                             transition={0}
