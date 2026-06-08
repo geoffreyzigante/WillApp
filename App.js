@@ -12206,7 +12206,7 @@ export default function App() {
         const r = await runnerApiFetch('/runner/follows');
         if (cancelled) return;
         if (!r) {
-          Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid.slice(-6)} profileUid=${uid.slice(-6)}\nrunnerApiFetch null`);
+          Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid}\nprofileUid=${uid}\nrunnerApiFetch null`);
           return;
         }
         if (!r.ok) {
@@ -12230,7 +12230,7 @@ export default function App() {
             crossCheck = `event-test HTTP ${r2?.status}`;
           }
         } catch (e2) { crossCheck = `event-test EXC: ${e2?.message||e2}`; }
-        Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid.slice(-6)} profileUid=${uid.slice(-6)}\nmatch=${tokenUid === uid}\nlocal: ${local.length}\nremote: ${remote.length} ${JSON.stringify(remote).slice(0, 100)}\n${crossCheck}`);
+        Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid}\nprofileUid=${uid}\nmatch=${tokenUid === uid}\nlocal: ${local.length}\nremote: ${remote.length} ${JSON.stringify(remote).slice(0, 100)}\n${crossCheck}`);
         if (cancelled) return;
         setFollows(merged);
         AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(merged)).catch(() => {});
