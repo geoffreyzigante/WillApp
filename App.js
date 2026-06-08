@@ -10062,12 +10062,17 @@ function PhotoViewerModal({
   // Layout cible (hauteurs fixes pour calcul de la zone photo)
   const HEADER_H = 56;          // titre + date
   const SLIDER_H = 0;           // slider supprime ; constante conservee pour les autres refs
-  const BUTTON_AREA_H = 78;     // bouton + paddings
+  const BUTTON_AREA_H = 78;     // bouton + paddings (mode orga uniquement)
+  // Mode runner : pas de zone reservee pour le CTA puisqu il chevauche le
+  // bas de la photo. Just bottom safe-area + 32 (marge sous le CTA qui
+  // depasse) pour matcher le viewer web mobile (.vstage bottom: env+32).
+  const RUNNER_BOTTOM_RESERVE = 32;
   const photoMargin = 20;       // marge G/D autour de la photo principale
   const targetX = photoMargin;
   const targetY = topPad + HEADER_H;
   const targetW = winWidth - photoMargin * 2;
-  const targetH = winHeight - topPad - HEADER_H - BUTTON_AREA_H - bottomPad - 8;
+  const effectiveBottomReserve = isOrga ? BUTTON_AREA_H : RUNNER_BOTTOM_RESERVE;
+  const targetH = winHeight - topPad - HEADER_H - effectiveBottomReserve - bottomPad - 8;
 
   // ── v2.3 refonte : Animation shared-element en TRANSFORM-ONLY ─────────
   // Au lieu d'animer left/top/width/height (re-layout cher → saccades), on
