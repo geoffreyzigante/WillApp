@@ -10494,11 +10494,16 @@ function PhotoViewerModal({
       <GestureHandlerRootView style={{ flex: 1 }}>
         {visible ? (
         <View style={{ flex: 1 }}>
-          {/* Fond blanc anime (fade in au mount, fade out a la fermeture) */}
+          {/* Fond givre blanc (glassmorphism). BlurView pour flouter la
+              galerie sous-jacente + voile blanc translucide par-dessus.
+              bgStyle anime l opacite au mount / unmount. */}
           <ReAnimated.View
             pointerEvents="none"
-            style={[StyleSheet.absoluteFillObject, { backgroundColor: viewerBg }, bgStyle]}
-          />
+            style={[StyleSheet.absoluteFillObject, bgStyle]}
+          >
+            <BlurView intensity={60} tint="light" style={StyleSheet.absoluteFillObject} />
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(255,255,255,0.65)' }]} />
+          </ReAnimated.View>
 
           {/* Header : titre event + date (fade in apres l'anim shared-element) */}
           <ReAnimated.View
@@ -10509,12 +10514,25 @@ function PhotoViewerModal({
             }, uiStyle]}
           >
             {eventTitle ? (
-              <Text numberOfLines={1} style={{ color: '#1a1a1a', fontSize: 18, fontWeight: '700', letterSpacing: -0.2 }}>
+              <Text numberOfLines={1} style={{
+                color: '#1a1a1a',
+                fontFamily: 'AVEstiana',
+                fontSize: 22,
+                letterSpacing: -0.2,
+                lineHeight: 24,
+              }}>
                 {eventTitle}
               </Text>
             ) : null}
             {eventDate ? (
-              <Text style={{ color: '#9ca3af', fontSize: 13, marginTop: 2 }}>{eventDate}</Text>
+              <Text style={{
+                color: '#9ca3af',
+                fontFamily: 'Montserrat',
+                fontSize: 12,
+                fontWeight: '500',
+                letterSpacing: 0.2,
+                marginTop: 4,
+              }}>{eventDate}</Text>
             ) : null}
           </ReAnimated.View>
 
@@ -10641,16 +10659,15 @@ function PhotoViewerModal({
               swipe horizontal sur la grande photo (FlatList pagingEnabled
               native, sans aucun sync croise -> pas de race possible). */}
 
-          {/* Bouton bas : Telecharger (coureur, violet primary) OU
-              Publier/Masquer (orga, rose Will). Supprimer cache par flag. */}
-          <ReAnimated.View
-            style={[{
-              position: 'absolute', left: 0, right: 0, bottom: bottomPad,
-              height: BUTTON_AREA_H, paddingHorizontal: 24,
-              alignItems: 'center', justifyContent: 'center',
-            }, uiStyle]}
-          >
-            {isOrga ? (
+          {/* Bouton bas : Telecharger (coureur) OU Publier/Masquer (orga). */}
+          {isOrga ? (
+            <ReAnimated.View
+              style={[{
+                position: 'absolute', left: 0, right: 0, bottom: bottomPad,
+                height: BUTTON_AREA_H, paddingHorizontal: 24,
+                alignItems: 'center', justifyContent: 'center',
+              }, uiStyle]}
+            >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' }}>
                 <TouchableOpacity
                   onPress={handleToggleVisibility}
@@ -10658,7 +10675,7 @@ function PhotoViewerModal({
                   activeOpacity={0.85}
                   style={{
                     flex: 1, paddingVertical: 14, borderRadius: 999,
-                    backgroundColor: C.pinkPill,   // rose Will pinkPill (orga)
+                    backgroundColor: C.pinkPill,
                     alignItems: 'center', justifyContent: 'center',
                     flexDirection: 'row', gap: 8,
                     opacity: busy ? 0.65 : 1,
@@ -10701,17 +10718,32 @@ function PhotoViewerModal({
                   </TouchableOpacity>
                 ) : null}
               </View>
-            ) : (
+            </ReAnimated.View>
+          ) : (
+            // Mode coureur : CTA Telecharger positionne par rapport au container
+            // photo (top: targetY + cardH - 23 = pile sur le bord bas avec 50%
+            // qui depasse). Mirror site .vcta translate(-50%, 50%).
+            <ReAnimated.View
+              style={[{
+                position: 'absolute', left: 0, right: 0,
+                top: targetY + cardH - 23,
+                alignItems: 'center', justifyContent: 'center',
+                zIndex: 30,
+              }, uiStyle]}
+              pointerEvents="box-none"
+            >
               <TouchableOpacity
                 onPress={download}
                 disabled={busy}
                 activeOpacity={0.85}
                 style={{
-                  paddingVertical: 14, paddingHorizontal: 32, borderRadius: 999,
-                  backgroundColor: '#7B2FFF',   // violet primary (coureur)
+                  paddingVertical: 12, paddingHorizontal: 28, borderRadius: 999,
+                  backgroundColor: '#7B2FFF',
                   alignItems: 'center', justifyContent: 'center',
                   flexDirection: 'row', gap: 8,
-                  opacity: busy ? 0.65 : 1, minWidth: 220,
+                  opacity: busy ? 0.65 : 1, minWidth: 200,
+                  shadowColor: '#7B2FFF', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
+                  elevation: 6,
                 }}
                 accessibilityLabel="Télécharger la photo"
               >
@@ -10722,12 +10754,12 @@ function PhotoViewerModal({
                     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
                       <Path d="M12 4v12m0 0l-5-5m5 5l5-5M4 20h16" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
                     </Svg>
-                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Télécharger</Text>
+                    <Text style={{ color: '#fff', fontFamily: 'Montserrat', fontSize: 14, fontWeight: '600' }}>Télécharger</Text>
                   </>
                 )}
               </TouchableOpacity>
-            )}
-          </ReAnimated.View>
+            </ReAnimated.View>
+          )}
         </View>
         ) : null}
       </GestureHandlerRootView>
