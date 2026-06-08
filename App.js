@@ -404,6 +404,35 @@ const colorForType = (eventType) => {
 // Label affiché pour event_type ; la valeur stockée reste sans accent ("Velo").
 const displayEventType = (t) => (t === 'Velo' ? 'Vélo' : t);
 
+// Compose le titre d'une course. label_only=true => juste le label
+// (mode nom personnalise). Sinon => `${label} ${km} km` ou `${km} km`.
+function raceTitle({ label, label_only, km } = {}) {
+  const l = (label || '').toString().trim();
+  if (label_only && l) return l;
+  if (l) return `${l} ${km} km`;
+  return `${km} km`;
+}
+
+// Titre depuis une photo (race + race_label + race_label_only).
+function raceTitleFromPhoto(p) {
+  if (!p || p.race === null || p.race === undefined || p.race === '') return '';
+  return raceTitle({ label: p.race_label, label_only: p.race_label_only, km: p.race });
+}
+
+// Pills toggle Type d epreuve / Nom personnalise dans les formulaires
+// distance (wizard step 2 + sub-modal edition).
+const modeChipStyleApp = (active) => ({
+  paddingHorizontal: 10, paddingVertical: 5,
+  borderRadius: 999,
+  backgroundColor: active ? '#7B2FFF' : 'transparent',
+  borderWidth: 1,
+  borderColor: active ? '#7B2FFF' : '#d8d4e0',
+});
+const modeChipTextStyleApp = (active) => ({
+  fontSize: 11, fontWeight: '700',
+  color: active ? '#fff' : '#666',
+});
+
 // Audit B15 — Upload selfie sur R2, factorise pour permettre l usage depuis
 // SelfieModal.save (1ere tentative declenchee par onSaved cote App) et depuis
 // le retry manuel. Throw explicite si HTTP non-OK pour que le caller bascule
@@ -2366,7 +2395,10 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
 // Reanimated 3 (useAnimatedScrollHandler + interpolateColor) : chaque
 // item passe doucement de accent (hors centre) a blanc (sur le cadre)
 // -> pas de "texte accent sur cadre accent" devenu invisible.
-const WHEEL_ITEM_W = 100;
+// 140 (vs 100 avant) pour accommoder les labels type complets
+// ("Triathlon 12 km", "Course sur route 42 km" ...). Labels plus longs sont
+// tronques en ellipsis (numberOfLines=1 sur le Text de l item).
+const WHEEL_ITEM_W = 140;
 const WHEEL_H = 30;
 const WHEEL_LOOPS = 30;
 const ReAnimatedFlatList = ReAnimated.createAnimatedComponent(FlatList);
@@ -2391,13 +2423,18 @@ function WheelItem({ index, label, accent, scrollX, onPress }) {
       style={{
         width: WHEEL_ITEM_W, height: WHEEL_H,
         alignItems: 'center', justifyContent: 'center',
+        paddingHorizontal: 8,
       }}
     >
-      <ReAnimated.Text style={[{
-        fontWeight: '600',
-        fontSize: 13.5,
-        fontFamily: 'Montserrat',
-      }, animStyle]}>{label}</ReAnimated.Text>
+      <ReAnimated.Text
+        numberOfLines={1}
+        ellipsizeMode="tail"
+        style={[{
+          fontWeight: '600',
+          fontSize: 13.5,
+          fontFamily: 'Montserrat',
+          maxWidth: '100%',
+        }, animStyle]}>{label}</ReAnimated.Text>
     </TouchableOpacity>
   );
 }
@@ -2596,6 +2633,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           race: p.race,
           km: p.km,
           race_label: p.race_label || null,
+          race_label_only: p.race_label_only === true,
           photographer: photographerId,
         };
       });
@@ -2649,24 +2687,29 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)))
     .sort((a, b) => Number(a) - Number(b));
 
-  // Map race_id -> label injecte par le worker via /list-public (race_label).
-  // Fallback : si la photo n'a pas de race_label (event legacy), on tente
-  // event.distances local. Sinon fronts default a `${km} km`.
+  // Map race_id -> { label, label_only } injecte par worker (race_label +
+  // race_label_only sur la photo) ou fallback event.distances local.
+  // raceTabLabel respecte label_only (mode nom personnalise = label seul).
   const raceLabelById = useMemo(() => {
     const m = {};
     for (const p of photos) {
-      if (p.race && p.race_label && !m[p.race]) m[p.race] = p.race_label;
+      if (p.race && p.race_label && !m[p.race]) {
+        m[p.race] = { label: p.race_label, label_only: p.race_label_only === true };
+      }
     }
     const evDistances = Array.isArray(event.distances) ? event.distances : [];
     for (const d of evDistances) {
       const k = String(d.km);
-      if (!m[k] && d.label) m[k] = d.label;
+      if (!m[k] && d.label) {
+        m[k] = { label: d.label, label_only: d.label_only === true };
+      }
     }
     return m;
   }, [photos, event.distances]);
   const raceTabLabel = (raceKey) => {
-    const lbl = raceLabelById[raceKey];
-    return lbl ? `${lbl} ${raceKey} km` : `${raceKey} km`;
+    const entry = raceLabelById[raceKey];
+    if (entry) return raceTitle({ label: entry.label, label_only: entry.label_only, km: raceKey });
+    return `${raceKey} km`;
   };
 
   // Niveau 2 — positions km presentes pour la course active. Exclut les
@@ -3019,7 +3062,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   }}>
                     <View style={{ marginBottom: 4 }}>
                       <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: tint, fontSize: 15, fontWeight: '700' }}>
-                        {d.label ? `${d.label} ${d.km} km` : `${d.km} km`}
+                        {raceTitle(d)}
                       </Text>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 16 }}>
@@ -5672,7 +5715,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         }}>
             {/* Section COURSE (gauche, 50%) — label + roulette 3-items toujours visible */}
             {(() => {
-              const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: d.label ? `${d.label} ${d.km} km` : `${d.km} km`, value: d }))];
+              const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: raceTitle(d), value: d }))];
               const rawIdx = courseItems.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null));
               const courseIdx = rawIdx >= 0 ? rawIdx : 0;
               const setCourseIdx = (idx) => {
@@ -7333,7 +7376,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       : (editEvent?.location || 'Non défini');
     const previewDistances = distances.length === 0
       ? 'Aucune'
-      : distances.map(d => d.km ? (d.label ? `${d.label} ${d.km} km` : `${d.km} km`) : '?').join(', ');
+      : distances.map(d => d.km ? raceTitle(d) : '?').join(', ');
 
     // PUT partiel : met a jour uniquement les champs presents dans `patch`.
     const savePartial = async (patch) => {
@@ -7821,12 +7864,20 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12, paddingBottom: 32, paddingHorizontal: 16 }} keyboardShouldPersistTaps="handled">
                 {distances.map((d, idx) => (
                   <View key={idx} style={{ backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 10 }}>
+                    <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                      <TouchableOpacity onPress={() => setDistanceMode(idx, false)} style={modeChipStyleApp(!d.label_only)}>
+                        <Text style={modeChipTextStyleApp(!d.label_only)}>Type d'épreuve</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setDistanceMode(idx, true)} style={modeChipStyleApp(!!d.label_only)}>
+                        <Text style={modeChipTextStyleApp(!!d.label_only)}>Nom personnalisé</Text>
+                      </TouchableOpacity>
+                    </View>
                     <View style={{ marginBottom: 8 }}>
-                      <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>COURSE</Text>
+                      <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>{d.label_only ? 'NOM' : 'TYPE'}</Text>
                       <TextInput
                         value={d.label}
                         onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
-                        placeholder={eventType || 'Course'}
+                        placeholder={d.label_only ? 'Nom de la course' : (eventType || 'Type')}
                         placeholderTextColor="rgba(123,47,255,0.3)"
                         maxLength={40}
                         style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', paddingHorizontal: 12, color: C.text, fontSize: 14 }}
@@ -8016,12 +8067,20 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     <Text style={formSectionStyle.heading}>Courses</Text>
                     {distances.map((d, idx) => (
                       <View key={idx} style={{ backgroundColor: '#faf9ff', borderRadius: 12, padding: 10, marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
+                          <TouchableOpacity onPress={() => setDistanceMode(idx, false)} style={modeChipStyleApp(!d.label_only)}>
+                            <Text style={modeChipTextStyleApp(!d.label_only)}>Type d'épreuve</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => setDistanceMode(idx, true)} style={modeChipStyleApp(!!d.label_only)}>
+                            <Text style={modeChipTextStyleApp(!!d.label_only)}>Nom personnalisé</Text>
+                          </TouchableOpacity>
+                        </View>
                         <View style={{ marginBottom: 8 }}>
-                          <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>COURSE</Text>
+                          <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>{d.label_only ? 'NOM' : 'TYPE'}</Text>
                           <TextInput
                             value={d.label}
                             onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
-                            placeholder={eventType || 'Course'}
+                            placeholder={d.label_only ? 'Nom de la course' : (eventType || 'Type')}
                             placeholderTextColor={C.textSoft}
                             maxLength={40}
                             style={[formSectionStyle.input, { marginBottom: 0 }]}
@@ -11241,6 +11300,7 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
           race: p.race,
           km: p.km,
           race_label: p.race_label || null,
+          race_label_only: p.race_label_only === true,
           hidden: p.hidden === true,   // propagation du flag worker
         }));
       setHiddenCount(typeof data.hidden_count === 'number' ? data.hidden_count : 0);
@@ -11452,7 +11512,7 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
                   backgroundColor: active ? C.primary : '#f5f3ff',
                 }}
               >
-                <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>{d.label ? `${d.label} ${d.km} km` : `${d.km} km`}</Text>
+                <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>{raceTitle(d)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -12938,6 +12998,7 @@ export default function App() {
           uri: p.url, thumbUri: p.thumb_url || p.url,
           race: p.race, km: p.km,
           race_label: p.race_label || null,
+          race_label_only: p.race_label_only === true,
           confidence: p.confidence, uploaded: p.uploaded,
         }));
         setBibResults(mapped);
