@@ -10584,7 +10584,7 @@ function PhotoViewerModal({
                   }}
                   renderItem={({ item }) => (
                     <View style={{ width: cardW, height: cardH, paddingHorizontal: photoMargin }}>
-                      <ReAnimated.View style={[{ flex: 1, overflow: 'hidden', backgroundColor: '#f5f5f5' }, radiusStyle]}>
+                      <ReAnimated.View style={[{ flex: 1, overflow: 'hidden', backgroundColor: 'transparent' }, radiusStyle]}>
                         {item?.uri ? (
                           <ExpoImage
                             source={{ uri: item.uri }}
