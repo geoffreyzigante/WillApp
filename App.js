@@ -10069,10 +10069,18 @@ function PhotoViewerModal({
   const RUNNER_BOTTOM_RESERVE = 32;
   const photoMargin = 20;       // marge G/D autour de la photo principale
   const targetX = photoMargin;
-  const targetY = topPad + HEADER_H;
   const targetW = winWidth - photoMargin * 2;
   const effectiveBottomReserve = isOrga ? BUTTON_AREA_H : RUNNER_BOTTOM_RESERVE;
-  const targetH = winHeight - topPad - HEADER_H - effectiveBottomReserve - bottomPad - 8;
+  // targetH ajuste au ratio 3:4 (portrait iPhone, standard des photos
+  // d event). Container photo cale sur l aspect de l image -> plus de
+  // letterboxing en haut/bas. Cap a maxCardH si l ideal depasse l espace
+  // dispo (photos paysage ou ecran etroit).
+  const PHOTO_ASPECT = 3 / 4;   // width / height = portrait iPhone
+  const idealCardH = Math.round(targetW / PHOTO_ASPECT);
+  const maxCardH = winHeight - topPad - HEADER_H - effectiveBottomReserve - bottomPad - 8;
+  const targetH = Math.min(idealCardH, maxCardH);
+  // Centre verticalement quand idealCardH < maxCardH (marge libre).
+  const targetY = topPad + HEADER_H + Math.max(0, (maxCardH - targetH) / 2);
 
   // ── v2.3 refonte : Animation shared-element en TRANSFORM-ONLY ─────────
   // Au lieu d'animer left/top/width/height (re-layout cher → saccades), on
