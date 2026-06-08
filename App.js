@@ -12231,7 +12231,10 @@ export default function App() {
           }
         } catch (e2) { crossCheck = `event-test EXC: ${e2?.message||e2}`; }
         const emailMobile = runnerSession?.profile?.email || '(none)';
-        Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid}\nprofileUid=${uid}\nemail=${emailMobile}\nlocal: ${local.length}\nremote: ${remote.length}\n${crossCheck}`);
+        const emailLen = emailMobile.length;
+        // codepoints en hex (4 chars) pour voir d eventuels caracteres invisibles
+        const emailHex = Array.from(emailMobile).map(c => c.codePointAt(0).toString(16).padStart(4,'0')).join(' ');
+        Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid}\nprofileUid=${uid}\nemail="${emailMobile}" (len=${emailLen})\nhex=${emailHex}\nremote: ${remote.length}\n${crossCheck}`);
         if (cancelled) return;
         setFollows(merged);
         AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(merged)).catch(() => {});
