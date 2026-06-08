@@ -2563,8 +2563,8 @@ function RaceDropdown({ items, activeKey, onChange, accent, bg, compact = false 
           color: accent,
           fontFamily: 'Montserrat',
           fontSize: 13,
-          fontWeight: '700',
-        }}>{active?.label || 'Toutes'}</Text>
+          fontWeight: '500',
+        }}>{active?.label || 'Toutes les photos'}</Text>
         <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8, transform: [{ rotate: open ? '180deg' : '0deg' }] }}>
           <Path d="M6 9l6 6 6-6" stroke={accent} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
@@ -2598,7 +2598,7 @@ function RaceDropdown({ items, activeKey, onChange, accent, bg, compact = false 
                       color: isActive ? '#fff' : C.text,
                       fontFamily: 'Montserrat',
                       fontSize: 14,
-                      fontWeight: isActive ? '700' : '500',
+                      fontWeight: '500',
                     }}>{it.label}</Text>
                   </TouchableOpacity>
                 );
@@ -3330,8 +3330,8 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                       }))]}
                       activeKey={activeKmFilter}
                       onChange={setActiveKmFilter}
-                      accent={C.pinkPill}
-                      bg={C.pinkPillBg}
+                      accent={C.primary}
+                      bg="#f5f3ff"
                       compact
                     />
                   )}
