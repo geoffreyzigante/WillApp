@@ -2595,6 +2595,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           tint,
           race: p.race,
           km: p.km,
+          race_label: p.race_label || null,
           photographer: photographerId,
         };
       });
@@ -2648,6 +2649,23 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)))
     .sort((a, b) => Number(a) - Number(b));
 
+  // Map race_id -> label injecte par le worker via /list-public (race_label).
+  // Fallback : si la photo n'a pas de race_label (event legacy), on tente
+  // event.distances local. Sinon fronts default a `${km} km`.
+  const raceLabelById = useMemo(() => {
+    const m = {};
+    for (const p of photos) {
+      if (p.race && p.race_label && !m[p.race]) m[p.race] = p.race_label;
+    }
+    const evDistances = Array.isArray(event.distances) ? event.distances : [];
+    for (const d of evDistances) {
+      const k = String(d.km);
+      if (!m[k] && d.label) m[k] = d.label;
+    }
+    return m;
+  }, [photos, event.distances]);
+  const raceTabLabel = (raceKey) => raceLabelById[raceKey] || `${raceKey} km`;
+
   // Niveau 2 — positions km presentes pour la course active. Exclut les
   // photos sans km (cran "-" cote photographe) -> elles ne creent pas
   // d onglet, on les retrouve uniquement dans le sous-onglet "Tous".
@@ -2700,7 +2718,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     ? []
     : [
         { key: 'all', label: 'Toutes' },
-        ...uniqueRaces.map(km => ({ key: String(km), label: `${km} km` })),
+        ...uniqueRaces.map(km => ({ key: String(km), label: raceTabLabel(String(km)) })),
       ];
 
   // Tabs km (apparaissent uniquement si course specifique selectionnee ET
@@ -2987,44 +3005,31 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           }}>
             {distances.length > 0 && (
               <View>
-                {/* Header colonnes */}
-                <View style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  paddingBottom: 6,
-                  borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${tint}40`,
-                }}>
-                  <Text style={{
-                    width: 60, fontSize: 10, fontWeight: '600', letterSpacing: 0.6,
-                    textTransform: 'uppercase', color: tint, fontFamily: 'Montserrat',
-                    opacity: 0.7,
-                  }}>Distance</Text>
-                  <Text style={{
-                    flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600',
-                    letterSpacing: 0.6, textTransform: 'uppercase', color: tint,
-                    fontFamily: 'Montserrat', opacity: 0.7,
-                  }}>Départ</Text>
-                  <Text style={{
-                    width: 70, textAlign: 'right', fontSize: 10, fontWeight: '600',
-                    letterSpacing: 0.6, textTransform: 'uppercase', color: tint,
-                    fontFamily: 'Montserrat', opacity: 0.7,
-                  }}>Dénivelé</Text>
-                </View>
+                {/* Layout empile : label en titre de ligne (fallback `${km} km`),
+                    puis km / heure / denivele en dessous. Plus lisible que 3
+                    colonnes serrees, surtout quand le label est custom. */}
                 {distances.map((d, i) => (
                   <View key={i} style={{
-                    flexDirection: 'row', alignItems: 'center',
-                    paddingVertical: 10,
+                    paddingVertical: 12,
                     borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
                     borderBottomColor: `${tint}40`,
                   }}>
-                    <Text style={{ color: tint, fontSize: 15, fontWeight: '700', width: 60 }}>
-                      {d.km} km
-                    </Text>
-                    <Text style={{ flex: 1, textAlign: 'center', color: tint, fontSize: 13, opacity: 0.85 }}>
-                      {d.time || '—'}
-                    </Text>
-                    <Text style={{ width: 70, textAlign: 'right', color: tint, fontSize: 13, opacity: 0.85 }}>
-                      {d.elevation || '—'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 4 }}>
+                      <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: tint, fontSize: 15, fontWeight: '700', flex: 1 }}>
+                        {d.label || `${d.km} km`}
+                      </Text>
+                      {d.label ? (
+                        <Text style={{ color: tint, fontSize: 12, opacity: 0.7, marginLeft: 8 }}>{d.km} km</Text>
+                      ) : null}
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 16 }}>
+                      <Text style={{ color: tint, fontSize: 12, opacity: 0.85 }}>
+                        Départ {d.time || '—'}
+                      </Text>
+                      <Text style={{ color: tint, fontSize: 12, opacity: 0.85 }}>
+                        Dénivelé {d.elevation || '—'}
+                      </Text>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -3101,47 +3106,31 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             }} />
           )}
 
-          {/* Distances integrees, sans titre de section ni puce avant km. */}
+          {/* Distances integrees, layout empile (label en titre, km/heure/denivele en dessous). */}
           {distances.length > 0 && (
             <View style={{ marginTop: 14 }}>
-              {/* Header colonnes */}
-              <View style={{
-                flexDirection: 'row', alignItems: 'center',
-                paddingBottom: 6,
-                borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${tint}40`,
-              }}>
-                <Text style={{
-                  width: 60, fontSize: 10, fontWeight: '600', letterSpacing: 0.6,
-                  textTransform: 'uppercase', color: tint, fontFamily: 'Montserrat',
-                  opacity: 0.7,
-                }}>Distance</Text>
-                <Text style={{
-                  flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600',
-                  letterSpacing: 0.6, textTransform: 'uppercase', color: tint,
-                  fontFamily: 'Montserrat', opacity: 0.7,
-                }}>Départ</Text>
-                <Text style={{
-                  width: 70, textAlign: 'right', fontSize: 10, fontWeight: '600',
-                  letterSpacing: 0.6, textTransform: 'uppercase', color: tint,
-                  fontFamily: 'Montserrat', opacity: 0.7,
-                }}>Dénivelé</Text>
-              </View>
               {distances.map((d, i) => (
                 <View key={i} style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  paddingVertical: 10,
+                  paddingVertical: 12,
                   borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
                   borderBottomColor: `${tint}40`,
                 }}>
-                  <Text style={{ color: tint, fontSize: 15, fontWeight: '700', width: 60 }}>
-                    {d.km} km
-                  </Text>
-                  <Text style={{ flex: 1, textAlign: 'center', color: tint, fontSize: 13, opacity: 0.85 }}>
-                    {d.time || '—'}
-                  </Text>
-                  <Text style={{ width: 70, textAlign: 'right', color: tint, fontSize: 13, opacity: 0.85 }}>
-                    {d.elevation || '—'}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 4 }}>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: tint, fontSize: 15, fontWeight: '700', flex: 1 }}>
+                      {d.label || `${d.km} km`}
+                    </Text>
+                    {d.label ? (
+                      <Text style={{ color: tint, fontSize: 12, opacity: 0.7, marginLeft: 8 }}>{d.km} km</Text>
+                    ) : null}
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 16 }}>
+                    <Text style={{ color: tint, fontSize: 12, opacity: 0.85 }}>
+                      Départ {d.time || '—'}
+                    </Text>
+                    <Text style={{ color: tint, fontSize: 12, opacity: 0.85 }}>
+                      Dénivelé {d.elevation || '—'}
+                    </Text>
+                  </View>
                 </View>
               ))}
             </View>
@@ -3204,7 +3193,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     -> sensation infinie. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <FilterWheel
-                    items={[{ key: 'all', label: 'Toutes' }, ...uniqueRaces.map(r => ({ key: String(r), label: `${r} km` }))]}
+                    items={[{ key: 'all', label: 'Toutes' }, ...uniqueRaces.map(r => ({ key: String(r), label: raceTabLabel(String(r)) }))]}
                     activeKey={activeRaceFilter}
                     onChange={(key) => {
                       LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
@@ -3732,14 +3721,18 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
           else if (delta === -1) opacity = 0.3;
           else if (delta === 1) opacity = 0.45;
           return (
-            <View key={gi} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{
-                color: isSel ? PINK : 'rgba(255,255,255,0.7)',
-                opacity,
-                fontSize: isSel ? 17 : 15,
-                fontWeight: isSel ? '400' : '300',
-                fontFamily: 'Montserrat',
-              }}>{it.label}</Text>
+            <View key={gi} style={{ height: ITEM_H, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6, overflow: 'hidden' }}>
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={{
+                  color: isSel ? PINK : 'rgba(255,255,255,0.7)',
+                  opacity,
+                  fontSize: isSel ? 17 : 15,
+                  fontWeight: isSel ? '400' : '300',
+                  fontFamily: 'Montserrat',
+                  maxWidth: '100%',
+                }}>{it.label}</Text>
             </View>
           );
         })}
@@ -5679,7 +5672,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         }}>
             {/* Section COURSE (gauche, 50%) — label + roulette 3-items toujours visible */}
             {(() => {
-              const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: `${d.km} km`, value: d }))];
+              const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: d.label || `${d.km} km`, value: d }))];
               const rawIdx = courseItems.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null));
               const courseIdx = rawIdx >= 0 ? rawIdx : 0;
               const setCourseIdx = (idx) => {
@@ -6779,7 +6772,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   // l email de login orga (pattern existant) mais editable independamment.
   const [contactAdmin, setContactAdmin] = useState('');
   const [phone, setPhone] = useState('');
-  const [distances, setDistances] = useState([]); // [{km, time, elevation}]
+  // distances : [{ label, km, time, elevation }]. `label` est le nom de course
+  // optionnel (40 max), pre-rempli avec event_type (Trail / Marche / etc.).
+  // Vide -> fallback `${km} km` partout en affichage.
+  const [distances, setDistances] = useState([]);
   const [timePickerIdx, setTimePickerIdx] = useState(null);
   const [elevPickerIdx, setElevPickerIdx] = useState(null);
   const [kmPickerIdx, setKmPickerIdx] = useState(null);
@@ -6849,6 +6845,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         setContactAdmin(editEvent.contact_admin || editEvent.organizer_email || organizerSession?.profile?.email || '');
         setPhone(editEvent.phone || '');
         setDistances(Array.isArray(editEvent.distances) ? editEvent.distances.map(d => ({
+          label: d.label || '',
           km: String(d.km || ''), time: d.time || '', elevation: d.elevation || '',
         })) : []);
         setCoverImage(editEvent.cover_image || null);
@@ -6926,7 +6923,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     return () => { cancelled = true; ctl.abort(); clearTimeout(timeoutId); };
   }, [postalCode]);
 
-  const addDistance = () => setDistances(d => [...d, { km: '', time: '', elevation: '' }]);
+  const addDistance = () => setDistances(d => [...d, { label: eventType || '', km: '', time: '', elevation: '' }]);
   const updateDistance = (idx, field, value) => {
     setDistances(d => d.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   };
@@ -7053,6 +7050,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         distances: distances
           .filter(d => d.km)
           .map(d => ({
+            label: (d.label || '').trim().slice(0, 40),
             km: parseFloat(d.km) || 0,
             time: d.time || '',
             elevation: d.elevation || '',
@@ -7323,7 +7321,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       : (editEvent?.location || 'Non défini');
     const previewDistances = distances.length === 0
       ? 'Aucune'
-      : distances.map(d => d.km ? `${d.km} km` : '?').join(', ');
+      : distances.map(d => d.km ? (d.label || `${d.km} km`) : '?').join(', ');
 
     // PUT partiel : met a jour uniquement les champs presents dans `patch`.
     const savePartial = async (patch) => {
@@ -7811,6 +7809,17 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12, paddingBottom: 32, paddingHorizontal: 16 }} keyboardShouldPersistTaps="handled">
                 {distances.map((d, idx) => (
                   <View key={idx} style={{ backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 10 }}>
+                    <View style={{ marginBottom: 8 }}>
+                      <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>COURSE</Text>
+                      <TextInput
+                        value={d.label}
+                        onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
+                        placeholder={eventType || 'Course'}
+                        placeholderTextColor="rgba(123,47,255,0.3)"
+                        maxLength={40}
+                        style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', paddingHorizontal: 12, color: C.text, fontSize: 14 }}
+                      />
+                    </View>
                     <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-end' }}>
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DISTANCE</Text>
@@ -7844,6 +7853,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                 <TouchableOpacity
                   onPress={async () => {
                     const cleaned = distances.filter(d => d.km).map(d => ({
+                      label: (d.label || '').trim().slice(0, 40),
                       km: parseFloat(d.km) || 0,
                       time: d.time || '',
                       elevation: d.elevation || '',
@@ -7993,6 +8003,17 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     <Text style={formSectionStyle.heading}>Courses</Text>
                     {distances.map((d, idx) => (
                       <View key={idx} style={{ backgroundColor: '#faf9ff', borderRadius: 12, padding: 10, marginBottom: 8 }}>
+                        <View style={{ marginBottom: 8 }}>
+                          <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>COURSE</Text>
+                          <TextInput
+                            value={d.label}
+                            onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
+                            placeholder={eventType || 'Course'}
+                            placeholderTextColor={C.textSoft}
+                            maxLength={40}
+                            style={[formSectionStyle.input, { marginBottom: 0 }]}
+                          />
+                        </View>
                         <View style={{ flexDirection: 'row', gap: 6 }}>
                           <View style={{ flex: 1 }}>
                             <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DISTANCE</Text>
@@ -11206,6 +11227,7 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
           tint,
           race: p.race,
           km: p.km,
+          race_label: p.race_label || null,
           hidden: p.hidden === true,   // propagation du flag worker
         }));
       setHiddenCount(typeof data.hidden_count === 'number' ? data.hidden_count : 0);
@@ -11417,7 +11439,7 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
                   backgroundColor: active ? C.primary : '#f5f3ff',
                 }}
               >
-                <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>{d.km} km</Text>
+                <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>{d.label || `${d.km} km`}</Text>
               </TouchableOpacity>
             );
           })}
@@ -12855,6 +12877,7 @@ export default function App() {
           id: p.key, key: p.key,
           uri: p.url, thumbUri: p.thumb_url || p.url,
           race: p.race, km: p.km,
+          race_label: p.race_label || null,
           confidence: p.confidence, uploaded: p.uploaded,
         }));
         setBibResults(mapped);
