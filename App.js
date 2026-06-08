@@ -12237,12 +12237,28 @@ export default function App() {
   // les comptes existants au moment du deploy.
   //
   // Sync app<->site (2026-06-09) : apres le load local, on appelle
-  // GET /runner/follows et on merge en union avec le local. Resultat :
+  // GET /runner/follows et on REMPLACE le local par la version serveur
+  // (source de verite). Sans ce remplacement, des follows revoquus cote
+  // serveur (unfollow web ou face-data delete) resteraient remanents en
+  // local. Resultat :
   //  - user fait un follow sur le SITE -> il apparait dans l app au prochain
-  //    open (ou apres logout/login si l app etait deja open).
+  //    foreground (cold start OU AppState 'active').
+  //  - user fait un unfollow sur le SITE -> disparait pareillement.
   //  - user fait un follow sur l APP -> POST /runner/follow ecrit deja le
   //    consent server-side, le site le verra sur sa prochaine page event.
   // Pattern identique a photo-favorites (App.js:12096-12134).
+  const syncFollowsFromServer = useCallback(async (uid) => {
+    if (!uid) return;
+    try {
+      const r = await runnerApiFetch('/runner/follows');
+      if (!r?.ok) return;
+      const data = await r.json().catch(() => ({}));
+      const remote = Array.isArray(data?.codes) ? data.codes : [];
+      setFollows(remote);
+      AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(remote)).catch(() => {});
+    } catch {}
+  }, [runnerApiFetch]);
+
   useEffect(() => {
     const uid = runnerSession?.profile?.userId;
     if (!uid) return;
@@ -12263,69 +12279,21 @@ export default function App() {
       }
       if (!Array.isArray(local)) local = [];
       if (!cancelled && local.length > 0) setFollows(local);
-
-      // Merge server : GET /runner/follows -> union avec local.
-      // [DEBUG 2026-06-09] Alert temporaire pour tracer ou la sync casse.
-      try {
-        // Decode le token (format `dataB64.sig`, dataB64 = base64 de `runner:UID:iat:exp`)
-        // pour voir quel userId il encode reellement vs le profil.
-        let tokenUid = '?';
-        try {
-          const tok = runnerSession?.token || '';
-          const dataB64 = tok.split('.')[0] || '';
-          const decoded = typeof atob === 'function' ? atob(dataB64) : Buffer.from(dataB64, 'base64').toString('utf8');
-          tokenUid = decoded.split(':')[1] || '(parse fail)';
-        } catch { tokenUid = '(decode error)'; }
-        const r = await runnerApiFetch('/runner/follows');
-        if (cancelled) return;
-        if (!r) {
-          Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid}\nprofileUid=${uid}\nrunnerApiFetch null`);
-          return;
-        }
-        if (!r.ok) {
-          let body = '';
-          try { body = await r.text(); } catch {}
-          Alert.alert('[DEBUG follows]', `HTTP ${r.status}: ${body.slice(0, 200)}`);
-          return;
-        }
-        const data = await r.json().catch(() => ({}));
-        const remote = Array.isArray(data?.codes) ? data.codes : [];
-        const merged = Array.from(new Set([...local, ...remote]));
-        // Cross-check : meme token, GET /runner/follow/event-test. Si {following:false}
-        // alors que le web le voit true -> token mobile pour un autre userId.
-        let crossCheck = 'n/a';
-        let knownEvents = 'n/a';
-        try {
-          const r2 = await runnerApiFetch('/runner/follow/event-test');
-          if (r2?.ok) {
-            const d2 = await r2.json().catch(() => ({}));
-            crossCheck = `event-test => following:${d2?.following}`;
-          } else {
-            crossCheck = `event-test HTTP ${r2?.status}`;
-          }
-          const r3 = await runnerApiFetch('/runner/known-events');
-          if (r3?.ok) {
-            const d3 = await r3.json().catch(() => ({}));
-            const evs = Array.isArray(d3?.events) ? d3.events : [];
-            knownEvents = `known: ${evs.length} ${JSON.stringify(evs).slice(0,80)}`;
-          } else {
-            knownEvents = `known HTTP ${r3?.status}`;
-          }
-        } catch (e2) { crossCheck = `event-test EXC: ${e2?.message||e2}`; }
-        const emailMobile = runnerSession?.profile?.email || '(none)';
-        const emailLen = emailMobile.length;
-        // codepoints en hex (4 chars) pour voir d eventuels caracteres invisibles
-        const emailHex = Array.from(emailMobile).map(c => c.codePointAt(0).toString(16).padStart(4,'0')).join(' ');
-        Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid}\nremote(follows): ${remote.length}\n${crossCheck}\n${knownEvents}`);
-        if (cancelled) return;
-        setFollows(merged);
-        AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(merged)).catch(() => {});
-      } catch (e) {
-        Alert.alert('[DEBUG follows]', `Exception: ${e?.message || String(e)}`);
-      }
+      if (!cancelled) await syncFollowsFromServer(uid);
     })();
     return () => { cancelled = true; };
-  }, [runnerSession?.profile?.userId, runnerApiFetch]);
+  }, [runnerSession?.profile?.userId, syncFollowsFromServer]);
+
+  // Re-sync follows quand l app revient au foreground (cas typique : user
+  // a fait un follow sur le site puis ouvre l app sans la killer).
+  useEffect(() => {
+    const uid = runnerSession?.profile?.userId;
+    if (!uid) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') syncFollowsFromServer(uid);
+    });
+    return () => sub.remove();
+  }, [runnerSession?.profile?.userId, syncFollowsFromServer]);
 
   const handleAuthSuccess = useCallback((session) => {
     const { isNewSignup, ...stored } = session || {};
