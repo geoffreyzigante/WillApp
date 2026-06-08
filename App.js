@@ -12247,18 +12247,6 @@ export default function App() {
   //  - user fait un follow sur l APP -> POST /runner/follow ecrit deja le
   //    consent server-side, le site le verra sur sa prochaine page event.
   // Pattern identique a photo-favorites (App.js:12096-12134).
-  const syncFollowsFromServer = useCallback(async (uid) => {
-    if (!uid) return;
-    try {
-      const r = await runnerApiFetch('/runner/follows');
-      if (!r?.ok) return;
-      const data = await r.json().catch(() => ({}));
-      const remote = Array.isArray(data?.codes) ? data.codes : [];
-      setFollows(remote);
-      AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(remote)).catch(() => {});
-    } catch {}
-  }, [runnerApiFetch]);
-
   useEffect(() => {
     const uid = runnerSession?.profile?.userId;
     if (!uid) return;
@@ -12279,21 +12267,19 @@ export default function App() {
       }
       if (!Array.isArray(local)) local = [];
       if (!cancelled && local.length > 0) setFollows(local);
-      if (!cancelled) await syncFollowsFromServer(uid);
+      // Fetch serveur = source de verite. Replace l etat local.
+      try {
+        const r = await runnerApiFetch('/runner/follows');
+        if (cancelled) return;
+        if (!r?.ok) return;
+        const data = await r.json().catch(() => ({}));
+        const remote = Array.isArray(data?.codes) ? data.codes : [];
+        setFollows(remote);
+        AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(remote)).catch(() => {});
+      } catch {}
     })();
     return () => { cancelled = true; };
-  }, [runnerSession?.profile?.userId, syncFollowsFromServer]);
-
-  // Re-sync follows quand l app revient au foreground (cas typique : user
-  // a fait un follow sur le site puis ouvre l app sans la killer).
-  useEffect(() => {
-    const uid = runnerSession?.profile?.userId;
-    if (!uid) return;
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') syncFollowsFromServer(uid);
-    });
-    return () => sub.remove();
-  }, [runnerSession?.profile?.userId, syncFollowsFromServer]);
+  }, [runnerSession?.profile?.userId, runnerApiFetch]);
 
   const handleAuthSuccess = useCallback((session) => {
     const { isNewSignup, ...stored } = session || {};
