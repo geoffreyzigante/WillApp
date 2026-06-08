@@ -1409,7 +1409,7 @@ function EventCard({ event, onPress, isFollowing, onToggleFollow, style }) {
       {/* Texte par-dessus la zone tactile (pointerEvents none pour que le tap passe au TouchableOpacity en dessous) */}
       <View style={s.eventCardCenter} pointerEvents="none">
         <Text style={s.eventDate}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
-        <Text style={[s.eventName, { lineHeight: 26, minHeight: 52 }]} numberOfLines={2} ellipsizeMode="tail">{event.name}</Text>
+        <Text style={[s.eventName, { lineHeight: 22 }]} numberOfLines={2} ellipsizeMode="tail">{event.name}</Text>
         <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
       </View>
       {/* Pastille type de course (bas droite) */}
@@ -2533,8 +2533,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // dans App.js (autour de la decl eventInPanel).
   // Bottom sheet "+ d'infos" sur le header de l event (courses, horaires,
   // bouton site organisateur).
+  // infoSheetOpen pilote l affichage inline de la section "Infos pratiques"
+  // sous le hero (anciennement un bottom-sheet modal). Toggle au tap du CTA
+  // dans le hero. useDismissibleSheet retire en meme temps que le Modal.
   const [infoSheetOpen, setInfoSheetOpen] = useState(false);
-  const { sheetTranslate: infoSheetTranslate, handlePanHandlers: infoSheetPanHandlers } = useDismissibleSheet(infoSheetOpen, () => setInfoSheetOpen(false));
   // Animated sliding pill iOS-style. Layout de chaque tab mesure via
   // onLayout. La pill slide vers la position du tab actif.
   const raceTabLayoutsRef = useRef({});
@@ -2746,7 +2748,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // de 20 que cellSize n'aurait pas pris en compte si on calculait a la main).
   // cellSize n'est utilise que pour les skeletons et tient compte des 20px de s.scroll.
   const NUM_COLS = 3;
-  const GRID_PADDING_H = 8;
+  // 0 : la grille s'aligne sur les memes edges gauche/droite que les autres
+  // blocs du header (hero card, CTA, filtres) — tous calés sur les 20 px de
+  // s.scroll. Avant : 8 px en plus → grille 28 px du bord, desalignement.
+  const GRID_PADDING_H = 0;
   const GRID_GAP = 6;
   const SCROLL_PADDING_H = 20; // doit matcher s.scroll.paddingHorizontal
   const cellSize = (SCREEN_W - SCROLL_PADDING_H * 2 - GRID_PADDING_H * 2 - GRID_GAP * (NUM_COLS - 1)) / NUM_COLS;
@@ -2757,8 +2762,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   // Header de la FlatList : tout ce qui s'affiche au-dessus de la grille.
   // Renvoie une seule View ; FlatList le rend une fois en haut, sans virtualisation.
   const renderHeader = () => (
-    <View>
-      <View style={s.headerRow}>
+    // gap: 8 px uniforme entre chaque bloc (header row → hero card → CTA
+    // favoris → "à venir" / filtres). paddingBottom: 8 px termine le rythme
+    // avant la grille. Chaque enfant ne doit PAS porter de marginTop/Bottom.
+    <View style={{ gap: 8, paddingBottom: 8 }}>
+      <View style={[s.headerRow, { paddingBottom: 0 }]}>
         <View style={[s.headerLeft, { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }]}>
           <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
             <Icon.User size={30} color="#c9beed" />
@@ -2791,28 +2799,73 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             )}
           </View>
         </View>
-        <TouchableOpacity
-          onPress={() => setInfoSheetOpen(true)}
-          activeOpacity={0.7}
-          style={{
-            flexDirection: 'row', alignItems: 'center', gap: 5,
-            paddingHorizontal: 12, paddingVertical: 7,
-            borderRadius: 999,
-            backgroundColor: '#f5f3ff',
-          }}
-        >
-          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-            <Path d="M12 8h.01M11 12h1v4h1" stroke={C.primary} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-            <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke={C.primary} strokeWidth={1.8} />
-          </Svg>
-          <Text style={{ color: C.primary, fontSize: 12, fontWeight: '700', fontFamily: 'Montserrat' }}>Infos pratiques</Text>
-        </TouchableOpacity>
+        {/* Pill "Infos pratiques" deplace dans le hero (sous le lieu, avec
+            divider). HeaderRow ne garde que le profil + Hello sur la gauche. */}
       </View>
 
-      <View style={{ position: 'relative', marginTop: 12, marginBottom: 4 }}>
-        {/* Override le marginBottom: 10 hérité de s.eventCard — l'espacement
-            avec le bloc suivant est géré par le wrapper (marginBottom: 8). */}
-        <View style={[s.eventCard, { marginBottom: 0 }]}>
+      {/* CTA Favoris en ONGLET : place au-dessus du hero, se glisse PAR DESSOUS
+          le hero via marginBottom negative (annule le gap 8 px + cree 16 px
+          d overlap). Coins bas carres pour effet onglet (bottom hidden sous
+          hero). marginTop: 8 → espace le CTA du header (gap 8 + 8 = 16 px).
+          Visible uniquement si NON SUIVI. */}
+      {onToggleFollow && !isFollowing && (
+        <View style={{ marginTop: 8, marginBottom: -24, position: 'relative' }}>
+          <TouchableOpacity onPress={onToggleFollow} activeOpacity={0.88}>
+            <LinearGradient
+              colors={['#7B2FFF', '#5E1AD6']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={{
+                borderTopLeftRadius: 16, borderTopRightRadius: 16,
+                paddingTop: 14, paddingBottom: 14 + 16, paddingHorizontal: 18,
+                shadowColor: '#7B2FFF', shadowOpacity: 0.3,
+                shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+              }}
+            >
+              {/* Titre 2 lignes : ligne 1 bold (action) + ligne 2 regular
+                  (consequence). Aligne sur le web (.fav-title-reg). */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
+                  <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+                </Svg>
+                <Text
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                  style={{ color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat', flexShrink: 1 }}
+                >
+                  Mets ton event en favoris avant le départ,{'\n'}
+                  <Text style={{ fontWeight: '400' }}>reçois tes photos automatiquement</Text>
+                </Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+          {/* Ombre INTERNE au bas du CTA en VRAI gradient (LinearGradient
+              expo, fade smooth sans steps visibles). Couvre y=44 a y=80
+              (= bord visible CTA jusqu'a sous le hero). Pas de zIndex :
+              RN iOS fait fuiter zIndex, l ordre DOM suffit. Le hero
+              (sibling DOM-after du wrapper) couvre le gradient dans la
+              zone d overlap SAUF aux coins arrondis ou les slivers liberes
+              par le radius rendent l ombre visible. rgba explicit (pas
+              'transparent' qui peut mal parser) pour fiabilite cross-platform. */}
+          <LinearGradient
+            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.6)']}
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 0, right: 0,
+              bottom: 0, height: 36,
+            }}
+          />
+        </View>
+      )}
+
+      <View style={{ position: 'relative', zIndex: 1 }}>
+        {/* zIndex: 1 → le hero reste au-dessus de SES voisins overlappants :
+            le CTA favoris (DOM-avant, marginBottom:-24) ET la section infos
+            pratiques (DOM-apres, marginTop:-24). Sans zIndex, infos serait
+            rendu APRES hero donc DEVANT — pas le comportement onglet voulu.
+            Override le marginBottom: 10 hérité de s.eventCard — l'espacement
+            avec le bloc suivant est géré par le gap du parent renderHeader. */}
+        <View style={[s.eventCard, { marginBottom: 0, height: undefined }]}>
           {/* Layer 0 : aplat coloré pleine carte (fallback + fond sous image) */}
           <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
           {/* Layer 1 : cover image sur la MOITIE DROITE seulement (left:50%
@@ -2839,13 +2892,15 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               pointerEvents="none"
             />
           ) : null}
-          {/* Stack vertical : Date > Nom (header) > Lieu + type.
-              paddingRight réserve l'espace du décompte bottom-right. */}
-          <View style={[s.eventCardCenter, { paddingRight: 84 }]}>
+          {/* Stack vertical : Date > Nom (header) > Lieu + type > Divider >
+              Infos pratiques (CTA inline). paddingRight réserve l'espace du
+              décompte bottom-right. paddingVertical: 16 donne la respiration
+              du hero a hauteur dynamique (pas de height fixe sur eventCard). */}
+          <View style={[s.eventCardCenter, { paddingRight: 84, paddingVertical: 16 }]}>
             <Text style={s.eventDate} numberOfLines={1}>
               {formatDateLong(event.event_date, event.event_date_end)}
             </Text>
-            <Text style={[s.eventName, { fontSize: 22 }]} numberOfLines={1}>{event.name}</Text>
+            <Text style={[s.eventName, { fontSize: 22, lineHeight: 27 }]} numberOfLines={2} ellipsizeMode="tail">{event.name}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'nowrap' }}>
               {cityLabel(event.location) ? (
                 <Text style={[s.eventLocation, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
@@ -2861,6 +2916,28 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                 </View>
               ) : null}
             </View>
+            {/* Divider blanc semi-transparent + ligne "Infos pratiques"
+                tappable (ouvre le bottom sheet info). Reste dans le content
+                column (respecte paddingRight: 84 → ne deborde pas sous le
+                countdown). */}
+            <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginTop: 14, marginBottom: 12 }} />
+            <TouchableOpacity
+              onPress={() => setInfoSheetOpen(v => !v)}
+              activeOpacity={0.7}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+            >
+              {/* Chevron : down quand ferme (= "deplier en bas"), up quand
+                  ouvert (= "replier"). Convention accordion. La section
+                  d infos pratiques s affiche maintenant inline sous le hero
+                  (plus dans un modal). */}
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d={infoSheetOpen ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'}
+                  stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"
+                />
+              </Svg>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat' }}>Infos pratiques</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -2895,35 +2972,99 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         ) : null}
       </View>
 
-      {/* CTA Favoris + RGPD integre : une seule card violette unifiee
-          (titre + sous-titre + divider + ligne biometrique inline). Visible
-          uniquement si NON SUIVI. */}
-      {onToggleFollow && !isFollowing && (
-        <View style={{ marginTop: 4, marginBottom: 12 }}>
-          <TouchableOpacity onPress={onToggleFollow} activeOpacity={0.88}>
-            <LinearGradient
-              colors={['#7B2FFF', '#5E1AD6']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={{
-                borderRadius: 16,
-                paddingVertical: 14, paddingHorizontal: 18,
-                shadowColor: '#7B2FFF', shadowOpacity: 0.3,
-                shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
-              }}
-            >
-              {/* Titre 2 lignes : ligne 1 bold (action) + ligne 2 regular
-                  (consequence). Aligne sur le web (.fav-title-reg). */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
-                  <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-                </Svg>
-                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', flexShrink: 1 }}>
-                  Mets ton event en favoris avant le départ,{'\n'}
-                  <Text style={{ fontWeight: '400' }}>reçois tes photos automatiquement</Text>
-                </Text>
+      {/* Section "Infos pratiques" en ONGLET sous le hero (symetrique au CTA
+          favoris au-dessus) : marginTop: -24 (= -8 gap cancel + -16 overlap),
+          coins haut carres (caches sous hero), coins bas arrondis 16
+          (visibles), paddingTop: 32 (= 16 normal + 16 compensation overlap),
+          LinearGradient interne en haut pour ombre du hero projetee sur la
+          surface. Visible quand chevron ouvert. */}
+      {infoSheetOpen && (
+        <View style={{ marginTop: -24, position: 'relative' }}>
+          <View style={{
+            backgroundColor: `${tint}1A`,
+            borderBottomLeftRadius: 16, borderBottomRightRadius: 16,
+            paddingTop: 16 + 16, paddingBottom: 16, paddingHorizontal: 16,
+          }}>
+            {distances.length > 0 && (
+              <View>
+                {/* Header colonnes */}
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingBottom: 6,
+                  borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: `${tint}40`,
+                }}>
+                  <Text style={{
+                    width: 60, fontSize: 10, fontWeight: '600', letterSpacing: 0.6,
+                    textTransform: 'uppercase', color: tint, fontFamily: 'Montserrat',
+                    opacity: 0.7,
+                  }}>Distance</Text>
+                  <Text style={{
+                    flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600',
+                    letterSpacing: 0.6, textTransform: 'uppercase', color: tint,
+                    fontFamily: 'Montserrat', opacity: 0.7,
+                  }}>Départ</Text>
+                  <Text style={{
+                    width: 70, textAlign: 'right', fontSize: 10, fontWeight: '600',
+                    letterSpacing: 0.6, textTransform: 'uppercase', color: tint,
+                    fontFamily: 'Montserrat', opacity: 0.7,
+                  }}>Dénivelé</Text>
+                </View>
+                {distances.map((d, i) => (
+                  <View key={i} style={{
+                    flexDirection: 'row', alignItems: 'center',
+                    paddingVertical: 10,
+                    borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
+                    borderBottomColor: `${tint}40`,
+                  }}>
+                    <Text style={{ color: tint, fontSize: 15, fontWeight: '700', width: 60 }}>
+                      {d.km} km
+                    </Text>
+                    <Text style={{ flex: 1, textAlign: 'center', color: tint, fontSize: 13, opacity: 0.85 }}>
+                      {d.time || '—'}
+                    </Text>
+                    <Text style={{ width: 70, textAlign: 'right', color: tint, fontSize: 13, opacity: 0.85 }}>
+                      {d.elevation || '—'}
+                    </Text>
+                  </View>
+                ))}
               </View>
-            </LinearGradient>
-          </TouchableOpacity>
+            )}
+
+            {/* Lien discret "Site organisateur" : juste texte + fleche, en
+                couleur tint. Plus de bouton solide violet plein largeur. */}
+            {event.website ? (
+              <TouchableOpacity
+                onPress={openWebsite}
+                activeOpacity={0.6}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 6,
+                  marginTop: distances.length > 0 ? 14 : 4,
+                  alignSelf: 'flex-start',
+                }}
+              >
+                <Text style={{ color: tint, fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat' }}>
+                  Site organisateur
+                </Text>
+                <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                  <Path d="M5 12h14M13 6l6 6-6 6" stroke={tint} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          {/* Ombre INTERNE au top de la section infos — teintee de la couleur
+              du type de course (tint), opacite legere 25 % → 0. Plus discret
+              que le black 0.6 precedent, integre la palette de l event. Les
+              16 premiers px sont caches sous le hero, les 20 suivants creent
+              un fade visible sur le haut de l infos section. */}
+          <LinearGradient
+            colors={[`${tint}40`, `${tint}00`]}
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 0, right: 0,
+              top: 0, height: 36,
+            }}
+          />
         </View>
       )}
 
@@ -3056,7 +3197,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               </TouchableOpacity>
             );
             return (
-              <View style={{ marginTop: 6, marginBottom: 0 }}>
+              <View>
                 {/* Row 1 : ROULETTE infinie horizontale. Les filtres
                     coulissent ; un cadre violet fixe au centre marque la
                     selection courante. snapToInterval + array dupliquee 30x
@@ -3154,9 +3295,8 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             );
           })()}
 
-          {/* Espacement avant la grille — donne de l air aux filtres pour
-              qu ils respirent avant le bloc dense des miniatures. */}
-          <View style={{ height: 16 }} />
+          {/* Espacement avant la grille gere par paddingBottom: 16 du
+              parent renderHeader (rythme uniforme avec les autres blocs). */}
         </>
       )}
     </View>
@@ -3491,94 +3631,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </View>
       </Modal>
 
-      {/* Bottom sheet "+ d'infos" : courses + horaires + lien site orga.
-          Meme pattern que les modales auth (BlurView light + spring slide). */}
-      <Modal visible={infoSheetOpen} transparent animationType="fade" onRequestClose={() => setInfoSheetOpen(false)}>
-        <View style={{ flex: 1 }}>
-          <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
-          <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={() => setInfoSheetOpen(false)}>
-            <Animated.View style={{ transform: [{ translateY: infoSheetTranslate }] }}>
-              <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
-                <View {...infoSheetPanHandlers} style={{ paddingVertical: 6, alignItems: 'center' }}>
-                  <View style={s.modalHandle} />
-                </View>
-                <Text style={[s.welcome, { color: C.text, fontSize: 22, marginTop: 4, marginBottom: 2, textAlign: 'center' }]} numberOfLines={1}>
-                  {event.name}
-                </Text>
-                <Text style={{ color: 'rgba(123,47,255,0.7)', fontSize: 13, marginBottom: 18, textAlign: 'center' }} numberOfLines={1}>
-                  {formatDateLong(event.event_date, event.event_date_end)}
-                  {cityLabel(event.location) ? ` · ${cityLabel(event.location)}` : ''}
-                </Text>
-
-                {distances.length > 0 && (
-                  <>
-                    {/* Header colonnes (aligne sur le contenu : 8 bullet + 10 gap
-                        avant la 1ere colonne, fixed widths sur km et D+, centre
-                        pour le depart). Couleur violet accentuee (au lieu de
-                        textSoft 0.3) pour ressortir la hierarchie. */}
-                    <View style={{
-                      flexDirection: 'row', alignItems: 'center',
-                      paddingLeft: 18, paddingBottom: 6,
-                      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e9e4f9',
-                    }}>
-                      <Text style={{
-                        width: 60, fontSize: 10, fontWeight: '600', letterSpacing: 0.6,
-                        textTransform: 'uppercase', color: 'rgba(123,47,255,0.7)', fontFamily: 'Montserrat',
-                      }}>Distance</Text>
-                      <Text style={{
-                        flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600',
-                        letterSpacing: 0.6, textTransform: 'uppercase', color: 'rgba(123,47,255,0.7)',
-                        fontFamily: 'Montserrat',
-                      }}>Départ</Text>
-                      <Text style={{
-                        width: 70, textAlign: 'right', fontSize: 10, fontWeight: '600',
-                        letterSpacing: 0.6, textTransform: 'uppercase', color: 'rgba(123,47,255,0.7)',
-                        fontFamily: 'Montserrat',
-                      }}>Dénivelé</Text>
-                    </View>
-                    {distances.map((d, i) => (
-                      <View key={i} style={{
-                        flexDirection: 'row', alignItems: 'center',
-                        paddingVertical: 10,
-                        borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
-                        borderBottomColor: '#e9e4f9',
-                      }}>
-                        <View style={{
-                          width: 8, height: 8, borderRadius: 4,
-                          backgroundColor: tint, marginRight: 10,
-                        }} />
-                        <Text style={{ color: C.text, fontSize: 15, fontWeight: '600', width: 60 }}>
-                          {d.km} km
-                        </Text>
-                        <Text style={{ flex: 1, textAlign: 'center', color: 'rgba(123,47,255,0.7)', fontSize: 13 }}>
-                          {d.time || '—'}
-                        </Text>
-                        <Text style={{ width: 70, textAlign: 'right', color: 'rgba(123,47,255,0.7)', fontSize: 13 }}>
-                          {d.elevation || '—'}
-                        </Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-
-                {event.website ? (
-                  <TouchableOpacity
-                    onPress={() => { setInfoSheetOpen(false); openWebsite(); }}
-                    style={{
-                      backgroundColor: C.primary,
-                      paddingVertical: 14, borderRadius: 14,
-                      alignItems: 'center',
-                      marginTop: distances.length > 0 ? 20 : 8,
-                    }}
-                  >
-                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Site organisateur</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </TouchableOpacity>
-            </Animated.View>
-          </TouchableOpacity>
-        </View>
-      </Modal>
+      {/* (Le bottom sheet "+ d'infos" a ete remplace par une section inline
+          sous le hero, controlee par le chevron du CTA "Infos pratiques"
+          dans le hero. Voir renderHeader plus haut.) */}
     </>
   );
 }
@@ -12085,9 +12140,18 @@ export default function App() {
   // n a pas logout depuis le pre-scoping), on copie vers la cle scopee
   // puis on supprime la globale. Resultat : pas de favoris perdus pour
   // les comptes existants au moment du deploy.
+  //
+  // Sync app<->site (2026-06-09) : apres le load local, on appelle
+  // GET /runner/follows et on merge en union avec le local. Resultat :
+  //  - user fait un follow sur le SITE -> il apparait dans l app au prochain
+  //    open (ou apres logout/login si l app etait deja open).
+  //  - user fait un follow sur l APP -> POST /runner/follow ecrit deja le
+  //    consent server-side, le site le verra sur sa prochaine page event.
+  // Pattern identique a photo-favorites (App.js:12096-12134).
   useEffect(() => {
     const uid = runnerSession?.profile?.userId;
     if (!uid) return;
+    let cancelled = false;
     (async () => {
       let raw = await AsyncStorage.getItem(`@will_follows_${uid}`).catch(() => null);
       if (!raw) {
@@ -12098,11 +12162,28 @@ export default function App() {
           raw = legacy;
         }
       }
+      let local = [];
       if (raw) {
-        try { setFollows(JSON.parse(raw)); } catch {}
+        try { local = JSON.parse(raw); } catch {}
       }
+      if (!Array.isArray(local)) local = [];
+      if (!cancelled && local.length > 0) setFollows(local);
+
+      // Merge server : GET /runner/follows -> union avec local.
+      try {
+        const r = await runnerApiFetch('/runner/follows');
+        if (cancelled) return;
+        if (!r?.ok) return;
+        const data = await r.json().catch(() => ({}));
+        const remote = Array.isArray(data?.codes) ? data.codes : [];
+        const merged = Array.from(new Set([...local, ...remote]));
+        if (cancelled) return;
+        setFollows(merged);
+        AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(merged)).catch(() => {});
+      } catch {}
     })();
-  }, [runnerSession?.profile?.userId]);
+    return () => { cancelled = true; };
+  }, [runnerSession?.profile?.userId, runnerApiFetch]);
 
   const handleAuthSuccess = useCallback((session) => {
     const { isNewSignup, ...stored } = session || {};
