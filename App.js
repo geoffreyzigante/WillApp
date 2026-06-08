@@ -6772,9 +6772,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   // l email de login orga (pattern existant) mais editable independamment.
   const [contactAdmin, setContactAdmin] = useState('');
   const [phone, setPhone] = useState('');
-  // distances : [{ label, km, time, elevation }]. `label` est le nom de course
-  // optionnel (40 max), pre-rempli avec event_type (Trail / Marche / etc.).
-  // Vide -> fallback `${km} km` partout en affichage.
+  // distances : [{ label, label_only, km, time, elevation }].
+  // Mode Type (label_only=false) : label = event_type, affichage final
+  // `${label} ${km} km`. Mode Nom (label_only=true) : label libre,
+  // affichage = label seul (sans km).
   const [distances, setDistances] = useState([]);
   const [timePickerIdx, setTimePickerIdx] = useState(null);
   const [elevPickerIdx, setElevPickerIdx] = useState(null);
@@ -6846,6 +6847,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         setPhone(editEvent.phone || '');
         setDistances(Array.isArray(editEvent.distances) ? editEvent.distances.map(d => ({
           label: d.label || '',
+          label_only: d.label_only === true,
           km: String(d.km || ''), time: d.time || '', elevation: d.elevation || '',
         })) : []);
         setCoverImage(editEvent.cover_image || null);
@@ -6923,7 +6925,16 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     return () => { cancelled = true; ctl.abort(); clearTimeout(timeoutId); };
   }, [postalCode]);
 
-  const addDistance = () => setDistances(d => [...d, { label: eventType || '', km: '', time: '', elevation: '' }]);
+  const addDistance = () => setDistances(d => [...d, { label: eventType || '', label_only: false, km: '', time: '', elevation: '' }]);
+  const setDistanceMode = (idx, labelOnly) => {
+    setDistances(d => d.map((it, i) => {
+      if (i !== idx) return it;
+      let nextLabel = it.label;
+      if (!labelOnly && !nextLabel) nextLabel = eventType || '';
+      if (labelOnly && nextLabel === eventType) nextLabel = '';
+      return { ...it, label_only: labelOnly, label: nextLabel };
+    }));
+  };
   const updateDistance = (idx, field, value) => {
     setDistances(d => d.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   };
@@ -7051,6 +7062,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
           .filter(d => d.km)
           .map(d => ({
             label: (d.label || '').trim().slice(0, 40),
+            label_only: !!d.label_only,
             km: parseFloat(d.km) || 0,
             time: d.time || '',
             elevation: d.elevation || '',
@@ -7854,6 +7866,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                   onPress={async () => {
                     const cleaned = distances.filter(d => d.km).map(d => ({
                       label: (d.label || '').trim().slice(0, 40),
+                      label_only: !!d.label_only,
                       km: parseFloat(d.km) || 0,
                       time: d.time || '',
                       elevation: d.elevation || '',
@@ -12221,6 +12234,7 @@ export default function App() {
         // Cross-check : meme token, GET /runner/follow/event-test. Si {following:false}
         // alors que le web le voit true -> token mobile pour un autre userId.
         let crossCheck = 'n/a';
+        let knownEvents = 'n/a';
         try {
           const r2 = await runnerApiFetch('/runner/follow/event-test');
           if (r2?.ok) {
@@ -12229,12 +12243,20 @@ export default function App() {
           } else {
             crossCheck = `event-test HTTP ${r2?.status}`;
           }
+          const r3 = await runnerApiFetch('/runner/known-events');
+          if (r3?.ok) {
+            const d3 = await r3.json().catch(() => ({}));
+            const evs = Array.isArray(d3?.events) ? d3.events : [];
+            knownEvents = `known: ${evs.length} ${JSON.stringify(evs).slice(0,80)}`;
+          } else {
+            knownEvents = `known HTTP ${r3?.status}`;
+          }
         } catch (e2) { crossCheck = `event-test EXC: ${e2?.message||e2}`; }
         const emailMobile = runnerSession?.profile?.email || '(none)';
         const emailLen = emailMobile.length;
         // codepoints en hex (4 chars) pour voir d eventuels caracteres invisibles
         const emailHex = Array.from(emailMobile).map(c => c.codePointAt(0).toString(16).padStart(4,'0')).join(' ');
-        Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid}\nprofileUid=${uid}\nemail="${emailMobile}" (len=${emailLen})\nhex=${emailHex}\nremote: ${remote.length}\n${crossCheck}`);
+        Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid}\nremote(follows): ${remote.length}\n${crossCheck}\n${knownEvents}`);
         if (cancelled) return;
         setFollows(merged);
         AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(merged)).catch(() => {});
