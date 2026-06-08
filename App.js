@@ -12209,7 +12209,19 @@ export default function App() {
         const data = await r.json().catch(() => ({}));
         const remote = Array.isArray(data?.codes) ? data.codes : [];
         const merged = Array.from(new Set([...local, ...remote]));
-        Alert.alert('[DEBUG follows]', `uid=${uid.slice(-6)}\nlocal: ${local.length}\nremote: ${remote.length} ${JSON.stringify(remote).slice(0, 100)}\nmerged: ${merged.length}`);
+        // Cross-check : meme token, GET /runner/follow/event-test. Si {following:false}
+        // alors que le web le voit true -> token mobile pour un autre userId.
+        let crossCheck = 'n/a';
+        try {
+          const r2 = await runnerApiFetch('/runner/follow/event-test');
+          if (r2?.ok) {
+            const d2 = await r2.json().catch(() => ({}));
+            crossCheck = `event-test => following:${d2?.following}`;
+          } else {
+            crossCheck = `event-test HTTP ${r2?.status}`;
+          }
+        } catch (e2) { crossCheck = `event-test EXC: ${e2?.message||e2}`; }
+        Alert.alert('[DEBUG follows]', `uid=${uid.slice(-6)}\nlocal: ${local.length}\nremote: ${remote.length} ${JSON.stringify(remote).slice(0, 100)}\n${crossCheck}`);
         if (cancelled) return;
         setFollows(merged);
         AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(merged)).catch(() => {});
