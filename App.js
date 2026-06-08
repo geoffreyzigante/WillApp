@@ -12230,7 +12230,8 @@ export default function App() {
             crossCheck = `event-test HTTP ${r2?.status}`;
           }
         } catch (e2) { crossCheck = `event-test EXC: ${e2?.message||e2}`; }
-        Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid}\nprofileUid=${uid}\nmatch=${tokenUid === uid}\nlocal: ${local.length}\nremote: ${remote.length} ${JSON.stringify(remote).slice(0, 100)}\n${crossCheck}`);
+        const emailMobile = runnerSession?.profile?.email || '(none)';
+        Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid}\nprofileUid=${uid}\nemail=${emailMobile}\nlocal: ${local.length}\nremote: ${remote.length}\n${crossCheck}`);
         if (cancelled) return;
         setFollows(merged);
         AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(merged)).catch(() => {});
