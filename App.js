@@ -2535,14 +2535,18 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
   );
 }
 
-// Dropdown course (niveau 1 du filtre galerie publique). Bouton compact
-// affichant le titre de la course active, tap ouvre un Modal avec la liste
-// des items (Toutes + chaque course). Mirror website .race-dropdown.
-function RaceDropdown({ items, activeKey, onChange, accent, bg }) {
+// Dropdown course / km (niveau 1 et 2 du filtre galerie publique). Bouton
+// compact affichant le titre actif, tap ouvre un Modal avec la liste
+// (Toutes + items). Mirror website .race-dropdown / .km-dropdown.
+// compact=true => flex 0 + min-width 110 (niveau 2 km, a droite).
+function RaceDropdown({ items, activeKey, onChange, accent, bg, compact = false }) {
   const [open, setOpen] = useState(false);
   const active = items.find(it => String(it.key) === String(activeKey)) || items[0];
+  const wrapStyle = compact
+    ? { flex: 0, minWidth: 110, marginRight: 10 }
+    : { flex: 1, marginRight: 10 };
   return (
-    <View style={{ flex: 1, marginRight: 10 }}>
+    <View style={wrapStyle}>
       <TouchableOpacity
         onPress={() => setOpen(true)}
         activeOpacity={0.7}
@@ -3308,7 +3312,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     y a 5+ courses. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <RaceDropdown
-                    items={[{ key: 'all', label: 'Toutes' }, ...uniqueRaces.map(r => ({ key: String(r), label: raceTabLabel(String(r)) }))]}
+                    items={[{ key: 'all', label: 'Toutes les photos' }, ...uniqueRaces.map(r => ({ key: String(r), label: raceTabLabel(String(r)) }))]}
                     activeKey={activeRaceFilter}
                     onChange={(key) => {
                       LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
@@ -3318,6 +3322,19 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     accent={C.primary}
                     bg="#f5f3ff"
                   />
+                  {activeRaceFilter !== 'all' && kmsForActiveRace.length > 1 && (
+                    <RaceDropdown
+                      items={[{ key: 'all', label: 'km' }, ...kmsForActiveRace.map(k => ({
+                        key: k,
+                        label: k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`,
+                      }))]}
+                      activeKey={activeKmFilter}
+                      onChange={setActiveKmFilter}
+                      accent={C.pinkPill}
+                      bg={C.pinkPillBg}
+                      compact
+                    />
+                  )}
                 {/* Bouton inverser l ordre du tri (recente / ancien).
                     Meme bg que la race row pour cohesion visuelle. */}
                 <TouchableOpacity
@@ -3367,34 +3384,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   </TouchableOpacity>
                 )}
                 </View>
-
-                {/* Row 2 : Posté centre sous la course, pill rose animee. */}
-                <Animated.View
-                  pointerEvents={(activeRaceFilter === 'all' || kmsForActiveRace.length <= 1) ? 'none' : 'auto'}
-                  style={{
-                    opacity: kmRowAnim,
-                    marginTop: activeRaceFilter === 'all' || kmsForActiveRace.length <= 1 ? 0 : 4,
-                    transform: [{
-                      translateY: kmRowAnim.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }),
-                    }],
-                  }}
-                >
-                  {activeRaceFilter !== 'all' && kmsForActiveRace.length > 1 && (
-                    /* Roulette km : meme composant que la race row mais
-                       accent rose (sub-filter) sur fond rose pale. */
-                    <FilterWheel
-                      items={[{ key: 'all', label: 'Tous' }, ...kmsForActiveRace.map(k => ({
-                        key: k,
-                        label: k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`,
-                      }))]}
-                      activeKey={activeKmFilter}
-                      onChange={setActiveKmFilter}
-                      accent={C.pinkPill}
-                      bg={C.pinkPillBg}
-                      marginRight={0}
-                    />
-                  )}
-                </Animated.View>
               </View>
             );
           })()}
