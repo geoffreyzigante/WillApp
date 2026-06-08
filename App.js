@@ -12192,17 +12192,30 @@ export default function App() {
       if (!cancelled && local.length > 0) setFollows(local);
 
       // Merge server : GET /runner/follows -> union avec local.
+      // [DEBUG 2026-06-09] Alert temporaire pour tracer ou la sync casse.
       try {
         const r = await runnerApiFetch('/runner/follows');
         if (cancelled) return;
-        if (!r?.ok) return;
+        if (!r) {
+          Alert.alert('[DEBUG follows]', 'runnerApiFetch a renvoye null/undefined');
+          return;
+        }
+        if (!r.ok) {
+          let body = '';
+          try { body = await r.text(); } catch {}
+          Alert.alert('[DEBUG follows]', `HTTP ${r.status}: ${body.slice(0, 200)}`);
+          return;
+        }
         const data = await r.json().catch(() => ({}));
         const remote = Array.isArray(data?.codes) ? data.codes : [];
         const merged = Array.from(new Set([...local, ...remote]));
+        Alert.alert('[DEBUG follows]', `uid=${uid.slice(-6)}\nlocal: ${local.length}\nremote: ${remote.length} ${JSON.stringify(remote).slice(0, 100)}\nmerged: ${merged.length}`);
         if (cancelled) return;
         setFollows(merged);
         AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(merged)).catch(() => {});
-      } catch {}
+      } catch (e) {
+        Alert.alert('[DEBUG follows]', `Exception: ${e?.message || String(e)}`);
+      }
     })();
     return () => { cancelled = true; };
   }, [runnerSession?.profile?.userId, runnerApiFetch]);
