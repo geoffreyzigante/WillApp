@@ -2535,6 +2535,78 @@ function FilterWheel({ items, activeKey, onChange, accent, bg, marginRight = 10 
   );
 }
 
+// Dropdown course (niveau 1 du filtre galerie publique). Bouton compact
+// affichant le titre de la course active, tap ouvre un Modal avec la liste
+// des items (Toutes + chaque course). Mirror website .race-dropdown.
+function RaceDropdown({ items, activeKey, onChange, accent, bg }) {
+  const [open, setOpen] = useState(false);
+  const active = items.find(it => String(it.key) === String(activeKey)) || items[0];
+  return (
+    <View style={{ flex: 1, marginRight: 10 }}>
+      <TouchableOpacity
+        onPress={() => setOpen(true)}
+        activeOpacity={0.7}
+        style={{
+          backgroundColor: bg,
+          borderRadius: 16,
+          paddingHorizontal: 14, paddingVertical: 8,
+          minHeight: 32,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        }}
+      >
+        <Text numberOfLines={1} ellipsizeMode="tail" style={{
+          flex: 1,
+          color: accent,
+          fontFamily: 'Montserrat',
+          fontSize: 13,
+          fontWeight: '700',
+        }}>{active?.label || 'Toutes'}</Text>
+        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8, transform: [{ rotate: open ? '180deg' : '0deg' }] }}>
+          <Path d="M6 9l6 6 6-6" stroke={accent} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      </TouchableOpacity>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <TouchableOpacity activeOpacity={1} onPress={() => setOpen(false)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', paddingHorizontal: 24 }}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{
+            backgroundColor: '#fff',
+            borderRadius: 16,
+            paddingVertical: 6,
+            maxHeight: 360,
+            shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 8 },
+            elevation: 8,
+          }}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {items.map((it, i) => {
+                const isActive = String(it.key) === String(activeKey);
+                return (
+                  <TouchableOpacity
+                    key={String(it.key) + ':' + i}
+                    onPress={() => { onChange(it.key); setOpen(false); }}
+                    activeOpacity={0.6}
+                    style={{
+                      paddingHorizontal: 16, paddingVertical: 12,
+                      backgroundColor: isActive ? accent : 'transparent',
+                      marginHorizontal: 4, marginVertical: 1,
+                      borderRadius: 10,
+                    }}
+                  >
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={{
+                      color: isActive ? '#fff' : C.text,
+                      fontFamily: 'Montserrat',
+                      fontSize: 14,
+                      fontWeight: isActive ? '700' : '500',
+                    }}>{it.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    </View>
+  );
+}
+
 function EventDetailScreen(props) {
   return (
     <GridErrorBoundary>
@@ -3230,12 +3302,12 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
             );
             return (
               <View>
-                {/* Row 1 : ROULETTE infinie horizontale. Les filtres
-                    coulissent ; un cadre violet fixe au centre marque la
-                    selection courante. snapToInterval + array dupliquee 30x
-                    -> sensation infinie. */}
+                {/* Row 1 : DROPDOWN course. Bouton compact (titre = course
+                    active), tap ouvre un Modal avec la liste des courses.
+                    Plus simple a parcourir que la roulette infinie quand il
+                    y a 5+ courses. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <FilterWheel
+                  <RaceDropdown
                     items={[{ key: 'all', label: 'Toutes' }, ...uniqueRaces.map(r => ({ key: String(r), label: raceTabLabel(String(r)) }))]}
                     activeKey={activeRaceFilter}
                     onChange={(key) => {
