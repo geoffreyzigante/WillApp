@@ -2244,8 +2244,17 @@ const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHear
         </TouchableOpacity>
       )}
       {favIndicator && !showHeart && (
-        <View pointerEvents="none" style={{ position: 'absolute', top: 6, right: 6 }}>
-          <FavStar size={14} fill="#fff" stroke="rgba(0,0,0,0.25)" strokeWidth={1.4} />
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute', top: 6, right: 6,
+            // Drop shadow + halo gris semi-transparent pour rendre l etoile
+            // visible aussi bien sur photos claires que sombres.
+            shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
+            elevation: 3,
+          }}
+        >
+          <FavStar size={18} fill="#fff" stroke="#000" strokeWidth={1.4} />
         </View>
       )}
     </TouchableOpacity>
