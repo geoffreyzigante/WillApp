@@ -2664,7 +2664,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     }
     return m;
   }, [photos, event.distances]);
-  const raceTabLabel = (raceKey) => raceLabelById[raceKey] || `${raceKey} km`;
+  const raceTabLabel = (raceKey) => {
+    const lbl = raceLabelById[raceKey];
+    return lbl ? `${lbl} ${raceKey} km` : `${raceKey} km`;
+  };
 
   // Niveau 2 — positions km presentes pour la course active. Exclut les
   // photos sans km (cran "-" cote photographe) -> elles ne creent pas
@@ -3014,13 +3017,10 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                     borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
                     borderBottomColor: `${tint}40`,
                   }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 4 }}>
-                      <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: tint, fontSize: 15, fontWeight: '700', flex: 1 }}>
-                        {d.label || `${d.km} km`}
+                    <View style={{ marginBottom: 4 }}>
+                      <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: tint, fontSize: 15, fontWeight: '700' }}>
+                        {d.label ? `${d.label} ${d.km} km` : `${d.km} km`}
                       </Text>
-                      {d.label ? (
-                        <Text style={{ color: tint, fontSize: 12, opacity: 0.7, marginLeft: 8 }}>{d.km} km</Text>
-                      ) : null}
                     </View>
                     <View style={{ flexDirection: 'row', gap: 16 }}>
                       <Text style={{ color: tint, fontSize: 12, opacity: 0.85 }}>
@@ -5672,7 +5672,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         }}>
             {/* Section COURSE (gauche, 50%) — label + roulette 3-items toujours visible */}
             {(() => {
-              const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: d.label || `${d.km} km`, value: d }))];
+              const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: d.label ? `${d.label} ${d.km} km` : `${d.km} km`, value: d }))];
               const rawIdx = courseItems.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null));
               const courseIdx = rawIdx >= 0 ? rawIdx : 0;
               const setCourseIdx = (idx) => {
@@ -7321,7 +7321,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       : (editEvent?.location || 'Non défini');
     const previewDistances = distances.length === 0
       ? 'Aucune'
-      : distances.map(d => d.km ? (d.label || `${d.km} km`) : '?').join(', ');
+      : distances.map(d => d.km ? (d.label ? `${d.label} ${d.km} km` : `${d.km} km`) : '?').join(', ');
 
     // PUT partiel : met a jour uniquement les champs presents dans `patch`.
     const savePartial = async (patch) => {
@@ -11439,7 +11439,7 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
                   backgroundColor: active ? C.primary : '#f5f3ff',
                 }}
               >
-                <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>{d.label || `${d.km} km`}</Text>
+                <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>{d.label ? `${d.label} ${d.km} km` : `${d.km} km`}</Text>
               </TouchableOpacity>
             );
           })}
@@ -12194,10 +12194,19 @@ export default function App() {
       // Merge server : GET /runner/follows -> union avec local.
       // [DEBUG 2026-06-09] Alert temporaire pour tracer ou la sync casse.
       try {
+        // Decode le token (format `dataB64.sig`, dataB64 = base64 de `runner:UID:iat:exp`)
+        // pour voir quel userId il encode reellement vs le profil.
+        let tokenUid = '?';
+        try {
+          const tok = runnerSession?.token || '';
+          const dataB64 = tok.split('.')[0] || '';
+          const decoded = typeof atob === 'function' ? atob(dataB64) : Buffer.from(dataB64, 'base64').toString('utf8');
+          tokenUid = decoded.split(':')[1] || '(parse fail)';
+        } catch { tokenUid = '(decode error)'; }
         const r = await runnerApiFetch('/runner/follows');
         if (cancelled) return;
         if (!r) {
-          Alert.alert('[DEBUG follows]', 'runnerApiFetch a renvoye null/undefined');
+          Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid.slice(-6)} profileUid=${uid.slice(-6)}\nrunnerApiFetch null`);
           return;
         }
         if (!r.ok) {
@@ -12221,7 +12230,7 @@ export default function App() {
             crossCheck = `event-test HTTP ${r2?.status}`;
           }
         } catch (e2) { crossCheck = `event-test EXC: ${e2?.message||e2}`; }
-        Alert.alert('[DEBUG follows]', `uid=${uid.slice(-6)}\nlocal: ${local.length}\nremote: ${remote.length} ${JSON.stringify(remote).slice(0, 100)}\n${crossCheck}`);
+        Alert.alert('[DEBUG follows]', `tokenUid=${tokenUid.slice(-6)} profileUid=${uid.slice(-6)}\nmatch=${tokenUid === uid}\nlocal: ${local.length}\nremote: ${remote.length} ${JSON.stringify(remote).slice(0, 100)}\n${crossCheck}`);
         if (cancelled) return;
         setFollows(merged);
         AsyncStorage.setItem(`@will_follows_${uid}`, JSON.stringify(merged)).catch(() => {});
