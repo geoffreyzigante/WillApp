@@ -1409,7 +1409,7 @@ function EventCard({ event, onPress, isFollowing, onToggleFollow, style }) {
       {/* Texte par-dessus la zone tactile (pointerEvents none pour que le tap passe au TouchableOpacity en dessous) */}
       <View style={s.eventCardCenter} pointerEvents="none">
         <Text style={s.eventDate}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
-        <Text style={s.eventName} numberOfLines={1}>{event.name}</Text>
+        <Text style={[s.eventName, { lineHeight: 26, minHeight: 52 }]} numberOfLines={2} ellipsizeMode="tail">{event.name}</Text>
         <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
       </View>
       {/* Pastille type de course (bas droite) */}
@@ -2584,6 +2584,11 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           // worker avec cache R2. Utilisee pour la grille ; le viewer plein
           // ecran continue d utiliser `uri` (haute resolution).
           thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
+          // thumbMdUri : version 800px (~50-90 KB) servie par /photo-thumb-md
+          // pour la GRANDE tuile 2x2 de la mosaique (~666px physiques) — le
+          // thumb 400px y etait upscale 1.67x → flou. Fallback thumb_url si
+          // worker pas encore deploye, puis url HD.
+          thumbMdUri: p.thumb_md_url || p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
           id: p.key,
           tint,
           race: p.race,
@@ -3229,10 +3234,15 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
   const renderPhotoSized = (photo, width, height, key) => {
     if (!photo) return <View key={key} style={{ width, height }} />;
+    // Grande tuile 2x2 (~666px physiques @3x) → source 800px (thumbMdUri)
+    // pour eviter le flou d upscale. Petites vignettes 3-col → thumbUri 400px.
+    const sourceUri = key === 'big'
+      ? (photo.thumbMdUri || photo.thumbUri || photo.uri)
+      : (photo.thumbUri || photo.uri);
     return (
       <View key={key} style={{ width, height }}>
         <PhotoCell
-          photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
+          photo={{ ...photo, uri: sourceUri }}
           size={{ width, height }}
           favIndicator={isFav(photo.id)}
           onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
