@@ -10518,14 +10518,14 @@ function PhotoViewerModal({
             <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(255,255,255,0.65)' }]} />
           </ReAnimated.View>
 
-          {/* Header : titre event + date positionnes a 50px au-dessus du bord
-              superieur de l image. Clamp avec topPad pour ne pas sortir de
-              l ecran sur petits devices / grosses photos. */}
+          {/* Header : titre event + date positionnes a 16px au-dessus du
+              bord superieur de l image. Clamp avec topPad pour ne pas sortir
+              de l ecran sur petits devices / grosses photos. */}
           <ReAnimated.View
             pointerEvents="none"
             style={[{
               position: 'absolute',
-              top: Math.max(topPad, targetY - 50 - HEADER_H),
+              top: Math.max(topPad, targetY - 16 - HEADER_H),
               left: 0, right: 0, height: HEADER_H,
               alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20,
             }, uiStyle]}
@@ -10596,14 +10596,23 @@ function PhotoViewerModal({
                   }}
                   renderItem={({ item }) => (
                     <View style={{ width: cardW, height: cardH, paddingHorizontal: photoMargin }}>
-                      <ReAnimated.View style={[{ flex: 1, overflow: 'hidden', backgroundColor: 'transparent' }, radiusStyle]}>
+                      {/* Wrapper avec radius statique 18 + overflow hidden
+                          en complement du radiusStyle anime. Le static
+                          garantit que les coins arrondis sont visibles
+                          immediatement (avant + apres l anim). */}
+                      <ReAnimated.View style={[{
+                        flex: 1, overflow: 'hidden',
+                        borderRadius: 18,
+                        backgroundColor: 'transparent',
+                      }, radiusStyle]}>
                         {item?.uri ? (
                           <ExpoImage
                             source={{ uri: item.uri }}
                             placeholder={{ uri: item.uri }}
-                            // borderRadius 18 directement sur l image pour
-                            // que les coins arrondis soient visibles meme
-                            // quand le wrapper a un fond transparent.
+                            // borderRadius sur l image elle-meme + sur le
+                            // wrapper : ceinture + bretelles pour iOS qui
+                            // n honore pas toujours overflow hidden quand
+                            // un transform est applique au parent.
                             style={{ flex: 1, borderRadius: 18 }}
                             contentFit="contain"
                             cachePolicy="memory-disk"
@@ -10626,10 +10635,12 @@ function PhotoViewerModal({
               <ReAnimated.View
                 pointerEvents="box-none"
                 style={[{
-                  // Haut-droite de la photo, marge 16 pour bien etre DANS
-                  // l image et ne pas etre rognee par le borderRadius des
-                  // coins arrondis.
-                  position: 'absolute', top: 16, right: photoMargin + 16,
+                  // Coin haut-droit de la photo. Ancrage strict : photoMargin
+                  // (= padding G/D du conteneur photo) + 12 = exactement
+                  // 12px dedans du bord droit de l image. Idem 12 du haut.
+                  // Marge plus serree que le radius 18 pour ne pas etre
+                  // visuellement decollee de la photo.
+                  position: 'absolute', top: 12, right: photoMargin + 12,
                 }, uiStyle]}
               >
                 <ReAnimated.View style={heartStyle}>
