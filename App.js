@@ -1384,7 +1384,15 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
               }}
               accessibilityLabel="Voir mon panier"
             >
-              <Svg width={22} height={20} viewBox="0 0 18.96 17.61" fill="#c9beed">
+              {/* Vignette : pastille light violet sans ombre, plus petite
+                  que l icone -> l icone chevauche les bords de la vignette. */}
+              <View style={{
+                position: 'absolute',
+                width: 28, height: 28,
+                borderRadius: 10,
+                backgroundColor: C.primaryLight,
+              }} />
+              <Svg width={26} height={24} viewBox="0 0 18.96 17.61" fill="#c9beed">
                 <Path d="M9.49,9.19c-.38,0-.68.3-.68.68v3.38c0,.37.31.68.68.68s.68-.3.68-.68v-3.38c0-.37-.31-.68-.68-.68Z" />
                 <Path d="M12.94,9.23c-.37-.06-.73.18-.79.55l-.59,3.33c-.07.37.18.72.55.78.37.06.73-.18.79-.55l.59-3.33c.07-.37-.18-.72-.55-.78Z" />
                 <Path d="M6.04,9.23c-.37.06-.62.42-.55.78l.59,3.33c.07.37.42.61.79.55.37-.06.62-.42.55-.78l-.59-3.33c-.07-.37-.42-.61-.79-.55Z" />
