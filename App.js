@@ -10518,11 +10518,12 @@ function PhotoViewerModal({
             <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(255,255,255,0.65)' }]} />
           </ReAnimated.View>
 
-          {/* Header : titre event + date (fade in apres l'anim shared-element) */}
+          {/* Header : titre event + date (fade in apres l'anim shared-element).
+              Baisse de 28px sous topPad pour respirer (mirror site .vheader). */}
           <ReAnimated.View
             pointerEvents="none"
             style={[{
-              position: 'absolute', top: topPad, left: 0, right: 0, height: HEADER_H,
+              position: 'absolute', top: topPad + 28, left: 0, right: 0, height: HEADER_H,
               alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20,
             }, uiStyle]}
           >
@@ -10624,7 +10625,9 @@ function PhotoViewerModal({
               <ReAnimated.View
                 pointerEvents="box-none"
                 style={[{
-                  position: 'absolute', bottom: 12, right: photoMargin + 8,
+                  // Haut-droite de la photo (consigne UX). photoMargin + 8 =
+                  // marge droite identique a l ancienne position bas.
+                  position: 'absolute', top: 12, right: photoMargin + 8,
                 }, uiStyle]}
               >
                 <ReAnimated.View style={heartStyle}>
