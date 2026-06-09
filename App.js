@@ -1151,7 +1151,14 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
       <View style={s.headerRow}>
         <View style={[s.headerLeft, { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }]}>
           <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
-            <Icon.User size={30} color="#c9beed" />
+            {selfieUri ? (
+              <Image
+                source={{ uri: selfieUri }}
+                style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: '#c9beed' }}
+              />
+            ) : (
+              <Icon.User size={30} color="#c9beed" />
+            )}
             {selfieUri && (
               <TouchableOpacity
                 onPress={(e) => {
@@ -1928,7 +1935,14 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
             onPress={onOpenProfile}
             style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', position: 'relative' }}
           >
-            <Icon.User size={30} color="#c9beed" />
+            {selfieUri ? (
+              <Image
+                source={{ uri: selfieUri }}
+                style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: '#c9beed' }}
+              />
+            ) : (
+              <Icon.User size={30} color="#c9beed" />
+            )}
             {selfieUri && (
               <TouchableOpacity
                 onPress={(e) => {
@@ -1938,7 +1952,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
                 activeOpacity={selfieUploadState === 'failed' ? 0.6 : 1}
                 hitSlop={8}
                 style={{
-                  position: 'absolute', top: 4, right: 4,
+                  position: 'absolute', top: 0, right: 0,
                   width: 10, height: 10, borderRadius: 5,
                   backgroundColor: selfieDotColor(selfieUploadState),
                   borderWidth: 2, borderColor: C.bg,
@@ -2926,7 +2940,14 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       <View style={[s.headerRow, { paddingBottom: 0 }]}>
         <View style={[s.headerLeft, { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }]}>
           <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
-            <Icon.User size={30} color="#c9beed" />
+            {selfieUri ? (
+              <Image
+                source={{ uri: selfieUri }}
+                style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: '#c9beed' }}
+              />
+            ) : (
+              <Icon.User size={30} color="#c9beed" />
+            )}
             {selfieUri && (
               <TouchableOpacity
                 onPress={(e) => {
