@@ -10053,6 +10053,14 @@ function PhotoViewerModal({
   // est la source de verite ; cette map evite un lag visuel le temps que le
   // caller refetche apres le toggle. Reset a chaque ouverture du viewer.
   const [localHiddenMap, setLocalHiddenMap] = useState({});
+  // Aspect ratio reel par photo (width/height), mesure via ExpoImage onLoad.
+  // Permet d adapter le wrapper a la photo (= radius visible sur la photo,
+  // etoile fav anchored au coin photo et non au wrapper 3:4).
+  const [aspectMap, setAspectMap] = useState({});
+  const setPhotoAspect = useCallback((id, w, h) => {
+    if (!id || !w || !h) return;
+    setAspectMap((m) => (m[id] ? m : { ...m, [id]: w / h }));
+  }, []);
   const effectiveHidden = (p) => {
     if (!p) return false;
     const ov = localHiddenMap[p.id];
@@ -10594,53 +10602,84 @@ function PhotoViewerModal({
                       setCurrentIndex(idx);
                     }
                   }}
-                  renderItem={({ item }) => (
-                    <View style={{ width: cardW, height: cardH, paddingHorizontal: photoMargin }}>
-                      {/* Wrapper avec radius statique 18 + overflow hidden
-                          en complement du radiusStyle anime. Le static
-                          garantit que les coins arrondis sont visibles
-                          immediatement (avant + apres l anim). */}
-                      <ReAnimated.View style={[{
-                        flex: 1, overflow: 'hidden',
-                        borderRadius: 18,
-                        backgroundColor: 'transparent',
-                      }, radiusStyle]}>
-                        {item?.uri ? (
-                          <ExpoImage
-                            source={{ uri: item.uri }}
-                            placeholder={{ uri: item.uri }}
-                            // borderRadius sur l image elle-meme + sur le
-                            // wrapper : ceinture + bretelles pour iOS qui
-                            // n honore pas toujours overflow hidden quand
-                            // un transform est applique au parent.
-                            style={{ flex: 1, borderRadius: 18 }}
-                            contentFit="contain"
-                            cachePolicy="memory-disk"
-                            priority="high"
-                            transition={0}
-                            recyclingKey={item.id}
-                          />
-                        ) : null}
-                      </ReAnimated.View>
-                    </View>
-                  )}
+                  renderItem={({ item }) => {
+                    // Wrapper de la photo : aspect-ratio EXACT de la photo
+                    // mesuree (via onLoad). Le wrapper se centre dans le
+                    // card (cardW x cardH) et la photo le remplit pile
+                    // -> radius 18 visible sur la photo, etoile fav (ci-
+                    // dessous) anchored au coin haut-droit de la photo.
+                    // Default PHOTO_ASPECT (3:4) avant chargement.
+                    const aspect = aspectMap[item.id] || PHOTO_ASPECT;
+                    return (
+                      <View style={{
+                        width: cardW, height: cardH,
+                        paddingHorizontal: photoMargin,
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <ReAnimated.View style={[{
+                          aspectRatio: aspect,
+                          maxWidth: '100%', maxHeight: '100%',
+                          overflow: 'hidden',
+                          borderRadius: 18,
+                          backgroundColor: 'transparent',
+                        }, radiusStyle]}>
+                          {item?.uri ? (
+                            <ExpoImage
+                              source={{ uri: item.uri }}
+                              placeholder={{ uri: item.uri }}
+                              style={{ width: '100%', height: '100%' }}
+                              // cover = fill exact puisque wrapper matche l aspect.
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              priority="high"
+                              transition={0}
+                              recyclingKey={item.id}
+                              onLoad={(e) => {
+                                const w = e?.source?.width;
+                                const h = e?.source?.height;
+                                if (w && h) setPhotoAspect(item.id, w, h);
+                              }}
+                            />
+                          ) : null}
+                        </ReAnimated.View>
+                      </View>
+                    );
+                  }}
                 />
               </ReAnimated.View>
             </GestureDetector>
 
-            {/* Coeur favori en overlay au-dessus de la FlatList photo.
-                Un seul coeur, lie au currentIndex (pas duplique par item).
-                Blanc + drop-shadow noir pour lisibilite cross-fond. */}
-            {isRunner ? (
+            {/* Coeur favori : position calculee sur l aspect REEL de la
+                photo courante. Le wrapper photo s adapte a l aspect via
+                aspectRatio dynamique (renderItem ci-dessus), donc la photo
+                peut etre plus etroite ou plus large que cardW x cardH.
+                On calcule les bounds reels pour ancrer l etoile au coin
+                haut-droit de la photo, pas au coin du card.
+                Calcul : cardInnerW x cardInnerH = la zone disponible apres
+                padding. La photo est contain dans cette zone avec son
+                aspect. */}
+            {isRunner ? (() => {
+              const cardInnerW = cardW - photoMargin * 2;
+              const cardInnerH = cardH;
+              const currentAspect = aspectMap[currentPhoto?.id] || PHOTO_ASPECT;
+              const wrapperAspect = cardInnerW / cardInnerH;
+              let photoW, photoH;
+              if (currentAspect >= wrapperAspect) {
+                photoW = cardInnerW;
+                photoH = cardInnerW / currentAspect;
+              } else {
+                photoH = cardInnerH;
+                photoW = cardInnerH * currentAspect;
+              }
+              const photoLeftFromCardLeft = photoMargin + (cardInnerW - photoW) / 2;
+              const photoTopFromCardTop = (cardInnerH - photoH) / 2;
+              const starTop = photoTopFromCardTop + 12;
+              const starRight = (cardW - photoLeftFromCardLeft - photoW) + 12;
+              return (
               <ReAnimated.View
                 pointerEvents="box-none"
                 style={[{
-                  // Coin haut-droit de la photo. Ancrage strict : photoMargin
-                  // (= padding G/D du conteneur photo) + 12 = exactement
-                  // 12px dedans du bord droit de l image. Idem 12 du haut.
-                  // Marge plus serree que le radius 18 pour ne pas etre
-                  // visuellement decollee de la photo.
-                  position: 'absolute', top: 12, right: photoMargin + 12,
+                  position: 'absolute', top: starTop, right: starRight,
                 }, uiStyle]}
               >
                 <ReAnimated.View style={heartStyle}>
@@ -10665,7 +10704,8 @@ function PhotoViewerModal({
                   </TouchableOpacity>
                 </ReAnimated.View>
               </ReAnimated.View>
-            ) : null}
+              );
+            })() : null}
           </ReAnimated.View>
 
           {/* X haut-droite de la PAGE, noire (point 6). Toujours visible
