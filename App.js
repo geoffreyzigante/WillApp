@@ -4158,15 +4158,18 @@ function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onClose, e
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <View style={{ paddingTop: topPad, paddingHorizontal: 20, paddingBottom: 4, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontFamily: 'Montserrat', fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.3 }}>Mon panier</Text>
-          <Text style={{ color: C.textSoft, fontSize: 13, marginTop: 4 }}>
-            {total === 0 ? 'Vide pour le moment.' : `${total} photo${total > 1 ? 's' : ''} dans ton panier.`}
-          </Text>
-        </View>
-        {onClose ? (
-          <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityLabel="Fermer" style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
+      {/* Header style charte modal (AuthOrganizerModal) : titre AVEstiana
+          rose centre + sous-titre textSoft. En embedded la fermeture passe
+          par le handle drag + tap backdrop, pas de X. */}
+      <View style={{ paddingTop: topPad, paddingHorizontal: 22, paddingBottom: 14, alignItems: 'center' }}>
+        <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginTop: 4, marginBottom: 4, textAlign: 'center' }]}>
+          Mon panier
+        </Text>
+        <Text style={{ color: C.textSoft, fontSize: 13, textAlign: 'center' }}>
+          {total === 0 ? 'Vide pour le moment.' : `${total} photo${total > 1 ? 's' : ''} dans ton panier.`}
+        </Text>
+        {!embedded && onClose ? (
+          <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityLabel="Fermer" style={{ position: 'absolute', right: 16, top: topPad, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
             <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
               <Path d="m8 8 8 8M16 8l-8 8" stroke={C.text} strokeWidth={2.6} strokeLinecap="round" />
             </Svg>
@@ -13791,6 +13794,7 @@ export default function App() {
   // ouvert au tap. Refresh auto via cartChangeListeners cross-component.
   const { total: cartGlobalTotal } = useAllCarts();
   const [panierModalVisible, setPanierModalVisible] = useState(false);
+  const { sheetTranslate: panierSheetTranslate, handlePanHandlers: panierPanHandlers } = useDismissibleSheet(panierModalVisible, () => setPanierModalVisible(false));
 
   const tabsTranslateX = useRef(new Animated.Value(0)).current;
 
@@ -14553,8 +14557,9 @@ export default function App() {
       animationType="fade"
       onRequestClose={() => setPanierModalVisible(false)}
     >
-      {/* Bottom sheet pattern aligne sur AuthOrganizerModal :
-          BlurView backdrop + sheet rounded-top en bas avec handle. */}
+      {/* Bottom sheet pattern aligne sur AuthOrganizerModal (charte modal) :
+          BlurView backdrop + Animated.View translateY drag-down via
+          useDismissibleSheet, handle visuel en haut, tap backdrop pour fermer. */}
       <View style={{ flex: 1 }}>
         <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
         <TouchableOpacity
@@ -14562,28 +14567,31 @@ export default function App() {
           style={{ flex: 1, justifyContent: 'flex-end' }}
           onPress={() => setPanierModalVisible(false)}
         >
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => {}}
-            style={{
-              backgroundColor: C.bg,
-              borderTopLeftRadius: 28,
-              borderTopRightRadius: 28,
-              height: '88%',
-              overflow: 'hidden',
-            }}
-          >
-            <View style={{ paddingVertical: 8, alignItems: 'center' }}>
-              <View style={s.modalHandle} />
-            </View>
-            <PanierScreen
-              allEvents={events}
-              onOpenEvent={(ev) => { setPanierModalVisible(false); setOpenedEvent(ev); }}
-              isActive={panierModalVisible}
-              onClose={() => setPanierModalVisible(false)}
-              embedded
-            />
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ translateY: panierSheetTranslate }] }}>
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => {}}
+              style={{
+                backgroundColor: C.bg,
+                borderTopLeftRadius: 28,
+                borderTopRightRadius: 28,
+                height: SCREEN_W * (Platform.OS === 'ios' ? 1.7 : 1.6),
+                maxHeight: '88%',
+                overflow: 'hidden',
+              }}
+            >
+              <View {...panierPanHandlers} style={{ paddingVertical: 6, alignItems: 'center' }}>
+                <View style={s.modalHandle} />
+              </View>
+              <PanierScreen
+                allEvents={events}
+                onOpenEvent={(ev) => { setPanierModalVisible(false); setOpenedEvent(ev); }}
+                isActive={panierModalVisible}
+                onClose={() => setPanierModalVisible(false)}
+                embedded
+              />
+            </TouchableOpacity>
+          </Animated.View>
         </TouchableOpacity>
       </View>
     </Modal>
