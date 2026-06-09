@@ -10075,7 +10075,7 @@ function PhotoViewerModal({
   // bas de la photo. Just bottom safe-area + 32 (marge sous le CTA qui
   // depasse) pour matcher le viewer web mobile (.vstage bottom: env+32).
   const RUNNER_BOTTOM_RESERVE = 32;
-  const photoMargin = 20;       // marge G/D autour de la photo principale
+  const photoMargin = 8;        // marge G/D autour de la photo principale (resserree)
   const targetX = photoMargin;
   const targetW = winWidth - photoMargin * 2;
   const effectiveBottomReserve = isOrga ? BUTTON_AREA_H : RUNNER_BOTTOM_RESERVE;
