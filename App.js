@@ -13881,7 +13881,7 @@ const s = StyleSheet.create({
 
   empty: { textAlign: 'center', color: C.textSoft, marginTop: 24, fontSize: 14 },
 
-  eventCard: { height: 90, borderRadius: 16, overflow: 'hidden', marginBottom: 10, backgroundColor: '#222', justifyContent: 'center' },
+  eventCard: { height: 110, borderRadius: 16, overflow: 'hidden', marginBottom: 10, backgroundColor: '#222', justifyContent: 'center' },
   eventCardCenter: { paddingHorizontal: 16, zIndex: 2 },
   eventDate: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 1, opacity: 0.9, marginBottom: 2 },
   eventName: { color: '#fff', fontSize: 18, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal' },
