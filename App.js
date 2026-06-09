@@ -1253,7 +1253,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, uploadStat
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0 }) {
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, cartTotal = 0, onOpenPanier }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   // Indicateur violet qui glisse entre les 3 pills. Mesure une fois la largeur
@@ -1369,24 +1369,62 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             )}
           </View>
         </View>
-        <View style={s.orgToggle}>
-          <TouchableOpacity
-            style={s.orgToggleBtn}
-            onPress={() => onOpenOrgRole('organizer')}
-            activeOpacity={0.7}
-            hitSlop={6}
-          >
-            <Icon.GearOrg size={22} color={C.pinkPillFg} />
-          </TouchableOpacity>
-          <View style={s.orgToggleDivider} />
-          <TouchableOpacity
-            style={s.orgToggleBtn}
-            onPress={() => onOpenOrgRole('photographer')}
-            activeOpacity={0.7}
-            hitSlop={6}
-          >
-            <Icon.CamOrg size={24} color={C.pinkPillFg} />
-          </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Pill panier : visible uniquement quand cart > 0. Tap ouvre
+              la modale panier (comme l espace orga/photo). */}
+          {cartTotal > 0 && onOpenPanier ? (
+            <TouchableOpacity
+              onPress={onOpenPanier}
+              activeOpacity={0.7}
+              hitSlop={6}
+              style={{
+                width: 40, height: 40,
+                borderRadius: 14,
+                backgroundColor: C.pinkPill,
+                alignItems: 'center', justifyContent: 'center',
+                position: 'relative',
+              }}
+              accessibilityLabel="Voir mon panier"
+            >
+              <Svg width={22} height={20} viewBox="0 0 18.96 17.61" fill={C.pinkPillFg}>
+                <Path d="M9.49,9.19c-.38,0-.68.3-.68.68v3.38c0,.37.31.68.68.68s.68-.3.68-.68v-3.38c0-.37-.31-.68-.68-.68Z" />
+                <Path d="M12.94,9.23c-.37-.06-.73.18-.79.55l-.59,3.33c-.07.37.18.72.55.78.37.06.73-.18.79-.55l.59-3.33c.07-.37-.18-.72-.55-.78Z" />
+                <Path d="M6.04,9.23c-.37.06-.62.42-.55.78l.59,3.33c.07.37.42.61.79.55.37-.06.62-.42.55-.78l-.59-3.33c-.07-.37-.42-.61-.79-.55Z" />
+                <Path d="M17.25,5.29h-6.43s.01-.04.01-.06V1.35C10.83.6,10.23,0,9.48,0s-1.36.6-1.36,1.35v3.88s.01.04.01.06H1.7C.59,5.29-.22,6.33.05,7.39l2.14,8.95c.19.74.87,1.26,1.64,1.26h11.29c.77,0,1.45-.52,1.64-1.26l2.14-8.95c.28-1.06-.53-2.1-1.64-2.1ZM15.44,9.36l-1.02,4.67c-.11.44-.51.74-.97.74h-7.93c-.46,0-.85-.31-.97-.74l-1.02-4.67c-.16-.63.32-1.24.97-1.24h9.98c.65,0,1.13.61.97,1.24Z" />
+              </Svg>
+              <View style={{
+                position: 'absolute', top: -4, right: -4,
+                minWidth: 18, height: 18, borderRadius: 9,
+                paddingHorizontal: 4,
+                backgroundColor: C.primary,
+                alignItems: 'center', justifyContent: 'center',
+                borderWidth: 1.5, borderColor: C.bg,
+              }}>
+                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800', lineHeight: 11 }}>
+                  {cartTotal > 99 ? '99+' : cartTotal}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ) : null}
+          <View style={s.orgToggle}>
+            <TouchableOpacity
+              style={s.orgToggleBtn}
+              onPress={() => onOpenOrgRole('organizer')}
+              activeOpacity={0.7}
+              hitSlop={6}
+            >
+              <Icon.GearOrg size={22} color={C.pinkPillFg} />
+            </TouchableOpacity>
+            <View style={s.orgToggleDivider} />
+            <TouchableOpacity
+              style={s.orgToggleBtn}
+              onPress={() => onOpenOrgRole('photographer')}
+              activeOpacity={0.7}
+              hitSlop={6}
+            >
+              <Icon.CamOrg size={24} color={C.pinkPillFg} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -4101,9 +4139,9 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 // Liste toutes les cles `will:cart:*` via useAllCarts, groupe par event
 // (avec metadata depuis allEvents = /public-events), affiche un footer
 // total + bouton Commander disable (Stripe a venir).
-function PanierScreen({ allEvents = [], onOpenEvent, isActive = true }) {
+function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onClose }) {
   const { carts, total, remove, refresh } = useAllCarts();
-  // Re-fetch backend a chaque fois qu on entre dans l onglet Panier.
+  // Re-fetch backend a chaque fois qu on entre dans le panier.
   // Permet de rattraper les ajouts faits depuis un autre device (web).
   const wasActiveRef = useRef(false);
   useEffect(() => {
@@ -4121,11 +4159,20 @@ function PanierScreen({ allEvents = [], onOpenEvent, isActive = true }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <View style={{ paddingTop: topPad, paddingHorizontal: 20, paddingBottom: 4 }}>
-        <Text style={{ fontFamily: 'Montserrat', fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.3 }}>Mon panier</Text>
-        <Text style={{ color: C.textSoft, fontSize: 13, marginTop: 4 }}>
-          {total === 0 ? 'Vide pour le moment.' : `${total} photo${total > 1 ? 's' : ''} dans ton panier.`}
-        </Text>
+      <View style={{ paddingTop: topPad, paddingHorizontal: 20, paddingBottom: 4, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: 'Montserrat', fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.3 }}>Mon panier</Text>
+          <Text style={{ color: C.textSoft, fontSize: 13, marginTop: 4 }}>
+            {total === 0 ? 'Vide pour le moment.' : `${total} photo${total > 1 ? 's' : ''} dans ton panier.`}
+          </Text>
+        </View>
+        {onClose ? (
+          <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityLabel="Fermer" style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+              <Path d="m8 8 8 8M16 8l-8 8" stroke={C.text} strokeWidth={2.6} strokeLinecap="round" />
+            </Svg>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: total > 0 ? 140 : 24 }}>
@@ -13739,13 +13786,13 @@ export default function App() {
   const tabs = useMemo(() => {
     const t = ['home', 'photos'];
     if (organizerSession) t.push('events');
-    t.push('cart');
     return t;
   }, [organizerSession]);
 
-  // Badge agrege pour l onglet Panier (somme des `will:cart:*` AsyncStorage).
-  // Refresh auto via cartChangeListeners quand un autre composant mute.
+  // Badge agrege pour le pill Panier dans le header HomeScreen + Modal panier
+  // ouvert au tap. Refresh auto via cartChangeListeners cross-component.
   const { total: cartGlobalTotal } = useAllCarts();
+  const [panierModalVisible, setPanierModalVisible] = useState(false);
 
   const tabsTranslateX = useRef(new Animated.Value(0)).current;
 
@@ -14035,6 +14082,8 @@ export default function App() {
                   selfieUploadState={selfieUploadState}
                   onRetryUpload={retrySelfieUpload}
                   scrollToTopSignal={homeScrollSignal}
+                  cartTotal={cartGlobalTotal}
+                  onOpenPanier={() => setPanierModalVisible(true)}
                 />
               </View>
               <View style={{ width: SCREEN_W }}>
@@ -14081,13 +14130,6 @@ export default function App() {
                   />
                 </View>
               )}
-              <View style={{ width: SCREEN_W }}>
-                <PanierScreen
-                  allEvents={events}
-                  onOpenEvent={(ev) => setOpenedEvent(ev)}
-                  isActive={bottomTab === 'cart'}
-                />
-              </View>
             </Animated.View>
           </View>
         </GestureDetector>
@@ -14190,31 +14232,6 @@ export default function App() {
             <Text style={[s.navLabel, bottomTab === 'events' && { color: C.pinkPill, fontWeight: '700' }]}>Mes events</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('cart'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
-          <View style={s.navIconWrap}>
-            <Svg width={24} height={22} viewBox="0 0 18.96 17.61" fill={bottomTab === 'cart' ? C.primary : C.text}>
-              <Path d="M9.49,9.19c-.38,0-.68.3-.68.68v3.38c0,.37.31.68.68.68s.68-.3.68-.68v-3.38c0-.37-.31-.68-.68-.68Z" />
-              <Path d="M12.94,9.23c-.37-.06-.73.18-.79.55l-.59,3.33c-.07.37.18.72.55.78.37.06.73-.18.79-.55l.59-3.33c.07-.37-.18-.72-.55-.78Z" />
-              <Path d="M6.04,9.23c-.37.06-.62.42-.55.78l.59,3.33c.07.37.42.61.79.55.37-.06.62-.42.55-.78l-.59-3.33c-.07-.37-.42-.61-.79-.55Z" />
-              <Path d="M17.25,5.29h-6.43s.01-.04.01-.06V1.35C10.83.6,10.23,0,9.48,0s-1.36.6-1.36,1.35v3.88s.01.04.01.06H1.7C.59,5.29-.22,6.33.05,7.39l2.14,8.95c.19.74.87,1.26,1.64,1.26h11.29c.77,0,1.45-.52,1.64-1.26l2.14-8.95c.28-1.06-.53-2.1-1.64-2.1ZM15.44,9.36l-1.02,4.67c-.11.44-.51.74-.97.74h-7.93c-.46,0-.85-.31-.97-.74l-1.02-4.67c-.16-.63.32-1.24.97-1.24h9.98c.65,0,1.13.61.97,1.24Z" />
-            </Svg>
-            {cartGlobalTotal > 0 && bottomTab !== 'cart' && (
-              <View style={{
-                position: 'absolute', top: -3, right: -8,
-                minWidth: 16, height: 16, borderRadius: 8,
-                paddingHorizontal: 4,
-                backgroundColor: '#D67CF8',
-                alignItems: 'center', justifyContent: 'center',
-                borderWidth: 1.5, borderColor: C.bg,
-              }}>
-                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', lineHeight: 11 }}>
-                  {cartGlobalTotal > 99 ? '99+' : cartGlobalTotal}
-                </Text>
-              </View>
-            )}
-          </View>
-          <Text style={[s.navLabel, bottomTab === 'cart' && { color: C.primary, fontWeight: '700' }]}>Panier</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Pill recherche par dossard — rendue APRES le bottom nav et le
@@ -14512,6 +14529,21 @@ export default function App() {
           }, 220);
         }}
       />
+
+      <Modal
+        visible={panierModalVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setPanierModalVisible(false)}
+        statusBarTranslucent
+      >
+        <PanierScreen
+          allEvents={events}
+          onOpenEvent={(ev) => { setPanierModalVisible(false); setOpenedEvent(ev); }}
+          isActive={panierModalVisible}
+          onClose={() => setPanierModalVisible(false)}
+        />
+      </Modal>
 
       <AuthRunnerModal
         visible={authModalVisible}
