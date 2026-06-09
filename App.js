@@ -1717,7 +1717,7 @@ function PhotosUnauthScreen({ onSignup, onLogin }) {
   );
 }
 
-function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerApiFetch, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload }) {
+function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerApiFetch, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, onRefreshFavorites, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload }) {
   // Cle de cache locale photos, scopee par userId. Sans le scope :
   //  - user B sur le meme device verrait les photos de A apres logout/login (RGPD)
   //  - on devait clear le cache au logout -> rechargement reseau a la reconnexion
@@ -1800,6 +1800,13 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   }, []);
   // Sort la selection auto quand on quitte l onglet Photos -> retour propre.
   useEffect(() => { if (!isActive) exitSelection(); }, [isActive, exitSelection]);
+
+  // Refresh forcee des favs depuis le serveur a chaque passage sur l onglet
+  // photos. Couvre le cas : user fav une photo sur le site, ouvre l app, va
+  // sur "Mes photos" -> ses nouveaux favs apparaissent sans cold start.
+  useEffect(() => {
+    if (isActive) onRefreshFavorites?.();
+  }, [isActive, onRefreshFavorites]);
 
   // E4 — marqueur "derniere photo vue" par burstTs (max global tous events).
   // Sert au pull-to-refresh pour afficher "X nouvelles photos" / "Rien de
@@ -2349,6 +2356,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
           ) : (
             <PhotoGrid
               photos={visiblePhotos.slice(0, visibleCount)}
+              numColumns={Math.max(1, Math.min(visiblePhotos.length, 4))}
               onPress={(p, _i, _photos, origin) => onOpenPhoto?.(p, visiblePhotos, {
                 origin,
                 photosForSale: !!p?.paid,
@@ -2575,13 +2583,24 @@ function SkeletonCell({ size }) {
   );
 }
 
-function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite, selectionMode = false, selectedIds, onTogglePhotoSelect }) {
-  // Si pas de photos : grille de placeholders
+function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite, selectionMode = false, selectedIds, onTogglePhotoSelect, numColumns }) {
+  // Colonnes adaptatives : si numColumns fourni, on utilise. Sinon
+  // fallback : 1 photo = 1 col (full width), 2 = 2 col, 3 = 3 col, 4+ = 4 col.
+  const cols = numColumns != null
+    ? Math.max(1, Math.min(numColumns, 4))
+    : Math.max(1, Math.min(photos.length || 4, 4));
+  const itemSize = (SCREEN_W - 40 - (cols - 1) * 8) / cols;
+  const itemStyle = { width: itemSize, height: itemSize, marginBottom: 8 };
+
+  // Si pas de photos : grille de placeholders (cols = 4 par defaut visuel).
   if (photos.length === 0) {
+    const phCols = 4;
+    const phSize = (SCREEN_W - 40 - (phCols - 1) * 8) / phCols;
+    const phStyle = { width: phSize, height: phSize, marginBottom: 8 };
     return (
       <View style={s.grid}>
         {Array.from({ length: 16 }, (_, i) => (
-          <View key={`ph-${i}`} style={s.gridItem}>
+          <View key={`ph-${i}`} style={phStyle}>
             <View style={s.gridPlaceholder} />
           </View>
         ))}
@@ -2606,6 +2625,7 @@ function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite, 
           selectionMode={selectionMode}
           selected={!!(selectedIds && selectedIds.has(p.id))}
           onToggleSelect={onTogglePhotoSelect}
+          itemStyle={itemStyle}
         />
       ))}
     </View>
@@ -2616,7 +2636,7 @@ function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite, 
 // measureInWindow (shared-element transition viewer). Le caller recoit
 // onPress(photo, index, photosList, origin) ou origin = {x,y,w,h} de la
 // thumb tapee, ou null si la mesure echoue.
-function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorite, selectionMode = false, selected = false, onToggleSelect }) {
+function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorite, selectionMode = false, selected = false, onToggleSelect, itemStyle }) {
   const itemRef = React.useRef(null);
   const handlePress = () => {
     // En mode selection : tap toggle l etat selected (pas d ouverture viewer).
@@ -2634,7 +2654,7 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
   return (
     <TouchableOpacity
       ref={itemRef}
-      style={s.gridItem}
+      style={itemStyle || s.gridItem}
       activeOpacity={0.85}
       onPress={handlePress}
     >
@@ -13057,17 +13077,40 @@ export default function App() {
   // puis on supprime la globale. Resultat : pas de favoris perdus pour
   // les comptes existants au moment du deploy.
   //
+  // Refresh forcee des favs photo depuis le serveur. Appelable depuis :
+  //  - useEffect au mount (initial sync)
+  //  - AppState foreground (l user revient sur l app apres avoir fav sur le
+  //    site)
+  //  - PhotosScreen au passage isActive (l user ouvre l onglet Mes photos)
+  // REPLACE le local par la version serveur (source de verite) pour ne pas
+  // garder des favs supprimees sur le site (pattern follows).
+  const refreshPhotoFavoritesFromServer = useCallback(async () => {
+    if (!userId || !runnerSession) return;
+    try {
+      const r = await runnerApiFetch('/runner/photo-favorites');
+      if (!r?.ok) return;
+      const data = await r.json().catch(() => ({}));
+      const remote = Array.isArray(data?.keys) ? data.keys : [];
+      setPhotoFavorites(remote);
+      AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(remote)).catch(() => {});
+    } catch {}
+  }, [userId, runnerSession, runnerApiFetch]);
+
+  // AppState foreground -> refresh favs (l user revient apres avoir fav sur
+  // le site, sync immediate sans attendre cold start).
+  useEffect(() => {
+    if (!userId || !runnerSession) return;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') refreshPhotoFavoritesFromServer();
+    });
+    return () => sub.remove();
+  }, [userId, runnerSession, refreshPhotoFavoritesFromServer]);
+
   // Sync app<->site (2026-06-09) : apres le load local, on appelle
   // GET /runner/follows et on REMPLACE le local par la version serveur
   // (source de verite). Sans ce remplacement, des follows revoquus cote
   // serveur (unfollow web ou face-data delete) resteraient remanents en
-  // local. Resultat :
-  //  - user fait un follow sur le SITE -> il apparait dans l app au prochain
-  //    foreground (cold start OU AppState 'active').
-  //  - user fait un unfollow sur le SITE -> disparait pareillement.
-  //  - user fait un follow sur l APP -> POST /runner/follow ecrit deja le
-  //    consent server-side, le site le verra sur sa prochaine page event.
-  // Pattern identique a photo-favorites (App.js:12096-12134).
+  // local.
   useEffect(() => {
     const uid = runnerSession?.profile?.userId;
     if (!uid) return;
@@ -14083,6 +14126,7 @@ export default function App() {
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
                     photoFavoritesSet={photoFavoritesSet}
                     onTogglePhotoFavorite={togglePhotoFavorite}
+                    onRefreshFavorites={refreshPhotoFavoritesFromServer}
                     isActive={bottomTab === 'photos'}
                     selfieSkipped={selfieSkipped && !selfieUri}
                     selfieUploadState={selfieUploadState}
