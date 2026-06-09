@@ -1727,15 +1727,15 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     const results = await Promise.all(queryList.map(async (code) => {
       try {
         const r = await runnerApiFetch(`/personal-gallery/${encodeURIComponent(code)}`);
-        if (!r.ok) return { code, photos: [] };
+        if (!r.ok) return { code, photos: [], paid: false };
         const data = await r.json();
-        return { code, photos: Array.isArray(data.photos) ? data.photos : [] };
-      } catch { return { code, photos: [] }; }
+        return { code, photos: Array.isArray(data.photos) ? data.photos : [], paid: !!data.photos_for_sale };
+      } catch { return { code, photos: [], paid: false }; }
     }));
     const now = Date.now();
     const merged = [];
     let searching = false;
-    for (const { code, photos: list } of results) {
+    for (const { code, photos: list, paid } of results) {
       const tint = eventTintMap[code] || TYPE_COLORS.autre;
       if (list.length === 0) {
         const startedTs = started[code];
@@ -1749,6 +1749,8 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
           thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
           id: p.key,
           tint,
+          paid,
+          eventCode: code,
         });
       }
     }
@@ -2086,7 +2088,11 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
           ) : (
             <PhotoGrid
               photos={visiblePhotos.slice(0, visibleCount)}
-              onPress={(p, _i, _photos, origin) => onOpenPhoto?.(p, visiblePhotos, { origin })}
+              onPress={(p, _i, _photos, origin) => onOpenPhoto?.(p, visiblePhotos, {
+                origin,
+                photosForSale: !!p?.paid,
+                eventCode: p?.eventCode || null,
+              })}
               photoFavoritesSet={photoFavoritesSet}
               onToggleFavorite={onTogglePhotoFavorite}
               selectionMode={selectionMode}
@@ -2201,7 +2207,7 @@ function FavStar({ size = 16, fill = '#fff', stroke = '#fff', strokeWidth = 1.6,
 
 // Cellule d'une thumbnail : memo + onError fallback. La taille est passee
 // pour pouvoir s'adapter au numColumns du parent.
-const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav, favIndicator = false }) {
+const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav, favIndicator = false, paid = false }) {
   const [errored, setErrored] = React.useState(false);
   const cellRef = React.useRef(null);
   // size optionnel :
@@ -2246,6 +2252,17 @@ const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHear
               console.warn('[gallery] image load failed:', photo.uri, e?.error || e);
               setErrored(true);
             }}
+          />
+        )}
+        {/* Watermark overlay events payants (mirror PhotoViewerModal). */}
+        {!errored && paid && (
+          <ExpoImage
+            source={{ uri: 'https://will-app.com/assets/watermark-will-cover-v3.png' }}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.55 }}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            pointerEvents="none"
+            transition={0}
           />
         )}
         {errored && (
@@ -2380,6 +2397,18 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
         transition={100}
         recyclingKey={p.id}
       />
+      {/* Watermark dissuasif events payants (mirror PhotoCell.paid). Sur la
+          galerie agregée "Mes photos", chaque thumb porte son propre p.paid. */}
+      {p?.paid ? (
+        <ExpoImage
+          source={{ uri: 'https://will-app.com/assets/watermark-will-cover-v3.png' }}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.55, borderRadius: 12 }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          pointerEvents="none"
+          transition={0}
+        />
+      ) : null}
       {/* Etoile favori : indicateur READ-ONLY uniquement pour les photos deja
           mises en favori. Le favoriting se fait uniquement depuis le viewer
           (meme logique que la galerie publique, decision UX 2026-06-03). */}
@@ -3470,10 +3499,13 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       // Le viewer plein ecran recoit item entier (avec uri haute resolution).
       photo={{ ...item, uri: item.thumbUri || item.uri }}
       favIndicator={isFav(item.id)}
+      paid={!!event?.photos_for_sale}
       onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
         origin,
         eventTitle: event?.name,
         eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+        photosForSale: !!event?.photos_for_sale,
+        eventCode: event?.code,
       })}
     />
   );
@@ -3516,10 +3548,13 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           photo={{ ...photo, uri: sourceUri }}
           size={{ width, height }}
           favIndicator={isFav(photo.id)}
+          paid={!!event?.photos_for_sale}
           onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
             origin,
             eventTitle: event?.name,
             eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+            photosForSale: !!event?.photos_for_sale,
+            eventCode: event?.code,
           })}
         />
       </View>
@@ -3539,10 +3574,13 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
           size={{ width, height }}
           favIndicator={isFav(photo.id)}
+          paid={!!event?.photos_for_sale}
           onPress={(origin) => onOpenPhoto?.(photo, bibResults, {
             origin,
             eventTitle: event?.name,
             eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+            photosForSale: !!event?.photos_for_sale,
+            eventCode: event?.code,
           })}
         />
       </View>
@@ -10025,6 +10063,7 @@ function PhotoViewerModal({
   photoFavoritesSet, onTogglePhotoFavorite,
   onTogglePhotoVisibility,
   origin, eventTitle, eventDate,
+  photosForSale = false, eventCode = null,
 }) {
   const [busy, setBusy] = useState(false);
   const winWidth = Dimensions.get('window').width;
@@ -10095,6 +10134,38 @@ function PhotoViewerModal({
     const ov = localHiddenMap[p.id];
     return ov === undefined ? p.hidden === true : ov;
   };
+
+  // Panier (stub AsyncStorage, MVP avant Stripe — mirror website event/index.html).
+  // Cle par event : `will:cart:{eventCode}`, valeur = JSON array de photo.id
+  // (qui vaut le R2 key cote mobile, cf line 1750/2738). Le bouton "Ajouter au
+  // panier" remplace "Telecharger" sur events payants. Pas de backend ; les
+  // donnees sont locales au device. Sera migre vers /cart worker plus tard.
+  const [cart, setCart] = useState([]);
+  const cartStorageKey = photosForSale && eventCode ? `will:cart:${eventCode}` : null;
+  useEffect(() => {
+    if (!visible || !cartStorageKey) return;
+    let cancelled = false;
+    AsyncStorage.getItem(cartStorageKey).then(v => {
+      if (cancelled) return;
+      try {
+        const arr = v ? JSON.parse(v) : [];
+        setCart(Array.isArray(arr) ? arr : []);
+      } catch { setCart([]); }
+    }).catch(() => { if (!cancelled) setCart([]); });
+    return () => { cancelled = true; };
+  }, [visible, cartStorageKey]);
+  const persistCart = useCallback((next) => {
+    setCart(next);
+    if (cartStorageKey) {
+      AsyncStorage.setItem(cartStorageKey, JSON.stringify(next)).catch(() => {});
+    }
+  }, [cartStorageKey]);
+  const toggleCartFor = useCallback((photoKey) => {
+    if (!photoKey) return;
+    const i = cart.indexOf(photoKey);
+    if (i >= 0) persistCart(cart.filter(k => k !== photoKey));
+    else persistCart([...cart, photoKey]);
+  }, [cart, persistCart]);
 
   // Layout cible (hauteurs fixes pour calcul de la zone photo)
   const HEADER_H = 56;          // titre + date
@@ -10669,6 +10740,19 @@ function PhotoViewerModal({
                               }}
                             />
                           ) : null}
+                          {/* Watermark dissuasif sur events payants : overlay
+                              client only, l image servie est propre. Mirror
+                              website body.paid-event .vphoto::after. */}
+                          {photosForSale && item?.uri ? (
+                            <ExpoImage
+                              source={{ uri: 'https://will-app.com/assets/watermark-will-cover-v3.png' }}
+                              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.55 }}
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              pointerEvents="none"
+                              transition={0}
+                            />
+                          ) : null}
                           {/* Etoile fav DANS le wrapper photo : ancrage strict
                               au coin haut-droit, pas de drift au swipe entre
                               photos d aspects differents. uiStyle anime le
@@ -10798,6 +10882,50 @@ function PhotoViewerModal({
                 ) : null}
               </View>
             </ReAnimated.View>
+          ) : photosForSale ? (
+            // Event payant : CTA "Ajouter au panier" remplace "Telecharger".
+            // Toggle local AsyncStorage (cf cart hooks plus haut), pas de
+            // backend. Couleur verte quand la photo est deja au panier ;
+            // label affiche le total entre parentheses si non vide.
+            (() => {
+              const inCart = !!currentPhoto?.id && cart.includes(currentPhoto.id);
+              const total = cart.length;
+              const suffix = total > 0 ? ` (${total})` : '';
+              return (
+                <ReAnimated.View
+                  style={[{
+                    position: 'absolute', left: 0, right: 0,
+                    top: targetY + cardH - 23,
+                    alignItems: 'center', justifyContent: 'center',
+                    zIndex: 30,
+                  }, uiStyle]}
+                  pointerEvents="box-none"
+                >
+                  <TouchableOpacity
+                    onPress={() => { if (currentPhoto?.id) toggleCartFor(currentPhoto.id); }}
+                    activeOpacity={0.85}
+                    style={{
+                      paddingVertical: 12, paddingHorizontal: 28, borderRadius: 999,
+                      backgroundColor: inCart ? '#16A34A' : '#7B2FFF',
+                      alignItems: 'center', justifyContent: 'center',
+                      flexDirection: 'row', gap: 8,
+                      minWidth: 220,
+                      shadowColor: inCart ? '#16A34A' : '#7B2FFF', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
+                      elevation: 6,
+                    }}
+                    accessibilityLabel={inCart ? 'Retirer du panier' : 'Ajouter au panier'}
+                  >
+                    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                      <Path d="M3 6h2l2 12h11l2-8H7" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                      <Path d="M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="#fff" />
+                    </Svg>
+                    <Text style={{ color: '#fff', fontFamily: 'Montserrat', fontSize: 14, fontWeight: '600' }}>
+                      {inCart ? `Dans le panier${suffix}` : `Ajouter au panier${suffix}`}
+                    </Text>
+                  </TouchableOpacity>
+                </ReAnimated.View>
+              );
+            })()
           ) : (
             // Mode coureur : CTA Telecharger positionne par rapport au container
             // photo (top: targetY + cardH - 23 = pile sur le bord bas avec 50%
@@ -13796,6 +13924,8 @@ export default function App() {
         origin={openedPhoto?.origin}
         eventTitle={openedPhoto?.eventTitle}
         eventDate={openedPhoto?.eventDate}
+        photosForSale={!!openedPhoto?.photosForSale}
+        eventCode={openedPhoto?.eventCode || null}
         onClose={() => setOpenedPhoto(null)}
         photoFavoritesSet={photoFavoritesSet}
         onTogglePhotoFavorite={(id) => {
