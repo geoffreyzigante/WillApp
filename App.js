@@ -14463,8 +14463,8 @@ const s = StyleSheet.create({
   gridPlaceholder: { flex: 1, backgroundColor: C.primaryLight, borderRadius: 12 },
   gridImg: { flex: 1, borderRadius: 12 },
 
-  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'transparent', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 28, paddingTop: 12, paddingHorizontal: 16, zIndex: 6 },
-  navBtn: { alignItems: 'center', justifyContent: 'flex-start', gap: 4, minWidth: 80 },
+  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'transparent', flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-start', paddingTop: 12, paddingHorizontal: 12, zIndex: 6 },
+  navBtn: { alignItems: 'center', justifyContent: 'flex-start', gap: 4, minWidth: 60, flex: 1, maxWidth: 110 },
   navIconWrap: { height: 26, alignItems: 'center', justifyContent: 'center' },
   navLabel: { fontSize: 12, color: C.text, marginTop: 2 },
 
