@@ -14224,14 +14224,6 @@ export default function App() {
           </View>
           <Text style={[s.navLabel, bottomTab === 'photos' && { color: C.primary, fontWeight: '700' }]}>Photos</Text>
         </TouchableOpacity>
-        {organizerSession && (
-          <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('events'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
-            <View style={s.navIconWrap}>
-              <Icon.ListEvents size={26} color={bottomTab === 'events' ? C.pinkPill : C.text} />
-            </View>
-            <Text style={[s.navLabel, bottomTab === 'events' && { color: C.pinkPill, fontWeight: '700' }]}>Mes events</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Pill recherche par dossard — rendue APRES le bottom nav et le
