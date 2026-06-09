@@ -2247,55 +2247,58 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
         </View>
       ) : (
         <>
-          {/* Segmented Moi / Mes favoris / Tous : pleine largeur, fond light
-              violet, bouton actif rempli violet primary. Toujours visible des
-              que photos > 0 (parite avec website sheet "Mes photos"). */}
+          {/* Segmented Moi / Mes favoris / Tous : style identique aux pills
+              "A venir / Passes / Favoris" de l accueil (indicateur slide
+              spring sur le tab actif + meme typo s.pillText). */}
           {!selectionMode && (
-            <View style={{
-              flexDirection: 'row',
-              backgroundColor: '#F4EFFF',
-              borderRadius: 999,
-              padding: 3,
-              marginBottom: 10,
-              gap: 2,
-            }}>
-              {[
-                { id: 'me', label: 'Moi', count: meCount },
-                { id: 'favs', label: 'Mes favoris', count: favCount },
-                { id: 'all', label: 'Tous', count: photos.length },
-              ].map((tab) => {
-                const isActive = viewFilter === tab.id;
-                return (
-                  <TouchableOpacity
-                    key={tab.id}
-                    onPress={() => {
-                      try { Haptics?.selectionAsync?.(); } catch {}
-                      setViewFilter(tab.id);
-                    }}
-                    activeOpacity={0.7}
-                    style={{
-                      flex: 1,
-                      paddingVertical: 6,
-                      paddingHorizontal: 8,
-                      borderRadius: 999,
-                      backgroundColor: isActive ? C.primary : 'transparent',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text
-                      numberOfLines={1}
-                      style={{
-                        color: isActive ? '#fff' : C.primary,
-                        fontSize: 12,
-                        fontWeight: isActive ? '700' : '600',
-                      }}
-                    >
-                      {tab.label} ({tab.count})
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <View
+              onLayout={(e) => setViewTabsContainerW(e.nativeEvent.layout.width - 8)}
+              style={{
+                flexDirection: 'row',
+                backgroundColor: C.pillBg,
+                borderRadius: 16,
+                padding: 4,
+                alignItems: 'center',
+                position: 'relative',
+                marginBottom: 10,
+              }}
+            >
+              {viewSlotW > 0 && (
+                <Animated.View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    left: 4, top: 4, bottom: 4,
+                    width: viewSlotW,
+                    backgroundColor: C.primary,
+                    borderRadius: 12,
+                    transform: [{ translateX: viewTabsSlideX }],
+                  }}
+                />
+              )}
+              <TouchableOpacity
+                onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setViewFilter('me'); }}
+                activeOpacity={0.85}
+                style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
+              >
+                <Text style={[s.pillText, viewFilter === 'me' && s.pillTextActive]} numberOfLines={1}>Moi ({meCount})</Text>
+              </TouchableOpacity>
+              {viewFilter === 'all' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
+              <TouchableOpacity
+                onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setViewFilter('favs'); }}
+                activeOpacity={0.85}
+                style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
+              >
+                <Text style={[s.pillText, viewFilter === 'favs' && s.pillTextActive]} numberOfLines={1}>Mes favoris ({favCount})</Text>
+              </TouchableOpacity>
+              {viewFilter === 'me' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
+              <TouchableOpacity
+                onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setViewFilter('all'); }}
+                activeOpacity={0.85}
+                style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
+              >
+                <Text style={[s.pillText, viewFilter === 'all' && s.pillTextActive]} numberOfLines={1}>Tous ({photos.length})</Text>
+              </TouchableOpacity>
             </View>
           )}
           {/* Barre selection en flow normal (occupe une vraie hauteur)
