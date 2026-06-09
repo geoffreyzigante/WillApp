@@ -2969,11 +2969,6 @@ function EventDetailScreen(props) {
 
 function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange }) {
   const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
-  // Panier : hook partage via cartChangeListeners ; sync auto avec
-  // PhotoViewerModal. Pilote le CTA flottant + la modale panier en bas.
-  const eventPaid = !!event?.photos_for_sale;
-  const { cart: cartKeys, count: cartCount, remove: cartRemove } = useCart(eventPaid ? event?.code : null);
-  const [cartModalVisible, setCartModalVisible] = useState(false);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -4094,153 +4089,13 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           sous le hero, controlee par le chevron du CTA "Infos pratiques"
           dans le hero. Voir renderHeader plus haut.) */}
 
-      {/* Events payants : CTA flottant "Mon panier" + modale plein-ecran.
-          Visible quand cart > 0. Sync via useCart (cartChangeListeners) ->
-          ouvert / retrait restent coherents avec PhotoViewerModal. */}
-      {eventPaid && cartCount > 0 ? (
-        <View
-          pointerEvents="box-none"
-          style={{ position: 'absolute', left: 0, right: 0, bottom: 24 + (Platform.OS === 'ios' ? 14 : 0), alignItems: 'center', zIndex: 50 }}
-        >
-          <TouchableOpacity
-            onPress={() => setCartModalVisible(true)}
-            activeOpacity={0.85}
-            style={{
-              backgroundColor: '#7B2FFF',
-              paddingVertical: 14, paddingHorizontal: 22,
-              borderRadius: 999,
-              flexDirection: 'row', alignItems: 'center', gap: 10,
-              shadowColor: '#7B2FFF', shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 8 },
-              elevation: 8,
-            }}
-            accessibilityLabel="Voir mon panier"
-          >
-            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-              <Path d="M3 6h2l2 12h11l2-8H7" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-              <Path d="M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="#fff" />
-            </Svg>
-            <Text style={{ color: '#fff', fontFamily: 'Montserrat', fontSize: 14, fontWeight: '700' }}>
-              {`Mon panier · ${cartCount} photo${cartCount > 1 ? 's' : ''} · ${cartCount * PRICE_PER_PHOTO_EUR} €`}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      <CartModal
-        visible={cartModalVisible}
-        onClose={() => setCartModalVisible(false)}
-        eventCode={event?.code}
-        cartKeys={cartKeys}
-        onRemove={cartRemove}
-        photosSource={photos}
-      />
+      {/* CTA flottant retire 2026-06-09 : l acces au panier se fait
+          desormais via l onglet Panier (bottom nav) qui montre toutes
+          les events agregees. */}
     </>
   );
 }
 
-// ─── Modale Mon panier (events payants) ─────────────────────────────
-// Plein-ecran blanc, header titre+close, grille des thumbs avec X de
-// retrait, footer total + bouton Commander disabled. Joint cartKeys
-// (R2 keys) avec photosSource (la liste photos du event courant) pour
-// retrouver les thumbs a afficher.
-function CartModal({ visible, onClose, eventCode, cartKeys, onRemove, photosSource }) {
-  const cartPhotos = useMemo(() => {
-    if (!Array.isArray(cartKeys) || !cartKeys.length) return [];
-    const keySet = new Set(cartKeys);
-    return (photosSource || []).filter(p => keySet.has(p.id));
-  }, [cartKeys, photosSource]);
-  const n = cartPhotos.length;
-  const total = n * PRICE_PER_PHOTO_EUR;
-  const topPad = Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 0) + 12;
-  const bottomPad = Platform.OS === 'ios' ? 34 : 16;
-  return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose} statusBarTranslucent>
-      <View style={{ flex: 1, backgroundColor: '#fff' }}>
-        <View style={{
-          paddingTop: topPad, paddingHorizontal: 20, paddingBottom: 12,
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          borderBottomWidth: 1, borderBottomColor: '#EFEAFB',
-        }}>
-          <Text style={{ fontFamily: 'Montserrat', fontSize: 18, fontWeight: '800', color: '#1A1426', letterSpacing: -0.2 }}>
-            {`Mon panier · ${n} photo${n > 1 ? 's' : ''}`}
-          </Text>
-          <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityLabel="Fermer">
-            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-              <Path d="m8 8 8 8M16 8l-8 8" stroke="#000" strokeWidth={2.6} strokeLinecap="round" />
-            </Svg>
-          </TouchableOpacity>
-        </View>
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
-          {n === 0 ? (
-            <Text style={{ textAlign: 'center', color: C.textSoft, fontSize: 14, paddingVertical: 60 }}>
-              Aucune photo dans votre panier.
-            </Text>
-          ) : (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {cartPhotos.map((p) => {
-                const cellW = (SCREEN_W - 32 - 16) / 3;
-                return (
-                  <View key={p.id} style={{ width: cellW, height: cellW, borderRadius: 12, overflow: 'hidden', backgroundColor: C.primaryLight, position: 'relative' }}>
-                    <ExpoImage
-                      source={{ uri: p.thumbUri || p.uri }}
-                      style={{ width: '100%', height: '100%' }}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                      transition={100}
-                    />
-                    <TouchableOpacity
-                      onPress={() => onRemove?.(p.id)}
-                      hitSlop={8}
-                      accessibilityLabel="Retirer du panier"
-                      style={{
-                        position: 'absolute', top: 6, right: 6,
-                        width: 26, height: 26, borderRadius: 999,
-                        backgroundColor: 'rgba(0,0,0,0.6)',
-                        alignItems: 'center', justifyContent: 'center',
-                      }}
-                    >
-                      <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                        <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" />
-                      </Svg>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </ScrollView>
-        <View style={{
-          paddingHorizontal: 20, paddingTop: 16, paddingBottom: bottomPad + 4,
-          borderTopWidth: 1, borderTopColor: '#EFEAFB',
-          gap: 12,
-        }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 14 }}>Total</Text>
-            <Text style={{ fontFamily: 'Montserrat', color: '#1A1426', fontSize: 22, fontWeight: '800', letterSpacing: -0.3 }}>
-              {`${total} €`}
-            </Text>
-          </View>
-          <TouchableOpacity
-            disabled
-            style={{
-              backgroundColor: n === 0 ? '#C9BEEF' : '#C9BEEF',
-              paddingVertical: 14, borderRadius: 999,
-              alignItems: 'center', justifyContent: 'center',
-            }}
-            accessibilityLabel="Commander (bientot disponible)"
-          >
-            <Text style={{ color: '#fff', fontFamily: 'Montserrat', fontSize: 15, fontWeight: '700' }}>
-              Commander · bientôt
-            </Text>
-          </TouchableOpacity>
-          <Text style={{ textAlign: 'center', color: C.textSoft, fontSize: 12 }}>
-            Le paiement sera disponible très prochainement.
-          </Text>
-        </View>
-      </View>
-    </Modal>
-  );
-}
 
 // ─── PanierScreen : onglet Panier global (agrege cross-event) ────────
 // Liste toutes les cles `will:cart:*` via useAllCarts, groupe par event
@@ -4282,9 +4137,11 @@ function PanierScreen({ allEvents = [], onOpenEvent, isActive = true }) {
               alignItems: 'center', justifyContent: 'center',
               marginBottom: 16,
             }}>
-              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
-                <Path d="M3 6h2l2 12h11l2-8H7" stroke="#7B2FFF" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-                <Path d="M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="#7B2FFF" />
+              <Svg width={30} height={28} viewBox="0 0 18.96 17.61" fill="#7B2FFF">
+                <Path d="M9.49,9.19c-.38,0-.68.3-.68.68v3.38c0,.37.31.68.68.68s.68-.3.68-.68v-3.38c0-.37-.31-.68-.68-.68Z" />
+                <Path d="M12.94,9.23c-.37-.06-.73.18-.79.55l-.59,3.33c-.07.37.18.72.55.78.37.06.73-.18.79-.55l.59-3.33c.07-.37-.18-.72-.55-.78Z" />
+                <Path d="M6.04,9.23c-.37.06-.62.42-.55.78l.59,3.33c.07.37.42.61.79.55.37-.06.62-.42.55-.78l-.59-3.33c-.07-.37-.42-.61-.79-.55Z" />
+                <Path d="M17.25,5.29h-6.43s.01-.04.01-.06V1.35C10.83.6,10.23,0,9.48,0s-1.36.6-1.36,1.35v3.88s.01.04.01.06H1.7C.59,5.29-.22,6.33.05,7.39l2.14,8.95c.19.74.87,1.26,1.64,1.26h11.29c.77,0,1.45-.52,1.64-1.26l2.14-8.95c.28-1.06-.53-2.1-1.64-2.1ZM15.44,9.36l-1.02,4.67c-.11.44-.51.74-.97.74h-7.93c-.46,0-.85-.31-.97-.74l-1.02-4.67c-.16-.63.32-1.24.97-1.24h9.98c.65,0,1.13.61.97,1.24Z" />
               </Svg>
             </View>
             <Text style={{ fontFamily: 'Montserrat', fontSize: 17, fontWeight: '800', color: C.text, textAlign: 'center', marginBottom: 8 }}>
@@ -11481,9 +11338,11 @@ function PhotoViewerModal({
                     }}
                     accessibilityLabel={inCart ? 'Retirer du panier' : 'Ajouter au panier'}
                   >
-                    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                      <Path d="M3 6h2l2 12h11l2-8H7" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-                      <Path d="M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="#fff" />
+                    <Svg width={19} height={18} viewBox="0 0 18.96 17.61" fill="#fff">
+                      <Path d="M9.49,9.19c-.38,0-.68.3-.68.68v3.38c0,.37.31.68.68.68s.68-.3.68-.68v-3.38c0-.37-.31-.68-.68-.68Z" />
+                      <Path d="M12.94,9.23c-.37-.06-.73.18-.79.55l-.59,3.33c-.07.37.18.72.55.78.37.06.73-.18.79-.55l.59-3.33c.07-.37-.18-.72-.55-.78Z" />
+                      <Path d="M6.04,9.23c-.37.06-.62.42-.55.78l.59,3.33c.07.37.42.61.79.55.37-.06.62-.42.55-.78l-.59-3.33c-.07-.37-.42-.61-.79-.55Z" />
+                      <Path d="M17.25,5.29h-6.43s.01-.04.01-.06V1.35C10.83.6,10.23,0,9.48,0s-1.36.6-1.36,1.35v3.88s.01.04.01.06H1.7C.59,5.29-.22,6.33.05,7.39l2.14,8.95c.19.74.87,1.26,1.64,1.26h11.29c.77,0,1.45-.52,1.64-1.26l2.14-8.95c.28-1.06-.53-2.1-1.64-2.1ZM15.44,9.36l-1.02,4.67c-.11.44-.51.74-.97.74h-7.93c-.46,0-.85-.31-.97-.74l-1.02-4.67c-.16-.63.32-1.24.97-1.24h9.98c.65,0,1.13.61.97,1.24Z" />
                     </Svg>
                     <Text style={{ color: '#fff', fontFamily: 'Montserrat', fontSize: 14, fontWeight: '600' }}>
                       {inCart ? `Dans le panier${suffix}` : `Ajouter au panier${suffix}`}
@@ -14333,9 +14192,11 @@ export default function App() {
         )}
         <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('cart'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
           <View style={s.navIconWrap}>
-            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-              <Path d="M3 6h2l2 12h11l2-8H7" stroke={bottomTab === 'cart' ? C.primary : C.text} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-              <Path d="M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill={bottomTab === 'cart' ? C.primary : C.text} />
+            <Svg width={24} height={22} viewBox="0 0 18.96 17.61" fill={bottomTab === 'cart' ? C.primary : C.text}>
+              <Path d="M9.49,9.19c-.38,0-.68.3-.68.68v3.38c0,.37.31.68.68.68s.68-.3.68-.68v-3.38c0-.37-.31-.68-.68-.68Z" />
+              <Path d="M12.94,9.23c-.37-.06-.73.18-.79.55l-.59,3.33c-.07.37.18.72.55.78.37.06.73-.18.79-.55l.59-3.33c.07-.37-.18-.72-.55-.78Z" />
+              <Path d="M6.04,9.23c-.37.06-.62.42-.55.78l.59,3.33c.07.37.42.61.79.55.37-.06.62-.42.55-.78l-.59-3.33c-.07-.37-.42-.61-.79-.55Z" />
+              <Path d="M17.25,5.29h-6.43s.01-.04.01-.06V1.35C10.83.6,10.23,0,9.48,0s-1.36.6-1.36,1.35v3.88s.01.04.01.06H1.7C.59,5.29-.22,6.33.05,7.39l2.14,8.95c.19.74.87,1.26,1.64,1.26h11.29c.77,0,1.45-.52,1.64-1.26l2.14-8.95c.28-1.06-.53-2.1-1.64-2.1ZM15.44,9.36l-1.02,4.67c-.11.44-.51.74-.97.74h-7.93c-.46,0-.85-.31-.97-.74l-1.02-4.67c-.16-.63.32-1.24.97-1.24h9.98c.65,0,1.13.61.97,1.24Z" />
             </Svg>
             {cartGlobalTotal > 0 && bottomTab !== 'cart' && (
               <View style={{
