@@ -210,7 +210,10 @@ function useAllCarts() {
       } catch {
         if (!cancelled) setCarts(new Map());
       }
-      // Phase 2 : fetch backend si authed, merge (union par event)
+      // Phase 2 : fetch backend si authed, REPLACE local (backend = source
+      // of truth). La migration union du panier anonyme est faite UNE fois
+      // dans App.useEffect au login (flag `will:cart:syncDone:{userId}`).
+      // Ici on remplace strict pour respecter les suppressions cross-device.
       const s = getCurrentRunnerSession();
       if (!s?.token || cancelled) return;
       try {
@@ -222,32 +225,18 @@ function useAllCarts() {
         const backend = (data && data.carts && typeof data.carts === 'object') ? data.carts : {};
         const allKeys2 = await AsyncStorage.getAllKeys();
         const cartKeys2 = (allKeys2 || []).filter((k) => k.startsWith('will:cart:'));
-        const entries2 = cartKeys2.length > 0 ? await AsyncStorage.multiGet(cartKeys2) : [];
         if (cancelled) return;
-        const localMap = new Map();
-        for (const [k, v] of entries2) {
-          const code = k.substring('will:cart:'.length);
-          try {
-            const arr = JSON.parse(v || '[]');
-            if (Array.isArray(arr) && arr.length > 0) localMap.set(code, arr);
-          } catch {}
-        }
-        const allCodes = new Set([...Object.keys(backend), ...localMap.keys()]);
+        const localCodes = cartKeys2.map((k) => k.substring('will:cart:'.length));
+        const allCodes = new Set([...Object.keys(backend), ...localCodes]);
         const merged = new Map();
         for (const code of allCodes) {
-          const localArr = localMap.get(code) || [];
           const remote = backend[code] || [];
-          const union = Array.from(new Set([...localArr, ...remote]));
-          if (union.length > 0) merged.set(code, union);
-          if (union.length !== localArr.length) {
-            await AsyncStorage.setItem(`will:cart:${code}`, JSON.stringify(union));
-          }
-          if (union.length > remote.length) {
-            fetch(`${API_URL}/runner/cart/${encodeURIComponent(code)}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.token}` },
-              body: JSON.stringify({ keys: union }),
-            }).catch(() => {});
+          if (remote.length > 0) {
+            merged.set(code, remote);
+            await AsyncStorage.setItem(`will:cart:${code}`, JSON.stringify(remote));
+          } else {
+            // Backend dit pas de panier pour cet event -> wipe local.
+            await AsyncStorage.removeItem(`will:cart:${code}`);
           }
         }
         if (cancelled) return;
@@ -13441,15 +13430,24 @@ export default function App() {
   }, [runnerSession?.token, handleRunnerAuthFailure]);
 
   // Cart sync : (1) garde la session runner exposee module-scope pour les
-  // hooks useCart/useAllCarts via setCurrentRunnerSession, (2) au login
-  // (token devient non-null) fetch /runner/cart et merge avec AsyncStorage
-  // local (union par event), push backend si le local avait des extras.
+  // hooks useCart/useAllCarts via setCurrentRunnerSession, (2) au boot/login
+  // resync local <-> backend. Strategy :
+  //   - 1er sync pour ce userId (flag `will:cart:syncDone:{userId}` absent) :
+  //     UNION local + backend, push, set flag. Migre le panier anonyme.
+  //   - Syncs suivants : REPLACE local par backend (backend = source of truth).
+  //     Sans ca une suppression cross-device est annulee a chaque sync car
+  //     le local re-pousse l item supprime via union.
   useEffect(() => {
     setCurrentRunnerSession(runnerSession);
     if (!runnerSession?.token) return;
+    const userId = runnerSession?.profile?.userId;
+    if (!userId) return;
     let cancelled = false;
     (async () => {
       try {
+        const flagKey = `will:cart:syncDone:${userId}`;
+        const flagVal = await AsyncStorage.getItem(flagKey).catch(() => null);
+        const isFirstSync = !flagVal;
         const r = await runnerApiFetch('/runner/cart');
         if (!r || !r.ok || cancelled) return;
         const data = await r.json().catch(() => null);
@@ -13470,24 +13468,45 @@ export default function App() {
         for (const code of allCodes) {
           const local = localMap[code] || [];
           const remote = backend[code] || [];
-          const union = Array.from(new Set([...local, ...remote]));
-          if (union.length !== local.length) {
-            await AsyncStorage.setItem(`will:cart:${code}`, JSON.stringify(union));
-            mutated = true;
+          if (isFirstSync) {
+            // Migration : UNION + push si extras locaux
+            const union = Array.from(new Set([...local, ...remote]));
+            if (union.length !== local.length) {
+              if (union.length === 0) {
+                await AsyncStorage.removeItem(`will:cart:${code}`);
+              } else {
+                await AsyncStorage.setItem(`will:cart:${code}`, JSON.stringify(union));
+              }
+              mutated = true;
+            }
+            if (union.length > remote.length) {
+              await runnerApiFetch(`/runner/cart/${encodeURIComponent(code)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ keys: union }),
+              }).catch(() => {});
+            }
+          } else {
+            // REPLACE : backend gagne. Si remote = [] -> wipe local.
+            const isDifferent = remote.length !== local.length || remote.some((k) => !local.includes(k));
+            if (isDifferent) {
+              if (remote.length === 0) {
+                await AsyncStorage.removeItem(`will:cart:${code}`);
+              } else {
+                await AsyncStorage.setItem(`will:cart:${code}`, JSON.stringify(remote));
+              }
+              mutated = true;
+            }
           }
-          if (union.length > remote.length) {
-            await runnerApiFetch(`/runner/cart/${encodeURIComponent(code)}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ keys: union }),
-            }).catch(() => {});
-          }
+        }
+        if (isFirstSync) {
+          await AsyncStorage.setItem(flagKey, '1').catch(() => {});
         }
         if (!cancelled && mutated) emitCartChange();
       } catch {}
     })();
     return () => { cancelled = true; };
-  }, [runnerSession?.token, runnerApiFetch]);
+  }, [runnerSession?.token, runnerSession?.profile?.userId, runnerApiFetch]);
 
   const organizerApiFetch = useCallback((path, options = {}) => {
     const token = organizerSession?.token;
