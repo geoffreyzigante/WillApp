@@ -14546,9 +14546,15 @@ export default function App() {
 
     {photographerOverlay}
 
-    {panierModalVisible && (
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: C.bg, zIndex: 1000 }]}>
-        <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+    <Modal
+      visible={panierModalVisible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={() => setPanierModalVisible(false)}
+      presentationStyle="fullScreen"
+    >
+      <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+      <View style={{ flex: 1, backgroundColor: C.bg }}>
         <PanierScreen
           allEvents={events}
           onOpenEvent={(ev) => { setPanierModalVisible(false); setOpenedEvent(ev); }}
@@ -14556,7 +14562,7 @@ export default function App() {
           onClose={() => setPanierModalVisible(false)}
         />
       </View>
-    )}
+    </Modal>
 
     {/* Splash overlay : ecran blanc + LoadingIcon (fleur Will) violet light
         centre. Meme icone que le pull-to-refresh des galeries -> ressenti
