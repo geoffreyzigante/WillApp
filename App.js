@@ -192,14 +192,11 @@ function useAllCarts() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Phase 1 : lecture locale (rapide)
       try {
         const allKeys = await AsyncStorage.getAllKeys();
         const cartKeys = (allKeys || []).filter((k) => k.startsWith('will:cart:'));
-        if (cartKeys.length === 0) {
-          if (!cancelled) setCarts(new Map());
-          return;
-        }
-        const entries = await AsyncStorage.multiGet(cartKeys);
+        const entries = cartKeys.length > 0 ? await AsyncStorage.multiGet(cartKeys) : [];
         if (cancelled) return;
         const m = new Map();
         for (const [k, v] of entries) {
@@ -213,6 +210,49 @@ function useAllCarts() {
       } catch {
         if (!cancelled) setCarts(new Map());
       }
+      // Phase 2 : fetch backend si authed, merge (union par event)
+      const s = getCurrentRunnerSession();
+      if (!s?.token || cancelled) return;
+      try {
+        const r = await fetch(`${API_URL}/runner/cart`, {
+          headers: { Authorization: `Bearer ${s.token}` },
+        });
+        if (!r.ok || cancelled) return;
+        const data = await r.json().catch(() => null);
+        const backend = (data && data.carts && typeof data.carts === 'object') ? data.carts : {};
+        const allKeys2 = await AsyncStorage.getAllKeys();
+        const cartKeys2 = (allKeys2 || []).filter((k) => k.startsWith('will:cart:'));
+        const entries2 = cartKeys2.length > 0 ? await AsyncStorage.multiGet(cartKeys2) : [];
+        if (cancelled) return;
+        const localMap = new Map();
+        for (const [k, v] of entries2) {
+          const code = k.substring('will:cart:'.length);
+          try {
+            const arr = JSON.parse(v || '[]');
+            if (Array.isArray(arr) && arr.length > 0) localMap.set(code, arr);
+          } catch {}
+        }
+        const allCodes = new Set([...Object.keys(backend), ...localMap.keys()]);
+        const merged = new Map();
+        for (const code of allCodes) {
+          const localArr = localMap.get(code) || [];
+          const remote = backend[code] || [];
+          const union = Array.from(new Set([...localArr, ...remote]));
+          if (union.length > 0) merged.set(code, union);
+          if (union.length !== localArr.length) {
+            await AsyncStorage.setItem(`will:cart:${code}`, JSON.stringify(union));
+          }
+          if (union.length > remote.length) {
+            fetch(`${API_URL}/runner/cart/${encodeURIComponent(code)}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.token}` },
+              body: JSON.stringify({ keys: union }),
+            }).catch(() => {});
+          }
+        }
+        if (cancelled) return;
+        setCarts(merged);
+      } catch {}
     })();
     return () => { cancelled = true; };
   }, [version]);
@@ -221,6 +261,7 @@ function useAllCarts() {
     cartChangeListeners.add(fn);
     return () => { cartChangeListeners.delete(fn); };
   }, []);
+  const refresh = useCallback(() => setVersion((v) => v + 1), []);
   const total = useMemo(() => {
     let n = 0;
     for (const arr of carts.values()) n += arr.length;
@@ -242,7 +283,7 @@ function useAllCarts() {
       } catch {}
     }).catch(() => {});
   }, []);
-  return { carts, total, remove };
+  return { carts, total, remove, refresh };
 }
 
 // ─── E2 — PUSH NOTIFS ────────────────────────────────────────────────────
@@ -4217,7 +4258,14 @@ function CartModal({ visible, onClose, eventCode, cartKeys, onRemove, photosSour
 // (avec metadata depuis allEvents = /public-events), affiche un footer
 // total + bouton Commander disable (Stripe a venir).
 function PanierScreen({ allEvents = [], onOpenEvent, isActive = true }) {
-  const { carts, total, remove } = useAllCarts();
+  const { carts, total, remove, refresh } = useAllCarts();
+  // Re-fetch backend a chaque fois qu on entre dans l onglet Panier.
+  // Permet de rattraper les ajouts faits depuis un autre device (web).
+  const wasActiveRef = useRef(false);
+  useEffect(() => {
+    if (isActive && !wasActiveRef.current) refresh();
+    wasActiveRef.current = isActive;
+  }, [isActive, refresh]);
   const eventsMap = useMemo(() => {
     const m = new Map();
     for (const ev of allEvents) if (ev && ev.code) m.set(ev.code, ev);
