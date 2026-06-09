@@ -4136,7 +4136,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 // Liste toutes les cles `will:cart:*` via useAllCarts, groupe par event
 // (avec metadata depuis allEvents = /public-events), affiche un footer
 // total + bouton Commander disable (Stripe a venir).
-function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onClose }) {
+function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onClose, embedded = false }) {
   const { carts, total, remove, refresh } = useAllCarts();
   // Re-fetch backend a chaque fois qu on entre dans le panier.
   // Permet de rattraper les ajouts faits depuis un autre device (web).
@@ -4150,7 +4150,9 @@ function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onClose })
     for (const ev of allEvents) if (ev && ev.code) m.set(ev.code, ev);
     return m;
   }, [allEvents]);
-  const topPad = Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 0) + 12;
+  // embedded : rendu dans une sheet (parent gere le handle/padding). On retire
+  // le topPad et l absolute bottom du footer pour utiliser le flex naturel.
+  const topPad = embedded ? 0 : (Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 0) + 12);
   const cellW = (SCREEN_W - 32 - 16) / 3;
   const orderedCodes = useMemo(() => Array.from(carts.keys()), [carts]);
 
@@ -4172,7 +4174,7 @@ function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onClose })
         ) : null}
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: total > 0 ? 140 : 24 }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
         {total === 0 ? (
           <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 36, alignItems: 'center' }}>
             <View style={{
@@ -4256,10 +4258,9 @@ function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onClose })
 
       {total > 0 ? (
         <View style={{
-          position: 'absolute', left: 0, right: 0, bottom: 64,
           backgroundColor: '#fff',
           borderTopWidth: 1, borderTopColor: '#EFEAFB',
-          paddingHorizontal: 20, paddingTop: 14, paddingBottom: 14,
+          paddingHorizontal: 20, paddingTop: 14, paddingBottom: embedded ? 18 : 14,
           flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16,
         }}>
           <View>
@@ -14548,19 +14549,42 @@ export default function App() {
 
     <Modal
       visible={panierModalVisible}
-      animationType="slide"
-      transparent={false}
+      transparent
+      animationType="fade"
       onRequestClose={() => setPanierModalVisible(false)}
-      presentationStyle="fullScreen"
     >
-      <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
-      <View style={{ flex: 1, backgroundColor: C.bg }}>
-        <PanierScreen
-          allEvents={events}
-          onOpenEvent={(ev) => { setPanierModalVisible(false); setOpenedEvent(ev); }}
-          isActive={panierModalVisible}
-          onClose={() => setPanierModalVisible(false)}
-        />
+      {/* Bottom sheet pattern aligne sur AuthOrganizerModal :
+          BlurView backdrop + sheet rounded-top en bas avec handle. */}
+      <View style={{ flex: 1 }}>
+        <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+        <TouchableOpacity
+          activeOpacity={1}
+          style={{ flex: 1, justifyContent: 'flex-end' }}
+          onPress={() => setPanierModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {}}
+            style={{
+              backgroundColor: C.bg,
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
+              height: '88%',
+              overflow: 'hidden',
+            }}
+          >
+            <View style={{ paddingVertical: 8, alignItems: 'center' }}>
+              <View style={s.modalHandle} />
+            </View>
+            <PanierScreen
+              allEvents={events}
+              onOpenEvent={(ev) => { setPanierModalVisible(false); setOpenedEvent(ev); }}
+              isActive={panierModalVisible}
+              onClose={() => setPanierModalVisible(false)}
+              embedded
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
       </View>
     </Modal>
 
