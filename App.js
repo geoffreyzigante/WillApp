@@ -1379,18 +1379,8 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
               hitSlop={6}
               style={{
                 width: 40, height: 40,
-                borderRadius: 14,
-                backgroundColor: C.primaryLight,
                 alignItems: 'center', justifyContent: 'center',
                 position: 'relative',
-                // Vignette : ombre violet douce + ring subtil
-                shadowColor: C.primary,
-                shadowOpacity: 0.18,
-                shadowRadius: 10,
-                shadowOffset: { width: 0, height: 4 },
-                elevation: 3,
-                borderWidth: 1,
-                borderColor: 'rgba(123, 47, 255, 0.12)',
               }}
               accessibilityLabel="Voir mon panier"
             >
