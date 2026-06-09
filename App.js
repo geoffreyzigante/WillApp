@@ -109,6 +109,25 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const PRICE_PER_PHOTO_EUR = 1;
 const cartChangeListeners = new Set();
 function emitCartChange() { cartChangeListeners.forEach((fn) => { try { fn(); } catch {} }); }
+
+// Reference module-scope vers la session runner courante. Pilote par App
+// via setCurrentRunnerSession() a chaque changement de runnerSession. Permet
+// aux hooks useCart/useAllCarts (qui n ont pas l auth en props) de pousser
+// vers le backend /runner/cart quand l user est authentifie.
+let _runnerSessionRef = null;
+function setCurrentRunnerSession(s) { _runnerSessionRef = s || null; }
+function getCurrentRunnerSession() { return _runnerSessionRef; }
+
+function pushCartToBackend(eventCode, keys) {
+  const s = getCurrentRunnerSession();
+  if (!s?.token || !eventCode) return;
+  fetch(`${API_URL}/runner/cart/${encodeURIComponent(eventCode)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.token}` },
+    body: JSON.stringify({ keys: Array.isArray(keys) ? keys : [] }),
+  }).catch(() => {});
+}
+
 function useCart(eventCode) {
   const [cart, setCart] = useState([]);
   const [version, setVersion] = useState(0);
@@ -134,25 +153,32 @@ function useCart(eventCode) {
     setCart(next);
     if (storageKey) {
       AsyncStorage.setItem(storageKey, JSON.stringify(next)).then(() => emitCartChange()).catch(() => {});
+      pushCartToBackend(eventCode, next);
     }
-  }, [storageKey]);
+  }, [storageKey, eventCode]);
   const toggle = useCallback((key) => {
     if (!key) return;
     setCart((prev) => {
       const i = prev.indexOf(key);
       const next = i >= 0 ? prev.filter((k) => k !== key) : [...prev, key];
-      if (storageKey) AsyncStorage.setItem(storageKey, JSON.stringify(next)).then(() => emitCartChange()).catch(() => {});
+      if (storageKey) {
+        AsyncStorage.setItem(storageKey, JSON.stringify(next)).then(() => emitCartChange()).catch(() => {});
+        pushCartToBackend(eventCode, next);
+      }
       return next;
     });
-  }, [storageKey]);
+  }, [storageKey, eventCode]);
   const remove = useCallback((key) => {
     if (!key) return;
     setCart((prev) => {
       const next = prev.filter((k) => k !== key);
-      if (storageKey) AsyncStorage.setItem(storageKey, JSON.stringify(next)).then(() => emitCartChange()).catch(() => {});
+      if (storageKey) {
+        AsyncStorage.setItem(storageKey, JSON.stringify(next)).then(() => emitCartChange()).catch(() => {});
+        pushCartToBackend(eventCode, next);
+      }
       return next;
     });
-  }, [storageKey]);
+  }, [storageKey, eventCode]);
   return { cart, count: cart.length, toggle, remove, persist };
 }
 
@@ -212,6 +238,7 @@ function useAllCarts() {
         } else {
           AsyncStorage.setItem(k, JSON.stringify(next)).then(() => emitCartChange()).catch(() => {});
         }
+        pushCartToBackend(eventCode, next);
       } catch {}
     }).catch(() => {});
   }, []);
@@ -1730,7 +1757,22 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   // Filtre 3 onglets : Moi (personal-gallery) / Mes favoris / Tous.
   // _isPersonalMatch marque les photos de /personal-gallery (match reco
   // faciale sur events suivis), pour les distinguer des fav cross-event.
+  // Style identique aux pills "A venir / Passes / Favoris" de l accueil :
+  // indicateur violet glisse en spring sur le tab actif (parite charte).
   const [viewFilter, setViewFilter] = useState('me'); // 'me' | 'favs' | 'all'
+  const VIEW_KEYS = ['me', 'favs', 'all'];
+  const viewIdx = Math.max(0, VIEW_KEYS.indexOf(viewFilter));
+  const [viewTabsContainerW, setViewTabsContainerW] = useState(0);
+  const viewTabsSlideX = useRef(new Animated.Value(0)).current;
+  const viewSlotW = viewTabsContainerW > 0 ? viewTabsContainerW / 3 : 0;
+  useEffect(() => {
+    if (viewSlotW <= 0) return;
+    Animated.spring(viewTabsSlideX, {
+      toValue: viewSlotW * viewIdx,
+      useNativeDriver: true,
+      tension: 110, friction: 14,
+    }).start();
+  }, [viewIdx, viewSlotW, viewTabsSlideX]);
   const visiblePhotos = useMemo(() => {
     if (viewFilter === 'favs') {
       return photoFavoritesSet ? photos.filter(p => photoFavoritesSet.has(p.id)) : [];
@@ -13303,6 +13345,55 @@ export default function App() {
     };
     return apiFetch(path, { ...options, headers }, { onAuthFailure: handleRunnerAuthFailure });
   }, [runnerSession?.token, handleRunnerAuthFailure]);
+
+  // Cart sync : (1) garde la session runner exposee module-scope pour les
+  // hooks useCart/useAllCarts via setCurrentRunnerSession, (2) au login
+  // (token devient non-null) fetch /runner/cart et merge avec AsyncStorage
+  // local (union par event), push backend si le local avait des extras.
+  useEffect(() => {
+    setCurrentRunnerSession(runnerSession);
+    if (!runnerSession?.token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await runnerApiFetch('/runner/cart');
+        if (!r || !r.ok || cancelled) return;
+        const data = await r.json().catch(() => null);
+        const backend = (data && data.carts && typeof data.carts === 'object') ? data.carts : {};
+        const allKeys = await AsyncStorage.getAllKeys();
+        const cartKeys = (allKeys || []).filter((k) => k.startsWith('will:cart:'));
+        const localEntries = cartKeys.length > 0 ? await AsyncStorage.multiGet(cartKeys) : [];
+        const localMap = {};
+        for (const [k, v] of localEntries) {
+          const code = k.substring('will:cart:'.length);
+          try {
+            const arr = JSON.parse(v || '[]');
+            if (Array.isArray(arr) && arr.length > 0) localMap[code] = arr;
+          } catch {}
+        }
+        const allCodes = new Set([...Object.keys(backend), ...Object.keys(localMap)]);
+        let mutated = false;
+        for (const code of allCodes) {
+          const local = localMap[code] || [];
+          const remote = backend[code] || [];
+          const union = Array.from(new Set([...local, ...remote]));
+          if (union.length !== local.length) {
+            await AsyncStorage.setItem(`will:cart:${code}`, JSON.stringify(union));
+            mutated = true;
+          }
+          if (union.length > remote.length) {
+            await runnerApiFetch(`/runner/cart/${encodeURIComponent(code)}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ keys: union }),
+            }).catch(() => {});
+          }
+        }
+        if (!cancelled && mutated) emitCartChange();
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [runnerSession?.token, runnerApiFetch]);
 
   const organizerApiFetch = useCallback((path, options = {}) => {
     const token = organizerSession?.token;
