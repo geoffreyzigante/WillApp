@@ -1727,13 +1727,23 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [downloading, setDownloading] = useState(false);
-  // Filtre favoris (galerie perso). Toggle pill coeur a cote de "Selectionner".
-  const [favOnly, setFavOnly] = useState(false);
-  const visiblePhotos = useMemo(() => (
-    favOnly && photoFavoritesSet
-      ? photos.filter(p => photoFavoritesSet.has(p.id))
-      : photos
-  ), [photos, favOnly, photoFavoritesSet]);
+  // Filtre 3 onglets : Moi (personal-gallery) / Mes favoris / Tous.
+  // _isPersonalMatch marque les photos de /personal-gallery (match reco
+  // faciale sur events suivis), pour les distinguer des fav cross-event.
+  const [viewFilter, setViewFilter] = useState('me'); // 'me' | 'favs' | 'all'
+  const visiblePhotos = useMemo(() => {
+    if (viewFilter === 'favs') {
+      return photoFavoritesSet ? photos.filter(p => photoFavoritesSet.has(p.id)) : [];
+    }
+    if (viewFilter === 'me') {
+      return photos.filter(p => p._isPersonalMatch);
+    }
+    return photos;
+  }, [photos, viewFilter, photoFavoritesSet]);
+  const meCount = useMemo(() => photos.filter(p => p._isPersonalMatch).length, [photos]);
+  const favCount = useMemo(() => (
+    photoFavoritesSet ? photos.filter(p => photoFavoritesSet.has(p.id)).length : 0
+  ), [photos, photoFavoritesSet]);
 
   const togglePhotoSelect = useCallback((id) => {
     setSelectedIds(prev => {
@@ -1869,6 +1879,7 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
           tint,
           paid,
           eventCode: code,
+          _isPersonalMatch: true,
         });
       }
     }
@@ -1887,6 +1898,62 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
     AsyncStorage.setItem(photosCacheKey, JSON.stringify(merged)).catch(() => {});
     return merged;
   }, [eventsToQuery, runnerApiFetch, eventTintMap, photosCacheKey]);
+
+  // Fetch les photos fav des events NON couverts par /personal-gallery
+  // (favoris cross-event : photos d events non suivis ou non matchees par
+  // la reco faciale). Permet a l onglet "Mes favoris" + "Tous" de les
+  // afficher. /list-public est public (sans auth), guard de re-fetch via
+  // Set des codes deja explores.
+  const favExtraFetchedRef = useRef(new Set());
+  useEffect(() => {
+    if (!photoFavoritesSet || photoFavoritesSet.size === 0) return;
+    const favEventCodes = new Set();
+    photoFavoritesSet.forEach((key) => {
+      const m = String(key || '').match(/^([^\/]+)\//);
+      if (m) favEventCodes.add(m[1]);
+    });
+    const coveredCodes = new Set(eventsToQuery);
+    const missing = [...favEventCodes].filter((c) => !coveredCodes.has(c) && !favExtraFetchedRef.current.has(c));
+    if (missing.length === 0) return;
+    missing.forEach((c) => favExtraFetchedRef.current.add(c));
+    Promise.all(missing.map(async (code) => {
+      try {
+        const r = await fetch(`${API_URL}/list-public/${encodeURIComponent(code)}`);
+        if (!r.ok) return { code, photos: [] };
+        const d = await r.json();
+        return { code, photos: Array.isArray(d.photos) ? d.photos : [] };
+      } catch { return { code, photos: [] }; }
+    })).then((results) => {
+      setPhotos((current) => {
+        const existingIds = new Set(current.map((p) => p.id));
+        const extras = [];
+        for (const { code, photos: list } of results) {
+          const tint = eventTintMap[code] || TYPE_COLORS.autre;
+          for (const p of list) {
+            if (!photoFavoritesSet.has(p.key)) continue;
+            if (existingIds.has(p.key)) continue;
+            extras.push({
+              uri: p.url || `${R2_PUBLIC}/${p.key}`,
+              thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
+              id: p.key,
+              tint,
+              paid: false,
+              eventCode: code,
+              _isPersonalMatch: false,
+            });
+          }
+        }
+        if (extras.length === 0) return current;
+        const merged = [...current, ...extras];
+        merged.sort((a, b) => {
+          const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
+          if (dt !== 0) return dt;
+          return extractIdx(b.id) - extractIdx(a.id);
+        });
+        return merged;
+      });
+    });
+  }, [photoFavoritesSet, eventsToQuery, eventTintMap]);
 
   // E4 — baseline last_seen au premier load reussi : on aligne le marqueur
   // sur le max actuel pour que le 1er pull-to-refresh apres cold start
@@ -2138,9 +2205,57 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
         </View>
       ) : (
         <>
-          {/* Pill "Will continue de chercher" retiree (retour user) : le polling
-              continue en arriere-plan, le pull-to-refresh permet a l utilisateur
-              de forcer un refresh quand il le souhaite. */}
+          {/* Segmented Moi / Mes favoris / Tous : pleine largeur, fond light
+              violet, bouton actif rempli violet primary. Toujours visible des
+              que photos > 0 (parite avec website sheet "Mes photos"). */}
+          {!selectionMode && (
+            <View style={{
+              flexDirection: 'row',
+              backgroundColor: '#F4EFFF',
+              borderRadius: 999,
+              padding: 3,
+              marginBottom: 10,
+              gap: 2,
+            }}>
+              {[
+                { id: 'me', label: 'Moi', count: meCount },
+                { id: 'favs', label: 'Mes favoris', count: favCount },
+                { id: 'all', label: 'Tous', count: photos.length },
+              ].map((tab) => {
+                const isActive = viewFilter === tab.id;
+                return (
+                  <TouchableOpacity
+                    key={tab.id}
+                    onPress={() => {
+                      try { Haptics?.selectionAsync?.(); } catch {}
+                      setViewFilter(tab.id);
+                    }}
+                    activeOpacity={0.7}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 6,
+                      paddingHorizontal: 8,
+                      borderRadius: 999,
+                      backgroundColor: isActive ? C.primary : 'transparent',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        color: isActive ? '#fff' : C.primary,
+                        fontSize: 12,
+                        fontWeight: isActive ? '700' : '600',
+                      }}
+                    >
+                      {tab.label} ({tab.count})
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
           {/* Barre selection en flow normal (occupe une vraie hauteur)
               pour eviter le conflit visuel avec la SelfieBlock placee juste
               au-dessus quand le selfie est absent. */}
@@ -2169,27 +2284,6 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
                 </>
               ) : (
                 <>
-                  <TouchableOpacity
-                    onPress={() => {
-                      try { Haptics?.selectionAsync?.(); } catch {}
-                      setFavOnly(v => !v);
-                    }}
-                    hitSlop={10}
-                    activeOpacity={0.7}
-                    accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
-                    style={{
-                      width: 30, height: 30, borderRadius: 15,
-                      backgroundColor: favOnly ? C.pinkPill : '#f5f3ff',
-                      alignItems: 'center', justifyContent: 'center',
-                    }}
-                  >
-                    <FavStar
-                      size={14}
-                      fill={favOnly ? '#fff' : 'none'}
-                      stroke={favOnly ? '#fff' : C.primary}
-                      strokeWidth={1.8}
-                    />
-                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
                     <Text style={{ color: '#c9beed', fontSize: 13, fontWeight: '500' }}>Sélectionner</Text>
                   </TouchableOpacity>
@@ -2197,10 +2291,14 @@ function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, on
               )}
             </View>
           )}
-          {favOnly && visiblePhotos.length === 0 ? (
+          {visiblePhotos.length === 0 ? (
             <View style={{ paddingVertical: 40, alignItems: 'center', paddingHorizontal: 24 }}>
               <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center' }}>
-                Aucune photo en favoris pour le moment.
+                {viewFilter === 'favs'
+                  ? 'Aucune photo en favoris pour le moment.'
+                  : viewFilter === 'me'
+                    ? 'Aucune photo de toi pour le moment.'
+                    : 'Aucune photo.'}
               </Text>
             </View>
           ) : (
