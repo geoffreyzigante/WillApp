@@ -10109,6 +10109,18 @@ function PhotoViewerModal({
     return ov === undefined ? p.hidden === true : ov;
   };
 
+  // Watermark events payants : gate l opacite de la photo tant que le PNG
+  // overlay n est pas paint, sinon le coureur peut screenshot la photo CLEAN
+  // pendant le delai entre photo load (rapide, cache memoire) et watermark
+  // load. L asset est bundle local (require) -> normalement instant ; on
+  // garde une safety net 600ms si onLoad ne tire pas.
+  const [wmReady, setWmReady] = useState(!photosForSale);
+  useEffect(() => {
+    if (!photosForSale || wmReady) return;
+    const t = setTimeout(() => setWmReady(true), 600);
+    return () => clearTimeout(t);
+  }, [photosForSale, wmReady]);
+
   // Panier (stub AsyncStorage, MVP avant Stripe — mirror website event/index.html).
   // Cle par event : `will:cart:{eventCode}`, valeur = JSON array de photo.id
   // (qui vaut le R2 key cote mobile, cf line 1750/2738). Le bouton "Ajouter au
@@ -10701,7 +10713,10 @@ function PhotoViewerModal({
                             <ExpoImage
                               source={{ uri: item.uri }}
                               placeholder={{ uri: item.uri }}
-                              style={{ width: '100%', height: '100%' }}
+                              style={[
+                                { width: '100%', height: '100%' },
+                                photosForSale && !wmReady ? { opacity: 0 } : null,
+                              ]}
                               contentFit="cover"
                               cachePolicy="memory-disk"
                               priority="high"
@@ -10716,17 +10731,20 @@ function PhotoViewerModal({
                           ) : null}
                           {/* Watermark dissuasif sur events payants : overlay
                               client only, l image servie est propre. tintColor
-                              re-colorize le PNG en blanc plein. Mirror website
-                              body.paid-event .vphoto::after (mask + bg white). */}
+                              re-colorize le PNG en blanc plein. Asset BUNDLE
+                              local (require) -> rendu instant, evite la fenetre
+                              screenshot. onLoad lifte le gate wmReady -> rend
+                              la photo visible. */}
                           {photosForSale && item?.uri ? (
                             <ExpoImage
-                              source={{ uri: 'https://will-app.com/assets/watermark-will-cover-v5.png' }}
+                              source={require('./assets/watermark-cover.png')}
                               style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.55 }}
                               contentFit="cover"
                               cachePolicy="memory-disk"
                               pointerEvents="none"
                               transition={0}
                               tintColor="#fff"
+                              onLoad={() => { if (!wmReady) setWmReady(true); }}
                             />
                           ) : null}
                           {/* Etoile fav DANS le wrapper photo : ancrage strict
