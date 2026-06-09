@@ -100,6 +100,62 @@ const API_URL = 'https://will-api.geoffreyzigante.workers.dev';
 const R2_PUBLIC = 'https://pub-f9a5894e66a44f8cbb34582302930449.r2.dev';
 const { width: SCREEN_W } = Dimensions.get('window');
 
+// ─── PANIER : prix unitaire + emitter pour sync cross-component ───────
+// Le cart vit en AsyncStorage (cle `will:cart:{eventCode}`) mais doit
+// rester en phase entre PhotoViewerModal (qui le mute) et EventDetail
+// (qui affiche le CTA + la modale). L emitter notifie les consumers
+// quand une mutation locale a lieu, declenchant un refetch dans les
+// composants qui montent useCart().
+const PRICE_PER_PHOTO_EUR = 1;
+const cartChangeListeners = new Set();
+function emitCartChange() { cartChangeListeners.forEach((fn) => { try { fn(); } catch {} }); }
+function useCart(eventCode) {
+  const [cart, setCart] = useState([]);
+  const [version, setVersion] = useState(0);
+  const storageKey = eventCode ? `will:cart:${eventCode}` : null;
+  useEffect(() => {
+    if (!storageKey) { setCart([]); return; }
+    let cancelled = false;
+    AsyncStorage.getItem(storageKey).then((v) => {
+      if (cancelled) return;
+      try {
+        const arr = v ? JSON.parse(v) : [];
+        setCart(Array.isArray(arr) ? arr : []);
+      } catch { setCart([]); }
+    }).catch(() => { if (!cancelled) setCart([]); });
+    return () => { cancelled = true; };
+  }, [storageKey, version]);
+  useEffect(() => {
+    const fn = () => setVersion((v) => v + 1);
+    cartChangeListeners.add(fn);
+    return () => { cartChangeListeners.delete(fn); };
+  }, []);
+  const persist = useCallback((next) => {
+    setCart(next);
+    if (storageKey) {
+      AsyncStorage.setItem(storageKey, JSON.stringify(next)).then(() => emitCartChange()).catch(() => {});
+    }
+  }, [storageKey]);
+  const toggle = useCallback((key) => {
+    if (!key) return;
+    setCart((prev) => {
+      const i = prev.indexOf(key);
+      const next = i >= 0 ? prev.filter((k) => k !== key) : [...prev, key];
+      if (storageKey) AsyncStorage.setItem(storageKey, JSON.stringify(next)).then(() => emitCartChange()).catch(() => {});
+      return next;
+    });
+  }, [storageKey]);
+  const remove = useCallback((key) => {
+    if (!key) return;
+    setCart((prev) => {
+      const next = prev.filter((k) => k !== key);
+      if (storageKey) AsyncStorage.setItem(storageKey, JSON.stringify(next)).then(() => emitCartChange()).catch(() => {});
+      return next;
+    });
+  }, [storageKey]);
+  return { cart, count: cart.length, toggle, remove, persist };
+}
+
 // ─── E2 — PUSH NOTIFS ────────────────────────────────────────────────────
 // Foreground handler : quand une notif arrive avec l app au premier plan,
 // on affiche tout de meme la banniere + son (sinon iOS la "consomme" en
@@ -2658,6 +2714,11 @@ function EventDetailScreen(props) {
 
 function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange }) {
   const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
+  // Panier : hook partage via cartChangeListeners ; sync auto avec
+  // PhotoViewerModal. Pilote le CTA flottant + la modale panier en bas.
+  const eventPaid = !!event?.photos_for_sale;
+  const { cart: cartKeys, count: cartCount, remove: cartRemove } = useCart(eventPaid ? event?.code : null);
+  const [cartModalVisible, setCartModalVisible] = useState(false);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -3777,7 +3838,152 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       {/* (Le bottom sheet "+ d'infos" a ete remplace par une section inline
           sous le hero, controlee par le chevron du CTA "Infos pratiques"
           dans le hero. Voir renderHeader plus haut.) */}
+
+      {/* Events payants : CTA flottant "Mon panier" + modale plein-ecran.
+          Visible quand cart > 0. Sync via useCart (cartChangeListeners) ->
+          ouvert / retrait restent coherents avec PhotoViewerModal. */}
+      {eventPaid && cartCount > 0 ? (
+        <View
+          pointerEvents="box-none"
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 24 + (Platform.OS === 'ios' ? 14 : 0), alignItems: 'center', zIndex: 50 }}
+        >
+          <TouchableOpacity
+            onPress={() => setCartModalVisible(true)}
+            activeOpacity={0.85}
+            style={{
+              backgroundColor: '#7B2FFF',
+              paddingVertical: 14, paddingHorizontal: 22,
+              borderRadius: 999,
+              flexDirection: 'row', alignItems: 'center', gap: 10,
+              shadowColor: '#7B2FFF', shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 8 },
+              elevation: 8,
+            }}
+            accessibilityLabel="Voir mon panier"
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Path d="M3 6h2l2 12h11l2-8H7" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+              <Path d="M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="#fff" />
+            </Svg>
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat', fontSize: 14, fontWeight: '700' }}>
+              {`Mon panier · ${cartCount} photo${cartCount > 1 ? 's' : ''} · ${cartCount * PRICE_PER_PHOTO_EUR} €`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      <CartModal
+        visible={cartModalVisible}
+        onClose={() => setCartModalVisible(false)}
+        eventCode={event?.code}
+        cartKeys={cartKeys}
+        onRemove={cartRemove}
+        photosSource={photos}
+      />
     </>
+  );
+}
+
+// ─── Modale Mon panier (events payants) ─────────────────────────────
+// Plein-ecran blanc, header titre+close, grille des thumbs avec X de
+// retrait, footer total + bouton Commander disabled. Joint cartKeys
+// (R2 keys) avec photosSource (la liste photos du event courant) pour
+// retrouver les thumbs a afficher.
+function CartModal({ visible, onClose, eventCode, cartKeys, onRemove, photosSource }) {
+  const cartPhotos = useMemo(() => {
+    if (!Array.isArray(cartKeys) || !cartKeys.length) return [];
+    const keySet = new Set(cartKeys);
+    return (photosSource || []).filter(p => keySet.has(p.id));
+  }, [cartKeys, photosSource]);
+  const n = cartPhotos.length;
+  const total = n * PRICE_PER_PHOTO_EUR;
+  const topPad = Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 0) + 12;
+  const bottomPad = Platform.OS === 'ios' ? 34 : 16;
+  return (
+    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+        <View style={{
+          paddingTop: topPad, paddingHorizontal: 20, paddingBottom: 12,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          borderBottomWidth: 1, borderBottomColor: '#EFEAFB',
+        }}>
+          <Text style={{ fontFamily: 'Montserrat', fontSize: 18, fontWeight: '800', color: '#1A1426', letterSpacing: -0.2 }}>
+            {`Mon panier · ${n} photo${n > 1 ? 's' : ''}`}
+          </Text>
+          <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityLabel="Fermer">
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+              <Path d="m8 8 8 8M16 8l-8 8" stroke="#000" strokeWidth={2.6} strokeLinecap="round" />
+            </Svg>
+          </TouchableOpacity>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+          {n === 0 ? (
+            <Text style={{ textAlign: 'center', color: C.textSoft, fontSize: 14, paddingVertical: 60 }}>
+              Aucune photo dans votre panier.
+            </Text>
+          ) : (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {cartPhotos.map((p) => {
+                const cellW = (SCREEN_W - 32 - 16) / 3;
+                return (
+                  <View key={p.id} style={{ width: cellW, height: cellW, borderRadius: 12, overflow: 'hidden', backgroundColor: C.primaryLight, position: 'relative' }}>
+                    <ExpoImage
+                      source={{ uri: p.thumbUri || p.uri }}
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={100}
+                    />
+                    <TouchableOpacity
+                      onPress={() => onRemove?.(p.id)}
+                      hitSlop={8}
+                      accessibilityLabel="Retirer du panier"
+                      style={{
+                        position: 'absolute', top: 6, right: 6,
+                        width: 26, height: 26, borderRadius: 999,
+                        backgroundColor: 'rgba(0,0,0,0.6)',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                        <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" />
+                      </Svg>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </ScrollView>
+        <View style={{
+          paddingHorizontal: 20, paddingTop: 16, paddingBottom: bottomPad + 4,
+          borderTopWidth: 1, borderTopColor: '#EFEAFB',
+          gap: 12,
+        }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 14 }}>Total</Text>
+            <Text style={{ fontFamily: 'Montserrat', color: '#1A1426', fontSize: 22, fontWeight: '800', letterSpacing: -0.3 }}>
+              {`${total} €`}
+            </Text>
+          </View>
+          <TouchableOpacity
+            disabled
+            style={{
+              backgroundColor: n === 0 ? '#C9BEEF' : '#C9BEEF',
+              paddingVertical: 14, borderRadius: 999,
+              alignItems: 'center', justifyContent: 'center',
+            }}
+            accessibilityLabel="Commander (bientot disponible)"
+          >
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat', fontSize: 15, fontWeight: '700' }}>
+              Commander · bientôt
+            </Text>
+          </TouchableOpacity>
+          <Text style={{ textAlign: 'center', color: C.textSoft, fontSize: 12 }}>
+            Le paiement sera disponible très prochainement.
+          </Text>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -10123,35 +10329,9 @@ function PhotoViewerModal({
 
   // Panier (stub AsyncStorage, MVP avant Stripe — mirror website event/index.html).
   // Cle par event : `will:cart:{eventCode}`, valeur = JSON array de photo.id
-  // (qui vaut le R2 key cote mobile, cf line 1750/2738). Le bouton "Ajouter au
-  // panier" remplace "Telecharger" sur events payants. Pas de backend ; les
-  // donnees sont locales au device. Sera migre vers /cart worker plus tard.
-  const [cart, setCart] = useState([]);
-  const cartStorageKey = photosForSale && eventCode ? `will:cart:${eventCode}` : null;
-  useEffect(() => {
-    if (!visible || !cartStorageKey) return;
-    let cancelled = false;
-    AsyncStorage.getItem(cartStorageKey).then(v => {
-      if (cancelled) return;
-      try {
-        const arr = v ? JSON.parse(v) : [];
-        setCart(Array.isArray(arr) ? arr : []);
-      } catch { setCart([]); }
-    }).catch(() => { if (!cancelled) setCart([]); });
-    return () => { cancelled = true; };
-  }, [visible, cartStorageKey]);
-  const persistCart = useCallback((next) => {
-    setCart(next);
-    if (cartStorageKey) {
-      AsyncStorage.setItem(cartStorageKey, JSON.stringify(next)).catch(() => {});
-    }
-  }, [cartStorageKey]);
-  const toggleCartFor = useCallback((photoKey) => {
-    if (!photoKey) return;
-    const i = cart.indexOf(photoKey);
-    if (i >= 0) persistCart(cart.filter(k => k !== photoKey));
-    else persistCart([...cart, photoKey]);
-  }, [cart, persistCart]);
+  // (qui vaut le R2 key cote mobile, cf line 1750/2738). Hook useCart partage
+  // via cartChangeListeners (module scope) -> sync auto avec EventDetailScreen.
+  const { cart, toggle: toggleCartFor } = useCart(photosForSale ? eventCode : null);
 
   // Layout cible (hauteurs fixes pour calcul de la zone photo)
   const HEADER_H = 56;          // titre + date
