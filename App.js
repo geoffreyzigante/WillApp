@@ -1078,7 +1078,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, uploadStat
   );
 }
 
-function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload }) {
+function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   // Indicateur violet qui glisse entre les 3 pills. Mesure une fois la largeur
@@ -1136,6 +1136,14 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
     });
     return () => sub.remove();
   }, []);
+
+  // Tap sur l onglet Accueil quand deja sur Accueil = scroll-to-top.
+  // scrollToTopSignal est un entier incremente par le parent a chaque tap.
+  useEffect(() => {
+    if (scrollToTopSignal > 0) {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  }, [scrollToTopSignal]);
 
   return (
     <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
@@ -12089,6 +12097,9 @@ export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [tab, setTab] = useState('upcoming');
   const [bottomTab, setBottomTab] = useState('home');
+  // Signal incremente a chaque tap "Accueil" pour declencher un scroll-to-top
+  // dans le HomeScreen (utile quand on est deja sur l onglet).
+  const [homeScrollSignal, setHomeScrollSignal] = useState(0);
   const [photosUnread, setPhotosUnread] = useState(0); // E3 — pastille rouge onglet Photos
   const [events, setEvents] = useState([]);
   const [openedEvent, setOpenedEvent] = useState(null);
@@ -13342,6 +13353,7 @@ export default function App() {
                   selfieSkipped={!!runnerSession && selfieSkipped && !selfieUri}
                   selfieUploadState={selfieUploadState}
                   onRetryUpload={retrySelfieUpload}
+                  scrollToTopSignal={homeScrollSignal}
                 />
               </View>
               <View style={{ width: SCREEN_W }}>
@@ -13448,7 +13460,12 @@ export default function App() {
 
       {/* Bottom Nav */}
       <View style={s.bottomNav}>
-        <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('home'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
+        <TouchableOpacity style={s.navBtn} onPress={() => {
+          if (bottomTab === 'home') {
+            setHomeScrollSignal((n) => n + 1);
+          }
+          setBottomTab('home'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null);
+        }}>
           <View style={s.navIconWrap}>
             <Icon.Home size={22} filled={bottomTab === 'home'} color={bottomTab === 'home' ? C.primary : C.text} />
           </View>
