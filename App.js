@@ -13883,9 +13883,9 @@ const s = StyleSheet.create({
 
   eventCard: { height: 110, borderRadius: 16, overflow: 'hidden', marginBottom: 10, backgroundColor: '#222', justifyContent: 'center' },
   eventCardCenter: { paddingHorizontal: 16, zIndex: 2 },
-  eventDate: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 1, opacity: 0.9, marginBottom: 6 },
+  eventDate: { color: '#fff', fontFamily: 'Montserrat', fontSize: 11, fontWeight: '600', opacity: 0.9, marginBottom: 6, textTransform: 'none' },
   eventName: { color: '#fff', fontSize: 20, fontWeight: '700', fontFamily: 'AVEstiana', fontStyle: 'normal', marginBottom: 2 },
-  eventLocation: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 2 },
+  eventLocation: { color: 'rgba(255,255,255,0.85)', fontFamily: 'Montserrat', fontSize: 13, fontWeight: '500', marginTop: 2 },
 
   pageTitleCenter: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 26, fontWeight: '700', color: C.primary, textAlign: 'center', marginVertical: 16 },
 
