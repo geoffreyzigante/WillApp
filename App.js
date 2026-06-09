@@ -14519,18 +14519,6 @@ export default function App() {
         }}
       />
 
-      {panierModalVisible && (
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: C.bg, zIndex: 1000 }]}>
-          <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
-          <PanierScreen
-            allEvents={events}
-            onOpenEvent={(ev) => { setPanierModalVisible(false); setOpenedEvent(ev); }}
-            isActive={panierModalVisible}
-            onClose={() => setPanierModalVisible(false)}
-          />
-        </View>
-      )}
-
       <AuthRunnerModal
         visible={authModalVisible}
         onClose={() => setAuthModalVisible(false)}
@@ -14557,6 +14545,18 @@ export default function App() {
     </SafeAreaView>
 
     {photographerOverlay}
+
+    {panierModalVisible && (
+      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: C.bg, zIndex: 1000 }]}>
+        <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
+        <PanierScreen
+          allEvents={events}
+          onOpenEvent={(ev) => { setPanierModalVisible(false); setOpenedEvent(ev); }}
+          isActive={panierModalVisible}
+          onClose={() => setPanierModalVisible(false)}
+        />
+      </View>
+    )}
 
     {/* Splash overlay : ecran blanc + LoadingIcon (fleur Will) violet light
         centre. Meme icone que le pull-to-refresh des galeries -> ressenti
