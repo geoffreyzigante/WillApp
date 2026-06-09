@@ -786,9 +786,9 @@ class GridErrorBoundary extends React.Component {
 const MONTHS_FULL = ['JANVIER','FÉVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOÛT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DÉCEMBRE'];
 const MONTHS_SHORT = ['JANV','FÉVR','MARS','AVR','MAI','JUIN','JUIL','AOÛT','SEPT','OCT','NOV','DÉC'];
 const formatDateLong = (iso, isoEnd) => {
-  if (!iso) return 'DATE À VENIR';
+  if (!iso) return 'Date à venir';
   const ds = new Date(iso);
-  if (isNaN(ds.getTime())) return 'DATE À VENIR';
+  if (isNaN(ds.getTime())) return 'Date à venir';
   const single = (d) => `${d.getDate()} ${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`;
   if (!isoEnd || isoEnd === iso) return single(ds);
   const de = new Date(isoEnd);
@@ -796,12 +796,12 @@ const formatDateLong = (iso, isoEnd) => {
   const sameYear = ds.getFullYear() === de.getFullYear();
   const sameMonth = sameYear && ds.getMonth() === de.getMonth();
   if (sameMonth) {
-    return `DU ${ds.getDate()} AU ${de.getDate()} ${MONTHS_SHORT[de.getMonth()]} ${de.getFullYear()}`;
+    return `Du ${ds.getDate()} au ${de.getDate()} ${MONTHS_FULL[de.getMonth()]} ${de.getFullYear()}`;
   }
   if (sameYear) {
-    return `DU ${ds.getDate()} ${MONTHS_SHORT[ds.getMonth()]} AU ${de.getDate()} ${MONTHS_SHORT[de.getMonth()]} ${de.getFullYear()}`;
+    return `Du ${ds.getDate()} ${MONTHS_FULL[ds.getMonth()]} au ${de.getDate()} ${MONTHS_FULL[de.getMonth()]} ${de.getFullYear()}`;
   }
-  return `DU ${ds.getDate()} ${MONTHS_SHORT[ds.getMonth()]} ${ds.getFullYear()} AU ${de.getDate()} ${MONTHS_SHORT[de.getMonth()]} ${de.getFullYear()}`;
+  return `Du ${ds.getDate()} ${MONTHS_FULL[ds.getMonth()]} ${ds.getFullYear()} au ${de.getDate()} ${MONTHS_FULL[de.getMonth()]} ${de.getFullYear()}`;
 };
 
 // Variante du format pour le champ "Date(s)" du formulaire de création d'event.
@@ -10540,7 +10540,7 @@ function PhotoViewerModal({
           >
             {eventTitle ? (
               <Text numberOfLines={1} style={{
-                color: '#1a1a1a',
+                color: C.primary,
                 fontFamily: 'AVEstiana',
                 fontSize: 22,
                 letterSpacing: -0.2,
@@ -10551,12 +10551,12 @@ function PhotoViewerModal({
             ) : null}
             {eventDate ? (
               <Text style={{
-                color: '#9ca3af',
+                color: '#000',
                 fontFamily: 'Montserrat',
                 fontSize: 12,
                 fontWeight: '500',
-                letterSpacing: 0.2,
                 marginTop: 4,
+                textTransform: 'none',
               }}>{eventDate}</Text>
             ) : null}
           </ReAnimated.View>
@@ -10628,7 +10628,6 @@ function PhotoViewerModal({
                               source={{ uri: item.uri }}
                               placeholder={{ uri: item.uri }}
                               style={{ width: '100%', height: '100%' }}
-                              // cover = fill exact puisque wrapper matche l aspect.
                               contentFit="cover"
                               cachePolicy="memory-disk"
                               priority="high"
@@ -10641,6 +10640,38 @@ function PhotoViewerModal({
                               }}
                             />
                           ) : null}
+                          {/* Etoile fav DANS le wrapper photo : ancrage strict
+                              au coin haut-droit, pas de drift au swipe entre
+                              photos d aspects differents. uiStyle anime le
+                              fade-in apres le shared-element. */}
+                          {isRunner && item?.id ? (
+                            <ReAnimated.View
+                              pointerEvents="box-none"
+                              style={[{ position: 'absolute', top: 12, right: 12 }, uiStyle]}
+                            >
+                              <ReAnimated.View style={heartStyle}>
+                                <TouchableOpacity
+                                  onPress={() => {
+                                    heartScale.value = withTiming(0.85, { duration: 90 }, () => {
+                                      heartScale.value = withTiming(1, { duration: 140 });
+                                    });
+                                    onTogglePhotoFavorite(item.id);
+                                  }}
+                                  hitSlop={12}
+                                  style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
+                                  accessibilityLabel={(photoFavoritesSet?.has(item.id)) ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                                >
+                                  <FavStar
+                                    size={24}
+                                    fill={photoFavoritesSet?.has(item.id) ? '#fff' : 'none'}
+                                    stroke="#fff"
+                                    strokeWidth={1.4}
+                                    style={iconShadowWhiteStyle}
+                                  />
+                                </TouchableOpacity>
+                              </ReAnimated.View>
+                            </ReAnimated.View>
+                          ) : null}
                         </ReAnimated.View>
                       </View>
                     );
@@ -10649,63 +10680,8 @@ function PhotoViewerModal({
               </ReAnimated.View>
             </GestureDetector>
 
-            {/* Coeur favori : position calculee sur l aspect REEL de la
-                photo courante. Le wrapper photo s adapte a l aspect via
-                aspectRatio dynamique (renderItem ci-dessus), donc la photo
-                peut etre plus etroite ou plus large que cardW x cardH.
-                On calcule les bounds reels pour ancrer l etoile au coin
-                haut-droit de la photo, pas au coin du card.
-                Calcul : cardInnerW x cardInnerH = la zone disponible apres
-                padding. La photo est contain dans cette zone avec son
-                aspect. */}
-            {isRunner ? (() => {
-              const cardInnerW = cardW - photoMargin * 2;
-              const cardInnerH = cardH;
-              const currentAspect = aspectMap[currentPhoto?.id] || PHOTO_ASPECT;
-              const wrapperAspect = cardInnerW / cardInnerH;
-              let photoW, photoH;
-              if (currentAspect >= wrapperAspect) {
-                photoW = cardInnerW;
-                photoH = cardInnerW / currentAspect;
-              } else {
-                photoH = cardInnerH;
-                photoW = cardInnerH * currentAspect;
-              }
-              const photoLeftFromCardLeft = photoMargin + (cardInnerW - photoW) / 2;
-              const photoTopFromCardTop = (cardInnerH - photoH) / 2;
-              const starTop = photoTopFromCardTop + 12;
-              const starRight = (cardW - photoLeftFromCardLeft - photoW) + 12;
-              return (
-              <ReAnimated.View
-                pointerEvents="box-none"
-                style={[{
-                  position: 'absolute', top: starTop, right: starRight,
-                }, uiStyle]}
-              >
-                <ReAnimated.View style={heartStyle}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      heartScale.value = withTiming(0.85, { duration: 90 }, () => {
-                        heartScale.value = withTiming(1, { duration: 140 });
-                      });
-                      onTogglePhotoFavorite(currentPhoto.id);
-                    }}
-                    hitSlop={12}
-                    style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
-                    accessibilityLabel={fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                  >
-                    <FavStar
-                      size={24}
-                      fill={fav ? '#fff' : 'none'}
-                      stroke="#fff"
-                      strokeWidth={2}
-                      style={iconShadowWhiteStyle}
-                    />
-                  </TouchableOpacity>
-                </ReAnimated.View>
-              </ReAnimated.View>
-              );
-            })() : null}
+            {/* Etoile favori : maintenant integree dans le renderItem
+                (cf. wrapper photo ci-dessus). Pas de overlay externe. */}
           </ReAnimated.View>
 
           {/* X haut-droite de la PAGE, noire (point 6). Toujours visible
