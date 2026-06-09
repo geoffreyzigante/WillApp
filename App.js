@@ -156,6 +156,68 @@ function useCart(eventCode) {
   return { cart, count: cart.length, toggle, remove, persist };
 }
 
+// Aggrege TOUTES les cles `will:cart:*` d AsyncStorage en une Map
+// <eventCode, photoKeys[]>. Utilise par PanierScreen (onglet Panier
+// global) pour afficher le panier cross-event + total agrege. Sync
+// via cartChangeListeners.
+function useAllCarts() {
+  const [carts, setCarts] = useState(new Map());
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const allKeys = await AsyncStorage.getAllKeys();
+        const cartKeys = (allKeys || []).filter((k) => k.startsWith('will:cart:'));
+        if (cartKeys.length === 0) {
+          if (!cancelled) setCarts(new Map());
+          return;
+        }
+        const entries = await AsyncStorage.multiGet(cartKeys);
+        if (cancelled) return;
+        const m = new Map();
+        for (const [k, v] of entries) {
+          const code = k.substring('will:cart:'.length);
+          try {
+            const arr = JSON.parse(v || '[]');
+            if (Array.isArray(arr) && arr.length > 0) m.set(code, arr);
+          } catch {}
+        }
+        setCarts(m);
+      } catch {
+        if (!cancelled) setCarts(new Map());
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [version]);
+  useEffect(() => {
+    const fn = () => setVersion((v) => v + 1);
+    cartChangeListeners.add(fn);
+    return () => { cartChangeListeners.delete(fn); };
+  }, []);
+  const total = useMemo(() => {
+    let n = 0;
+    for (const arr of carts.values()) n += arr.length;
+    return n;
+  }, [carts]);
+  const remove = useCallback((eventCode, photoKey) => {
+    if (!eventCode || !photoKey) return;
+    const k = `will:cart:${eventCode}`;
+    AsyncStorage.getItem(k).then((v) => {
+      try {
+        const arr = JSON.parse(v || '[]');
+        const next = Array.isArray(arr) ? arr.filter((x) => x !== photoKey) : [];
+        if (next.length === 0) {
+          AsyncStorage.removeItem(k).then(() => emitCartChange()).catch(() => {});
+        } else {
+          AsyncStorage.setItem(k, JSON.stringify(next)).then(() => emitCartChange()).catch(() => {});
+        }
+      } catch {}
+    }).catch(() => {});
+  }, []);
+  return { carts, total, remove };
+}
+
 // ─── E2 — PUSH NOTIFS ────────────────────────────────────────────────────
 // Foreground handler : quand une notif arrive avec l app au premier plan,
 // on affiche tout de meme la banniere + son (sinon iOS la "consomme" en
@@ -3984,6 +4046,136 @@ function CartModal({ visible, onClose, eventCode, cartKeys, onRemove, photosSour
         </View>
       </View>
     </Modal>
+  );
+}
+
+// ─── PanierScreen : onglet Panier global (agrege cross-event) ────────
+// Liste toutes les cles `will:cart:*` via useAllCarts, groupe par event
+// (avec metadata depuis allEvents = /public-events), affiche un footer
+// total + bouton Commander disable (Stripe a venir).
+function PanierScreen({ allEvents = [], onOpenEvent, isActive = true }) {
+  const { carts, total, remove } = useAllCarts();
+  const eventsMap = useMemo(() => {
+    const m = new Map();
+    for (const ev of allEvents) if (ev && ev.code) m.set(ev.code, ev);
+    return m;
+  }, [allEvents]);
+  const topPad = Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 0) + 12;
+  const cellW = (SCREEN_W - 32 - 16) / 3;
+  const orderedCodes = useMemo(() => Array.from(carts.keys()), [carts]);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <View style={{ paddingTop: topPad, paddingHorizontal: 20, paddingBottom: 4 }}>
+        <Text style={{ fontFamily: 'Montserrat', fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.3 }}>Mon panier</Text>
+        <Text style={{ color: C.textSoft, fontSize: 13, marginTop: 4 }}>
+          {total === 0 ? 'Vide pour le moment.' : `${total} photo${total > 1 ? 's' : ''} dans ton panier.`}
+        </Text>
+      </View>
+
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: total > 0 ? 140 : 24 }}>
+        {total === 0 ? (
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 36, alignItems: 'center' }}>
+            <View style={{
+              width: 56, height: 56, borderRadius: 999,
+              backgroundColor: '#F2EDFD',
+              alignItems: 'center', justifyContent: 'center',
+              marginBottom: 16,
+            }}>
+              <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+                <Path d="M3 6h2l2 12h11l2-8H7" stroke="#7B2FFF" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                <Path d="M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="#7B2FFF" />
+              </Svg>
+            </View>
+            <Text style={{ fontFamily: 'Montserrat', fontSize: 17, fontWeight: '800', color: C.text, textAlign: 'center', marginBottom: 8 }}>
+              Aucune photo dans ton panier
+            </Text>
+            <Text style={{ color: C.textSoft, fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
+              Parcours les galeries de tes événements et ajoute les photos que tu souhaites télécharger.
+            </Text>
+          </View>
+        ) : (
+          orderedCodes.map((code) => {
+            const keys = carts.get(code) || [];
+            const meta = eventsMap.get(code) || { name: code, event_date: '' };
+            const dateLabel = meta.event_date ? formatDateLong(meta.event_date, meta.event_date_end) : '';
+            return (
+              <View key={code} style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <View style={{ flex: 1, paddingRight: 12 }}>
+                    <Text style={{ fontFamily: 'Montserrat', fontSize: 16, fontWeight: '800', color: C.text, letterSpacing: -0.2 }} numberOfLines={2}>
+                      {meta.name || code}
+                    </Text>
+                    <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>
+                      {[dateLabel, `${keys.length} photo${keys.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
+                    </Text>
+                  </View>
+                  {onOpenEvent ? (
+                    <TouchableOpacity onPress={() => onOpenEvent(meta)} activeOpacity={0.7}>
+                      <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600' }}>Voir →</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {keys.map((k) => {
+                    const thumbUri = `${API_URL}/photo-thumb/${encodeURIComponent(k)}?v=wm19`;
+                    return (
+                      <View key={k} style={{ width: cellW, height: cellW, borderRadius: 12, overflow: 'hidden', backgroundColor: C.primaryLight, position: 'relative' }}>
+                        <ExpoImage
+                          source={{ uri: thumbUri }}
+                          style={{ width: '100%', height: '100%' }}
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                          transition={100}
+                        />
+                        <TouchableOpacity
+                          onPress={() => remove(code, k)}
+                          hitSlop={8}
+                          accessibilityLabel="Retirer du panier"
+                          style={{
+                            position: 'absolute', top: 6, right: 6,
+                            width: 26, height: 26, borderRadius: 999,
+                            backgroundColor: 'rgba(0,0,0,0.6)',
+                            alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >
+                          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" />
+                          </Svg>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })
+        )}
+      </ScrollView>
+
+      {total > 0 ? (
+        <View style={{
+          position: 'absolute', left: 0, right: 0, bottom: 64,
+          backgroundColor: '#fff',
+          borderTopWidth: 1, borderTopColor: '#EFEAFB',
+          paddingHorizontal: 20, paddingTop: 14, paddingBottom: 14,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+        }}>
+          <View>
+            <Text style={{ color: C.textSoft, fontSize: 12, fontFamily: 'Montserrat' }}>Total</Text>
+            <Text style={{ fontFamily: 'Montserrat', fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.3 }}>
+              {`${total * PRICE_PER_PHOTO_EUR} €`}
+            </Text>
+          </View>
+          <TouchableOpacity
+            disabled
+            style={{ backgroundColor: '#C9BEEF', paddingVertical: 12, paddingHorizontal: 22, borderRadius: 999 }}
+          >
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat', fontSize: 14, fontWeight: '700' }}>Commander · bientôt</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -13386,8 +13578,13 @@ export default function App() {
   const tabs = useMemo(() => {
     const t = ['home', 'photos'];
     if (organizerSession) t.push('events');
+    t.push('cart');
     return t;
   }, [organizerSession]);
+
+  // Badge agrege pour l onglet Panier (somme des `will:cart:*` AsyncStorage).
+  // Refresh auto via cartChangeListeners quand un autre composant mute.
+  const { total: cartGlobalTotal } = useAllCarts();
 
   const tabsTranslateX = useRef(new Animated.Value(0)).current;
 
@@ -13722,6 +13919,13 @@ export default function App() {
                   />
                 </View>
               )}
+              <View style={{ width: SCREEN_W }}>
+                <PanierScreen
+                  allEvents={events}
+                  onOpenEvent={(ev) => setOpenedEvent(ev)}
+                  isActive={bottomTab === 'cart'}
+                />
+              </View>
             </Animated.View>
           </View>
         </GestureDetector>
@@ -13824,6 +14028,29 @@ export default function App() {
             <Text style={[s.navLabel, bottomTab === 'events' && { color: C.pinkPill, fontWeight: '700' }]}>Mes events</Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('cart'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
+          <View style={s.navIconWrap}>
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+              <Path d="M3 6h2l2 12h11l2-8H7" stroke={bottomTab === 'cart' ? C.primary : C.text} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+              <Path d="M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill={bottomTab === 'cart' ? C.primary : C.text} />
+            </Svg>
+            {cartGlobalTotal > 0 && bottomTab !== 'cart' && (
+              <View style={{
+                position: 'absolute', top: -3, right: -8,
+                minWidth: 16, height: 16, borderRadius: 8,
+                paddingHorizontal: 4,
+                backgroundColor: '#D67CF8',
+                alignItems: 'center', justifyContent: 'center',
+                borderWidth: 1.5, borderColor: C.bg,
+              }}>
+                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', lineHeight: 11 }}>
+                  {cartGlobalTotal > 99 ? '99+' : cartGlobalTotal}
+                </Text>
+              </View>
+            )}
+          </View>
+          <Text style={[s.navLabel, bottomTab === 'cart' && { color: C.primary, fontWeight: '700' }]}>Panier</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Pill recherche par dossard — rendue APRES le bottom nav et le
