@@ -1404,7 +1404,6 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
                 paddingHorizontal: 4,
                 backgroundColor: C.primary,
                 alignItems: 'center', justifyContent: 'center',
-                borderWidth: 1.5, borderColor: C.bg,
               }}>
                 <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800', lineHeight: 11 }}>
                   {cartTotal > 99 ? '99+' : cartTotal}
