@@ -2207,7 +2207,7 @@ function FavStar({ size = 16, fill = '#fff', stroke = '#fff', strokeWidth = 1.6,
 
 // Cellule d'une thumbnail : memo + onError fallback. La taille est passee
 // pour pouvoir s'adapter au numColumns du parent.
-const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav, favIndicator = false, paid = false }) {
+const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav, favIndicator = false }) {
   const [errored, setErrored] = React.useState(false);
   const cellRef = React.useRef(null);
   // size optionnel :
@@ -2252,17 +2252,6 @@ const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHear
               console.warn('[gallery] image load failed:', photo.uri, e?.error || e);
               setErrored(true);
             }}
-          />
-        )}
-        {/* Watermark overlay events payants (mirror PhotoViewerModal). */}
-        {!errored && paid && (
-          <ExpoImage
-            source={{ uri: 'https://will-app.com/assets/watermark-will-cover-v3.png' }}
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.55 }}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            pointerEvents="none"
-            transition={0}
           />
         )}
         {errored && (
@@ -2397,18 +2386,6 @@ function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorit
         transition={100}
         recyclingKey={p.id}
       />
-      {/* Watermark dissuasif events payants (mirror PhotoCell.paid). Sur la
-          galerie agregée "Mes photos", chaque thumb porte son propre p.paid. */}
-      {p?.paid ? (
-        <ExpoImage
-          source={{ uri: 'https://will-app.com/assets/watermark-will-cover-v3.png' }}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.55, borderRadius: 12 }}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          pointerEvents="none"
-          transition={0}
-        />
-      ) : null}
       {/* Etoile favori : indicateur READ-ONLY uniquement pour les photos deja
           mises en favori. Le favoriting se fait uniquement depuis le viewer
           (meme logique que la galerie publique, decision UX 2026-06-03). */}
@@ -3499,7 +3476,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
       // Le viewer plein ecran recoit item entier (avec uri haute resolution).
       photo={{ ...item, uri: item.thumbUri || item.uri }}
       favIndicator={isFav(item.id)}
-      paid={!!event?.photos_for_sale}
       onPress={(origin) => onOpenPhoto?.(item, filteredPhotos, {
         origin,
         eventTitle: event?.name,
@@ -3548,7 +3524,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           photo={{ ...photo, uri: sourceUri }}
           size={{ width, height }}
           favIndicator={isFav(photo.id)}
-          paid={!!event?.photos_for_sale}
           onPress={(origin) => onOpenPhoto?.(photo, filteredPhotos, {
             origin,
             eventTitle: event?.name,
@@ -3574,7 +3549,6 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           photo={{ ...photo, uri: photo.thumbUri || photo.uri }}
           size={{ width, height }}
           favIndicator={isFav(photo.id)}
-          paid={!!event?.photos_for_sale}
           onPress={(origin) => onOpenPhoto?.(photo, bibResults, {
             origin,
             eventTitle: event?.name,
@@ -10741,8 +10715,9 @@ function PhotoViewerModal({
                             />
                           ) : null}
                           {/* Watermark dissuasif sur events payants : overlay
-                              client only, l image servie est propre. Mirror
-                              website body.paid-event .vphoto::after. */}
+                              client only, l image servie est propre. tintColor
+                              re-colorize le PNG en blanc plein. Mirror website
+                              body.paid-event .vphoto::after (mask + bg white). */}
                           {photosForSale && item?.uri ? (
                             <ExpoImage
                               source={{ uri: 'https://will-app.com/assets/watermark-will-cover-v3.png' }}
@@ -10751,6 +10726,7 @@ function PhotoViewerModal({
                               cachePolicy="memory-disk"
                               pointerEvents="none"
                               transition={0}
+                              tintColor="#fff"
                             />
                           ) : null}
                           {/* Etoile fav DANS le wrapper photo : ancrage strict
