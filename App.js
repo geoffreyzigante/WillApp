@@ -2248,13 +2248,13 @@ const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHear
           pointerEvents="none"
           style={{
             position: 'absolute', top: 6, right: 6,
-            // Drop shadow + halo gris semi-transparent pour rendre l etoile
-            // visible aussi bien sur photos claires que sombres.
+            // Drop shadow noir pour rendre l etoile visible sur photos
+            // claires comme sombres (remplace le contour noir).
             shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
             elevation: 3,
           }}
         >
-          <FavStar size={18} fill="#fff" stroke="#000" strokeWidth={1.4} />
+          <FavStar size={18} fill="#fff" stroke="#fff" strokeWidth={1.4} />
         </View>
       )}
     </TouchableOpacity>
