@@ -10518,12 +10518,15 @@ function PhotoViewerModal({
             <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(255,255,255,0.65)' }]} />
           </ReAnimated.View>
 
-          {/* Header : titre event + date (fade in apres l'anim shared-element).
-              Baisse de 28px sous topPad pour respirer (mirror site .vheader). */}
+          {/* Header : titre event + date positionnes a 50px au-dessus du bord
+              superieur de l image. Clamp avec topPad pour ne pas sortir de
+              l ecran sur petits devices / grosses photos. */}
           <ReAnimated.View
             pointerEvents="none"
             style={[{
-              position: 'absolute', top: topPad + 28, left: 0, right: 0, height: HEADER_H,
+              position: 'absolute',
+              top: Math.max(topPad, targetY - 50 - HEADER_H),
+              left: 0, right: 0, height: HEADER_H,
               alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20,
             }, uiStyle]}
           >
@@ -10598,12 +10601,10 @@ function PhotoViewerModal({
                           <ExpoImage
                             source={{ uri: item.uri }}
                             placeholder={{ uri: item.uri }}
-                            style={{ flex: 1 }}
-                            // contain (vs cover) : preserve le cadrage entier
-                            // de la photo source = identique au fichier
-                            // telecharge + au cadrage photographe. Sinon le
-                            // viewer crop et le watermark bord droit risque
-                            // d'etre coupe.
+                            // borderRadius 18 directement sur l image pour
+                            // que les coins arrondis soient visibles meme
+                            // quand le wrapper a un fond transparent.
+                            style={{ flex: 1, borderRadius: 18 }}
                             contentFit="contain"
                             cachePolicy="memory-disk"
                             priority="high"
@@ -10625,9 +10626,10 @@ function PhotoViewerModal({
               <ReAnimated.View
                 pointerEvents="box-none"
                 style={[{
-                  // Haut-droite de la photo (consigne UX). photoMargin + 8 =
-                  // marge droite identique a l ancienne position bas.
-                  position: 'absolute', top: 12, right: photoMargin + 8,
+                  // Haut-droite de la photo, marge 16 pour bien etre DANS
+                  // l image et ne pas etre rognee par le borderRadius des
+                  // coins arrondis.
+                  position: 'absolute', top: 16, right: photoMargin + 16,
                 }, uiStyle]}
               >
                 <ReAnimated.View style={heartStyle}>
