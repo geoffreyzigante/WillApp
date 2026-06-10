@@ -3090,6 +3090,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
           id: p.key,
           tint,
           race: p.race,
+          race_distance_id: p.race_distance_id || null,
           km: p.km,
           race_label: p.race_label || null,
           race_label_only: p.race_label_only === true,
@@ -3142,33 +3143,51 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     kmTabLayoutsRef.current = {};
   }, [activeRaceFilter]);
 
-  // Niveau 1 — courses uniques presentes dans les photos. Trie numerique asc.
-  const uniqueRaces = Array.from(new Set(photos.map(p => p.race).filter(Boolean)))
-    .sort((a, b) => Number(a) - Number(b));
+  // Cle canonique de course pour une photo : race_distance_id (resolu worker,
+  // distingue deux courses de meme km, post-fix 2026-06-10) sinon p.race brut
+  // pour les events pas encore backfilles.
+  const photoRaceKey = (p) => (p && p.race_distance_id) ? String(p.race_distance_id) : (p && p.race ? String(p.race) : null);
 
-  // Map race_id -> { label, label_only } injecte par worker (race_label +
+  // Niveau 1 — courses uniques presentes dans les photos. Trie numerique asc
+  // sur le km associe (pour conserver l ordre intuitif quand on a des IDs).
+  const uniqueRaces = (() => {
+    const keys = Array.from(new Set(photos.map(photoRaceKey).filter(Boolean)));
+    const evDistances = Array.isArray(event.distances) ? event.distances : [];
+    const kmOf = (k) => {
+      const d = evDistances.find(x => x && (x.id === k || String(x.km) === String(k)));
+      return d ? Number(d.km) : Number(k);
+    };
+    return keys.sort((a, b) => kmOf(a) - kmOf(b));
+  })();
+
+  // Map race_key -> { label, label_only } injecte par worker (race_label +
   // race_label_only sur la photo) ou fallback event.distances local.
   // raceTabLabel respecte label_only (mode nom personnalise = label seul).
   const raceLabelById = useMemo(() => {
     const m = {};
     for (const p of photos) {
-      if (p.race && p.race_label && !m[p.race]) {
-        m[p.race] = { label: p.race_label, label_only: p.race_label_only === true };
+      const key = photoRaceKey(p);
+      if (key && p.race_label && !m[key]) {
+        m[key] = { label: p.race_label, label_only: p.race_label_only === true };
       }
     }
     const evDistances = Array.isArray(event.distances) ? event.distances : [];
     for (const d of evDistances) {
+      if (!d) continue;
+      const entry = { label: d.label, label_only: d.label_only === true };
+      if (d.id && !m[d.id] && d.label) m[d.id] = entry;
       const k = String(d.km);
-      if (!m[k] && d.label) {
-        m[k] = { label: d.label, label_only: d.label_only === true };
-      }
+      if (!m[k] && d.label) m[k] = entry;
     }
     return m;
   }, [photos, event.distances]);
   const raceTabLabel = (raceKey) => {
     const entry = raceLabelById[raceKey];
-    if (entry) return raceTitle({ label: entry.label, label_only: entry.label_only, km: raceKey });
-    return `${raceKey} km`;
+    const evDistances = Array.isArray(event.distances) ? event.distances : [];
+    const d = evDistances.find(x => x && (x.id === raceKey || String(x.km) === String(raceKey)));
+    const km = d ? d.km : raceKey;
+    if (entry) return raceTitle({ label: entry.label, label_only: entry.label_only, km });
+    return `${km} km`;
   };
 
   // Niveau 2 — positions km presentes pour la course active. Exclut les
@@ -3177,7 +3196,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
   const kmsForActiveRace = (() => {
     if (activeRaceFilter === 'all') return [];
     const kms = photos
-      .filter(p => String(p.race) === activeRaceFilter)
+      .filter(p => photoRaceKey(p) === activeRaceFilter)
       .map(p => p.km)
       .filter(k => k !== null && k !== undefined && k !== '');
     // Tri : Depart (0) puis Arrivee ('arrivee') puis km N croissant. 'arrivee'
@@ -3244,7 +3263,7 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
     if (activeRaceFilter === 'all') {
       list = photos;
     } else {
-      list = photos.filter(p => String(p.race) === activeRaceFilter);
+      list = photos.filter(p => photoRaceKey(p) === activeRaceFilter);
       if (activeKmFilter !== 'all') {
         list = list.filter(p => String(p.km) === activeKmFilter);
       }
@@ -12080,6 +12099,7 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
           id: p.key,
           tint,
           race: p.race,
+          race_distance_id: p.race_distance_id || null,
           km: p.km,
           race_label: p.race_label || null,
           race_label_only: p.race_label_only === true,
@@ -12123,7 +12143,10 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
 
   const filteredPhotos = raceFilter === 'all'
     ? photos
-    : photos.filter(p => p.race === raceFilter || !p.race);
+    : photos.filter(p => {
+        const k = (p && p.race_distance_id) ? String(p.race_distance_id) : (p && p.race ? String(p.race) : null);
+        return k === raceFilter || !p.race;
+      });
 
   const distances = Array.isArray(event.distances) ? event.distances : [];
 
@@ -12283,7 +12306,7 @@ function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose
             <Text style={{ color: raceFilter === 'all' ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>Toutes</Text>
           </TouchableOpacity>
           {distances.map((d, i) => {
-            const val = String(d.km);
+            const val = String(d.id || d.km);
             const active = raceFilter === val;
             return (
               <TouchableOpacity
@@ -13844,6 +13867,7 @@ export default function App() {
           id: p.key, key: p.key,
           uri: p.url, thumbUri: p.thumb_url || p.url,
           race: p.race, km: p.km,
+          race_distance_id: p.race_distance_id || null,
           race_label: p.race_label || null,
           race_label_only: p.race_label_only === true,
           confidence: p.confidence, uploaded: p.uploaded,
