@@ -1236,7 +1236,7 @@ function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, uploadStat
       <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
         <View style={{ flex: 1 }}>
           <Text style={s.selfieTitle}>Un selfie suffit</Text>
-          <Text style={s.selfieSub}>Ajoute ton event en favoris avant le départ et reçois tes photos automatiquement !</Text>
+          <Text style={s.selfieSub}>Un selfie suffit pour recevoir tes photos automatiquement sur tous tes events Will.</Text>
         </View>
         <View style={[s.selfieAvatar, { backgroundColor: 'transparent' }]}>
           {/* Icone ScanCoeur (source ~/WILL/ScanCoeur.svg) : cadres FaceID
@@ -1565,13 +1565,13 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
             fontSize: 13, color: C.textSoft, textAlign: 'center',
             lineHeight: 18, marginBottom: 22, paddingHorizontal: 8,
           }}>
-            Ajoute tes events à venir en favoris avant le départ. Will te reconnaît et t'envoie tes photos dès qu'elles sont prises.
+            Ajoute tes events en favoris pour les suivre. Un selfie suffit pour être reconnu sur toutes les photos publiées (valable 12 mois renouvelables).
           </Text>
           {/* 3 etapes numerotees */}
           <View style={{ alignSelf: 'stretch', gap: 10, marginBottom: 22 }}>
             {[
               { n: 1, t: 'Crée ton compte et prends ton selfie' },
-              { n: 2, t: 'Ajoute ton event en favori avant le jour J' },
+              { n: 2, t: 'Ajoute tes events en favoris pour les suivre' },
               { n: 3, t: "Profite, Will s'occupe du reste" },
             ].map(({ n, t }) => (
               <View key={n} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FAF7FF', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
@@ -1747,12 +1747,12 @@ function PhotosUnauthScreen({ onSignup, onLogin }) {
           fontSize: 14, color: C.textSoft, textAlign: 'center',
           lineHeight: 20, marginBottom: 24, paddingHorizontal: 8,
         }}>
-          Ajoute tes events à venir en favoris avant le départ. Will te reconnaît et t'envoie tes photos dès qu'elles sont prises.
+          Ajoute tes events en favoris pour les suivre. Un selfie suffit pour être reconnu sur toutes les photos publiées (valable 12 mois renouvelables).
         </Text>
         <View style={{ alignSelf: 'stretch', gap: 10, marginBottom: 24 }}>
           {[
             { n: 1, t: 'Crée ton compte et prends ton selfie' },
-            { n: 2, t: 'Ajoute ton event en favori avant le jour J' },
+            { n: 2, t: 'Ajoute tes events en favoris pour les suivre' },
             { n: 3, t: "Profite, Will s'occupe du reste" },
           ].map(({ n, t }) => (
             <View key={n} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FAF7FF', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
@@ -2468,7 +2468,7 @@ function PhotosEmptyState({ selfieUri, onFindEvent }) {
         textAlign: 'center', marginBottom: 22,
         paddingHorizontal: 12,
       }}>
-        Will te reconnaît uniquement sur les events que tu suis. Ajoute-en un, et tes photos arrivent toutes seules.
+        Will reconnaît ton visage sur les photos de tous les events Will. Ajoute un event en favoris pour recevoir tes notifs dès qu'elles arrivent.
       </Text>
 
       {onFindEvent && (
@@ -3381,8 +3381,8 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                   ellipsizeMode="tail"
                   style={{ color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat', flexShrink: 1 }}
                 >
-                  Mets ton event en favoris avant le départ,{'\n'}
-                  <Text style={{ fontWeight: '400' }}>reçois tes photos automatiquement</Text>
+                  Mets en favoris pour suivre cet event,{'\n'}
+                  <Text style={{ fontWeight: '400' }}>tes photos arrivent dès leur publication</Text>
                 </Text>
               </View>
             </LinearGradient>
@@ -4104,13 +4104,13 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
               fontSize: 14, color: C.text, lineHeight: 20,
               marginBottom: 10, textAlign: 'center',
             }}>
-              Will arrête de te reconnaître automatiquement sur les nouvelles photos de cet event. Les photos déjà identifiées restent dans ta galerie.
+              Tu ne recevras plus de notifs pour les nouvelles photos de cet event. Les photos déjà identifiées restent dans ta galerie.
             </Text>
             <Text style={{
               fontSize: 11, color: C.textSoft, lineHeight: 15,
               marginBottom: 20, textAlign: 'center',
             }}>
-              Tes données biométriques pour cet event sont retirées de nos serveurs. Pour tout effacer (selfie + photos identifiées), utilise « Supprimer mes données faciales » dans ton profil.
+              Ta reconnaissance faciale globale n'est pas affectée — tu restes reconnaissable sur les autres events Will que tu suis. Pour la retirer, utilise « Supprimer mon selfie » dans ton profil.
             </Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity
@@ -9322,13 +9322,13 @@ function PhaseDResetModal({ visible, onClose }) {
             fontSize: 18, fontWeight: '800', color: '#1A1426',
             textAlign: 'center', marginBottom: 10, letterSpacing: -0.3,
           }}>
-            Will respecte mieux ta vie privée
+            Reconnaissance Will, version 2
           </Text>
           <Text style={{
             fontSize: 14, color: 'rgba(123,47,255,0.3)', lineHeight: 20,
             textAlign: 'center', marginBottom: 22,
           }}>
-            Tu dois maintenant <Text style={{ fontWeight: '700', color: '#1A1426' }}>Suivre</Text> explicitement chaque event pour recevoir tes photos. Tes anciens favoris ont été retirés. Tu peux les Suivre à nouveau pour réactiver l'envoi automatique.
+            <Text style={{ fontWeight: '700', color: '#1A1426' }}>Un seul selfie</Text> suffit désormais pour recevoir tes photos sur tous les events Will. Consentement valable 12 mois renouvelables. Tu peux le retirer à tout moment depuis ton profil.
           </Text>
           <TouchableOpacity onPress={onClose} style={{
             backgroundColor: '#7B2FFF', borderRadius: 999,
@@ -9426,8 +9426,9 @@ function SelfieModal({ visible, onClose, onSaved, userId, signupMode = false, on
             <>
               <Text style={s.modalTitle}>Reconnaissance faciale</Text>
               <Text style={[s.modalSub, { textAlign: 'left', lineHeight: 20 }]}>
-                Pour t'envoyer automatiquement tes photos d'événement, Will utilise ton selfie comme référence biométrique. L'image et l'empreinte faciale générée par AWS Rekognition sont chiffrées, stockées sur des serveurs européens, et supprimées 30 jours après ton dernier événement.{'\n\n'}
-                Tu peux retirer ton consentement à tout moment en supprimant ton selfie depuis l'app.
+                Pour t'envoyer automatiquement tes photos d'event, Will utilise ton selfie comme référence biométrique. L'image et l'empreinte faciale générée par AWS Rekognition sont chiffrées, stockées sur des serveurs européens (eu-west-1 Francfort).{'\n\n'}
+                Ton consentement est valable <Text style={{ fontWeight: '700' }}>12 mois renouvelables</Text>. Tu recevras un rappel à J-30 et J-7 avant l'échéance. Sans renouvellement, ton selfie est automatiquement supprimé.{'\n\n'}
+                Tu peux retirer ton consentement à tout moment depuis ton profil.
               </Text>
               <TouchableOpacity
                 onPress={() => Linking.openURL('https://will-app.com/privacy').catch(() => {})}
@@ -9456,7 +9457,7 @@ function SelfieModal({ visible, onClose, onSaved, userId, signupMode = false, on
                   ) : null}
                 </View>
                 <Text style={{ flex: 1, color: C.text, fontSize: 14, lineHeight: 19 }}>
-                  J'accepte le traitement biométrique de mon image (RGPD art. 9).
+                  J'accepte le traitement biométrique de mon image (RGPD art. 9) pour la reconnaissance faciale sur les events Will, pendant 12 mois renouvelables.
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -9477,8 +9478,8 @@ function SelfieModal({ visible, onClose, onSaved, userId, signupMode = false, on
           <Text style={s.modalTitle}>{signupMode ? 'Prends ton selfie' : 'Mon selfie'}</Text>
           <Text style={s.modalSub}>
             {signupMode
-              ? "Will reconnaîtra ton visage sur les photos des events auxquels tu participes. Image chiffrée, serveurs européens, supprimée 30 jours après ton dernier événement."
-              : "Ton selfie est utilisé pour la reconnaissance faciale. Il est chiffré, stocké sur des serveurs européens, et supprimé automatiquement 30 jours après ton dernier événement."}
+              ? "Will reconnaîtra ton visage sur les photos des events Will. Image chiffrée, serveurs européens. Consentement valable 12 mois renouvelables."
+              : "Ton selfie est utilisé pour la reconnaissance faciale sur tous les events Will. Chiffré, serveurs européens. Consentement valable 12 mois renouvelables."}
           </Text>
 
           <View style={s.selfiePreviewWrap}>
@@ -13487,7 +13488,7 @@ export default function App() {
               if (startedKeys.length > 0) await AsyncStorage.multiRemove(startedKeys);
             } catch {}
             setProfileMenu(false);
-            Alert.alert('Données faciales supprimées', 'Tout est nettoyé. Tu peux redéposer un selfie quand tu veux.');
+            Alert.alert('Données faciales supprimées', 'Ton consentement biométrique est retiré et ton selfie est supprimé de nos serveurs. Tu peux redéposer un selfie quand tu veux.');
           } else {
             Alert.alert('Erreur', r?.error || 'Impossible de supprimer. Reessaie.');
           }
@@ -13762,7 +13763,7 @@ export default function App() {
   }, [selfieUri, runSelfieUpload]);
 
   const deleteSelfie = useCallback(() => {
-    Alert.alert('Supprimer le selfie ?', 'Tu pourras en reprendre un nouveau.', [
+    Alert.alert('Supprimer ton selfie ?', 'Ton consentement biométrique sera retiré immédiatement et la reconnaissance s’arrêtera sur les nouvelles photos. Tu peux redéposer un selfie à tout moment.', [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Supprimer', style: 'destructive', onPress: async () => {
         // 1. Supprime le selfie cote serveur en premier. Sinon le useEffect
