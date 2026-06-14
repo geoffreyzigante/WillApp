@@ -366,6 +366,45 @@ if (bgUploaderEmitter) {
   });
 }
 
+// === Thermal monitor (Phase B2) ===
+// ProcessInfo.thermalState : nominal / fair / serious / critical.
+// On adapte CONCURRENCY upload pour soulager le NPU/CPU sur events 4h+ :
+// nominal/fair -> 3, serious -> 2, critical -> 1. La capture reste a cadence
+// pleine -- on prefere ralentir le drain qu'avoir un thermal shutdown camera.
+const ThermalMonitorModule = NativeModules.ThermalMonitor;
+const hasThermalMonitor = !!(ThermalMonitorModule && ThermalMonitorModule.getThermalState);
+const thermalEmitter = hasThermalMonitor
+  ? new NativeEventEmitter(ThermalMonitorModule)
+  : null;
+// State partage module-level : lu par drainQueue (CONCURRENCY dynamique).
+// Default 'nominal' pour ne pas penaliser le drain au demarrage avant le
+// 1er read async.
+let currentThermalState = 'nominal';
+function concurrencyForThermal(state) {
+  switch (state) {
+    case 'critical': return 1;
+    case 'serious': return 2;
+    case 'fair':
+    case 'nominal':
+    default: return 3;
+  }
+}
+if (thermalEmitter) {
+  thermalEmitter.addListener('ThermalStateChanged', (evt) => {
+    if (evt && typeof evt.state === 'string') {
+      const prev = currentThermalState;
+      currentThermalState = evt.state;
+      if (prev !== evt.state) {
+        console.log(`[thermal] ${prev} -> ${evt.state} (CONCURRENCY=${concurrencyForThermal(evt.state)})`);
+      }
+    }
+  });
+  // Init async, ne bloque pas
+  ThermalMonitorModule.getThermalState()
+    .then(({ state }) => { if (state) currentThermalState = state; })
+    .catch(() => {});
+}
+
 const UPLOAD_QUEUE_KEY = '@will_upload_queue';
 const LAST_CAPTURE_KEY = '@will_last_capture_at';
 const PENDING_DIR_NAME = 'will_pending';
@@ -5890,10 +5929,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       drainStartTotalRef.current = uploadable.length;
       if (isMountedRef.current) setDrainStartTotal(uploadable.length);
 
-      // CONCURRENCY 3 : compromis entre debit utile (3 connexions saturent
-      // un 4G/5G correct) et battery / thermal (4 workers en parallele
-      // chauffent le NPU/CPU plus vite). Conforme au brief Phase 2.
-      const CONCURRENCY = 3;
+      // CONCURRENCY 3 par defaut, adapte dynamiquement selon ProcessInfo.thermalState :
+      //   nominal/fair -> 3 (debit utile, 4G/5G correct)
+      //   serious      -> 2 (CPU/GPU throttling actif, on soulage)
+      //   critical     -> 1 (proche shutdown iOS, on minimise)
+      // currentThermalState est mis a jour par le listener module-level ;
+      // si le module natif n'est pas dispo, reste 'nominal' = 3.
+      const CONCURRENCY = concurrencyForThermal(currentThermalState);
       let cursor = 0;
       // mark all as uploading upfront so UI reflète. MERGE-COMMIT (pas
       // overwrite) : on lit queueRef.current AU MOMENT DU COMMIT et on
