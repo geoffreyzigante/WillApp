@@ -60,11 +60,6 @@ class BackgroundUploader: RCTEventEmitter, URLSessionDataDelegate, URLSessionTas
     // Si pas de reseau au moment du enqueue, iOS attend qu'il revienne au
     // lieu de fail. Combine au backoff JS = recovery quasi automatique.
     config.waitsForConnectivity = true
-    // HTTP/3 (QUIC) : iOS 15+ auto-negocie avec Cloudflare R2 qui le
-    // supporte. -30 pourcent latency handshake en 4G mauvaise.
-    if #available(iOS 15.0, *) {
-      config.assumesHTTP3Capable = true
-    }
     return URLSession(configuration: config, delegate: self, delegateQueue: nil)
   }()
 
@@ -184,6 +179,11 @@ class BackgroundUploader: RCTEventEmitter, URLSessionDataDelegate, URLSessionTas
     var req = URLRequest(url: url)
     req.httpMethod = "PUT"
     for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+    // HTTP/3 (QUIC) auto-negocie avec Cloudflare R2 qui le supporte.
+    // -30 pourcent latency handshake en 4G mauvaise. iOS 14.5+ requis.
+    if #available(iOS 14.5, *) {
+      req.assumesHTTP3Capable = true
+    }
     let task = session.uploadTask(with: req, fromFile: fileUrl)
     // Insertion AVANT resume() : sinon didSendBodyData peut arriver avant que
     // le mapping soit en place (delegate sur queue distincte cote URLSession).
@@ -302,7 +302,6 @@ class BackgroundUploader: RCTEventEmitter, URLSessionDataDelegate, URLSessionTas
   }
 }
 
-// Bridge des types RN -- redeclaration locale (cf PhotoMetadataBurner.swift)
-// pour eviter le bridging header.
-private typealias RCTPromiseResolveBlock = (Any?) -> Void
-private typealias RCTPromiseRejectBlock = (String?, String?, Error?) -> Void
+// Note : les typealias RCTPromiseResolveBlock / RCTPromiseRejectBlock sont
+// declares au niveau module dans PhotoMetadataBurner.swift (internal). On les
+// reutilise tels quels -- redeclaration causerait "invalid redeclaration".

@@ -81,6 +81,5 @@ class ThermalMonitor: RCTEventEmitter {
   }
 }
 
-// Bridge types -- cf PhotoMetadataBurner.swift / BackgroundUploader.swift
-private typealias RCTPromiseResolveBlock = (Any?) -> Void
-private typealias RCTPromiseRejectBlock = (String?, String?, Error?) -> Void
+// Typealias RCTPromise* declares au niveau module dans PhotoMetadataBurner.swift.
+// Pas de redeclaration ici (cause "invalid redeclaration").
