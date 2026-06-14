@@ -86,7 +86,8 @@
       "./plugins/with-exposure-reader",
       "./plugins/with-shutter-lock",
       "./plugins/with-photo-metadata-burner",
-      "./plugins/with-heic-capture"
+      "./plugins/with-heic-capture",
+      "./plugins/with-background-uploader"
     ]
   }
 }

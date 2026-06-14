@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  AppState, Share, NativeModules, PanResponder, LayoutAnimation,
+  AppState, Share, NativeModules, NativeEventEmitter, PanResponder, LayoutAnimation,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -339,6 +339,33 @@ async function migrateSensitiveKeysToSecureStore() {
 // drainQueue ne touche que les items processed=true. processQueue ne touche
 // que les items processed=false. Les deux peuvent tourner en parallele sans
 // se marcher dessus.
+
+// === Background URLSession uploader (Phase B1) ===
+// Module natif iOS BackgroundUploader (cf plugins/BackgroundUploader.swift) :
+// les uploads PUT R2 sont delegues a URLSession.background -- iOS continue
+// meme app minimisee/suspended, streaming depuis le fichier (zero blob RAM).
+// Si le module n'est pas disponible (Expo Go / build sans plugin), on retombe
+// sur fetch comme aujourd'hui.
+const BackgroundUploaderModule = NativeModules.BackgroundUploader;
+const hasBackgroundUploader = !!(BackgroundUploaderModule && BackgroundUploaderModule.enqueueUpload);
+const bgUploaderEmitter = hasBackgroundUploader
+  ? new NativeEventEmitter(BackgroundUploaderModule)
+  : null;
+// Mapping global itemId -> { resolve, reject } pour faire le pont entre
+// l'event natif BackgroundUploaderComplete et le worker JS qui await sur
+// le resultat. Module-level (pas useRef) pour survivre aux re-renders et
+// au cas ou un upload finit juste apres unmount.
+const pendingBgUploads = new Map();
+if (bgUploaderEmitter) {
+  bgUploaderEmitter.addListener('BackgroundUploaderComplete', (evt) => {
+    const { itemId, success, statusCode, error } = evt || {};
+    const pending = pendingBgUploads.get(itemId);
+    if (!pending) return;
+    pendingBgUploads.delete(itemId);
+    pending.resolve({ ok: !!success, status: statusCode || 0, error: error || null });
+  });
+}
+
 const UPLOAD_QUEUE_KEY = '@will_upload_queue';
 const LAST_CAPTURE_KEY = '@will_last_capture_at';
 const PENDING_DIR_NAME = 'will_pending';
@@ -5039,6 +5066,41 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     };
   }, []);
 
+  // BackgroundUploader : listener Complete pour les uploads en cours qui
+  // survivent a un cold start. Le wrapper Promise dans le worker drainQueue
+  // resout les uploads "actifs" de la session JS courante (via pendingBgUploads),
+  // mais un upload encore en cours iOS apres restart n'a pas de promise pending.
+  // Ce listener applique le resultat directement a queueRef pour ces cas-la.
+  useEffect(() => {
+    if (!bgUploaderEmitter) return;
+    const sub = bgUploaderEmitter.addListener('BackgroundUploaderComplete', (evt) => {
+      const { itemId, success, statusCode } = evt || {};
+      if (!itemId) return;
+      // Si une promise pending existe, le wrapper drainQueue gere -- skip.
+      if (pendingBgUploads.has(itemId)) return;
+      // Sinon : reconcile direct queueRef. Trouve l'item, applique le succes
+      // ou bumpe les retries.
+      const cur = queueRef.current;
+      const idx = cur.findIndex(it => it.id === itemId);
+      if (idx === -1) return;
+      const item = cur[idx];
+      const ok = !!success && statusCode >= 200 && statusCode < 300;
+      if (ok) {
+        try { new File(item.localUri).delete(); } catch {}
+        uploadedCountRef.current += 1;
+        if (isMountedRef.current) setUploadedCount(uploadedCountRef.current);
+        const next = cur.filter((_, i) => i !== idx);
+        commitQueue(next);
+      } else {
+        const updated = nextRetryState(item, MAX_RETRIES_DEFAULT);
+        const next = cur.map((it, i) => i === idx ? updated : it);
+        commitQueue(next);
+        scheduleRetryTick();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // Reagit au level/state : pause capture si <10% ET pas en charge.
   useEffect(() => {
     const charging = batteryState === Battery.BatteryState.CHARGING
@@ -5205,6 +5267,20 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     (async () => {
       ensurePendingDir();
       const arr = await loadUploadQueue();
+      // Reconcile BackgroundUploader : ces itemIds sont encore en cours cote
+      // iOS (URLSession.background survit aux restarts JS). On preserve leur
+      // status 'uploading' au lieu de reset a 'pending' -- sinon le drain JS
+      // les enqueue une 2e fois cote iOS = doublon.
+      let activeBgItemIds = new Set();
+      if (hasBackgroundUploader) {
+        try {
+          const { activeItemIds } = await BackgroundUploaderModule.getActiveUploads();
+          activeBgItemIds = new Set(Array.isArray(activeItemIds) ? activeItemIds : []);
+          if (activeBgItemIds.size > 0) {
+            console.log(`[BackgroundUploader] reconcile: ${activeBgItemIds.size} uploads encore actifs cote iOS`);
+          }
+        } catch (e) { console.warn('getActiveUploads', e?.message); }
+      }
       // Photos d'un autre event (ou sans eventCode) : on les purge silencieusement
       // pour eviter qu'un photographe qui change d'event voie l'ancienne session.
       const currentEvent = session?.event?.code;
@@ -5231,7 +5307,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         }
         // recovery: 'uploading' (drain interrompu) -> 'pending', cooldown reset
         // pour partir au prochain tick. Idem 'processing' (worker burn interrompu).
-        if (it.status === 'uploading' || it.status === 'processing') {
+        // EXCEPTION : si l'itemId est encore actif dans URLSession background,
+        // on preserve 'uploading' -- l'event Complete arrivera quand iOS finit.
+        if (it.status === 'uploading' && activeBgItemIds.has(it.id)) {
+          cleaned.push(it);
+        } else if (it.status === 'uploading' || it.status === 'processing') {
           cleaned.push({ ...it, status: 'pending', nextAttemptAt: null });
         } else {
           cleaned.push(it);
@@ -5850,15 +5930,37 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             continue;
           }
           try {
-            const blob = await (await fetch(item.localUri)).blob();
             const headers = {
               'Content-Type': item.isRaw ? 'image/x-adobe-dng' : 'image/heic',
               Authorization: `Bearer ${session.token}`,
             };
             if (item.race) headers['X-Will-Race'] = String(item.race);
             if (item.km) headers['X-Will-Km'] = String(item.km);
-            const res = await fetch(`${API_URL}/${item.key}`, { method: 'PUT', headers, body: blob });
-            if (res.ok) {
+            const uploadUrl = `${API_URL}/${item.key}`;
+
+            // Voie native iOS si dispo : streaming depuis fichier (zero blob
+            // RAM), HTTP/3, iOS gere le transfer meme app minimisee. L'enqueue
+            // resolve immediatement (task creee), on attend le resultat via
+            // event BackgroundUploaderComplete dispatchee dans pendingBgUploads.
+            // Fallback fetch si module absent (dev sans build natif).
+            let result;
+            if (hasBackgroundUploader) {
+              result = await new Promise((resolve, reject) => {
+                pendingBgUploads.set(item.id, { resolve, reject });
+                BackgroundUploaderModule
+                  .enqueueUpload(uploadUrl, item.localUri, headers, item.id)
+                  .catch((e) => {
+                    pendingBgUploads.delete(item.id);
+                    reject(e);
+                  });
+              });
+            } else {
+              const blob = await (await fetch(item.localUri)).blob();
+              const res = await fetch(uploadUrl, { method: 'PUT', headers, body: blob });
+              result = { ok: res.ok, status: res.status, error: null };
+            }
+
+            if (result.ok) {
               // succès → delete fichier local + drop item + bump "Uploadees"
               // (verite R2 cote app : on n'incremente QUE sur PUT 200 OK).
               try { new File(item.localUri).delete(); } catch {}
@@ -5866,12 +5968,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               uploadedCountRef.current += 1;
               if (isMountedRef.current) setUploadedCount(uploadedCountRef.current);
               if (verbose) {
-                const m = `[upload] OK ${item.id} (key=${item.key})`;
+                const m = `[upload] OK ${item.id} (key=${item.key}) via=${hasBackgroundUploader ? 'bg' : 'fetch'}`;
                 console.log(m); addDebugLog(m);
               }
             } else {
               const updated = nextRetryState(item, maxRetries);
-              const m = `[upload] HTTP ${res.status} ${item.id} -> retries=${updated.retries}, next=${updated.nextAttemptAt ?? 'never'}`;
+              const m = `[upload] HTTP ${result.status} ${item.id} -> retries=${updated.retries}, next=${updated.nextAttemptAt ?? 'never'}${result.error ? ` err=${result.error}` : ''}`;
               if (verbose) console.warn(m);
               addDebugLog(m);
               arr[i] = updated;
@@ -5943,6 +6045,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     const target = queueRef.current.find(it => it.id === id);
     if (target) {
       try { new File(target.localUri).delete(); } catch {}
+    }
+    // Si une task BackgroundUploader est encore en cours pour cet item, on
+    // la cancel cote iOS pour eviter qu'elle finisse en zombie.
+    if (hasBackgroundUploader) {
+      try { await BackgroundUploaderModule.cancelUpload(id); } catch {}
+    }
+    // Resout la promise pending eventuelle pour debloquer un worker JS.
+    const pending = pendingBgUploads.get(id);
+    if (pending) {
+      pendingBgUploads.delete(id);
+      pending.resolve({ ok: false, status: 0, error: 'cancelled by user' });
     }
     const next = queueRef.current.filter(it => it.id !== id);
     await commitQueue(next);
