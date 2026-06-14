@@ -91,6 +91,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { Paths, File, Directory } from 'expo-file-system';
 import * as Updates from 'expo-updates';
 import { useKeepAwake } from 'expo-keep-awake';
+import * as Battery from 'expo-battery';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
 // (EAS preview channel). En production, le bouton ⚙️ est masque pour ne pas
@@ -4567,6 +4568,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // upload tournent en continu 4-5h sans interruption. Auto-deactive au
   // unmount du screen (retour Home / logout).
   useKeepAwake();
+  // Monitoring batterie : auto-pause capture si <10% ET pas branche, pour
+  // laisser 10-20 min de marge pour drainer la queue avant kill iOS. Affiche
+  // aussi le % dans le header (utile au benevole sur le terrain).
+  const [batteryLevel, setBatteryLevel] = useState(1);
+  const [batteryState, setBatteryState] = useState(Battery.BatteryState.UNKNOWN);
   const { hasPermission, requestPermission } = useCameraPermission();
   // Audit B13 : si iOS a deja denied une fois, requestPermission() devient
   // inerte. On bascule le bouton vers Linking.openSettings() quand on
@@ -4865,6 +4871,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // plus bas, base sur le meme shutter median que le voyant.
   const capSecondsSV = useMemo(() => Worklets.createSharedValue(0.002), []);
   const brightnessLabelSV = useMemo(() => Worklets.createSharedValue('init'), []);
+  // Cadence dynamique Vision : 0 = normal (skip 1/3 -> ~10 fps analyse), 1 = idle
+  // (skip 1/6 -> ~5 fps). Bascule en idle apres IDLE_AFTER_MS sans visage detecte
+  // pour economiser CPU/NPU + thermal sur event long. Retour immediat a normal
+  // des qu'un visage est vu (cf onHumansDetectedJS).
+  const idleModeSV = useMemo(() => Worklets.createSharedValue(0), []);
 
   // Caméra ancrée juste sous le header (au lieu de absoluteFill + letterbox 4:3
   // qui laissait un grand vide noir entre le header et l'image visible sur les
@@ -4921,6 +4932,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     [],
   );
 
+  // Idle threshold avant de passer en cadence Vision reduite. 30s : large
+  // marge pour ne pas rater un coureur isole qui arrive apres une accalmie.
+  const IDLE_AFTER_MS = 30000;
+  const idleTimeoutRef = useRef(null);
+
   const onHumansDetectedJS = useMemo(
     () => Worklets.createRunOnJS((count) => {
       // Met à jour faceInZoneRef à CHAQUE frame analysée (count>=1 OU 0) et
@@ -4931,6 +4947,22 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       if (!isDetectionEnabledRef.current) return;
       frameSeqRef.current += 1;
       faceInZoneRef.current = count > 0;
+      // Cadence Vision dynamique : visage detecte -> repasse immediatement
+      // a 10 fps. Si pas de visage -> arme un timeout 30s qui bascule en idle
+      // (5 fps Vision) jusqu'au prochain visage. Le worklet lit idleModeSV
+      // a chaque frame pour ajuster le skip mod.
+      if (count > 0) {
+        if (idleTimeoutRef.current) {
+          clearTimeout(idleTimeoutRef.current);
+          idleTimeoutRef.current = null;
+        }
+        if (idleModeSV.value !== 0) idleModeSV.value = 0;
+      } else if (!idleTimeoutRef.current && idleModeSV.value === 0) {
+        idleTimeoutRef.current = setTimeout(() => {
+          idleTimeoutRef.current = null;
+          idleModeSV.value = 1;
+        }, IDLE_AFTER_MS);
+      }
       if (!isAutoArmedRef.current) return;
       if (!faceInZoneRef.current) return;
       if (burstLoopRef.current) return;
@@ -4953,6 +4985,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         clearTimeout(retryTickTimeoutRef.current);
         retryTickTimeoutRef.current = null;
       }
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+        idleTimeoutRef.current = null;
+      }
     };
   }, [hasPermission]);
 
@@ -4969,6 +5005,57 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       Animated.timing(badgePulse, { toValue: 1, duration: 200, useNativeDriver: true }).start();
     }
   }, [isShooting]);
+
+  // Battery monitoring : init + listeners.
+  // Threshold 10% : pause capture (mais drain continue tant que possible) +
+  // alerte one-shot par session. Auto-restart si le benevole branche un
+  // powerbank apres la pause. throttle 5 min entre 2 alertes batterie pour
+  // ne pas spammer si le niveau oscille autour du seuil.
+  const lastBatteryWarnAtRef = useRef(0);
+  const BATTERY_PAUSE_THRESHOLD = 0.10;
+  useEffect(() => {
+    let levelSub = null;
+    let stateSub = null;
+    (async () => {
+      try {
+        const lvl = await Battery.getBatteryLevelAsync();
+        const st = await Battery.getBatteryStateAsync();
+        if (!isMountedRef.current) return;
+        setBatteryLevel(lvl);
+        setBatteryState(st);
+      } catch (e) { console.warn('battery init', e?.message); }
+      levelSub = Battery.addBatteryLevelListener(({ batteryLevel: lvl }) => {
+        if (!isMountedRef.current) return;
+        setBatteryLevel(lvl);
+      });
+      stateSub = Battery.addBatteryStateListener(({ batteryState: st }) => {
+        if (!isMountedRef.current) return;
+        setBatteryState(st);
+      });
+    })();
+    return () => {
+      try { levelSub?.remove?.(); } catch {}
+      try { stateSub?.remove?.(); } catch {}
+    };
+  }, []);
+
+  // Reagit au level/state : pause capture si <10% ET pas en charge.
+  useEffect(() => {
+    const charging = batteryState === Battery.BatteryState.CHARGING
+                  || batteryState === Battery.BatteryState.FULL;
+    if (batteryLevel <= BATTERY_PAUSE_THRESHOLD && !charging && isAutoArmedRef.current) {
+      isAutoArmedRef.current = false;
+      setIsAutoArmed(false);
+      const now = Date.now();
+      if (now - lastBatteryWarnAtRef.current > 5 * 60 * 1000) {
+        lastBatteryWarnAtRef.current = now;
+        Alert.alert(
+          'Batterie faible',
+          `${Math.round(batteryLevel * 100)}% restant. Capture pausee pour laisser l'upload finir. Branche un powerbank pour reprendre.`,
+        );
+      }
+    }
+  }, [batteryLevel, batteryState]);
 
   useEffect(() => {
     Animated.sequence([
@@ -5042,7 +5129,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       if (exp && exp.iso) onExposureSampleJS(exp);
     }
 
-    frameSkipSV.value = (frameSkipSV.value + 1) % 3;
+    // Skip dynamique : 1/3 (10 fps) en normal, 1/6 (5 fps) en idle.
+    // idleModeSV est togglee par onHumansDetectedJS (cf timeout 30s).
+    const skipMod = idleModeSV.value === 1 ? 6 : 3;
+    frameSkipSV.value = (frameSkipSV.value + 1) % skipMod;
     if (frameSkipSV.value !== 0) return;
     const result = detectHumans(frame, {
       zoneWidthPercent: zoneSV.value,
@@ -5050,7 +5140,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     });
     const count = result?.count ?? 0;
     onHumansDetectedJS(count);
-  }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV]);
+  }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV, idleModeSV]);
 
   // === Mode offline-first : queue persistante ===
   // - Photos copiées dans Paths.document/will_pending/ (survit au kill app)
