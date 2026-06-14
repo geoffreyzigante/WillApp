@@ -114,6 +114,7 @@ import {
   extractIdx,
   raceTitle,
   raceTitleFromPhoto,
+  detectPhotoExtension,
 } from './src/utils/photo';
 import {
   pendingDir,
@@ -143,6 +144,13 @@ import {
   getCurrentThermalState,
 } from './src/services/thermalMonitor';
 import { C, TYPE_COLORS, colorForType } from './src/constants/colors';
+import {
+  cartChangeListeners,
+  emitCartChange,
+  setCurrentRunnerSession,
+  getCurrentRunnerSession,
+  pushCartToBackend,
+} from './src/services/cart';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
 // (EAS preview channel). En production, le bouton ⚙️ est masque pour ne pas
@@ -151,32 +159,12 @@ const IS_PREVIEW_OR_DEV = __DEV__ || Updates.channel === 'preview';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-// ─── PANIER : prix unitaire + emitter pour sync cross-component ───────
-// Le cart vit en AsyncStorage (cle `will:cart:{eventCode}`) mais doit
-// rester en phase entre PhotoViewerModal (qui le mute) et EventDetail
-// (qui affiche le CTA + la modale). L emitter notifie les consumers
-// quand une mutation locale a lieu, declenchant un refetch dans les
-// composants qui montent useCart().
-const cartChangeListeners = new Set();
-function emitCartChange() { cartChangeListeners.forEach((fn) => { try { fn(); } catch {} }); }
-
-// Reference module-scope vers la session runner courante. Pilote par App
-// via setCurrentRunnerSession() a chaque changement de runnerSession. Permet
-// aux hooks useCart/useAllCarts (qui n ont pas l auth en props) de pousser
-// vers le backend /runner/cart quand l user est authentifie.
-let _runnerSessionRef = null;
-function setCurrentRunnerSession(s) { _runnerSessionRef = s || null; }
-function getCurrentRunnerSession() { return _runnerSessionRef; }
-
-function pushCartToBackend(eventCode, keys) {
-  const s = getCurrentRunnerSession();
-  if (!s?.token || !eventCode) return;
-  fetch(`${API_URL}/runner/cart/${encodeURIComponent(eventCode)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.token}` },
-    body: JSON.stringify({ keys: Array.isArray(keys) ? keys : [] }),
-  }).catch(() => {});
-}
+// ─── PANIER ───
+// Helpers module-level (cartChangeListeners, emitCartChange,
+// setCurrentRunnerSession, getCurrentRunnerSession, pushCartToBackend)
+// -> src/services/cart.js
+// useCart / useAllCarts ci-dessous restent pour l'instant : ils utilisent
+// du React state qui est plus tendu a extraire sans test iPhone.
 
 function useCart(eventCode) {
   const [cart, setCart] = useState([]);
@@ -763,26 +751,6 @@ class GridErrorBoundary extends React.Component {
 
 // ---------- HELPERS ----------
 
-// Détecte l'extension d'une photo depuis l'URL (puis HEAD si absent).
-// MediaLibrary.saveToLibraryAsync exige un fichier local nommé avec une
-// extension valide, sinon échoue avec "Could not get the file's extension".
-async function detectPhotoExtension(url) {
-  const fromUrl = String(url || '').match(/\.(jpe?g|png|heic|heif|dng|webp)(\?|#|$)/i);
-  if (fromUrl) {
-    const e = fromUrl[1].toLowerCase();
-    return e === 'jpeg' ? 'jpg' : e;
-  }
-  try {
-    const r = await fetch(url, { method: 'HEAD' });
-    const ct = (r.headers.get('content-type') || '').toLowerCase();
-    if (ct.includes('heic') || ct.includes('heif')) return 'heic';
-    if (ct.includes('png')) return 'png';
-    if (ct.includes('x-adobe-dng') || ct.includes('dng')) return 'dng';
-    if (ct.includes('webp')) return 'webp';
-    if (ct.includes('jpeg') || ct.includes('jpg')) return 'jpg';
-  } catch {}
-  return 'jpg';
-}
 
 // ---------- API ----------
 const api = {

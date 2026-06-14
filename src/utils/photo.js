@@ -45,3 +45,24 @@ export function raceTitleFromPhoto(p) {
   if (!p || p.race === null || p.race === undefined || p.race === '') return '';
   return raceTitle({ label: p.race_label, label_only: p.race_label_only, km: p.race });
 }
+
+// Detecte l'extension d'une photo depuis l'URL (puis HEAD si absent).
+// MediaLibrary.saveToLibraryAsync exige un fichier local nomme avec une
+// extension valide, sinon echoue avec "Could not get the file's extension".
+export async function detectPhotoExtension(url) {
+  const fromUrl = String(url || '').match(/\.(jpe?g|png|heic|heif|dng|webp)(\?|#|$)/i);
+  if (fromUrl) {
+    const e = fromUrl[1].toLowerCase();
+    return e === 'jpeg' ? 'jpg' : e;
+  }
+  try {
+    const r = await fetch(url, { method: 'HEAD' });
+    const ct = (r.headers.get('content-type') || '').toLowerCase();
+    if (ct.includes('heic') || ct.includes('heif')) return 'heic';
+    if (ct.includes('png')) return 'png';
+    if (ct.includes('x-adobe-dng') || ct.includes('dng')) return 'dng';
+    if (ct.includes('webp')) return 'webp';
+    if (ct.includes('jpeg') || ct.includes('jpg')) return 'jpg';
+  } catch {}
+  return 'jpg';
+}
