@@ -93,13 +93,27 @@ import * as Updates from 'expo-updates';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Battery from 'expo-battery';
 
+import { API_URL, R2_PUBLIC, PRICE_PER_PHOTO_EUR } from './src/constants/api';
+import {
+  UPLOAD_QUEUE_KEY,
+  LAST_CAPTURE_KEY,
+  PENDING_DIR_NAME,
+  RAW_SUBDIR,
+  PROCESSED_SUBDIR,
+  COVERS_DIR_NAME,
+  MAX_RETRIES_DEFAULT,
+  STORAGE_WARN_BYTES,
+  DISK_LOW_BYTES,
+  QUEUE_WARN_THRESHOLD,
+  MAX_QUEUE_SIZE,
+  retryDelayMs,
+} from './src/constants/queue';
+
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
 // (EAS preview channel). En production, le bouton ⚙️ est masque pour ne pas
 // laisser fuiter des toggles internes a l'utilisateur final.
 const IS_PREVIEW_OR_DEV = __DEV__ || Updates.channel === 'preview';
 
-const API_URL = 'https://will-api.geoffreyzigante.workers.dev';
-const R2_PUBLIC = 'https://pub-f9a5894e66a44f8cbb34582302930449.r2.dev';
 const { width: SCREEN_W } = Dimensions.get('window');
 
 // ─── PANIER : prix unitaire + emitter pour sync cross-component ───────
@@ -108,7 +122,6 @@ const { width: SCREEN_W } = Dimensions.get('window');
 // (qui affiche le CTA + la modale). L emitter notifie les consumers
 // quand une mutation locale a lieu, declenchant un refetch dans les
 // composants qui montent useCart().
-const PRICE_PER_PHOTO_EUR = 1;
 const cartChangeListeners = new Set();
 function emitCartChange() { cartChangeListeners.forEach((fn) => { try { fn(); } catch {} }); }
 
@@ -405,29 +418,6 @@ if (thermalEmitter) {
     .catch(() => {});
 }
 
-const UPLOAD_QUEUE_KEY = '@will_upload_queue';
-const LAST_CAPTURE_KEY = '@will_last_capture_at';
-const PENDING_DIR_NAME = 'will_pending';
-const RAW_SUBDIR = 'raw';            // capture brute + sidecar JSON
-const PROCESSED_SUBDIR = 'processed'; // post-enhance/burn/encode, pret upload
-const COVERS_DIR_NAME = 'will_event_covers';
-const MAX_RETRIES_DEFAULT = 5;
-const STORAGE_WARN_BYTES = 5 * 1024 * 1024 * 1024; // 5 Go pendingDir
-const DISK_LOW_BYTES = 1 * 1024 * 1024 * 1024;     // 1 Go iPhone restant
-// Seuil au-dela duquel on previent le photographe que sa queue grossit
-// (throttle 5 min, ne bloque rien). Cale a la moitie de MAX_QUEUE_SIZE :
-// suffisamment haut pour ne pas spammer en event 4G lente normale, mais
-// laisse marge avant le FIFO drop.
-const QUEUE_WARN_THRESHOLD = 500;
-// Plafond dur de la queue : au-dela, on FIFO-drop les plus anciens 'pending'/
-// 'failed' (jamais 'uploading') pour eviter qu'un evenement long sans reseau
-// ne sature le stockage. 1000 photos × ~5 Mo HEIC ≈ 5 Go disque, aligne sur
-// STORAGE_WARN_BYTES. Couvre un peloton dense entier meme avec 4G saturee.
-const MAX_QUEUE_SIZE = 1000;
-// Backoff exponentiel borne : delai (ms) avant retry #n. Plafonne a 8s.
-function retryDelayMs(retries) {
-  return Math.min(2000 * Math.pow(2, Math.max(0, retries - 1)), 8000);
-}
 
 function pendingDir() {
   return new Directory(Paths.document, PENDING_DIR_NAME);
