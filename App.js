@@ -59,18 +59,6 @@ function readExposure(frame, options) {
 // 30 fps) : on ne descend jamais sous quelques 1/30s, l'auto-expo monte
 // l'ISO a la place. Donc tjrs format "1/N" en pratique, mais on garde
 // le cas >= 1s par securite (jamais vu sur preview video).
-function formatShutter(seconds) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
-  if (seconds >= 1) return `${seconds.toFixed(1)}s`;
-  return `1/${Math.round(1 / seconds)}`;
-}
-// EV BrightnessValue : peut etre negatif (faible lumiere) ou positif
-// (plein jour). Affichage avec signe explicite pour lecture rapide.
-function formatEV(ev) {
-  if (!Number.isFinite(ev)) return '—';
-  const sign = ev >= 0 ? '+' : '−';
-  return `EV ${sign}${Math.abs(ev).toFixed(1)}`;
-}
 import { GestureHandlerRootView, GestureDetector, Gesture } from 'react-native-gesture-handler';
 import ReAnimated, {
   useSharedValue,
@@ -108,6 +96,25 @@ import {
   MAX_QUEUE_SIZE,
   retryDelayMs,
 } from './src/constants/queue';
+import {
+  formatShutter,
+  formatEV,
+  formatTimeAgo,
+  MONTHS_FULL,
+  MONTHS_SHORT,
+  formatDateLong,
+  formatDateForForm,
+  isUpcoming,
+  displayEventType,
+  cityLabel,
+} from './src/utils/format';
+import {
+  generateItemId,
+  extractBurstTs,
+  extractIdx,
+  raceTitle,
+  raceTitleFromPhoto,
+} from './src/utils/photo';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
 // (EAS preview channel). En production, le bouton ⚙️ est masque pour ne pas
@@ -519,23 +526,6 @@ async function cacheEventCover(eventCode, remoteUrl) {
   }
 }
 
-// "Il y a 3 min", "Il y a 2 h", "Hier", "Le 11 mai" — pour alerte de reprise.
-function formatTimeAgo(ts) {
-  if (!ts) return '';
-  const diff = Date.now() - ts;
-  if (diff < 60_000) return 'il y a quelques secondes';
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return `il y a ${mins} min`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `il y a ${hours} h`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return 'hier';
-  if (days < 7) return `il y a ${days} jours`;
-  try {
-    const d = new Date(ts);
-    return `le ${d.getDate()}/${d.getMonth() + 1}`;
-  } catch { return ''; }
-}
 
 async function loadUploadQueue() {
   try {
@@ -583,9 +573,6 @@ function pendingDirSizeBytesCached(maxAgeMs = 30000) {
   return _pendingDirCachedBytes;
 }
 
-function generateItemId() {
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
-}
 
 // ---------- DESIGN TOKENS ----------
 const C = {
@@ -653,23 +640,6 @@ const colorForType = (eventType) => {
   return TYPE_COLORS[k] || TYPE_COLORS.autre;
 };
 
-// Label affiché pour event_type ; la valeur stockée reste sans accent ("Velo").
-const displayEventType = (t) => (t === 'Velo' ? 'Vélo' : t);
-
-// Compose le titre d'une course. label_only=true => juste le label
-// (mode nom personnalise). Sinon => `${label} ${km} km` ou `${km} km`.
-function raceTitle({ label, label_only, km } = {}) {
-  const l = (label || '').toString().trim();
-  if (label_only && l) return l;
-  if (l) return `${l} ${km} km`;
-  return `${km} km`;
-}
-
-// Titre depuis une photo (race + race_label + race_label_only).
-function raceTitleFromPhoto(p) {
-  if (!p || p.race === null || p.race === undefined || p.race === '') return '';
-  return raceTitle({ label: p.race_label, label_only: p.race_label_only, km: p.race });
-}
 
 // Pills toggle Type d epreuve / Nom personnalise dans les formulaires
 // distance (wizard step 2 + sub-modal edition).
@@ -1031,85 +1001,6 @@ class GridErrorBoundary extends React.Component {
 }
 
 // ---------- HELPERS ----------
-// Format date uppercase pour le bandeau (mono-jour) ou la plage (multi-jours).
-// Synchronisé avec dashboard/EventCard.js → formatDateMobile et la page
-// publique /event/<code> sur will-app.com. Toute modification ici doit être
-// répercutée sur les deux autres surfaces.
-const MONTHS_FULL = ['JANVIER','FÉVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOÛT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DÉCEMBRE'];
-const MONTHS_SHORT = ['JANV','FÉVR','MARS','AVR','MAI','JUIN','JUIL','AOÛT','SEPT','OCT','NOV','DÉC'];
-const formatDateLong = (iso, isoEnd) => {
-  if (!iso) return 'Date à venir';
-  const ds = new Date(iso);
-  if (isNaN(ds.getTime())) return 'Date à venir';
-  const single = (d) => `${d.getDate()} ${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`;
-  if (!isoEnd || isoEnd === iso) return single(ds);
-  const de = new Date(isoEnd);
-  if (isNaN(de.getTime())) return single(ds);
-  const sameYear = ds.getFullYear() === de.getFullYear();
-  const sameMonth = sameYear && ds.getMonth() === de.getMonth();
-  if (sameMonth) {
-    return `Du ${ds.getDate()} au ${de.getDate()} ${MONTHS_FULL[de.getMonth()]} ${de.getFullYear()}`;
-  }
-  if (sameYear) {
-    return `Du ${ds.getDate()} ${MONTHS_FULL[ds.getMonth()]} au ${de.getDate()} ${MONTHS_FULL[de.getMonth()]} ${de.getFullYear()}`;
-  }
-  return `Du ${ds.getDate()} ${MONTHS_FULL[ds.getMonth()]} ${ds.getFullYear()} au ${de.getDate()} ${MONTHS_FULL[de.getMonth()]} ${de.getFullYear()}`;
-};
-
-// Variante du format pour le champ "Date(s)" du formulaire de création d'event.
-// Sur 1 jour on préfixe par le jour de la semaine court ("VEN. 15 MAI 2026")
-// pour aider l'orga à confirmer visuellement le bon jour ; sur une plage on
-// retombe sur formatDateLong (déjà explicite avec "DU ... AU ...").
-const formatDateForForm = (iso, isoEnd) => {
-  if (!iso) return '';
-  const start = new Date(iso); start.setHours(0, 0, 0, 0);
-  if (isNaN(start.getTime())) return '';
-  if (!isoEnd || isoEnd === iso) {
-    const wd = start.toLocaleDateString('fr-FR', { weekday: 'short' }).replace(/\./g, '').toUpperCase();
-    return `${wd}. ${formatDateLong(iso, null)}`;
-  }
-  return formatDateLong(iso, isoEnd);
-};
-
-// Event "à venir / en cours" si la date de fin (ou la date de début si pas
-// d'end) n'est pas passée. Couvre les events multi-jours : tant que end >= today,
-// l'event reste dans la liste "À venir".
-const isUpcoming = (iso, isoEnd) => {
-  const ref = isoEnd || iso;
-  if (!ref) return true;
-  const d = new Date(ref);
-  if (isNaN(d.getTime())) return true;
-  return d.getTime() >= Date.now() - 86400000;
-};
-
-// Extrait le burstTs (timestamp unix ms) depuis le filename d'une photo
-// Format: {event}/{photographer}/{date}/{time}_{burstTs}_{idx}.heic
-const extractBurstTs = (key) => {
-  if (!key) return 0;
-  const filename = key.split('/').pop().replace(/\.(jpg|jpeg|png|heic|dng)$/i, '');
-  const parts = filename.split('_');
-  if (parts.length < 3) return 0;
-  const ts = parseInt(parts[parts.length - 2], 10);
-  return isNaN(ts) ? 0 : ts;
-};
-
-// Index dans le burst (0..N). Cle de tri secondaire au sein d'une rafale
-// (idx DESC -> derniere photo prise en tete de groupe, coherent avec le
-// tri principal "newest first" entre rafales).
-const extractIdx = (key) => {
-  if (!key) return 0;
-  const filename = key.split('/').pop().replace(/\.(jpg|jpeg|png|heic|dng)$/i, '');
-  const parts = filename.split('_');
-  if (parts.length < 3) return 0;
-  const idx = parseInt(parts[parts.length - 1], 10);
-  return isNaN(idx) ? 0 : idx;
-};
-
-const cityLabel = (location) => {
-  if (!location) return '';
-  // "Louviers (27400)" → "Louviers (27)"
-  return String(location).replace(/\((\d{2})\d{3}\)/, '($1)');
-};
 
 // Détecte l'extension d'une photo depuis l'URL (puis HEAD si absent).
 // MediaLibrary.saveToLibraryAsync exige un fichier local nommé avec une
