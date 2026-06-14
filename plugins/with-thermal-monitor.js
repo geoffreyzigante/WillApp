@@ -18,7 +18,8 @@ const fs = require('fs');
 const path = require('path');
 
 const PLUGIN_DIR = __dirname;
-const SWIFT_FILENAME = 'ThermalMonitor.swift';
+// Implementation ObjC pure (pas de Swift) : pas de bridging header React
+// requis dans ce projet. Cf ThermalMonitor.m pour la logique.
 const OBJC_FILENAME = 'ThermalMonitor.m';
 
 function copyPluginSources(projectRoot, iosProjectName) {
@@ -29,7 +30,7 @@ function copyPluginSources(projectRoot, iosProjectName) {
         'Le prebuild iOS a-t-il tourne ?'
     );
   }
-  for (const name of [SWIFT_FILENAME, OBJC_FILENAME]) {
+  for (const name of [OBJC_FILENAME]) {
     const src = path.join(PLUGIN_DIR, name);
     const dst = path.join(targetDir, name);
     const content = fs.readFileSync(src, 'utf8');
@@ -62,7 +63,7 @@ module.exports = function withThermalMonitor(config) {
     if (!groupKey) {
       throw new Error('[with-thermal-monitor] PBXGroup app introuvable');
     }
-    for (const name of [SWIFT_FILENAME, OBJC_FILENAME]) {
+    for (const name of [OBJC_FILENAME]) {
       const alreadyAdded = Object.values(project.pbxBuildFileSection())
         .some(bf => bf && bf.fileRef_comment === name);
       if (alreadyAdded) {
