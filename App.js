@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
-  AppState, Share, NativeModules, NativeEventEmitter, PanResponder, LayoutAnimation,
+  AppState, Share, NativeModules, PanResponder, LayoutAnimation,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -131,6 +131,17 @@ import {
   pendingDirSizeBytes,
   pendingDirSizeBytesCached,
 } from './src/services/storage';
+import {
+  BackgroundUploaderModule,
+  hasBackgroundUploader,
+  bgUploaderEmitter,
+  pendingBgUploads,
+} from './src/services/backgroundUploader';
+import {
+  hasThermalMonitor,
+  concurrencyForThermal,
+  getCurrentThermalState,
+} from './src/services/thermalMonitor';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
 // (EAS preview channel). En production, le bouton ⚙️ est masque pour ne pas
@@ -376,70 +387,10 @@ async function migrateSensitiveKeysToSecureStore() {
 // que les items processed=false. Les deux peuvent tourner en parallele sans
 // se marcher dessus.
 
-// === Background URLSession uploader (Phase B1) ===
-// Module natif iOS BackgroundUploader (cf plugins/BackgroundUploader.swift) :
-// les uploads PUT R2 sont delegues a URLSession.background -- iOS continue
-// meme app minimisee/suspended, streaming depuis le fichier (zero blob RAM).
-// Si le module n'est pas disponible (Expo Go / build sans plugin), on retombe
-// sur fetch comme aujourd'hui.
-const BackgroundUploaderModule = NativeModules.BackgroundUploader;
-const hasBackgroundUploader = !!(BackgroundUploaderModule && BackgroundUploaderModule.enqueueUpload);
-const bgUploaderEmitter = hasBackgroundUploader
-  ? new NativeEventEmitter(BackgroundUploaderModule)
-  : null;
-// Mapping global itemId -> { resolve, reject } pour faire le pont entre
-// l'event natif BackgroundUploaderComplete et le worker JS qui await sur
-// le resultat. Module-level (pas useRef) pour survivre aux re-renders et
-// au cas ou un upload finit juste apres unmount.
-const pendingBgUploads = new Map();
-if (bgUploaderEmitter) {
-  bgUploaderEmitter.addListener('BackgroundUploaderComplete', (evt) => {
-    const { itemId, success, statusCode, error } = evt || {};
-    const pending = pendingBgUploads.get(itemId);
-    if (!pending) return;
-    pendingBgUploads.delete(itemId);
-    pending.resolve({ ok: !!success, status: statusCode || 0, error: error || null });
-  });
-}
-
-// === Thermal monitor (Phase B2) ===
-// ProcessInfo.thermalState : nominal / fair / serious / critical.
-// On adapte CONCURRENCY upload pour soulager le NPU/CPU sur events 4h+ :
-// nominal/fair -> 3, serious -> 2, critical -> 1. La capture reste a cadence
-// pleine -- on prefere ralentir le drain qu'avoir un thermal shutdown camera.
-const ThermalMonitorModule = NativeModules.ThermalMonitor;
-const hasThermalMonitor = !!(ThermalMonitorModule && ThermalMonitorModule.getThermalState);
-const thermalEmitter = hasThermalMonitor
-  ? new NativeEventEmitter(ThermalMonitorModule)
-  : null;
-// State partage module-level : lu par drainQueue (CONCURRENCY dynamique).
-// Default 'nominal' pour ne pas penaliser le drain au demarrage avant le
-// 1er read async.
-let currentThermalState = 'nominal';
-function concurrencyForThermal(state) {
-  switch (state) {
-    case 'critical': return 1;
-    case 'serious': return 2;
-    case 'fair':
-    case 'nominal':
-    default: return 3;
-  }
-}
-if (thermalEmitter) {
-  thermalEmitter.addListener('ThermalStateChanged', (evt) => {
-    if (evt && typeof evt.state === 'string') {
-      const prev = currentThermalState;
-      currentThermalState = evt.state;
-      if (prev !== evt.state) {
-        console.log(`[thermal] ${prev} -> ${evt.state} (CONCURRENCY=${concurrencyForThermal(evt.state)})`);
-      }
-    }
-  });
-  // Init async, ne bloque pas
-  ThermalMonitorModule.getThermalState()
-    .then(({ state }) => { if (state) currentThermalState = state; })
-    .catch(() => {});
-}
+// Background URLSession (Phase B1) et ThermalMonitor (Phase B2) sont
+// initialises au module-load dans src/services/backgroundUploader.js et
+// src/services/thermalMonitor.js (cf imports en haut du fichier). Les
+// listeners natifs sont attaches une fois pour toute, partages cross-render.
 
 
 
@@ -5686,9 +5637,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       //   nominal/fair -> 3 (debit utile, 4G/5G correct)
       //   serious      -> 2 (CPU/GPU throttling actif, on soulage)
       //   critical     -> 1 (proche shutdown iOS, on minimise)
-      // currentThermalState est mis a jour par le listener module-level ;
-      // si le module natif n'est pas dispo, reste 'nominal' = 3.
-      const CONCURRENCY = concurrencyForThermal(currentThermalState);
+      // L'etat est mis a jour par le listener module-level dans
+      // src/services/thermalMonitor.js. Si le module natif n'est pas dispo,
+      // reste 'nominal' = 3.
+      const CONCURRENCY = concurrencyForThermal(getCurrentThermalState());
       let cursor = 0;
       // mark all as uploading upfront so UI reflète. MERGE-COMMIT (pas
       // overwrite) : on lit queueRef.current AU MOMENT DU COMMIT et on
