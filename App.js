@@ -69,10 +69,7 @@ import ReAnimated, {
   runOnJS,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
 import Svg, { Path, Circle, Ellipse, Defs, Mask, Rect, SvgXml } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import NetInfo from '@react-native-community/netinfo';
@@ -151,6 +148,13 @@ import {
   getCurrentRunnerSession,
   pushCartToBackend,
 } from './src/services/cart';
+import {
+  SECURE_KEYS,
+  toSecureKey,
+  Secure,
+  migrateSensitiveKeysToSecureStore,
+} from './src/services/secureStore';
+import { api, ensurePushRegistered } from './src/services/api';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
 // (EAS preview channel). En production, le bouton ⚙️ est masque pour ne pas
@@ -326,39 +330,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// ─── SecureStore : stockage chiffre des sessions/consentement (M-S08) ─────
-// Cles a migrer d AsyncStorage → SecureStore : sessions runner/organizer/
-// photographer + consentement biometrique. SecureStore n accepte que
-// [A-Za-z0-9._-] : on normalise les cles "@will_*" en "will_*".
-const SECURE_KEYS = [
-  '@will_runner',
-  '@will_organizer',
-  '@will_photographer_session',
-  '@will_biometric_consent_v1',
-];
-const toSecureKey = (k) => k.replace(/^@/, 'will_');
-const Secure = {
-  getItem: (k) => SecureStore.getItemAsync(toSecureKey(k)),
-  setItem: (k, v) => SecureStore.setItemAsync(toSecureKey(k), v),
-  removeItem: (k) => SecureStore.deleteItemAsync(toSecureKey(k)),
-};
-
-// Migration one-shot au demarrage : pour chaque cle sensible, si elle existe
-// dans AsyncStorage, on la copie vers SecureStore puis on l efface. Idempotent
-// (skip si AsyncStorage vide ou SecureStore deja peuple).
-async function migrateSensitiveKeysToSecureStore() {
-  for (const k of SECURE_KEYS) {
-    try {
-      const v = await AsyncStorage.getItem(k);
-      if (v === null) continue;
-      const existing = await SecureStore.getItemAsync(toSecureKey(k));
-      if (existing === null) await SecureStore.setItemAsync(toSecureKey(k), v);
-      await AsyncStorage.removeItem(k);
-    } catch (e) {
-      console.warn('[migrate-secure]', k, e?.message || e);
-    }
-  }
-}
+// SecureStore wrapper + migration (M-S08) -> src/services/secureStore.js
 
 // Mode photographe offline-first : queue persistante d'uploads
 // + photos stockées hors-cache pour survivre au kill / nettoyage iOS.
@@ -753,108 +725,7 @@ class GridErrorBoundary extends React.Component {
 
 
 // ---------- API ----------
-const api = {
-  async getEvents() {
-    const r = await fetch(`${API_URL}/public-events`);
-    return r.ok ? r.json() : [];
-  },
-  async login(code, password, role, photographer_name) {
-    const r = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, password, role, photographer_name }),
-    });
-    if (r.ok) return r.json();
-    // Non-OK : on remonte status + error pour distinguer 429 (rate limit)
-    // de 401 (PIN incorrect). Le caller affiche le message adapte.
-    let error = '';
-    try { error = (await r.json())?.error || ''; } catch {}
-    return { status: r.status, error };
-  },
-
-  // RGPD biométrie — Suivre un event = geste de consentement explicite.
-  // 400 'selfie_required' si pas de selfie deposé → l'UI ouvre SelfieModal puis relance.
-  // Audit B14 : signature (eventCode, runnerApiFetch) - le fetcher injecte le Bearer.
-  async follow(eventCode, runnerApiFetch) {
-    const r = await runnerApiFetch(`/runner/follow/${encodeURIComponent(eventCode)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ consent: true }),
-    });
-    if (r.ok) return r.json();
-    let error = '';
-    try { error = (await r.json())?.error || ''; } catch {}
-    return { status: r.status, error };
-  },
-  async unfollow(eventCode, runnerApiFetch) {
-    const r = await runnerApiFetch(`/runner/follow/${encodeURIComponent(eventCode)}`, {
-      method: 'DELETE',
-    });
-    if (r.ok) return r.json();
-    let error = '';
-    try { error = (await r.json())?.error || ''; } catch {}
-    return { status: r.status, error };
-  },
-  // Wipe biometrique chirurgical : supprime selfie + empreintes sans toucher au compte.
-  async deleteFaceData(runnerApiFetch) {
-    const r = await runnerApiFetch(`/runner/face-data`, {
-      method: 'DELETE',
-    });
-    if (r.ok) return r.json();
-    let error = '';
-    try { error = (await r.json())?.error || ''; } catch {}
-    return { status: r.status, error };
-  },
-  // E2 — enregistre le token Expo push cote worker.
-  async registerPushToken(runnerToken, expoToken, platform) {
-    try {
-      const r = await fetch(`${API_URL}/runner/push-token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${runnerToken}` },
-        body: JSON.stringify({ token: expoToken, platform }),
-      });
-      return r.ok;
-    } catch { return false; }
-  },
-  async deletePushToken(runnerToken) {
-    try {
-      await fetch(`${API_URL}/runner/push-token`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${runnerToken}` },
-      });
-    } catch {}
-  },
-};
-
-// E2 — wrapper unique pour (a) silent re-register au boot si deja autorise,
-// (b) ask + register apres premier follow. Idempotent : iOS ne re-affiche
-// pas le prompt une fois denied (Notifications.requestPermissionsAsync
-// retourne la decision existante).
-async function ensurePushRegistered(runnerToken, { ask = false } = {}) {
-  if (!Device.isDevice) return; // simulator -> rien a faire
-  if (!runnerToken) return;
-  let { status } = await Notifications.getPermissionsAsync();
-  if (status !== 'granted') {
-    if (!ask) return; // boot silencieux : on n'embete pas le user
-    const req = await Notifications.requestPermissionsAsync();
-    status = req.status;
-    if (status !== 'granted') return;
-  }
-  const projectId = Constants?.expoConfig?.extra?.eas?.projectId
-    || Constants?.easConfig?.projectId;
-  if (!projectId) {
-    console.warn('[push] projectId introuvable dans expo.extra.eas');
-    return;
-  }
-  try {
-    const tokenObj = await Notifications.getExpoPushTokenAsync({ projectId });
-    const expoToken = tokenObj?.data;
-    if (!expoToken) return;
-    await api.registerPushToken(runnerToken, expoToken, Platform.OS);
-  } catch (e) {
-    console.warn('[push] getExpoPushTokenAsync', e?.message || e);
-  }
-}
+// api + ensurePushRegistered -> src/services/api.js
 
 // ---------- SCREENS ----------
 
