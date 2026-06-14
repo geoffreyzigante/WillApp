@@ -90,6 +90,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import NetInfo from '@react-native-community/netinfo';
 import { Paths, File, Directory } from 'expo-file-system';
 import * as Updates from 'expo-updates';
+import { useKeepAwake } from 'expo-keep-awake';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
 // (EAS preview channel). En production, le bouton ⚙️ est masque pour ne pas
@@ -346,11 +347,16 @@ const COVERS_DIR_NAME = 'will_event_covers';
 const MAX_RETRIES_DEFAULT = 5;
 const STORAGE_WARN_BYTES = 5 * 1024 * 1024 * 1024; // 5 Go pendingDir
 const DISK_LOW_BYTES = 1 * 1024 * 1024 * 1024;     // 1 Go iPhone restant
-const QUEUE_WARN_THRESHOLD = 100;
+// Seuil au-dela duquel on previent le photographe que sa queue grossit
+// (throttle 5 min, ne bloque rien). Cale a la moitie de MAX_QUEUE_SIZE :
+// suffisamment haut pour ne pas spammer en event 4G lente normale, mais
+// laisse marge avant le FIFO drop.
+const QUEUE_WARN_THRESHOLD = 500;
 // Plafond dur de la queue : au-dela, on FIFO-drop les plus anciens 'pending'/
 // 'failed' (jamais 'uploading') pour eviter qu'un evenement long sans reseau
-// ne sature le stockage. Aligne sur le brief Phase 2 (200 photos).
-const MAX_QUEUE_SIZE = 200;
+// ne sature le stockage. 1000 photos × ~5 Mo HEIC ≈ 5 Go disque, aligne sur
+// STORAGE_WARN_BYTES. Couvre un peloton dense entier meme avec 4G saturee.
+const MAX_QUEUE_SIZE = 1000;
 // Backoff exponentiel borne : delai (ms) avant retry #n. Plafonne a 8s.
 function retryDelayMs(retries) {
   return Math.min(2000 * Math.pow(2, Math.max(0, retries - 1)), 8000);
@@ -504,6 +510,20 @@ function pendingDirSizeBytes() {
     return total;
   }
   try { return walk(pendingDir()); } catch { return 0; }
+}
+
+// Version throttle pour le backpressure burst : pendingDirSizeBytes() walk
+// recursivement le dir (peut etre 1000 fichiers en pleine course), trop
+// lourd a appeler par shot. On cache la valeur 30s — assez frais pour servir
+// de circuit breaker disque sans ralentir la cadence rafale (5-7 shots/s).
+let _pendingDirCachedBytes = 0;
+let _pendingDirCachedAt = 0;
+function pendingDirSizeBytesCached(maxAgeMs = 30000) {
+  const now = Date.now();
+  if (now - _pendingDirCachedAt < maxAgeMs) return _pendingDirCachedBytes;
+  _pendingDirCachedBytes = pendingDirSizeBytes();
+  _pendingDirCachedAt = now;
+  return _pendingDirCachedBytes;
 }
 
 function generateItemId() {
@@ -4541,6 +4561,12 @@ function OverlayWheel({ items, selectedIndex, onChange }) {
 }
 
 function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch }) {
+  // Ecran toujours allume pendant la session photographe : evite que la veille
+  // iOS suspende process/drain (les fetch upload sont coupes en background).
+  // Cas terrain : benevole pose l'iPhone branche sur powerbank, capture +
+  // upload tournent en continu 4-5h sans interruption. Auto-deactive au
+  // unmount du screen (retour Home / logout).
+  useKeepAwake();
   const { hasPermission, requestPermission } = useCameraPermission();
   // Audit B13 : si iOS a deja denied une fois, requestPermission() devient
   // inerte. On bascule le bouton vers Linking.openSettings() quand on
@@ -5895,10 +5921,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // moins de parasites possibles a la sortie.
   const MAX_IN_FLIGHT = 3;
 
-  // Cap dur du pipeline (queue persistante + in-flight). Au-dela, le burst
-  // loop break -- on PREFERE rater 1 coureur a saturer la memoire. Le drain
-  // ramene le total sous le seuil avant la rafale suivante.
-  const MAX_TOTAL_IN_PIPELINE = 50;
+  // Cap dur du pipeline (queue persistante + in-flight). Aligne sur
+  // MAX_QUEUE_SIZE (1000) : on autorise la capture tant qu'on n'a pas atteint
+  // le seuil FIFO drop. Defense memoire obsolete depuis le refactor pipeline
+  // mai 2026 (les photos sont disque-backed via pendingDir/raw|processed,
+  // queueRef ne contient que ~200 octets de metadonnees par item).
+  // Le vrai garde-fou physique est le check disque ci-dessous via
+  // pendingDirSizeBytesCached > STORAGE_WARN_BYTES (5 Go).
+  const MAX_TOTAL_IN_PIPELINE = 1000;
 
   // Boucle de capture pipelinée (Palier 1, cf échange 2026-05-20).
   // Lance takePhoto SANS attendre la résolution : MAX_IN_FLIGHT captures
@@ -5938,13 +5968,26 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         // Pre-shot guard : re-check juste avant chaque lancement.
         if (!faceInZoneRef.current) break;
 
-        // Backpressure dur : si le pipeline total (queue + in-flight) atteint
-        // MAX_TOTAL_IN_PIPELINE, on stoppe la rafale -- on PREFERE rater 1
-        // coureur a saturer la memoire. Le drain ramene le total sous le
-        // seuil naturellement.
+        // Backpressure dur — deux gardes independantes :
+        //
+        // 1. Queue + in-flight atteint MAX_TOTAL_IN_PIPELINE (1000) : on est
+        //    sur le point de declencher la FIFO eviction (MAX_QUEUE_SIZE).
+        //    Plutot que d'enqueuer pour pousser une ancienne dehors, on stoppe
+        //    le burst -- la prochaine photo en captureerait une autre derriere.
+        //
+        // 2. pendingDir disque > STORAGE_WARN_BYTES (5 Go) : circuit breaker
+        //    physique. Throttle 30s (pendingDirSizeBytesCached) car walk
+        //    recursif ne doit PAS tourner par shot a 5-7 ph/s. Au-dela on
+        //    risque de saturer le disque iPhone ; mieux vaut pauser que rendre
+        //    le tel inutilisable pour le reste de la course.
         const pipelineLoad = queueRef.current.length + inFlightSetRef.current.size;
         if (pipelineLoad >= MAX_TOTAL_IN_PIPELINE) {
           console.warn(`[burst] backpressure: pipeline=${pipelineLoad}/${MAX_TOTAL_IN_PIPELINE} — pause burst`);
+          break;
+        }
+        const diskBytes = pendingDirSizeBytesCached();
+        if (diskBytes > STORAGE_WARN_BYTES) {
+          console.warn(`[burst] backpressure disque: ${(diskBytes / 1024 / 1024 / 1024).toFixed(1)} Go > 5 Go — pause burst`);
           break;
         }
 
@@ -5977,7 +6020,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       const dt = Date.now() - burstStartedAt;
       const reason = !faceInZoneRef.current ? 'face-left-zone'
                    : shotsInBurst >= MAX_BURST_SHOTS ? 'max-burst-cap'
-                   : (queueRef.current.length + inFlightSetRef.current.size) >= MAX_TOTAL_IN_PIPELINE ? 'backpressure'
+                   : (queueRef.current.length + inFlightSetRef.current.size) >= MAX_TOTAL_IN_PIPELINE ? 'backpressure-queue'
+                   : pendingDirSizeBytesCached() > STORAGE_WARN_BYTES ? 'backpressure-disk'
                    : 'disarmed';
       console.log(`[burst] launched ${shotsInBurst} shots in ${dt}ms (${reason}), inFlight=${inFlightSetRef.current.size}`);
     } finally {
