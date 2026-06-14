@@ -164,6 +164,11 @@ import {
   RefreshableScrollView,
 } from './src/components/loaders';
 import { GridErrorBoundary } from './src/components/GridErrorBoundary';
+import { SelfieIllustration } from './src/components/SelfieIllustration';
+import { PhotosStepRow } from './src/components/PhotosStepRow';
+import { FavStar } from './src/components/FavStar';
+import { SkeletonCell } from './src/components/SkeletonCell';
+import { InfoRow } from './src/components/InfoRow';
 import { s } from './src/constants/styles';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
@@ -1014,16 +1019,6 @@ function EventCard({ event, onPress, isFollowing, onToggleFollow, style }) {
 // Source: assets/Selfie.svg, inline pour eviter un require asset transform.
 // Couleur dynamique : violet primary par defaut (sur fond clair), blanc pour
 // usage sur fond violet (ex. selfie card de l accueil).
-function SelfieIllustration({ size = 128, color = '#7B2FFF' }) {
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17.61 17.61">
-  <path fill="${color}" d="M1.86,3.28c0-.77.62-1.4,1.4-1.4h4.12V0H1.4C.62,0,0,.62,0,1.4v5.98h1.86V3.28Z"/>
-  <path fill="${color}" d="M16.21,0h-5.98v1.88h4.12c.77,0,1.4.62,1.4,1.4v4.1h1.86V1.4C17.61.62,16.98,0,16.21,0Z"/>
-  <path fill="${color}" d="M15.75,13.64c0,.54-.31,1.01-.76,1.24-.23-1.89-2.9-3.38-6.18-3.38s-5.95,1.49-6.18,3.38c-.45-.23-.76-.7-.76-1.24v-3.41H0v5.98C0,16.98.62,17.61,1.4,17.61h2.84s0,0,0,0h9.12s0,0,0,0h2.84c.77,0,1.4-.62,1.4-1.4v-5.98h-1.86v3.41Z"/>
-  <path fill="${color}" d="M5.73,6.82c0,1.87,1.38,3.38,3.08,3.38s3.08-1.51,3.08-3.38-1.38-3.38-3.08-3.38-3.08,1.51-3.08,3.38Z"/>
-</svg>`;
-  return <SvgXml xml={xml} width={size} height={size} />;
-}
 
 // Ecran "Photos" quand le coureur n'est pas connecte. Explique la valeur
 // (un selfie suffit) avant de proposer l'inscription. Les CTA pointent vers
@@ -1896,42 +1891,10 @@ function PhotosEmptyState({ selfieUri, onFindEvent }) {
   );
 }
 
-function PhotosStepRow({ num, text, done = false }) {
-  return (
-    <View style={{
-      flexDirection: 'row', alignItems: 'center', gap: 12,
-      paddingVertical: 8,
-    }}>
-      <View style={{
-        width: 28, height: 28, borderRadius: 14,
-        backgroundColor: done ? C.success : '#EDE4FF',
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        {done ? (
-          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M20 6L9 17l-5-5" />
-          </Svg>
-        ) : (
-          <Text style={{ color: '#7B2FFF', fontSize: 13, fontWeight: '700' }}>{num}</Text>
-        )}
-      </View>
-      <Text style={{ flex: 1, color: '#1A1426', fontSize: 14 }}>{text}</Text>
-    </View>
-  );
-}
 
 // Icone "favori photo" = etoile (Favoris_3.svg). Distingue les favoris de
 // PHOTOS (etoile) des favoris d EVENTS (coeur) pour eviter la confusion
 // visuelle entre les deux types de favoris.
-function FavStar({ size = 16, fill = '#fff', stroke = '#fff', strokeWidth = 1.6, style }) {
-  // viewBox elargi de 2px sur chaque cote pour ne pas rogner le stroke (le
-  // path Favoris_3.svg colle les bords 0,0 -> 18.42,17.61).
-  return (
-    <Svg width={size * (22.42 / 21.61)} height={size} viewBox="-2 -2 22.42 21.61" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" style={style}>
-      <Path d="M10.09.61l1.91,5.17,5.51.22c.87.03,1.23,1.14.55,1.68l-4.33,3.42,1.5,5.31c.24.84-.7,1.52-1.43,1.04l-4.59-3.06-4.59,3.06c-.73.49-1.66-.2-1.43-1.04l1.5-5.31L.36,7.69c-.69-.54-.33-1.64.55-1.68l5.51-.22,1.91-5.17c.3-.82,1.46-.82,1.76,0Z" />
-    </Svg>
-  );
-}
 
 // Cellule d'une thumbnail : memo + onError fallback. La taille est passee
 // pour pouvoir s'adapter au numColumns du parent.
@@ -2018,29 +1981,6 @@ const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHear
 });
 
 // Cellule skeleton (pulse gris) affichee pendant le chargement initial.
-function SkeletonCell({ size }) {
-  const op = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(op, { toValue: 0.5, duration: 750, useNativeDriver: true }),
-        Animated.timing(op, { toValue: 1, duration: 750, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [op]);
-  return (
-    <Animated.View style={{
-      width: size, height: size,
-      borderRadius: 12,
-      // Violet leger brand (C.primaryLight) au lieu du gris #E5E7EB
-      // -> placeholder coherent avec l identite, page jamais blanche.
-      backgroundColor: C.primaryLight,
-      opacity: op,
-    }} />
-  );
-}
 
 function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite, selectionMode = false, selectedIds, onTogglePhotoSelect, numColumns }) {
   // Colonnes adaptatives : si numColumns fourni, on utilise. Sinon
@@ -9911,18 +9851,6 @@ function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDel
   );
 }
 
-function InfoRow({ label, value, last }) {
-  return (
-    <View style={{
-      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-      paddingVertical: 10,
-      borderBottomWidth: last ? 0 : 1, borderBottomColor: '#f0eaff',
-    }}>
-      <Text style={{ color: C.textSoft, fontSize: 14 }}>{label}</Text>
-      <Text style={{ color: C.text, fontSize: 14, fontWeight: '500', flex: 1, textAlign: 'right' }} numberOfLines={1}>{value || '—'}</Text>
-    </View>
-  );
-}
 
 function OrganizerProfileMenuModal({ visible, onClose, organizerSession, organizerApiFetch, onLogout, onUpdate, onDeleteAccount }) {
   const [editing, setEditing] = useState(false);
