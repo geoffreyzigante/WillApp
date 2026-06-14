@@ -170,6 +170,7 @@ import { FavStar } from './src/components/FavStar';
 import { SkeletonCell } from './src/components/SkeletonCell';
 import { InfoRow } from './src/components/InfoRow';
 import { SelfieBlock } from './src/components/SelfieBlock';
+import { EventCard } from './src/components/EventCard';
 import { s } from './src/constants/styles';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
@@ -836,94 +837,6 @@ function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRol
   );
 }
 
-function EventCard({ event, onPress, isFollowing, onToggleFollow, style }) {
-  const tint = colorForType(event.event_type);
-
-  return (
-    <View style={[s.eventCard, style]}>
-      {/* Layer 0 : aplat coloré solide pleine carte. Sert de fallback total
-          quand pas de cover, et de fond sous l'image (techniquement caché par
-          l'image dans ce cas, mais protège contre tout artefact d'aliasing). */}
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
-      {/* Layer 1 : cover image sur la MOITIE DROITE seulement (left:50%
-          -> right:0). La gauche reste en aplat tint pour la lisibilite du
-          texte (date / nom / lieu). */}
-      {event.cover_image ? (
-        <ExpoImage
-          source={{ uri: event.cover_image }}
-          style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', right: 0 }}
-          contentFit="cover"
-          transition={200}
-          cachePolicy="memory-disk"
-        />
-      ) : null}
-      {/* Layer 2 : gradient pleine largeur, tint 100% au seam (x=0.5) ->
-          tint 10% au bord droit. L image fade progressivement de invisible
-          (gauche) a 90% visible (droite). Meme convention que le hero de
-          la galerie publique (EventDetailScreen). */}
-      {event.cover_image ? (
-        <LinearGradient
-          colors={[tint, tint + '1A']}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          locations={[0.5, 1]}
-          style={StyleSheet.absoluteFillObject}
-          pointerEvents="none"
-        />
-      ) : null}
-      {/* Zone tactile principale (ouvre l'événement) */}
-      <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={StyleSheet.absoluteFillObject} />
-      {/* Texte par-dessus la zone tactile (pointerEvents none pour que le tap passe au TouchableOpacity en dessous) */}
-      <View style={s.eventCardCenter} pointerEvents="none">
-        <Text style={s.eventDate}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
-        <Text style={[s.eventName, { lineHeight: 22 }]} numberOfLines={2} ellipsizeMode="tail">{event.name}</Text>
-        <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
-      </View>
-      {/* Pastille type de course (bas droite) */}
-      {event.event_type ? (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            bottom: 8,
-            right: 8,
-            backgroundColor: '#fff',
-            paddingHorizontal: 8,
-            paddingVertical: 2,
-            borderRadius: 999,
-            zIndex: 3,
-          }}
-        >
-          <Text style={{ color: tint, fontSize: 10, fontWeight: '700' }}>
-            {displayEventType(event.event_type)}
-          </Text>
-        </View>
-      ) : null}
-      {/* Bouton Suivre (geste de consentement biometrique RGPD).
-          Etoile pleine si suivi, contour si non-suivi. */}
-      {onToggleFollow && (
-        <TouchableOpacity
-          onPress={onToggleFollow}
-          hitSlop={10}
-          style={{
-            position: 'absolute',
-            top: 6,
-            right: 6,
-            width: 40,
-            height: 40,
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10,
-          }}
-        >
-          <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61" fill={isFollowing ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}>
-            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-          </Svg>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-}
 
 // Illustration selfie pour l'onboarding (visage stylise + FaceID).
 // Source: assets/Selfie.svg, inline pour eviter un require asset transform.
