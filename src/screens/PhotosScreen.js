@@ -163,26 +163,55 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
   const refreshAll = useCallback(async () => {
     const queryList = eventsToQuery;
     if (queryList.length === 0 || !runnerApiFetch) {
-      setPhotos([]);
-      setAnySearching(false);
-      setLoading(false);
-      return [];
+      // Si pas d events suivis mais des favs : aller chercher les events
+      // depuis les favs pour ne pas afficher empty alors qu il y a des favs.
+      const favEventCodes = new Set();
+      if (photoFavoritesSet && photoFavoritesSet.size > 0) {
+        photoFavoritesSet.forEach((key) => {
+          const m = String(key || '').match(/^([^\/]+)\//);
+          if (m) favEventCodes.add(m[1]);
+        });
+      }
+      if (favEventCodes.size === 0) {
+        setPhotos([]);
+        setAnySearching(false);
+        setLoading(false);
+        return [];
+      }
     }
     const started = {};
     for (const code of queryList) {
       const v = await AsyncStorage.getItem(`@will_follow_started_${code}`);
       started[code] = v ? parseInt(v, 10) : 0;
     }
-    const results = await Promise.all(queryList.map(async (code) => {
-      try {
-        const r = await runnerApiFetch(`/personal-gallery/${encodeURIComponent(code)}`);
-        if (!r.ok) return { code, photos: [], paid: false };
-        const data = await r.json();
-        return { code, photos: Array.isArray(data.photos) ? data.photos : [], paid: !!data.photos_for_sale };
-      } catch { return { code, photos: [], paid: false }; }
-    }));
+    // Fetch en parallele :
+    //  - /personal-gallery/{code} pour tous les events suivis (photos
+    //    identifiees au selfie)
+    //  - /runner/photo-favorites-full (UN SEUL appel) : tous les favs avec
+    //    leurs URLs, meme si masques par face-gate/time-gate dans list-public.
+    //    Indispensable pour afficher les favs qui pointent vers des photos
+    //    non-visibles publiquement (l user les a fav, il y a droit).
+    const [results, favFullResp] = await Promise.all([
+      Promise.all(queryList.map(async (code) => {
+        try {
+          const r = await runnerApiFetch(`/personal-gallery/${encodeURIComponent(code)}`);
+          if (!r.ok) return { code, photos: [], paid: false };
+          const data = await r.json();
+          return { code, photos: Array.isArray(data.photos) ? data.photos : [], paid: !!data.photos_for_sale };
+        } catch { return { code, photos: [], paid: false }; }
+      })),
+      (async () => {
+        try {
+          const r = await runnerApiFetch('/runner/photo-favorites-full');
+          if (!r.ok) return [];
+          const d = await r.json();
+          return Array.isArray(d?.photos) ? d.photos : [];
+        } catch { return []; }
+      })(),
+    ]);
     const now = Date.now();
     const merged = [];
+    const seenIds = new Set();
     let searching = false;
     for (const { code, photos: list, paid } of results) {
       const tint = eventTintMap[code] || TYPE_COLORS.autre;
@@ -193,6 +222,7 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
         continue;
       }
       for (const p of list) {
+        seenIds.add(p.key);
         merged.push({
           uri: p.url || `${R2_PUBLIC}/${p.key}`,
           thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
@@ -203,6 +233,25 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
           _isPersonalMatch: true,
         });
       }
+    }
+    // Ajoute les favs depuis /runner/photo-favorites-full (deduit eventCode
+    // depuis le premier segment de la R2 key).
+    for (const p of favFullResp) {
+      if (!p?.key) continue;
+      if (seenIds.has(p.key)) continue;
+      seenIds.add(p.key);
+      const m = String(p.key).match(/^([^\/]+)\//);
+      const eventCode = m ? m[1] : '';
+      const tint = eventTintMap[eventCode] || TYPE_COLORS.autre;
+      merged.push({
+        uri: p.url || `${R2_PUBLIC}/${p.key}`,
+        thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
+        id: p.key,
+        tint,
+        paid: false,
+        eventCode,
+        _isPersonalMatch: false,
+      });
     }
     merged.sort((a, b) => {
       const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
@@ -215,7 +264,7 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
     setVisibleCount(30);
     AsyncStorage.setItem(photosCacheKey, JSON.stringify(merged)).catch(() => {});
     return merged;
-  }, [eventsToQuery, runnerApiFetch, eventTintMap, photosCacheKey]);
+  }, [eventsToQuery, runnerApiFetch, eventTintMap, photosCacheKey, photoFavoritesSet]);
 
   const favExtraFetchedRef = useRef(new Set());
   useEffect(() => {
@@ -225,8 +274,12 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
       const m = String(key || '').match(/^([^\/]+)\//);
       if (m) favEventCodes.add(m[1]);
     });
-    const coveredCodes = new Set(eventsToQuery);
-    const missing = [...favEventCodes].filter((c) => !coveredCodes.has(c) && !favExtraFetchedRef.current.has(c));
+    // On fetch /list-public pour TOUS les events qui ont au moins un fav,
+    // pas seulement les events non-suivis. /personal-gallery ne retourne que
+    // les photos identifiees au selfie, donc un fav sur une photo "non-moi"
+    // (ami, paysage) ne sera jamais dans personal-gallery -> il faut le
+    // chopper via list-public.
+    const missing = [...favEventCodes].filter((c) => !favExtraFetchedRef.current.has(c));
     if (missing.length === 0) return;
     missing.forEach((c) => favExtraFetchedRef.current.add(c));
     Promise.all(missing.map(async (code) => {
@@ -306,7 +359,10 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
       Animated.timing(toastOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
     ]).start();
 
-    await refreshKnownEvents();
+    await Promise.all([
+      refreshKnownEvents(),
+      onRefreshFavorites?.(),
+    ]);
     const merged = await refreshAll();
     setRefreshing(false);
 
@@ -344,7 +400,7 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
         setRefreshToast(null);
       });
     }, 2000);
-  }, [refreshAll, refreshKnownEvents, titleOpacity, toastOpacity]);
+  }, [refreshAll, refreshKnownEvents, onRefreshFavorites, titleOpacity, toastOpacity]);
 
   const downloadSelected = useCallback(async () => {
     if (selectedIds.size === 0 || downloading) return;
