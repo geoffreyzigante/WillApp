@@ -10,6 +10,7 @@ import { Icon } from '../components/Icon';
 import { SelfieIllustration } from '../components/SelfieIllustration';
 import { SelfieBlock } from '../components/SelfieBlock';
 import { EventCard } from '../components/EventCard';
+import { HotOnesCarousel } from '../components/HotOnesCarousel';
 import { RefreshableScrollView } from '../components/loaders';
 import { C } from '../constants/colors';
 import { s } from '../constants/styles';
@@ -193,6 +194,9 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
         </>
       )}
       {selfieUri && <View style={{ height: 18 }} />}
+
+      {/* Carrousel "Galerie ouverte" : derniers events passes avec photos. */}
+      <HotOnesCarousel events={events} onOpenEvent={onOpenEvent} />
 
       {/* Row tabs + bouton loupe a droite */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>

@@ -166,10 +166,11 @@ import { EventDetailScreen } from './src/screens/EventDetailScreen';
 import { PhotoViewerModal } from './src/components/modals/PhotoViewerModal';
 import { CreateEventModal } from './src/components/modals/CreateEventModal';
 import { PhotographerScreen } from './src/screens/PhotographerScreen';
-import { initSentry, wrapRootComponent, captureError } from './src/services/sentry';
-
-// Init Sentry au module load (avant App() premier render) pour capturer
-// les crashes pendant le mount initial. No-op silencieux si DSN absent.
+// Sentry desactive en OTA panic safe : a re-activer apres install du nouveau
+// build EAS contenant le module natif @sentry/react-native (build pending).
+const initSentry = () => {};
+const wrapRootComponent = (C) => C;
+const captureError = (e) => console.error('[err]', e?.message || e);
 initSentry();
 import { PIN_REGEX, isValidPin, generateRandomPin } from './src/utils/pin';
 import { PinInputRow } from './src/components/PinInputRow';
