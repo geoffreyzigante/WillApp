@@ -88,7 +88,8 @@
       "./plugins/with-photo-metadata-burner",
       "./plugins/with-heic-capture",
       "./plugins/with-background-uploader",
-      "./plugins/with-thermal-monitor"
+      "./plugins/with-thermal-monitor",
+      "@sentry/react-native"
     ]
   }
 }

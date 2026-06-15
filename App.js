@@ -166,6 +166,11 @@ import { EventDetailScreen } from './src/screens/EventDetailScreen';
 import { PhotoViewerModal } from './src/components/modals/PhotoViewerModal';
 import { CreateEventModal } from './src/components/modals/CreateEventModal';
 import { PhotographerScreen } from './src/screens/PhotographerScreen';
+import { initSentry, wrapRootComponent, captureError } from './src/services/sentry';
+
+// Init Sentry au module load (avant App() premier render) pour capturer
+// les crashes pendant le mount initial. No-op silencieux si DSN absent.
+initSentry();
 import { PIN_REGEX, isValidPin, generateRandomPin } from './src/utils/pin';
 import { PinInputRow } from './src/components/PinInputRow';
 import { PinDisplay } from './src/components/PinDisplay';
@@ -380,7 +385,7 @@ try { SplashScreen?.preventAutoHideAsync?.(); } catch {}
 
 
 
-export default function App() {
+function AppRoot() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [tab, setTab] = useState('upcoming');
   const [bottomTab, setBottomTab] = useState('home');
@@ -2281,5 +2286,11 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+// Wrap App avec Sentry.wrap : capture les crashes JS du tree React
+// + tracker performance (currently off). Si Sentry DSN absent, wrapper
+// no-op silencieux (cf src/services/sentry.js).
+const App = wrapRootComponent(AppRoot);
+export default App;
 
 // ---------- STYLES ----------

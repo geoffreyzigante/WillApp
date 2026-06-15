@@ -12,6 +12,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-community/netinfo": "11.4.1",
+    "@sentry/react-native": "~7.2.0",
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.34",
     "expo-battery": "~10.0.8",
