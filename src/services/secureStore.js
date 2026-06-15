@@ -12,11 +12,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
+export const BIOMETRIC_CONSENT_KEY = '@will_biometric_consent_v1';
+
 export const SECURE_KEYS = [
   '@will_runner',
   '@will_organizer',
   '@will_photographer_session',
-  '@will_biometric_consent_v1',
+  BIOMETRIC_CONSENT_KEY,
 ];
 
 export const toSecureKey = (k) => k.replace(/^@/, 'will_');
