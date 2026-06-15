@@ -154,7 +154,8 @@ import {
   Secure,
   migrateSensitiveKeysToSecureStore,
 } from './src/services/secureStore';
-import { api, ensurePushRegistered } from './src/services/api';
+import { api, apiFetch, ensurePushRegistered, uploadSelfieToR2 } from './src/services/api';
+import { modeChipStyleApp, modeChipTextStyleApp, selfieDotColor } from './src/utils/styleHelpers';
 import { Icon } from './src/components/Icon';
 import { PasswordInput } from './src/components/PasswordInput';
 import {
@@ -396,78 +397,8 @@ Notifications.setNotificationHandler({
 // C, TYPE_COLORS, colorForType -> src/constants/colors.js
 
 
-// Pills toggle Type d epreuve / Nom personnalise dans les formulaires
-// distance (wizard step 2 + sub-modal edition).
-const modeChipStyleApp = (active) => ({
-  paddingHorizontal: 10, paddingVertical: 5,
-  borderRadius: 999,
-  backgroundColor: active ? '#7B2FFF' : 'transparent',
-  borderWidth: 1,
-  borderColor: active ? '#7B2FFF' : '#d8d4e0',
-});
-const modeChipTextStyleApp = (active) => ({
-  fontSize: 11, fontWeight: '700',
-  color: active ? '#fff' : '#666',
-});
-
-// Audit B15 — Upload selfie sur R2, factorise pour permettre l usage depuis
-// SelfieModal.save (1ere tentative declenchee par onSaved cote App) et depuis
-// le retry manuel. Throw explicite si HTTP non-OK pour que le caller bascule
-// le state d upload en 'failed'.
-// Audit B14a followup — apiFetch direct (sans onAuthFailure) au lieu de
-// runnerApiFetch. Cas edge identifie : PUT /selfie/{userId} juste apres
-// signup avec un token frais peut renvoyer 401 le temps de la propagation
-// cote serveur. Si on declenche handle*AuthFailure sur ce 401, l utilisateur
-// est deloggue au milieu de l onboarding selfie -> boucle login/save/logout.
-// Le 401 propage comme erreur normale, runSelfieUpload catch et bascule en
-// 'failed' (etat visuel B15) sans logout.
-async function uploadSelfieToR2(uri, userId, runnerToken) {
-  const blob = await (await fetch(uri)).blob();
-  const r = await apiFetch(`/selfie/${userId}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'image/jpeg',
-      Authorization: `Bearer ${runnerToken}`,
-    },
-    body: blob,
-  });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-}
-
-// Audit B14 — Wrapper fetch qui :
-// 1) Detecte les erreurs reseau (fetch throw : TypeError "Network request
-//    failed" sur RN) et les normalise en Error("Connexion impossible.
-//    Verifie ton reseau.").
-// 2) Detecte les 401 (session expiree cote serveur) et appelle onAuthFailure
-//    (caller fournit l Alert + logout adapte a la session).
-//
-// Retourne la Response standard si OK. Le caller gere r.ok / r.json comme
-// avant — pas de refacto des call-sites au-dela de l URL/headers.
-//
-// Pour les call-sites SANS session (ex /auth/submit-event anonyme), appeler
-// apiFetch directement sans onAuthFailure : normalisation reseau seule.
-async function apiFetch(path, options = {}, { onAuthFailure } = {}) {
-  let r;
-  try {
-    r = await fetch(`${API_URL}${path}`, options);
-  } catch (e) {
-    if (e?.name === 'AbortError') throw e;
-    throw new Error('Connexion impossible. Vérifie ton réseau.');
-  }
-  if (r.status === 401 && onAuthFailure) {
-    onAuthFailure();
-    throw new Error('Session expirée');
-  }
-  return r;
-}
-
-// Couleur pastille selfie derivee de l etat d upload. Hex alignes sur les
-// occurrences existantes du code (cf UI-09 backlog pour tokeniser plus tard).
-function selfieDotColor(state) {
-  if (state === 'failed') return C.error;
-  if (state === 'ok') return C.success;
-  return C.warning; // 'uploading' ou 'idle' avec selfieUri local non confirme
-}
+// modeChipStyleApp + modeChipTextStyleApp + selfieDotColor -> src/utils/styleHelpers.js
+// apiFetch + uploadSelfieToR2 -> src/services/api.js
 
 // ---------- ICONS (custom SVG) ----------
 

@@ -11,6 +11,57 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { API_URL } from '../constants/api';
 
+// Audit B14 -- Wrapper fetch qui :
+// 1) Detecte les erreurs reseau (fetch throw : TypeError "Network request
+//    failed" sur RN) et les normalise en Error("Connexion impossible.
+//    Verifie ton reseau.").
+// 2) Detecte les 401 (session expiree cote serveur) et appelle onAuthFailure
+//    (caller fournit l Alert + logout adapte a la session).
+//
+// Retourne la Response standard si OK. Le caller gere r.ok / r.json comme
+// avant -- pas de refacto des call-sites au-dela de l URL/headers.
+//
+// Pour les call-sites SANS session (ex /auth/submit-event anonyme), appeler
+// apiFetch directement sans onAuthFailure : normalisation reseau seule.
+export async function apiFetch(path, options = {}, { onAuthFailure } = {}) {
+  let r;
+  try {
+    r = await fetch(`${API_URL}${path}`, options);
+  } catch (e) {
+    if (e?.name === 'AbortError') throw e;
+    throw new Error('Connexion impossible. Vérifie ton réseau.');
+  }
+  if (r.status === 401 && onAuthFailure) {
+    onAuthFailure();
+    throw new Error('Session expirée');
+  }
+  return r;
+}
+
+// Audit B15 -- Upload selfie sur R2, factorise pour permettre l usage depuis
+// SelfieModal.save (1ere tentative declenchee par onSaved cote App) et depuis
+// le retry manuel. Throw explicite si HTTP non-OK pour que le caller bascule
+// le state d upload en 'failed'.
+// Audit B14a followup -- apiFetch direct (sans onAuthFailure) au lieu de
+// runnerApiFetch. Cas edge identifie : PUT /selfie/{userId} juste apres
+// signup avec un token frais peut renvoyer 401 le temps de la propagation
+// cote serveur. Si on declenche handle*AuthFailure sur ce 401, l utilisateur
+// est deloggue au milieu de l onboarding selfie -> boucle login/save/logout.
+// Le 401 propage comme erreur normale, runSelfieUpload catch et bascule en
+// 'failed' (etat visuel B15) sans logout.
+export async function uploadSelfieToR2(uri, userId, runnerToken) {
+  const blob = await (await fetch(uri)).blob();
+  const r = await apiFetch(`/selfie/${userId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'image/jpeg',
+      Authorization: `Bearer ${runnerToken}`,
+    },
+    body: blob,
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+}
+
 export const api = {
   async getEvents() {
     const r = await fetch(`${API_URL}/public-events`);
