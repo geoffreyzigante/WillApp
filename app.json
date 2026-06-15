@@ -41,7 +41,8 @@
     "extra": {
       "eas": {
         "projectId": "8e0d828b-39bb-4fa3-99a9-98e2712493d8"
-      }
+      },
+      "sentryDsn": "https://2c6ee4fdfc1d3b0dd4c707979f09c6f7@o4511568397205504.ingest.de.sentry.io/4511568409854032"
     },
     "owner": "geoffreyzigante",
     "runtimeVersion": {
