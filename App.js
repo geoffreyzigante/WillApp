@@ -193,6 +193,7 @@ import { SearchModal } from './src/components/modals/SearchModal';
 import { PhaseDResetModal } from './src/components/modals/PhaseDResetModal';
 import { SelfieViewerModal } from './src/components/modals/SelfieViewerModal';
 import { OrganizationModal } from './src/components/modals/OrganizationModal';
+import { SubModalInputText } from './src/components/modals/SubModalInputText';
 import { s } from './src/constants/styles';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
@@ -5506,70 +5507,6 @@ function CropImageModal({ visible, asset, onCancel, onConfirm }) {
 // Sous-modale slide-up reutilisable pour editer 1 champ texte (nom, email,
 // telephone, site web). Auto-focus a l'ouverture, KeyboardAvoidingView pour
 // que le bouton Enregistrer reste visible. Save par section via onSave.
-function SubModalInputText({ visible, title, value, onChangeText, placeholder, keyboardType, autoCapitalize, secureTextEntry, onClose, onSave, busy }) {
-  // Suivi manuel de la hauteur clavier : KeyboardAvoidingView est peu fiable
-  // sur iOS dans une Modal (encore moins avec presentationStyle). On applique
-  // un paddingBottom dynamique au container du bouton Enregistrer pour qu'il
-  // reste toujours au-dessus du clavier.
-  const [kbHeight, setKbHeight] = useState(0);
-  useEffect(() => {
-    if (!visible) { setKbHeight(0); return; }
-    const showName = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideName = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const sh = Keyboard.addListener(showName, e => setKbHeight(e?.endCoordinates?.height || 0));
-    const hd = Keyboard.addListener(hideName, () => setKbHeight(0));
-    return () => { sh.remove(); hd.remove(); };
-  }, [visible]);
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
-        <View style={{
-          paddingTop: 56, paddingHorizontal: 16, paddingBottom: 12,
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(123,47,255,0.3)',
-          backgroundColor: '#fff',
-        }}>
-          <View style={{ width: 60 }} />
-          <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>{title}</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
-            <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12 }} keyboardShouldPersistTaps="handled">
-          <TextInput
-            value={value || ''}
-            onChangeText={onChangeText}
-            placeholder={placeholder}
-            placeholderTextColor="#9CA3AF"
-            keyboardType={keyboardType}
-            autoCapitalize={autoCapitalize}
-            secureTextEntry={!!secureTextEntry}
-            style={{
-              fontSize: 17, color: C.text,
-              paddingVertical: 14, paddingHorizontal: 16,
-              backgroundColor: '#fff', borderRadius: 14,
-              marginHorizontal: 16,
-            }}
-            autoFocus
-          />
-        </ScrollView>
-        <View style={{ paddingBottom: kbHeight }}>
-          <TouchableOpacity
-            onPress={onSave}
-            disabled={busy}
-            style={{
-              marginHorizontal: 16, marginBottom: kbHeight > 0 ? 12 : 28,
-              paddingVertical: 14, borderRadius: 14, backgroundColor: C.primary, alignItems: 'center',
-              opacity: busy ? 0.6 : 1,
-            }}
-          >
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
 
 // CalendarRangeModal — picker calendrier custom (sans dépendance externe).
 // Mode plage : 1er tap = début, 2e tap = fin. Si le 2e tap est < début, la
