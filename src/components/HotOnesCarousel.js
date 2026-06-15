@@ -1,56 +1,95 @@
-// Carrousel horizontal "Galerie ouverte" affiche les derniers events
-// passes qui ont deja des photos publiques (has_photos = true cote worker).
-// Sert a peupler l accueil pour les utilisateurs sans events suivis et a
-// donner un signal "le produit tourne" : il y a deja de la galerie ouverte.
+// Carrousel "Hot ones" : derniers events passes avec photos publiques
+// (has_photos = true cote worker). Design hero iOS : cover full-bleed avec
+// rotation auto-play d une photo random toutes les 3.5s, overlay sombre,
+// nom + ville · type en bas. Brand WILL : titre AVEstiana sans fontWeight.
 //
-// Si aucun event ne match (compte frais + plateforme silencieuse), la
-// section ne se rend pas du tout pour eviter un titre orphelin.
+// Coût réseau : 1 fetch /list-public/{code} par card affichée (max 10),
+// limité aux 5 premières photos après shuffle pour borner la mémoire.
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colorForType, C } from '../constants/colors';
 import { displayEventType, cityLabel, isUpcoming } from '../utils/format';
+import { API_URL } from '../constants/api';
 
-const CARD_W = 180;
-const CARD_H = 220;
-const COVER_H = 130;
+const HOT_ICON_PATH = "M14.23,5.38c-.29-.35-.86-.2-.98.24-.24.82-.66,1.59-1.17,2.27.05-2.98-1.33-5.74-3.52-7.69-.41-.36-1.08-.2-1.25.31-.67,2.03-2.48,3.44-3.77,5.12-5.63,6.25,3.31,16.13,9.78,10.23,2.86-2.53,3.36-7.53.91-10.47ZM8.91,15.24c-3.91,0-2.43-5.24-.45-6.9.21-.18.52-.16.69.06,1.39,1.72,3.67,6.85-.24,6.85Z";
+
+const CARD_W = 220;
+const CARD_H = 300;
 const MAX_ITEMS = 10;
+const PHOTOS_PER_CARD = 5;
+const ROTATE_INTERVAL_MS = 3500;
 
 function HotCard({ event, onPress }) {
   const tint = colorForType(event.event_type);
   const typeLabel = displayEventType(event.event_type);
   const city = cityLabel(event.location);
-  const dateLabel = formatRelativeEventDate(event.event_date_end || event.event_date);
+  const subline = [city, typeLabel].filter(Boolean).join(' · ');
+
+  const [photos, setPhotos] = useState([]);
+  const [currentIdx, setCurrentIdx] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    fetch(`${API_URL}/list-public/${event.code}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!alive || !data) return;
+        const ps = (data.photos || []).slice();
+        // Shuffle Fisher-Yates pour rotation aleatoire
+        for (let i = ps.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [ps[i], ps[j]] = [ps[j], ps[i]];
+        }
+        setPhotos(ps.slice(0, PHOTOS_PER_CARD));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [event.code]);
+
+  useEffect(() => {
+    if (photos.length <= 1) return;
+    const id = setInterval(() => {
+      setCurrentIdx(i => (i + 1) % photos.length);
+    }, ROTATE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [photos.length]);
+
+  const currentPhoto = photos[currentIdx];
+  const coverUri = currentPhoto?.thumb_md_url || currentPhoto?.thumb_url || event.cover_image;
 
   return (
-    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.card}>
+    <TouchableOpacity activeOpacity={0.88} onPress={onPress} style={styles.card}>
       <View style={[styles.cover, { backgroundColor: tint }]}>
-        {event.cover_image ? (
+        {coverUri ? (
           <ExpoImage
-            source={{ uri: event.cover_image }}
+            source={{ uri: coverUri }}
             style={StyleSheet.absoluteFillObject}
             contentFit="cover"
+            transition={500}
+            cachePolicy="memory-disk"
           />
         ) : null}
         <LinearGradient
-          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.45)']}
-          start={{ x: 0, y: 0.4 }}
-          end={{ x: 0, y: 1 }}
+          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.75)']}
+          locations={[0, 0.45, 1]}
           style={StyleSheet.absoluteFillObject}
         />
-        {typeLabel ? (
-          <View style={[styles.typePill, { backgroundColor: tint }]}>
-            <Text style={styles.typePillText} numberOfLines={1}>{typeLabel}</Text>
-          </View>
-        ) : null}
-      </View>
-      <View style={styles.meta}>
-        <Text style={styles.name} numberOfLines={2}>{event.name || 'Sans nom'}</Text>
-        <Text style={styles.subline} numberOfLines={1}>
-          {[dateLabel, city].filter(Boolean).join(' • ')}
-        </Text>
+        <View style={styles.hotPill}>
+          <Svg width={11} height={11} viewBox="0 0 17.61 17.61">
+            <Path d={HOT_ICON_PATH} fill="#fff" />
+          </Svg>
+          <Text style={styles.hotPillText}>Hot</Text>
+        </View>
+        <View style={styles.overlay}>
+          <Text style={styles.name} numberOfLines={2}>{event.name || 'Sans nom'}</Text>
+          {subline ? (
+            <Text style={styles.subline} numberOfLines={1}>{subline}</Text>
+          ) : null}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -66,16 +105,12 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
 
   return (
     <View style={styles.section}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Galerie ouverte</Text>
-        <Text style={styles.subtitle}>Photos déjà disponibles</Text>
-      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         decelerationRate="fast"
-        snapToInterval={CARD_W + 12}
+        snapToInterval={CARD_W + 14}
         snapToAlignment="start"
       >
         {hotOnes.map(ev => (
@@ -86,64 +121,71 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
   );
 }
 
-function formatRelativeEventDate(iso) {
-  if (!iso) return '';
-  try {
-    const ts = new Date(iso).getTime();
-    if (isNaN(ts)) return '';
-    const diffDays = Math.floor((Date.now() - ts) / (24 * 3600 * 1000));
-    if (diffDays <= 0) return "aujourd'hui";
-    if (diffDays === 1) return 'hier';
-    if (diffDays < 7) return `il y a ${diffDays}j`;
-    if (diffDays < 30) return `il y a ${Math.floor(diffDays / 7)} sem`;
-    const d = new Date(ts);
-    const MONTHS = ['janv','févr','mars','avr','mai','juin','juil','août','sept','oct','nov','déc'];
-    return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
-  } catch { return ''; }
-}
-
 const styles = StyleSheet.create({
-  section: { marginBottom: 18 },
-  header: { paddingHorizontal: 4, marginBottom: 10 },
-  title: { fontSize: 16, fontWeight: '700', color: C.text },
-  subtitle: { fontSize: 12, color: C.textSoft, marginTop: 2 },
-  scrollContent: { paddingRight: 8, gap: 12 },
+  section: { marginTop: 6, marginBottom: 18 },
+  scrollContent: { paddingRight: 14, gap: 14 },
+  hotPill: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 100,
+    backgroundColor: C.primary,
+  },
+  hotPillText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
   card: {
     width: CARD_W,
     height: CARD_H,
-    borderRadius: 14,
+    borderRadius: 22,
     overflow: 'hidden',
     backgroundColor: '#fff',
     shadowColor: '#1A0A3E',
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 14,
+    elevation: 4,
   },
-  cover: { width: '100%', height: COVER_H, position: 'relative' },
-  typePill: {
+  cover: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  overlay: {
     position: 'absolute',
-    left: 8,
-    bottom: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    maxWidth: '80%',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 16,
+    paddingTop: 24,
   },
-  typePillText: {
+  name: {
     color: '#fff',
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    fontSize: 18,
+    fontFamily: 'AVEstiana',
+    lineHeight: 21,
+    letterSpacing: -0.2,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  meta: {
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 10,
-    justifyContent: 'space-between',
+  subline: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 6,
+    letterSpacing: 0.1,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
-  name: { fontSize: 13, fontWeight: '600', color: C.text, lineHeight: 17 },
-  subline: { fontSize: 11, color: C.textSoft },
 });

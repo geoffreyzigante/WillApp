@@ -4,18 +4,16 @@
 // EventCard ou empty state pedagogique (deconnecte + tab favoris).
 
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Image, TextInput, Animated, Keyboard } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Animated, Keyboard } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Icon } from '../components/Icon';
 import { SelfieIllustration } from '../components/SelfieIllustration';
-import { SelfieBlock } from '../components/SelfieBlock';
 import { EventCard } from '../components/EventCard';
 import { HotOnesCarousel } from '../components/HotOnesCarousel';
 import { RefreshableScrollView } from '../components/loaders';
 import { C } from '../constants/colors';
 import { s } from '../constants/styles';
 import { isUpcoming } from '../utils/format';
-import { selfieDotColor } from '../utils/styleHelpers';
 
 export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, cartTotal = 0, onOpenPanier }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -84,116 +82,51 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
 
   return (
     <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-      {/* Header : avatar + "Bienvenue sur Will" + pills orga/photographe */}
+      {/* Header mobile-site : [Logo gauche] ←→ [Hello\nPrenom (right)] [Burger]
+          Toutes les actions (profil, espaces orga/photo, panier, deconnexion) sont
+          derriere le burger qui ouvre ProfileMenuModal (onOpenProfile). */}
       <View style={s.headerRow}>
-        <View style={[s.headerLeft, { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }]}>
-          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
-            {selfieUri ? (
-              <Image
-                source={{ uri: selfieUri }}
-                style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: '#c9beed' }}
-              />
-            ) : (
-              <Icon.User size={30} color="#c9beed" />
-            )}
-            {selfieUri && (
-              <TouchableOpacity
-                onPress={(e) => {
-                  if (selfieUploadState === 'failed') { e.stopPropagation?.(); onRetryUpload?.(); }
-                }}
-                disabled={selfieUploadState !== 'failed'}
-                activeOpacity={selfieUploadState === 'failed' ? 0.6 : 1}
-                hitSlop={8}
-                style={{
-                  position: 'absolute',
-                  top: -2,
-                  right: -2,
-                  width: 10,
-                  height: 10,
-                  borderRadius: 5,
-                  backgroundColor: selfieDotColor(selfieUploadState),
-                  borderWidth: 2,
-                  borderColor: C.bg,
-                }}
-              />
-            )}
-          </TouchableOpacity>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-            {runnerFirstName ? (
-              <Text style={[s.welcome, { color: '#c9beed', fontSize: 17 }]} numberOfLines={1}>
-                Hello {runnerFirstName}
-              </Text>
-            ) : (
-              <>
-                <Text style={[s.welcome, { color: '#c9beed', fontSize: 17 }]} numberOfLines={1}>Bienvenue sur </Text>
-                <Icon.Logo width={36} color="#c9beed" />
-              </>
-            )}
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {/* Pill panier : visible uniquement quand cart > 0. */}
-          {cartTotal > 0 && onOpenPanier ? (
-            <TouchableOpacity
-              onPress={onOpenPanier}
-              activeOpacity={0.7}
-              hitSlop={6}
-              style={{
-                width: 40, height: 40,
-                alignItems: 'center', justifyContent: 'center',
-                position: 'relative',
-              }}
-              accessibilityLabel="Voir mon panier"
-            >
-              <Svg width={26} height={24} viewBox="0 0 18.96 17.61" fill="#c9beed">
-                <Path d="M9.49,9.19c-.38,0-.68.3-.68.68v3.38c0,.37.31.68.68.68s.68-.3.68-.68v-3.38c0-.37-.31-.68-.68-.68Z" />
-                <Path d="M12.94,9.23c-.37-.06-.73.18-.79.55l-.59,3.33c-.07.37.18.72.55.78.37.06.73-.18.79-.55l.59-3.33c.07-.37-.18-.72-.55-.78Z" />
-                <Path d="M6.04,9.23c-.37.06-.62.42-.55.78l.59,3.33c.07.37.42.61.79.55.37-.06.62-.42.55-.78l-.59-3.33c-.07-.37-.42-.61-.79-.55Z" />
-                <Path d="M17.25,5.29h-6.43s.01-.04.01-.06V1.35C10.83.6,10.23,0,9.48,0s-1.36.6-1.36,1.35v3.88s.01.04.01.06H1.7C.59,5.29-.22,6.33.05,7.39l2.14,8.95c.19.74.87,1.26,1.64,1.26h11.29c.77,0,1.45-.52,1.64-1.26l2.14-8.95c.28-1.06-.53-2.1-1.64-2.1ZM15.44,9.36l-1.02,4.67c-.11.44-.51.74-.97.74h-7.93c-.46,0-.85-.31-.97-.74l-1.02-4.67c-.16-.63.32-1.24.97-1.24h9.98c.65,0,1.13.61.97,1.24Z" />
-              </Svg>
-              <View style={{
-                position: 'absolute', top: -4, right: -4,
-                minWidth: 18, height: 18, borderRadius: 9,
-                paddingHorizontal: 4,
-                backgroundColor: C.primary,
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '800', lineHeight: 11 }}>
-                  {cartTotal > 99 ? '99+' : cartTotal}
-                </Text>
-              </View>
+        <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.7} hitSlop={8}>
+          <Icon.Logo width={72} color={C.primary} />
+        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }}>
+          {runnerFirstName ? (
+            <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.7} hitSlop={6} style={{ alignItems: 'flex-end', flexShrink: 1 }}>
+              <Text style={[s.welcome, { color: '#c9beed', fontSize: 15, lineHeight: 17 }]} numberOfLines={1}>Hello</Text>
+              <Text style={[s.welcome, { color: '#c9beed', fontSize: 17, lineHeight: 19 }]} numberOfLines={1}>{runnerFirstName}</Text>
             </TouchableOpacity>
           ) : null}
-          <View style={s.orgToggle}>
-            <TouchableOpacity
-              style={s.orgToggleBtn}
-              onPress={() => onOpenOrgRole('organizer')}
-              activeOpacity={0.7}
-              hitSlop={6}
-            >
-              <Icon.GearOrg size={22} color={C.pinkPillFg} />
-            </TouchableOpacity>
-            <View style={s.orgToggleDivider} />
-            <TouchableOpacity
-              style={s.orgToggleBtn}
-              onPress={() => onOpenOrgRole('photographer')}
-              activeOpacity={0.7}
-              hitSlop={6}
-            >
-              <Icon.CamOrg size={24} color={C.pinkPillFg} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={onOpenProfile}
+            activeOpacity={0.7}
+            hitSlop={8}
+            style={{
+              width: 36, height: 36, borderRadius: 12,
+              backgroundColor: 'transparent',
+              alignItems: 'center', justifyContent: 'center',
+              position: 'relative',
+            }}
+            accessibilityLabel="Menu"
+          >
+            <Svg width={18} height={14} viewBox="0 0 18 14" fill="none">
+              <Path d="M1 1h16M1 7h16M1 13h16" stroke={C.primary} strokeWidth={2} strokeLinecap="round" />
+            </Svg>
+            {/* Pastille verte selfie OK : visible si runner connecte + selfie uploaded
+                sans erreur (cf logique selfieDotColor / site .will-has-selfie). */}
+            {runnerFirstName && selfieUri && selfieUploadState !== 'failed' && selfieUploadState !== 'uploading' ? (
+              <View style={{
+                position: 'absolute',
+                top: 3, right: 3,
+                width: 10, height: 10, borderRadius: 5,
+                backgroundColor: '#10B981',
+                borderWidth: 2, borderColor: '#fff',
+              }} />
+            ) : null}
+          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Carte selfie : uniquement si pas encore pris. */}
-      {!selfieUri && (
-        <>
-          <View style={{ height: 14 }} />
-          <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
-        </>
-      )}
-      {selfieUri && <View style={{ height: 18 }} />}
+      <View style={{ height: 18 }} />
 
       {/* Carrousel "Galerie ouverte" : derniers events passes avec photos. */}
       <HotOnesCarousel events={events} onOpenEvent={onOpenEvent} />

@@ -209,6 +209,7 @@ import { SelfieCameraModal } from './src/components/modals/SelfieCameraModal';
 import { SelfieModal } from './src/components/modals/SelfieModal';
 import { LoginModal } from './src/components/modals/LoginModal';
 import { ProfileMenuModal } from './src/components/modals/ProfileMenuModal';
+import { BurgerMenuModal } from './src/components/modals/BurgerMenuModal';
 import { OrganizerProfileMenuModal } from './src/components/modals/OrganizerProfileMenuModal';
 import { AuthRunnerModal } from './src/components/modals/AuthRunnerModal';
 import { AuthOrganizerModal } from './src/components/modals/AuthOrganizerModal';
@@ -4593,6 +4594,7 @@ export default function App() {
   // la session SecureStore (le photographe revient sans re-saisir son mdp).
   const [inPhotographerMode, setInPhotographerMode] = useState(false);
   const [profileMenu, setProfileMenu] = useState(false);
+  const [burgerMenu, setBurgerMenu] = useState(false);
   const [selfieViewer, setSelfieViewer] = useState(false);
   const [openedPhoto, setOpenedPhoto] = useState(null); // { photo, photos, allowDelete, onDelete }
   const [follows, setFollows] = useState([]);  // Events suivis (consentement biometrique RGPD)
@@ -5923,10 +5925,7 @@ export default function App() {
                   onOpenAuthLogin={() => { setAuthInitialMode('login'); setAuthModalVisible(true); }}
                   selfieUri={selfieUri}
                   onDeleteSelfie={deleteSelfie}
-                  onOpenProfile={() => {
-                    if (runnerSession) setProfileMenu(true);
-                    else { setAuthInitialMode('login'); setAuthModalVisible(true); }
-                  }}
+                  onOpenProfile={() => setBurgerMenu(true)}
                   follows={follows}
                   onToggleFollow={(code) => requireAuth(() => toggleFollowStable(code))}
                   onRefresh={reloadEvents}
@@ -6300,6 +6299,25 @@ export default function App() {
         organizerApiFetch={organizerApiFetch}
         editEvent={editEventTarget}
         onCreated={() => setOrgRefreshKey(k => k + 1)}
+      />
+
+      <BurgerMenuModal
+        visible={burgerMenu}
+        onClose={() => setBurgerMenu(false)}
+        isAuthed={!!runnerSession}
+        runnerFirstName={runnerSession?.profile?.firstName || ''}
+        selfieUri={selfieUri}
+        selfieUploadState={selfieUploadState}
+        cartTotal={cartGlobalTotal}
+        onOpenAccount={() => setProfileMenu(true)}
+        onOpenMyPhotos={() => setBottomTab('photos')}
+        onOpenPanier={() => setPanierModalVisible(true)}
+        onOpenOrgRole={handlePickRole}
+        onLogout={logoutRunner}
+        onDeleteFaceData={deleteFaceData}
+        onDeleteAccount={deleteRunnerAccount}
+        onOpenAuthLogin={() => { setAuthInitialMode('login'); setAuthModalVisible(true); }}
+        onOpenAuthSignup={() => { setAuthInitialMode('register'); setAuthModalVisible(true); }}
       />
 
       <ProfileMenuModal
