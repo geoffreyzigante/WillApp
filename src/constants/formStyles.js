@@ -14,3 +14,23 @@ export const formSectionStyle = StyleSheet.create({
   subheading: { fontSize: 12, color: '#5E1AD6', marginBottom: 8, lineHeight: 17 },
   input: { backgroundColor: '#faf9ff', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: C.text, marginBottom: 8 },
 });
+
+// Styles partages pour les TextInput des Auth* modals et ProfileMenu*.
+// Variant plus pale (#f5f3ff) que formSectionStyle.input (#faf9ff).
+export const authStyles = StyleSheet.create({
+  input: {
+    backgroundColor: '#f5f3ff',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: C.text,
+    marginBottom: 10,
+  },
+});
+
+// Cartes section "card" pour les profile menus (Runner + Organizer).
+export const profileCardStyles = StyleSheet.create({
+  card: { backgroundColor: '#faf9ff', borderRadius: 16, padding: 16, marginBottom: 12 },
+  label: { color: C.text, fontSize: 16, fontWeight: '600' },
+});
