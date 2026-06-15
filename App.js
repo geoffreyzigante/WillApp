@@ -199,6 +199,7 @@ import { CalendarRangeModal } from './src/components/modals/CalendarRangeModal';
 import { CropImageModal } from './src/components/modals/CropImageModal';
 import { SelfieCameraModal } from './src/components/modals/SelfieCameraModal';
 import { SelfieModal } from './src/components/modals/SelfieModal';
+import { useDismissibleSheet } from './src/hooks/useDismissibleSheet';
 import { s } from './src/constants/styles';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
@@ -6995,58 +6996,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
 // (re-supprime le flag + recharge l'app via DevSettings.reload).
 
 
-// Hook commun pour les bottom sheets auth : slide-in spring au visible
-// + drag-to-dismiss avec PanResponder sur la handle (tap = close,
-// drag > 120px OU velocite > 0.5 = close en anim, sinon snap back).
-function useDismissibleSheet(visible, onClose) {
-  const sheetTranslate = useRef(new Animated.Value(1000)).current;
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    if (visible) {
-      sheetTranslate.setValue(1000);
-      Animated.spring(sheetTranslate, {
-        toValue: 0, useNativeDriver: true,
-        friction: 11, tension: 80,
-      }).start();
-    }
-  }, [visible]);
-
-  const handlePanHandlers = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
-      onPanResponderMove: (_, g) => {
-        if (g.dy > 0) sheetTranslate.setValue(g.dy);
-      },
-      onPanResponderRelease: (_, g) => {
-        const tap = Math.abs(g.dy) < 5 && Math.abs(g.dx) < 5;
-        if (tap) {
-          onCloseRef.current?.();
-          return;
-        }
-        const shouldClose = g.dy > 120 || g.vy > 0.5;
-        if (shouldClose) {
-          Animated.timing(sheetTranslate, {
-            toValue: 1000, duration: 220, useNativeDriver: true,
-          }).start(() => onCloseRef.current?.());
-        } else {
-          Animated.spring(sheetTranslate, {
-            toValue: 0, useNativeDriver: true, friction: 11, tension: 80,
-          }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        Animated.spring(sheetTranslate, {
-          toValue: 0, useNativeDriver: true, friction: 11, tension: 80,
-        }).start();
-      },
-    })
-  ).current.panHandlers;
-
-  return { sheetTranslate, handlePanHandlers };
-}
+// useDismissibleSheet -> src/hooks/useDismissibleSheet.js
 
 function LoginModal({ visible, role, events, onClose, onSuccess }) {
   const [code, setCode] = useState('');
