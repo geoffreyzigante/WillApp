@@ -189,6 +189,9 @@ import { PinDisplay } from './src/components/PinDisplay';
 import { Haptics } from './src/services/haptics';
 import { PhotoCell, PhotoGrid, PhotoGridItem } from './src/components/PhotoGrid';
 import { OverlayWheel } from './src/components/OverlayWheel';
+import { SearchModal } from './src/components/modals/SearchModal';
+import { PhaseDResetModal } from './src/components/modals/PhaseDResetModal';
+import { SelfieViewerModal } from './src/components/modals/SelfieViewerModal';
 import { s } from './src/constants/styles';
 
 // Active le panneau debug en build de dev (Metro/expo start) ou de preview
@@ -7618,51 +7621,6 @@ function SelfieCameraModal({ visible, onClose, onCaptured }) {
 // re-tester en dev : depuis la console React Native, appeler
 //   await global.__resetPhaseD()
 // (re-supprime le flag + recharge l'app via DevSettings.reload).
-function PhaseDResetModal({ visible, onClose }) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={{
-        flex: 1, backgroundColor: 'rgba(26,20,38,0.45)',
-        justifyContent: 'center', padding: 24,
-      }}>
-        <View style={{
-          backgroundColor: '#fff', borderRadius: 20, padding: 24,
-          shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20,
-          shadowOffset: { width: 0, height: 8 },
-        }}>
-          <View style={{
-            width: 56, height: 56, borderRadius: 28,
-            backgroundColor: '#EDE4FF',
-            alignItems: 'center', justifyContent: 'center',
-            alignSelf: 'center', marginBottom: 14,
-          }}>
-            <Svg width={28} height={26} viewBox="-1 -1.5 22.78 20.61" fill="#7B2FFF">
-              <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-            </Svg>
-          </View>
-          <Text style={{
-            fontSize: 18, fontWeight: '800', color: '#1A1426',
-            textAlign: 'center', marginBottom: 10, letterSpacing: -0.3,
-          }}>
-            Reconnaissance Will, version 2
-          </Text>
-          <Text style={{
-            fontSize: 14, color: 'rgba(123,47,255,0.3)', lineHeight: 20,
-            textAlign: 'center', marginBottom: 22,
-          }}>
-            <Text style={{ fontWeight: '700', color: '#1A1426' }}>Un seul selfie</Text> suffit désormais pour recevoir tes photos sur tous les events Will. Consentement valable 12 mois renouvelables. Tu peux le retirer à tout moment depuis ton profil.
-          </Text>
-          <TouchableOpacity onPress={onClose} style={{
-            backgroundColor: '#7B2FFF', borderRadius: 999,
-            paddingVertical: 13, alignItems: 'center',
-          }} activeOpacity={0.85}>
-            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>J'ai compris</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
 
 function SelfieModal({ visible, onClose, onSaved, userId, signupMode = false, onSkip }) {
   const [uri, setUri] = useState(null);
@@ -8250,33 +8208,6 @@ function LoginModal({ visible, role, events, onClose, onSuccess }) {
   );
 }
 
-function SearchModal({ visible, events, onClose, onPick }) {
-  // Tri ASC strict (decision user 2026-06-04, toutes les listes d'events).
-  const upcoming = events
-    .filter(e => isUpcoming(e.event_date, e.event_date_end))
-    .sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
-          <TouchableOpacity onPress={onClose} hitSlop={20}>
-            <View style={s.modalHandle} />
-          </TouchableOpacity>
-          <Text style={s.modalTitle}>Mon événement</Text>
-          <ScrollView style={{ maxHeight: 400, marginTop: 8 }}>
-            {upcoming.length === 0 && <Text style={s.empty}>Aucun événement à venir</Text>}
-            {upcoming.map(e => (
-              <TouchableOpacity key={e.code} style={s.eventPick} onPress={() => { onPick(e); onClose(); }}>
-                <Text style={s.eventPickName}>{e.name}</Text>
-                <Text style={s.eventPickDate}>{formatDateLong(e.event_date, e.event_date_end)} · {cityLabel(e.location)}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
 
 // ---------- ROOT ----------
 function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload }) {
@@ -8818,22 +8749,6 @@ const profileCardStyles = StyleSheet.create({
   label: { color: C.text, fontSize: 16, fontWeight: '600' },
 });
 
-function SelfieViewerModal({ visible, uri, onClose }) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center' }}>
-        <TouchableOpacity onPress={onClose} style={{ position: 'absolute', top: 60, right: 20, padding: 10 }} hitSlop={20}>
-          <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
-            <Path d="m8 8 8 8M16 8l-8 8" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" />
-          </Svg>
-        </TouchableOpacity>
-        {uri ? (
-          <ExpoImage source={{ uri }} style={{ width: '85%', aspectRatio: 1, borderRadius: 999 }} contentFit="cover" />
-        ) : null}
-      </View>
-    </Modal>
-  );
-}
 
 // Haptics -> src/services/haptics.js (importe en haut du fichier)
 
