@@ -9,11 +9,9 @@
 // Audit B13 : meme pattern que PhotographerScreen pour gerer le cas
 // permission deja denied de facon permanente cote iOS.
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Modal, View, Text, TouchableOpacity, Dimensions, Animated, Platform, StyleSheet, Alert, Linking } from 'react-native';
-import { Camera as VisionCamera, useCameraPermission, useCameraDevice, useFrameProcessor } from 'react-native-vision-camera';
-import { useFaceDetector } from 'react-native-vision-camera-face-detector';
-import { Worklets } from 'react-native-worklets-core';
+import { Camera as VisionCamera, useCameraPermission, useCameraDevice } from 'react-native-vision-camera';
 import Svg, { Defs, Mask, Rect, Ellipse, Path } from 'react-native-svg';
 import { s } from '../../constants/styles';
 
@@ -26,41 +24,6 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   const [busy, setBusy] = useState(false);
   const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
   const cameraPermissionDenied = hasRequestedCameraPermission && !hasPermission;
-  // Face detection live : on track le ratio bbox.height / frame.height.
-  // Si <= 0.4 -> "trop loin", shutter disabled. Au-dessus -> capture OK.
-  const [faceFillRatio, setFaceFillRatio] = useState(0);
-  const setFaceFillRatioJS = useMemo(
-    () => Worklets.createRunOnJS((r) => setFaceFillRatio(r)),
-    []
-  );
-  const { detectFaces } = useFaceDetector({
-    performanceMode: 'fast',
-    landmarkMode: 'none',
-    contourMode: 'none',
-    classificationMode: 'none',
-    minFaceSize: 0.15,
-    trackingEnabled: false,
-  });
-  const frameProcessor = useFrameProcessor((frame) => {
-    'worklet';
-    try {
-      const faces = detectFaces(frame);
-      if (faces && faces.length > 0) {
-        const fH = frame.height;
-        const bH = faces[0].bounds.height;
-        setFaceFillRatioJS(bH / fH);
-      } else {
-        setFaceFillRatioJS(0);
-      }
-    } catch (e) {
-      setFaceFillRatioJS(0);
-    }
-  }, [detectFaces, setFaceFillRatioJS]);
-  // 90% du diametre vertical de l ovale UI : l ovale fait ~OVAL_H/winH du
-  // viewport => le visage doit remplir au moins 0.9 * (OVAL_H/winH) du
-  // frame. ~0.4 pour un viewport 800px et un ovale 340px.
-  const MIN_FACE_FILL = 0.4;
-  const faceOk = faceFillRatio >= MIN_FACE_FILL;
   const requestCameraPermission = async () => {
     setHasRequestedCameraPermission(true);
     await requestPermission();
@@ -94,13 +57,6 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
 
   const shoot = async () => {
     if (!cameraRef.current || busy) return;
-    if (!faceOk) {
-      Alert.alert(
-        'Approche-toi',
-        'Ton visage doit remplir l\'ovale pour un selfie efficace. Rapproche-toi de la caméra.'
-      );
-      return;
-    }
     setBusy(true);
     try {
       const photo = await cameraRef.current.takePhoto({
@@ -128,7 +84,6 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             photo={true}
             zoom={device.minZoom}
             resizeMode="cover"
-            frameProcessor={frameProcessor}
           />
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -167,14 +122,10 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
           position: 'absolute',
           top: cy + OVAL_H / 2 + 24,
           left: 0, right: 0, textAlign: 'center',
-          color: faceOk ? '#7CFF8E' : '#fff', fontSize: 14, fontWeight: '600',
+          color: '#fff', fontSize: 14, fontWeight: '600',
           textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 4,
         }}>
-          {faceFillRatio === 0
-            ? "Place ton visage dans l'ovale"
-            : faceOk
-              ? '✓ Parfait, capture maintenant'
-              : 'Approche-toi pour remplir l\'ovale'}
+          Place ton visage dans l'ovale
         </Text>
 
         {/* Bouton capture centre, style iOS Camera : blanc plein, sans bordure. */}
@@ -189,12 +140,12 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
               onPress={shoot}
               onPressIn={onCapturePressIn}
               onPressOut={onCapturePressOut}
-              disabled={busy || !hasPermission || !device || !faceOk}
+              disabled={busy || !hasPermission || !device}
               activeOpacity={1}
               style={{
                 width: 80, height: 80, borderRadius: 999,
                 backgroundColor: '#fff',
-                opacity: busy || !hasPermission || !device ? 0.4 : (faceOk ? 1 : 0.5),
+                opacity: busy || !hasPermission || !device ? 0.4 : 1,
               }}
             />
           </Animated.View>

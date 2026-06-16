@@ -5583,6 +5583,13 @@ export default function App() {
     } catch (e) {
       console.warn('selfie upload R2', e?.message || e);
       setSelfieUploadState('failed');
+      // Erreur "visage trop petit" : on clear le selfie local pour que
+      // l user soit invite a refaire un selfie + Alert avec message clair.
+      if (e?.code === 'face_too_small') {
+        setSelfieUri(null);
+        AsyncStorage.removeItem('@will_selfie').catch(() => {});
+        Alert.alert('Visage trop petit', e.userMessage || 'Approche-toi de la caméra pour remplir l\'ovale.');
+      }
     }
   }, [runnerSession?.profile?.userId, runnerSession?.token]);
 

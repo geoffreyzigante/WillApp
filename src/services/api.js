@@ -59,7 +59,19 @@ export async function uploadSelfieToR2(uri, userId, runnerToken) {
     },
     body: blob,
   });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
+  if (!r.ok) {
+    // Le worker rejette si bbox.Height < 0.7 (visage trop petit). On
+    // parse le body JSON pour proposer un message clair coté UI.
+    let payload = null;
+    try { payload = await r.json(); } catch (e) {}
+    if (payload?.error === 'face_too_small') {
+      const err = new Error('face_too_small');
+      err.code = 'face_too_small';
+      err.userMessage = payload.message || "Visage trop petit. Approche-toi de la caméra pour remplir l'ovale.";
+      throw err;
+    }
+    throw new Error('HTTP ' + r.status);
+  }
 }
 
 export const api = {
