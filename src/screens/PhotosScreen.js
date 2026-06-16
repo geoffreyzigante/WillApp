@@ -19,6 +19,7 @@ import {
   View, Text, TouchableOpacity, Image, Animated, Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image as ExpoImage } from 'expo-image';
 import * as MediaLibrary from 'expo-media-library';
 import { Paths, File } from 'expo-file-system';
 import NetInfo from '@react-native-community/netinfo';
@@ -263,6 +264,16 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
     setLoading(false);
     setVisibleCount(30);
     AsyncStorage.setItem(photosCacheKey, JSON.stringify(merged)).catch(() => {});
+    // Prefetch thumbnails (top 60 = 2x visibleCount initial) en arriere-plan
+    // pour fluidifier le 1er scroll : les vignettes sont en cache disque avant
+    // que l user n atteigne leur cellule.
+    if (typeof ExpoImage?.prefetch === 'function') {
+      merged.slice(0, 60).forEach((p) => {
+        if (p?.thumbUri) {
+          ExpoImage.prefetch(p.thumbUri, 'memory-disk').catch(() => {});
+        }
+      });
+    }
     return merged;
   }, [eventsToQuery, runnerApiFetch, eventTintMap, photosCacheKey, photoFavoritesSet]);
 
