@@ -264,15 +264,16 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
     setLoading(false);
     setVisibleCount(30);
     AsyncStorage.setItem(photosCacheKey, JSON.stringify(merged)).catch(() => {});
-    // Prefetch thumbnails (top 60 = 2x visibleCount initial) en arriere-plan
-    // pour fluidifier le 1er scroll : les vignettes sont en cache disque avant
-    // que l user n atteigne leur cellule.
+    // Prefetch thumbnails en arriere-plan pour fluidifier le 1er scroll :
+    // top 40 de chaque filtre (Moi / Favs / Tous) -> couvre les 3 onglets
+    // independamment de l ordre dans merged. Dedup par Set pour ne pas
+    // prefetch 2x la meme uri.
     if (typeof ExpoImage?.prefetch === 'function') {
-      merged.slice(0, 60).forEach((p) => {
-        if (p?.thumbUri) {
-          ExpoImage.prefetch(p.thumbUri, 'memory-disk').catch(() => {});
-        }
-      });
+      const toPrefetch = new Set();
+      merged.filter(p => p._isPersonalMatch).slice(0, 40).forEach(p => p?.thumbUri && toPrefetch.add(p.thumbUri));
+      merged.filter(p => photoFavoritesSet?.has(p.id)).slice(0, 40).forEach(p => p?.thumbUri && toPrefetch.add(p.thumbUri));
+      merged.slice(0, 40).forEach(p => p?.thumbUri && toPrefetch.add(p.thumbUri));
+      toPrefetch.forEach(uri => ExpoImage.prefetch(uri, 'memory-disk').catch(() => {}));
     }
     return merged;
   }, [eventsToQuery, runnerApiFetch, eventTintMap, photosCacheKey, photoFavoritesSet]);

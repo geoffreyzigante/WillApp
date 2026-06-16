@@ -9,6 +9,7 @@ import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
   KeyboardAvoidingView, ActivityIndicator, Alert, Platform, StyleSheet,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { Image as ExpoImage } from 'expo-image';
 import { Icon } from '../Icon';
@@ -134,6 +135,17 @@ export function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake
           <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
             <TouchableOpacity onPress={onClose} hitSlop={20}>
               <View style={s.modalHandle} />
+            </TouchableOpacity>
+            {/* Croix de fermeture haut-droite, light violet (alignee web /profil/). */}
+            <TouchableOpacity
+              onPress={onClose}
+              hitSlop={12}
+              style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
+              accessibilityLabel="Fermer"
+            >
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 6l12 12M18 6L6 18" stroke="#C4A6FF" strokeWidth={2.2} strokeLinecap="round" />
+              </Svg>
             </TouchableOpacity>
 
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
