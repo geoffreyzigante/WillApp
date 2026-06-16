@@ -39,7 +39,7 @@ export const SpinningLoader = ({ size = 24, color = '#c9beed' }) => {
   );
 };
 
-export const PULL_THRESHOLD = 70;
+export const PULL_THRESHOLD = 45;
 
 export const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, children, ...props }, ref) => {
   const [refreshing, setRefreshing] = useState(false);
