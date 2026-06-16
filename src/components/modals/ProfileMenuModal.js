@@ -136,15 +136,26 @@ export function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake
             <TouchableOpacity onPress={onClose} hitSlop={20}>
               <View style={s.modalHandle} />
             </TouchableOpacity>
-            {/* Croix de fermeture haut-droite, light violet (alignee web /profil/). */}
+            {/* Croix de fermeture haut-droite : cercle violet pale + X primary. */}
             <TouchableOpacity
               onPress={onClose}
               hitSlop={12}
-              style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                width: 34,
+                height: 34,
+                borderRadius: 17,
+                backgroundColor: '#F4EFFF',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 999,
+              }}
               accessibilityLabel="Fermer"
             >
-              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                <Path d="M6 6l12 12M18 6L6 18" stroke="#C4A6FF" strokeWidth={2.2} strokeLinecap="round" />
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 6l12 12M18 6L6 18" stroke="#7B2FFF" strokeWidth={2.6} strokeLinecap="round" />
               </Svg>
             </TouchableOpacity>
 
