@@ -540,6 +540,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // décider de relancer (le frame processor peut se figer ~100-400ms
   // pendant Deep Fusion : sans cette attente, on relit un ref stale).
   const frameSeqRef = useRef(0);
+  // Timestamp ms de la derniere frame analysee. Lu par captureBurstLoop pour
+  // detecter une stagnation Vision (>250ms = frame processor fige par Deep
+  // Fusion ou suspension AVCapture). Si stale, on stoppe le burst plutot que
+  // de tirer sur un faceInZoneRef qui n'a pas pu repasser a false.
+  const lastFrameAtRef = useRef(0);
   // True pendant qu'une boucle de capture est en cours. Empêche un 2e
   // démarrage concurrent si plusieurs frames "face détecté" arrivent rapprochées.
   const burstLoopRef = useRef(false);
@@ -724,6 +729,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // s'arrête dès que faceInZoneRef repasse à false).
       if (!isDetectionEnabledRef.current) return;
       frameSeqRef.current += 1;
+      lastFrameAtRef.current = Date.now();
       faceInZoneRef.current = count > 0;
       // Cadence Vision dynamique : visage detecte -> repasse immediatement
       // a 10 fps. Si pas de visage -> arme un timeout 30s qui bascule en idle
@@ -1925,6 +1931,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       ) {
         // Pre-shot guard : re-check juste avant chaque lancement.
         if (!faceInZoneRef.current) break;
+
+        // Watchdog frame staleness : si Vision n'a pas dispatch de frame
+        // depuis >250 ms, faceInZoneRef est stale -- on a pu sortir de zone
+        // pendant Deep Fusion / suspension AVCapture sans que le ref repasse
+        // a false. Stoppe le burst pour eviter une rafale parasite.
+        if (Date.now() - lastFrameAtRef.current > 250) {
+          console.warn(`[burst] frame stale ${Date.now() - lastFrameAtRef.current}ms — pause burst`);
+          break;
+        }
 
         // Backpressure dur — deux gardes independantes :
         //
