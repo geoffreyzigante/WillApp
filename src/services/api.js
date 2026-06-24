@@ -49,6 +49,58 @@ export async function apiFetch(path, options = {}, { onAuthFailure } = {}) {
 // est deloggue au milieu de l onboarding selfie -> boucle login/save/logout.
 // Le 401 propage comme erreur normale, runSelfieUpload catch et bascule en
 // 'failed' (etat visuel B15) sans logout.
+// Phase 2b fermeture R2 -- charge le selfie depuis /runner/selfie/image
+// (auth runner, retourne le binary JPEG) et le convertit en data URI
+// `data:image/jpeg;base64,...` pour que les <Image source={{ uri }}>
+// existants continuent de fonctionner SANS prop drilling de headers.
+//
+// Robustesse : RETOURNE null PROPREMENT si :
+//   - runnerToken absent / runnerApiFetch non fourni
+//   - fetch reseau echoue (Network request failed)
+//   - HTTP non-OK (401 session expiree, 404 selfie absent, 5xx, etc.)
+//   - blob() echoue ou retourne taille 0
+//   - lecture base64 echoue
+// Le caller affiche le placeholder selfie existant + log warning.
+// Aucun throw, jamais d Image cassee.
+//
+// Cout memoire : ~30-80 Ko binary -> ~40-110 Ko base64 + le scheme
+// `data:image/jpeg;base64,`. AsyncStorage tolerant (limite ~6 Mo iOS).
+export async function loadSelfieDataUri(runnerApiFetch) {
+  if (typeof runnerApiFetch !== 'function') return null;
+  try {
+    const r = await runnerApiFetch('/runner/selfie/image');
+    if (!r || !r.ok) {
+      console.warn('[selfie] /runner/selfie/image HTTP', r?.status || 'no-response');
+      return null;
+    }
+    const blob = await r.blob();
+    if (!blob || blob.size === 0) {
+      console.warn('[selfie] blob vide ou null');
+      return null;
+    }
+    // FileReader.readAsDataURL retourne deja "data:<ct>;base64,<...>".
+    // RN supporte FileReader nativement (polyfill expo-file-system par defaut).
+    const dataUri = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result;
+        resolve(typeof result === 'string' && result.startsWith('data:') ? result : null);
+      };
+      reader.onerror = () => resolve(null);
+      try { reader.readAsDataURL(blob); } catch (e) { resolve(null); }
+    });
+    if (!dataUri) {
+      console.warn('[selfie] base64 read fail');
+      return null;
+    }
+    return dataUri;
+  } catch (e) {
+    // Network error, AbortError, etc. -> log + null
+    console.warn('[selfie] loadSelfieDataUri error', e?.message || e);
+    return null;
+  }
+}
+
 export async function uploadSelfieToR2(uri, userId, runnerToken) {
   const blob = await (await fetch(uri)).blob();
   const r = await apiFetch(`/selfie/${userId}`, {

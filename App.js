@@ -155,7 +155,7 @@ import {
   migrateSensitiveKeysToSecureStore,
   BIOMETRIC_CONSENT_KEY,
 } from './src/services/secureStore';
-import { api, apiFetch, ensurePushRegistered, uploadSelfieToR2 } from './src/services/api';
+import { api, apiFetch, ensurePushRegistered, uploadSelfieToR2, loadSelfieDataUri } from './src/services/api';
 import { modeChipStyleApp, modeChipTextStyleApp, selfieDotColor } from './src/utils/styleHelpers';
 import { Icon } from './src/components/Icon';
 import { PasswordInput } from './src/components/PasswordInput';
@@ -5010,16 +5010,39 @@ export default function App() {
     // Audit B14 — migration via runnerApiFetch (token injecte). runnerApiFetch
     // est dans les deps, le ref guard selfieConfirmDoneRef empeche la boucle
     // meme si le wrapper change pour autre raison que token.
+    //
+    // Phase 2b fermeture R2 (2026-06-24) : on confirme l existence via
+    // GET /runner/selfie ({exists}) puis on hydrate selfieUri via
+    // loadSelfieDataUri qui fetch /runner/selfie/image (auth runner,
+    // binary) et le convertit en data:image/jpeg;base64,...
+    // L ancien data.uri (pub-*.r2.dev/_selfies/...) est ignore : le
+    // bucket public est en cours de fermeture, on bascule cote auth.
+    //
+    // Robustesse : si loadSelfieDataUri retourne null (reseau / 401 /
+    // blob vide / lecture base64 KO), on conserve selfieUri local
+    // (peut etre null = placeholder UI) sans crash.
     runnerApiFetch(`/runner/selfie`)
       .then(r => r.ok ? r.json() : null)
-      .then(data => {
+      .then(async (data) => {
         if (cancelled) return;
-        if (data?.exists && data?.uri) {
+        if (data?.exists) {
           if (!hasLocalSelfie) {
-            setSelfieUri(data.uri);
-            AsyncStorage.setItem('@will_selfie', data.uri).catch(() => {});
+            const dataUri = await loadSelfieDataUri(runnerApiFetch);
+            if (cancelled) return;
+            if (dataUri) {
+              setSelfieUri(dataUri);
+              AsyncStorage.setItem('@will_selfie', dataUri).catch(() => {});
+              setSelfieUploadState('ok');
+            } else {
+              // fetch binary KO : on ne casse pas l UI. Etat 'ok' car le
+              // serveur confirme exists=true (le selfie existe en R2,
+              // c est l affichage qui a foire). Le placeholder restera
+              // affiche tant que selfieUri = null.
+              setSelfieUploadState('ok');
+            }
+          } else {
+            setSelfieUploadState('ok');
           }
-          setSelfieUploadState('ok');
         } else if (hasLocalSelfie) {
           // Selfie local mais serveur dit non : upload R2 a foire OU TTL
           // R2 a purge l objet. Dans les 2 cas, UI propose retry.
