@@ -33,7 +33,7 @@ import { PhotoGrid } from '../components/PhotoGrid';
 import { SpinningLoader, RefreshableScrollView } from '../components/loaders';
 import { C, TYPE_COLORS, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
-import { API_URL, R2_PUBLIC } from '../constants/api';
+import { API_URL } from '../constants/api';
 import { extractBurstTs, extractIdx, detectPhotoExtension } from '../utils/photo';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
@@ -241,8 +241,8 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       for (const p of list) {
         seenIds.add(p.key);
         merged.push({
-          uri: p.url || `${R2_PUBLIC}/${p.key}`,
-          thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
+          uri: p.url || '',
+          thumbUri: p.thumb_url || p.url || '',
           id: p.key,
           tint,
           paid,
@@ -261,8 +261,8 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       const eventCode = m ? m[1] : '';
       const tint = eventTintMap[eventCode] || TYPE_COLORS.autre;
       merged.push({
-        uri: p.url || `${R2_PUBLIC}/${p.key}`,
-        thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
+        uri: p.url || '',
+        thumbUri: p.thumb_url || p.url || '',
         id: p.key,
         tint,
         paid: false,
@@ -327,8 +327,8 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
             if (!photoFavoritesSet.has(p.key)) continue;
             if (existingIds.has(p.key)) continue;
             extras.push({
-              uri: p.url || `${R2_PUBLIC}/${p.key}`,
-              thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
+              uri: p.url || '',
+              thumbUri: p.thumb_url || p.url || '',
               id: p.key,
               tint,
               paid: false,

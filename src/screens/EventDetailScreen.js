@@ -22,7 +22,7 @@ import { RaceDropdown } from '../components/wheels';
 import { AppHeader } from '../components/AppHeader';
 import { C, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
-import { API_URL, R2_PUBLIC } from '../constants/api';
+import { API_URL } from '../constants/api';
 import { formatDateLong, cityLabel, displayEventType, isUpcoming } from '../utils/format';
 import { raceTitle, extractBurstTs, extractIdx } from '../utils/photo';
 import { selfieDotColor } from '../utils/styleHelpers';
@@ -86,9 +86,9 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         const parts = (p.key || '').split('/');
         const photographerId = parts.length >= 2 ? parts[1] : null;
         return {
-          uri: p.url || `${R2_PUBLIC}/${p.key}`,
-          thumbUri: p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
-          thumbMdUri: p.thumb_md_url || p.thumb_url || p.url || `${R2_PUBLIC}/${p.key}`,
+          uri: p.url || '',
+          thumbUri: p.thumb_url || p.url || '',
+          thumbMdUri: p.thumb_md_url || p.thumb_url || p.url || '',
           id: p.key,
           tint,
           race: p.race,
