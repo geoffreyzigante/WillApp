@@ -6,8 +6,8 @@
 // Coût réseau : 1 fetch /list-public/{code} par card affichée (max 10),
 // limité aux 5 premières photos après shuffle pour borner la mémoire.
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,7 +23,7 @@ const MAX_ITEMS = 10;
 const PHOTOS_PER_CARD = 5;
 const ROTATE_INTERVAL_MS = 3500;
 
-function HotCard({ event, onPress }) {
+function HotCard({ event, onPress, isActive }) {
   const tint = colorForType(event.event_type);
   const typeLabel = displayEventType(event.event_type);
   const city = cityLabel(event.location);
@@ -31,6 +31,16 @@ function HotCard({ event, onPress }) {
 
   const [photos, setPhotos] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
+
+  // Pill "Hot" anime opacity (mirror site: transition 800ms ease).
+  const pillOpacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(pillOpacity, {
+      toValue: isActive ? 1 : 0,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+  }, [isActive, pillOpacity]);
 
   useEffect(() => {
     let alive = true;
@@ -69,21 +79,21 @@ function HotCard({ event, onPress }) {
             source={{ uri: coverUri }}
             style={StyleSheet.absoluteFillObject}
             contentFit="cover"
-            transition={500}
+            transition={1800}
             cachePolicy="memory-disk"
           />
         ) : null}
         <LinearGradient
           colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.75)']}
-          locations={[0, 0.45, 1]}
+          locations={[0.45, 0.65, 1]}
           style={StyleSheet.absoluteFillObject}
         />
-        <View style={styles.hotPill}>
+        <Animated.View style={[styles.hotPill, { opacity: pillOpacity }]} pointerEvents="none">
           <Svg width={11} height={11} viewBox="0 0 17.61 17.61">
             <Path d={HOT_ICON_PATH} fill="#fff" />
           </Svg>
           <Text style={styles.hotPillText}>Hot</Text>
-        </View>
+        </Animated.View>
         <View style={styles.overlay}>
           <Text style={styles.name} numberOfLines={2}>{event.name || 'Sans nom'}</Text>
           {subline ? (
@@ -101,6 +111,10 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
     .sort((a, b) => (b.event_date_end || b.event_date || '').localeCompare(a.event_date_end || a.event_date || ''))
     .slice(0, MAX_ITEMS);
 
+  // Track la carte au centre du viewport pour n'afficher la pastille "Hot"
+  // que sur celle-ci (mirror site mobile : pastille active uniquement).
+  const [activeIdx, setActiveIdx] = useState(0);
+
   if (hotOnes.length === 0) return null;
 
   return (
@@ -112,18 +126,47 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
         decelerationRate="fast"
         snapToInterval={CARD_W + 14}
         snapToAlignment="start"
+        snapToOffsets={hotOnes.map((_, i) => i * (CARD_W + 14))}
+        onScroll={(e) => {
+          const x = e.nativeEvent.contentOffset.x;
+          const idx = Math.round(x / (CARD_W + 14));
+          if (idx !== activeIdx) setActiveIdx(idx);
+        }}
+        scrollEventThrottle={16}
       >
-        {hotOnes.map(ev => (
-          <HotCard key={ev.code} event={ev} onPress={() => onOpenEvent(ev)} />
+        {hotOnes.map((ev, i) => (
+          <HotCard key={ev.code} event={ev} onPress={() => onOpenEvent(ev)} isActive={i === activeIdx} />
         ))}
       </ScrollView>
+      {/* Fade-out a droite (mirror site .hot-section::after) : suggere
+          qu'il y a plus de cards a scroller. */}
+      <LinearGradient
+        colors={['rgba(245,243,255,0)', 'rgba(245,243,255,0.95)']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+        pointerEvents="none"
+        style={styles.edgeFade}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { marginTop: 6, marginBottom: 18 },
-  scrollContent: { paddingRight: 14, gap: 14 },
+  // marginHorizontal: -20 annule le paddingHorizontal du parent (s.scroll)
+  // -> le carousel devient full-bleed comme sur le site (.hot-section .container
+  // { padding: 0 }). La 1ere carte est positionnee a 20px du bord physique
+  // grace au paddingLeft du scrollContent (= align avec le contenu hors carousel).
+  section: { marginTop: 8, marginBottom: 18, marginHorizontal: -20, position: 'relative' },
+  // Mirror site .hot-scroll : padding-left 20 (1ere carte alignee avec
+  // le contenu en dessous, pas collee au bord), gap 14, padding-right
+  // pour que la derniere carte puisse se snapper a gauche.
+  scrollContent: { paddingLeft: 20, paddingRight: 14, gap: 14 },
+  edgeFade: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 60,
+  },
   hotPill: {
     position: 'absolute',
     top: 12,
@@ -134,7 +177,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 100,
-    backgroundColor: C.primary,
+    backgroundColor: '#7B2FFF',
+    zIndex: 2,
   },
   hotPillText: {
     color: '#fff',
@@ -148,12 +192,7 @@ const styles = StyleSheet.create({
     height: CARD_H,
     borderRadius: 22,
     overflow: 'hidden',
-    backgroundColor: '#fff',
-    shadowColor: '#1A0A3E',
-    shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 14,
-    elevation: 4,
+    backgroundColor: '#f4f1ff',
   },
   cover: {
     width: '100%',
@@ -181,10 +220,11 @@ const styles = StyleSheet.create({
   subline: {
     color: 'rgba(255,255,255,0.92)',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '400',
+    fontFamily: 'Montserrat',
     marginTop: 6,
-    letterSpacing: 0.1,
-    textShadowColor: 'rgba(0,0,0,0.3)',
+    letterSpacing: 0.6,
+    textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },

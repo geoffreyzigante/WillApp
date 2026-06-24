@@ -19,6 +19,8 @@ import {
   View, Text, TouchableOpacity, Image, Animated, Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Svg, { Path } from 'react-native-svg';
+import { BlurView } from 'expo-blur';
 import { Image as ExpoImage } from 'expo-image';
 import * as MediaLibrary from 'expo-media-library';
 import { Paths, File } from 'expo-file-system';
@@ -36,7 +38,21 @@ import { extractBurstTs, extractIdx, detectPhotoExtension } from '../utils/photo
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
 
-export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerApiFetch, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, onRefreshFavorites, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload }) {
+export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerApiFetch, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, onRefreshFavorites, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload, headerH = 0 }) {
+  const scrollRef = useRef(null);
+  const [showBackTop, setShowBackTop] = useState(false);
+  const backTopOpacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(backTopOpacity, {
+      toValue: showBackTop ? 1 : 0,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  }, [showBackTop, backTopOpacity]);
+  const onScrollWatch = useCallback((e) => {
+    const y = e.nativeEvent.contentOffset.y;
+    setShowBackTop(y > 400);
+  }, []);
   const photosCacheKey = runnerUserId ? `@will_photos_cache_${runnerUserId}` : '@will_photos_cache';
   const knownEventsCacheKey = runnerUserId ? `@will_known_events_${runnerUserId}` : null;
   const [knownEvents, setKnownEvents] = useState([]);
@@ -467,69 +483,37 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
   }, [selectedIds, photos, downloading, exitSelection]);
 
   return (
+    <View style={{ flex: 1 }}>
     <RefreshableScrollView
+      ref={scrollRef}
       hideTopRefresh
       onRefresh={onPullRefresh}
+      onScroll={onScrollWatch}
       refreshing={refreshing}
       style={s.scroll}
-      contentContainerStyle={{ paddingBottom: 120 }}
+      contentContainerStyle={{ paddingTop: headerH, paddingBottom: 120 }}
       showsVerticalScrollIndicator={false}
     >
-      <View style={s.headerRow}>
-        <View style={s.headerLeft}>
-          <TouchableOpacity
-            hitSlop={10}
-            onPress={onOpenProfile}
-            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-          >
-            {selfieUri ? (
-              <Image
-                source={{ uri: selfieUri }}
-                style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: '#c9beed' }}
-              />
-            ) : (
-              <Icon.User size={30} color="#c9beed" />
-            )}
-            {selfieUri && (
-              <TouchableOpacity
-                onPress={(e) => {
-                  if (selfieUploadState === 'failed') { e.stopPropagation?.(); onRetryUpload?.(); }
-                }}
-                disabled={selfieUploadState !== 'failed'}
-                activeOpacity={selfieUploadState === 'failed' ? 0.6 : 1}
-                hitSlop={8}
-                style={{
-                  position: 'absolute', top: 0, right: 0,
-                  width: 10, height: 10, borderRadius: 5,
-                  backgroundColor: selfieDotColor(selfieUploadState),
-                  borderWidth: 2, borderColor: C.bg,
-                }}
-              />
-            )}
-          </TouchableOpacity>
-        </View>
-        {/* SLOT CENTRE : cross-fade titre <-> toast refresh. */}
-        <View style={{ flex: 1, height: 24, alignItems: 'center', justifyContent: 'center' }}>
-          <Animated.View style={{ position: 'absolute', opacity: titleOpacity }}>
-            <Text style={[s.welcome, { color: C.primary, fontSize: 17 }]}>Mes photos</Text>
-          </Animated.View>
-          {toastPhase !== 'idle' && (
-            <Animated.View style={{
-              position: 'absolute',
-              opacity: toastOpacity,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 6,
-            }}>
-              {toastPhase === 'searching' && <SpinningLoader size={14} color="#c9beed" />}
-              <Text style={{ color: '#c9beed', fontSize: 14, fontWeight: '500' }}>
-                {toastPhase === 'searching' ? 'Recherche…' : (refreshToast || '')}
-              </Text>
-            </Animated.View>
-          )}
-        </View>
-        <View style={{ width: 40, height: 40 }} />
-      </View>
+      {/* Header retire : rendu une seule fois dans App.js (AppHeader.js)
+          au-dessus du tab container -> persistant au switch de tab. */}
+
+      {/* Toast pull-to-refresh : ligne dediee sous le header. */}
+      {toastPhase !== 'idle' && (
+        <Animated.View style={{
+          opacity: toastOpacity,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          height: 20,
+          marginTop: 4,
+        }}>
+          {toastPhase === 'searching' && <SpinningLoader size={14} color="#c9beed" />}
+          <Text style={{ color: '#c9beed', fontSize: 14, fontWeight: '500' }}>
+            {toastPhase === 'searching' ? 'Recherche…' : (refreshToast || '')}
+          </Text>
+        </Animated.View>
+      )}
 
       <View style={{ height: 14 }} />
       <ConsentRenewBanner runnerApiFetch={runnerApiFetch} isAuthed={!!runnerUserId} />
@@ -673,5 +657,43 @@ export function PhotosScreen({ events = [], onOpenSelfie, selfieUri, onDeleteSel
         </>
       )}
     </RefreshableScrollView>
+    {/* Bouton "Remonter en haut" : mirror site .bib-back-to-top (40x40,
+        borderRadius 16, glass blur, centre horizontal). */}
+    <Animated.View
+      pointerEvents={showBackTop ? 'auto' : 'none'}
+      style={{
+        position: 'absolute',
+        left: 0, right: 0,
+        bottom: 100,
+        alignItems: 'center',
+        opacity: backTopOpacity,
+      }}
+    >
+      <TouchableOpacity
+        onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+        activeOpacity={0.85}
+        style={{
+          width: 40, height: 40,
+          borderRadius: 16,
+          overflow: 'hidden',
+          borderWidth: 0.5,
+          borderColor: 'rgba(255,255,255,0.9)',
+          shadowColor: '#000',
+          shadowOpacity: 0.10,
+          shadowOffset: { width: 0, height: 4 },
+          shadowRadius: 14,
+          elevation: 6,
+          backgroundColor: 'rgba(255,255,255,0.6)',
+        }}
+        accessibilityLabel="Remonter en haut"
+      >
+        <BlurView intensity={50} tint="light" style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+            <Path d="M6 15l6-6 6 6" stroke={C.primary} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+        </BlurView>
+      </TouchableOpacity>
+    </Animated.View>
+    </View>
   );
 }

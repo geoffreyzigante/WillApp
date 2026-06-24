@@ -3,9 +3,10 @@
 // Favoris avec indicateur slide anime, barre de recherche toggable, liste
 // EventCard ou empty state pedagogique (deconnecte + tab favoris).
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Animated, Keyboard } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { BlurView } from 'expo-blur';
 import { Icon } from '../components/Icon';
 import { SelfieIllustration } from '../components/SelfieIllustration';
 import { EventCard } from '../components/EventCard';
@@ -15,7 +16,7 @@ import { C } from '../constants/colors';
 import { s } from '../constants/styles';
 import { isUpcoming } from '../utils/format';
 
-export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, cartTotal = 0, onOpenPanier }) {
+export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, cartTotal = 0, onOpenPanier, headerH = 0 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   // Indicateur violet qui glisse entre les 3 pills. Mesure une fois la largeur
@@ -64,6 +65,19 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
     : tabFiltered
   ).slice().sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
   const scrollRef = useRef(null);
+  const [showBackTop, setShowBackTop] = useState(false);
+  const backTopOpacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(backTopOpacity, {
+      toValue: showBackTop ? 1 : 0,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  }, [showBackTop, backTopOpacity]);
+  const onScrollWatch = useCallback((e) => {
+    const y = e.nativeEvent.contentOffset.y;
+    setShowBackTop(y > 400);
+  }, []);
 
   // Quand le clavier se ferme : remonter le scroll en haut
   useEffect(() => {
@@ -81,52 +95,11 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
   }, [scrollToTopSignal]);
 
   return (
-    <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} style={s.scroll} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-      {/* Header mobile-site : [Logo gauche] ←→ [Hello\nPrenom (right)] [Burger]
-          Toutes les actions (profil, espaces orga/photo, panier, deconnexion) sont
-          derriere le burger qui ouvre ProfileMenuModal (onOpenProfile). */}
-      <View style={s.headerRow}>
-        <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.7} hitSlop={8}>
-          <Icon.Logo width={72} color={C.primary} />
-        </TouchableOpacity>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }}>
-          {runnerFirstName ? (
-            <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.7} hitSlop={6} style={{ alignItems: 'flex-end', flexShrink: 1 }}>
-              <Text style={[s.welcome, { color: '#c9beed', fontSize: 15, lineHeight: 17 }]} numberOfLines={1}>Hello</Text>
-              <Text style={[s.welcome, { color: '#c9beed', fontSize: 17, lineHeight: 19 }]} numberOfLines={1}>{runnerFirstName}</Text>
-            </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity
-            onPress={onOpenProfile}
-            activeOpacity={0.7}
-            hitSlop={8}
-            style={{
-              width: 36, height: 36, borderRadius: 12,
-              backgroundColor: 'transparent',
-              alignItems: 'center', justifyContent: 'center',
-              position: 'relative',
-            }}
-            accessibilityLabel="Menu"
-          >
-            <Svg width={18} height={14} viewBox="0 0 18 14" fill="none">
-              <Path d="M1 1h16M1 7h16M1 13h16" stroke={C.primary} strokeWidth={2} strokeLinecap="round" />
-            </Svg>
-            {/* Pastille verte selfie OK : visible si runner connecte + selfie uploaded
-                sans erreur (cf logique selfieDotColor / site .will-has-selfie). */}
-            {runnerFirstName && selfieUri && selfieUploadState !== 'failed' && selfieUploadState !== 'uploading' ? (
-              <View style={{
-                position: 'absolute',
-                top: 3, right: 3,
-                width: 10, height: 10, borderRadius: 5,
-                backgroundColor: '#10B981',
-                borderWidth: 2, borderColor: '#fff',
-              }} />
-            ) : null}
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={{ height: 18 }} />
+    <View style={{ flex: 1 }}>
+    <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} onScroll={onScrollWatch} style={s.scroll} contentContainerStyle={{ paddingTop: headerH, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+      {/* Header retire : il est maintenant rendu UNE FOIS dans App.js
+          (AppHeader.js) au-dessus du tab container -> aucun re-mount au
+          switch Accueil <-> Photos. */}
 
       {/* Carrousel "Galerie ouverte" : derniers events passes avec photos. */}
       <HotOnesCarousel events={events} onOpenEvent={onOpenEvent} />
@@ -292,5 +265,42 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
         )}
       </Animated.View>
     </RefreshableScrollView>
+    {/* Bouton "Remonter en haut" : mirror site .bib-back-to-top. */}
+    <Animated.View
+      pointerEvents={showBackTop ? 'auto' : 'none'}
+      style={{
+        position: 'absolute',
+        left: 0, right: 0,
+        bottom: 100,
+        alignItems: 'center',
+        opacity: backTopOpacity,
+      }}
+    >
+      <TouchableOpacity
+        onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+        activeOpacity={0.85}
+        style={{
+          width: 40, height: 40,
+          borderRadius: 16,
+          overflow: 'hidden',
+          borderWidth: 0.5,
+          borderColor: 'rgba(255,255,255,0.9)',
+          shadowColor: '#000',
+          shadowOpacity: 0.10,
+          shadowOffset: { width: 0, height: 4 },
+          shadowRadius: 14,
+          elevation: 6,
+          backgroundColor: 'rgba(255,255,255,0.6)',
+        }}
+        accessibilityLabel="Remonter en haut"
+      >
+        <BlurView intensity={50} tint="light" style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+            <Path d="M6 15l6-6 6 6" stroke={C.primary} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+        </BlurView>
+      </TouchableOpacity>
+    </Animated.View>
+    </View>
   );
 }

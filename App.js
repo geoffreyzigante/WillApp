@@ -190,6 +190,7 @@ import { OrganizerEventPhotosScreen } from './src/screens/OrganizerEventPhotosSc
 import { OrganizerDashboardScreen } from './src/screens/OrganizerDashboardScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { PhotosScreen } from './src/screens/PhotosScreen';
+import { AppHeader } from './src/components/AppHeader';
 import { EventDetailScreen } from './src/screens/EventDetailScreen';
 import { PhotoViewerModal } from './src/components/modals/PhotoViewerModal';
 import { PIN_REGEX, isValidPin, generateRandomPin } from './src/utils/pin';
@@ -4585,6 +4586,10 @@ export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [tab, setTab] = useState('upcoming');
   const [bottomTab, setBottomTab] = useState('home');
+  // Hauteur du AppHeader floating (mesuree onLayout). Utilisee comme paddingTop
+  // des ScrollView des screens pour que le contenu commence sous le header
+  // et puisse passer dessous au scroll -> effet glass/blur visible.
+  const [headerH, setHeaderH] = useState(60);
   // Signal incremente a chaque tap "Accueil" pour declencher un scroll-to-top
   // dans le HomeScreen (utile quand on est deja sur l onglet).
   const [homeScrollSignal, setHomeScrollSignal] = useState(0);
@@ -5885,7 +5890,7 @@ export default function App() {
             close (cf useEffect [openedEvent] qui clear au callback de fin
             d anim), permettant a EventDetailScreen de glisser vers la
             gauche au lieu de disparaitre instantanement. */}
-        <View style={{ width: SCREEN_W, height: '100%', backgroundColor: C.bg }}>
+        <View style={{ width: SCREEN_W, height: '100%', backgroundColor: '#F5F3FF' }}>
           <SafeAreaView style={{ flex: 1 }}>
             {eventInPanel && (
               <GestureDetector gesture={navPan}>
@@ -5893,11 +5898,15 @@ export default function App() {
                   <EventDetailScreen
                     event={eventInPanel}
                     onClose={() => setOpenedEvent(null)}
+                    onLogoPress={() => {
+                      setOpenedEvent(null);
+                      setBottomTab('home');
+                    }}
                     onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
                     onOpenProfile={() => {
-                      if (runnerSession) setProfileMenu(true);
+                      if (runnerSession) setBurgerMenu(true);
                       else { setAuthInitialMode('login'); setAuthModalVisible(true); }
                     }}
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
@@ -5924,6 +5933,25 @@ export default function App() {
         {/* PANNEAU DROIT : ACCUEIL (HomeScreen + tabs internes) */}
         <View style={{ width: SCREEN_W, height: '100%' }}>
           <SafeAreaView style={{ flex: 1 }}>
+        {/* Header partage : floating en absolute par-dessus le contenu pour
+            que le scroll passe dessous -> effet glass/blur iOS classique. */}
+        <View
+          onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50 }}
+        >
+          <AppHeader
+            runnerFirstName={runnerSession?.profile?.firstName || ''}
+            selfieUri={selfieUri}
+            selfieUploadState={selfieUploadState}
+            onOpenProfile={() => setBurgerMenu(true)}
+            onLogoPress={() => {
+              if (bottomTab === 'home') setHomeScrollSignal((n) => n + 1);
+              setBottomTab('home');
+              setOpenedEvent(null);
+              setOrganizerEventPhotosTarget(null);
+            }}
+          />
+        </View>
         <GestureDetector gesture={swipeNav}>
           <View style={{ flex: 1, overflow: 'hidden' }}>
             <Animated.View style={{
@@ -5934,6 +5962,7 @@ export default function App() {
             }}>
               <View style={{ width: SCREEN_W }}>
                 <HomeScreen
+                  headerH={headerH}
                   events={events}
                   onOpenEvent={setOpenedEvent}
                   onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
@@ -5963,7 +5992,9 @@ export default function App() {
               <View style={{ width: SCREEN_W }}>
                 {runnerSession ? (
                   <PhotosScreen
+                    headerH={headerH}
                     events={events}
+                    runnerFirstName={runnerSession?.profile?.firstName || ''}
                     onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
@@ -6340,6 +6371,7 @@ export default function App() {
         onDeleteAccount={deleteRunnerAccount}
         onOpenAuthLogin={() => { setAuthInitialMode('login'); setAuthModalVisible(true); }}
         onOpenAuthSignup={() => { setAuthInitialMode('register'); setAuthModalVisible(true); }}
+        onViewSelfie={() => setSelfieViewer(true)}
       />
 
       <ProfileMenuModal

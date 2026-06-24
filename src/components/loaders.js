@@ -77,6 +77,7 @@ export const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefre
 
   const onScroll = (e) => {
     scrollPosRef.current = e.nativeEvent.contentOffset.y;
+    if (typeof props.onScroll === 'function') props.onScroll(e);
   };
 
   const triggerRefresh = async () => {

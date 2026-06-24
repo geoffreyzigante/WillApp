@@ -13,10 +13,11 @@
 import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
-  KeyboardAvoidingView, Animated, ActivityIndicator, Platform, StyleSheet,
+  KeyboardAvoidingView, Animated, ActivityIndicator, Platform, StyleSheet, Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
 import { s } from '../../constants/styles';
@@ -25,6 +26,30 @@ import { API_URL } from '../../constants/api';
 import { passwordStrength } from '../../utils/passwordStrength';
 import { useDismissibleSheet } from '../../hooks/useDismissibleSheet';
 
+// Helpers date naissance : ISO yyyy-mm-dd <-> JJ/MM/AAAA pour l'affichage FR.
+const formatDobFr = (iso) => {
+  if (!iso) return '';
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+};
+const dateToIso = (d) => {
+  if (!d) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+const ageFromIso = (iso) => {
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return 0;
+  const dob = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const mm = now.getMonth() - dob.getMonth();
+  if (mm < 0 || (mm === 0 && now.getDate() < dob.getDate())) age -= 1;
+  return age;
+};
+
 export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'login' }) {
   const [mode, setMode] = useState(initialMode); // 'login' | 'register' | 'forgot'
   const [forgotEmailSent, setForgotEmailSent] = useState(false);
@@ -32,10 +57,10 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [postalCode, setPostalCode] = useState('');
-  const [city, setCity] = useState('');
-  const [citySuggestions, setCitySuggestions] = useState([]);
-  const [cityFetchFailed, setCityFetchFailed] = useState(false);
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [showDobPicker, setShowDobPicker] = useState(false);
+  const [cguAccepted, setCguAccepted] = useState(false);
+  const [biometricsConsent, setBiometricsConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { sheetTranslate, handlePanHandlers } = useDismissibleSheet(visible, onClose);
@@ -51,44 +76,11 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
 
   const reset = () => {
     setEmail(''); setPassword(''); setFirstName(''); setLastName('');
-    setPostalCode(''); setCity(''); setCitySuggestions([]);
+    setDateOfBirth(''); setCguAccepted(false); setBiometricsConsent(false);
     setError(''); setBusy(false); setForgotEmailSent(false);
   };
 
   const pwdStrength = passwordStrength(password);
-
-  useEffect(() => {
-    if (mode !== 'register') return;
-    if (!/^\d{5}$/.test(postalCode)) {
-      setCitySuggestions([]);
-      setCityFetchFailed(false);
-      return;
-    }
-    let cancelled = false;
-    const ctl = new AbortController();
-    ctl.timedOut = false;
-    const timeoutId = setTimeout(() => { ctl.timedOut = true; ctl.abort(); }, 3000);
-    (async () => {
-      try {
-        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`, { signal: ctl.signal });
-        clearTimeout(timeoutId);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const data = await r.json();
-        if (cancelled) return;
-        const cities = (data || []).map(c => c.nom);
-        setCitySuggestions(cities);
-        setCityFetchFailed(cities.length === 0);
-        if (cities.length === 1 && !city) setCity(cities[0]);
-      } catch (e) {
-        clearTimeout(timeoutId);
-        if (cancelled) return;
-        if (e?.name === 'AbortError' && !ctl.timedOut) return;
-        setCitySuggestions([]);
-        setCityFetchFailed(true);
-      }
-    })();
-    return () => { cancelled = true; ctl.abort(); clearTimeout(timeoutId); };
-  }, [postalCode, mode]);
 
   const submit = async () => {
     setError('');
@@ -113,12 +105,18 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
       }
       return;
     }
+    if (mode === 'register') {
+      if (!firstName.trim() || !lastName.trim()) { setError('Prénom et nom requis.'); return; }
+      if (!dateOfBirth) { setError('Date de naissance requise.'); return; }
+      if (ageFromIso(dateOfBirth) < 13) { setError('Tu dois avoir au moins 13 ans.'); return; }
+      if (!cguAccepted) { setError("Tu dois accepter les CGU et la politique de confidentialité."); return; }
+    }
     setBusy(true);
     try {
       const url = mode === 'login' ? '/runner/login' : '/runner/register';
       const body = mode === 'login'
         ? { email, password }
-        : { email, password, firstName, lastName, department: `${postalCode} ${city}`.trim() };
+        : { email, password, firstName, lastName, dateOfBirth, biometricsConsent };
       const r = await fetch(`${API_URL}${url}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -149,19 +147,14 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
                 <View {...handlePanHandlers} style={{ paddingVertical: 6, alignItems: 'center' }}>
                   <View style={s.modalHandle} />
                 </View>
-                {mode === 'register' && (
-                  <Text style={{ color: C.textSoft, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase', textAlign: 'center', marginTop: 0, marginBottom: 4 }}>
-                    Étape 1 sur 2
+                <Text style={[s.welcome, { color: C.primary, fontSize: 22, marginBottom: mode === 'forgot' ? 4 : 14, marginTop: 4, textAlign: 'center' }]}>
+                  {mode === 'login' ? 'Me connecter' : mode === 'forgot' ? 'Mot de passe oublié' : 'Créer mon compte'}
+                </Text>
+                {mode === 'forgot' && (
+                  <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }}>
+                    On t'envoie un lien par email pour le réinitialiser.
                   </Text>
                 )}
-                <Text style={[s.welcome, { color: C.primary, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
-                  {mode === 'login' ? 'Connexion' : mode === 'forgot' ? 'Mot de passe oublié' : 'Inscription'}
-                </Text>
-                <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }}>
-                  {mode === 'login' ? 'Connecte-toi à ton compte'
-                    : mode === 'forgot' ? "On t'envoie un lien par email pour le réinitialiser."
-                    : 'Crée ton compte coureur'}
-                </Text>
 
                 <ScrollView
                   keyboardShouldPersistTaps="handled"
@@ -171,63 +164,84 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
                 >
                   {mode === 'register' && (
                     <>
-                      <TextInput placeholder="Prénom" placeholderTextColor={C.textSoft} value={firstName} onChangeText={setFirstName} style={formSectionStyle.input} />
-                      <TextInput placeholder="Nom" placeholderTextColor={C.textSoft} value={lastName} onChangeText={setLastName} style={formSectionStyle.input} />
-                      <TextInput
-                        placeholder="Code postal"
-                        placeholderTextColor={C.textSoft}
-                        value={postalCode}
-                        onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
-                        keyboardType="number-pad"
-                        maxLength={5}
-                        style={formSectionStyle.input}
-                      />
-                      {citySuggestions.length > 0 && !city && (
-                        <ScrollView
-                          style={{ maxHeight: 140, marginBottom: 10, borderRadius: 12, backgroundColor: '#f5f3ff' }}
-                          keyboardShouldPersistTaps="handled"
-                          nestedScrollEnabled
-                        >
-                          {citySuggestions.map((c) => (
-                            <TouchableOpacity
-                              key={c}
-                              onPress={() => { setCity(c); setCitySuggestions([]); }}
-                              style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
-                            >
-                              <Text style={{ color: C.text, fontSize: 14 }}>{c}</Text>
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
+                      <TextInput placeholder="Prénom" placeholderTextColor={C.textSoft} value={firstName} onChangeText={setFirstName} textContentType="givenName" autoComplete="given-name" autoCapitalize="words" style={formSectionStyle.input} />
+                      <TextInput placeholder="Nom" placeholderTextColor={C.textSoft} value={lastName} onChangeText={setLastName} textContentType="familyName" autoComplete="family-name" autoCapitalize="words" style={formSectionStyle.input} />
+                      <TouchableOpacity
+                        onPress={() => setShowDobPicker(true)}
+                        style={[formSectionStyle.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                      >
+                        <Text style={{ color: dateOfBirth ? C.text : C.textSoft, fontSize: 15 }}>
+                          {dateOfBirth ? formatDobFr(dateOfBirth) : 'Date de naissance'}
+                        </Text>
+                        <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+                      </TouchableOpacity>
+                      {showDobPicker && (
+                        <DateTimePicker
+                          value={dateOfBirth ? new Date(dateOfBirth) : new Date(2000, 0, 1)}
+                          mode="date"
+                          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                          maximumDate={new Date()}
+                          onChange={(event, selectedDate) => {
+                            if (Platform.OS === 'android') setShowDobPicker(false);
+                            if (selectedDate) setDateOfBirth(dateToIso(selectedDate));
+                          }}
+                        />
                       )}
-                      {cityFetchFailed && !city && (
-                        <View style={{ marginBottom: 10 }}>
-                          <Text style={{ color: C.textSoft, fontSize: 12, marginBottom: 4 }}>
-                            Recherche de villes indisponible. Saisis ta ville manuellement.
-                          </Text>
-                          <TextInput
-                            placeholder="Ta ville"
-                            placeholderTextColor={C.textSoft}
-                            value={city}
-                            onChangeText={setCity}
-                            autoCapitalize="words"
-                            style={formSectionStyle.input}
-                          />
-                        </View>
-                      )}
-                      {city ? (
+                      {Platform.OS === 'ios' && showDobPicker && (
                         <TouchableOpacity
-                          onPress={() => setCity('')}
-                          style={[formSectionStyle.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                          onPress={() => setShowDobPicker(false)}
+                          style={{ alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 16, marginBottom: 6 }}
                         >
-                          <Text style={{ color: C.text, fontSize: 15 }}>{city}</Text>
-                          <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+                          <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>OK</Text>
                         </TouchableOpacity>
-                      ) : null}
+                      )}
                     </>
                   )}
-                  <TextInput placeholder="Email" placeholderTextColor={C.textSoft} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={formSectionStyle.input} />
+                  <TextInput placeholder="Email" placeholderTextColor={C.textSoft} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} textContentType="emailAddress" autoComplete="email" style={formSectionStyle.input} />
                   {mode !== 'forgot' && (
-                    <PasswordInput placeholder="Mot de passe" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} style={formSectionStyle.input} />
+                    <PasswordInput placeholder="Mot de passe" placeholderTextColor={C.textSoft} value={password} onChangeText={setPassword} textContentType={mode === 'register' ? 'newPassword' : 'password'} autoComplete={mode === 'register' ? 'new-password' : 'current-password'} style={formSectionStyle.input} />
+                  )}
+                  {mode === 'register' && (
+                    <>
+                      <TouchableOpacity
+                        onPress={() => setCguAccepted(!cguAccepted)}
+                        activeOpacity={0.7}
+                        style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 6, marginBottom: 8 }}
+                      >
+                        <View style={{
+                          width: 20, height: 20, borderRadius: 5, marginTop: 1,
+                          borderWidth: 1.5, borderColor: cguAccepted ? C.primary : '#c9beed',
+                          backgroundColor: cguAccepted ? C.primary : 'transparent',
+                          alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {cguAccepted && <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', lineHeight: 14 }}>✓</Text>}
+                        </View>
+                        <Text style={{ flex: 1, color: C.text, fontSize: 12, lineHeight: 16 }}>
+                          J'accepte les{' '}
+                          <Text onPress={() => Linking.openURL('https://will-app.com/cgu')} style={{ color: C.primary, fontWeight: '600' }}>CGU</Text>
+                          {' '}et la{' '}
+                          <Text onPress={() => Linking.openURL('https://will-app.com/confidentialite')} style={{ color: C.primary, fontWeight: '600' }}>politique de confidentialité</Text>.
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setBiometricsConsent(!biometricsConsent)}
+                        activeOpacity={0.7}
+                        style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 4 }}
+                      >
+                        <View style={{
+                          width: 20, height: 20, borderRadius: 5, marginTop: 1,
+                          borderWidth: 1.5, borderColor: biometricsConsent ? C.primary : '#c9beed',
+                          backgroundColor: biometricsConsent ? C.primary : 'transparent',
+                          alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {biometricsConsent && <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', lineHeight: 14 }}>✓</Text>}
+                        </View>
+                        <Text style={{ flex: 1, color: C.text, fontSize: 12, lineHeight: 16 }}>
+                          J'autorise Will à utiliser mon selfie (données biométriques) pour retrouver mes photos automatiquement.{' '}
+                          <Text style={{ color: C.textSoft, fontStyle: 'italic', fontSize: 11 }}>Optionnel — tu peux l'activer plus tard.</Text>
+                        </Text>
+                      </TouchableOpacity>
+                    </>
                   )}
                   {mode === 'login' && (
                     <TouchableOpacity
@@ -259,9 +273,9 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
                   {busy
                     ? <ActivityIndicator color="#fff" />
                     : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
-                        {mode === 'login' ? 'Se connecter'
+                        {mode === 'login' ? 'Me connecter'
                           : mode === 'forgot' ? (forgotEmailSent ? 'Email envoyé' : 'Recevoir le lien')
-                          : "S'inscrire"}
+                          : 'Créer mon compte'}
                       </Text>}
                 </TouchableOpacity>
 

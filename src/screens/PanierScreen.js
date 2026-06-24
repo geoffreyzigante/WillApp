@@ -38,7 +38,7 @@ export function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onC
   const orderedCodes = useMemo(() => Array.from(carts.keys()), [carts]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
+    <View style={{ flex: 1, backgroundColor: '#F5F3FF' }}>
       {/* Header style charte modal (AuthOrganizerModal) : titre AVEstiana
           rose centre + sous-titre textSoft. En embedded la fermeture passe
           par le handle drag + tap backdrop, pas de X. */}

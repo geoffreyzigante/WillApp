@@ -104,17 +104,33 @@ export const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, s
 });
 
 export function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFavorite, selectionMode = false, selectedIds, onTogglePhotoSelect, numColumns }) {
-  // Colonnes adaptatives : si numColumns fourni, on utilise. Sinon
-  // fallback : 1 photo = 1 col (full width), 2 = 2 col, 3 = 3 col, 4+ = 4 col.
+  // Colonnes adaptatives : si numColumns fourni, on utilise (cap 3). Sinon
+  // fallback : 1 photo = 1 col, 2 = 2 col, 3+ = 3 col.
   const cols = numColumns != null
-    ? Math.max(1, Math.min(numColumns, 4))
-    : Math.max(1, Math.min(photos.length || 4, 4));
+    ? Math.max(1, Math.min(numColumns, 3))
+    : Math.max(1, Math.min(photos.length || 3, 3));
   const itemSize = (SCREEN_W - 40 - (cols - 1) * 8) / cols;
   const itemStyle = { width: itemSize, height: itemSize, marginBottom: 8 };
 
-  // Si pas de photos : grille de placeholders (cols = 4 par defaut visuel).
+  // Last-row fill : si la derniere ligne est incomplete (1 ou 2 items),
+  // ces items s'etalent pour remplir la largeur (50/50 ou full).
+  const total = photos.length;
+  const remainder = (cols === 3 && total > 2) ? total % 3 : 0;
+  const lastRowStart = total - remainder;
+  const fullW = SCREEN_W - 40;
+  const halfW = (fullW - 8) / 2;
+  const fullStyle = { width: fullW, height: fullW, marginBottom: 8 };
+  const halfStyle = { width: halfW, height: halfW, marginBottom: 8 };
+  const styleForIndex = (i) => {
+    if (remainder > 0 && i >= lastRowStart) {
+      return remainder === 1 ? fullStyle : halfStyle;
+    }
+    return itemStyle;
+  };
+
+  // Si pas de photos : grille de placeholders (cols = 3 par defaut visuel).
   if (photos.length === 0) {
-    const phCols = 4;
+    const phCols = 3;
     const phSize = (SCREEN_W - 40 - (phCols - 1) * 8) / phCols;
     const phStyle = { width: phSize, height: phSize, marginBottom: 8 };
     return (
@@ -145,7 +161,7 @@ export function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFav
           selectionMode={selectionMode}
           selected={!!(selectedIds && selectedIds.has(p.id))}
           onToggleSelect={onTogglePhotoSelect}
-          itemStyle={itemStyle}
+          itemStyle={styleForIndex(i)}
         />
       ))}
     </View>

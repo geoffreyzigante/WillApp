@@ -12,7 +12,7 @@ import { C } from './colors';
 const { width: SCREEN_W } = Dimensions.get('window');
 
 export const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1, backgroundColor: '#F5F3FF' },
   scroll: { flex: 1, paddingHorizontal: 20 },
 
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, paddingBottom: 4 },

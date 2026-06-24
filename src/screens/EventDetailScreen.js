@@ -19,6 +19,7 @@ import { SkeletonCell } from '../components/SkeletonCell';
 import { FavStar } from '../components/FavStar';
 import { PhotoCell } from '../components/PhotoGrid';
 import { RaceDropdown } from '../components/wheels';
+import { AppHeader } from '../components/AppHeader';
 import { C, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
 import { API_URL, R2_PUBLIC } from '../constants/api';
@@ -37,7 +38,7 @@ export function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange }) {
+function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange }) {
   const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -249,87 +250,17 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
 
   const renderHeader = () => (
     <View style={{ gap: 8, paddingBottom: 8 }}>
-      <View style={[s.headerRow, { paddingBottom: 0 }]}>
-        <View style={[s.headerLeft, { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }]}>
-          <TouchableOpacity hitSlop={10} style={{ position: 'relative' }} onPress={onOpenProfile}>
-            {selfieUri ? (
-              <Image
-                source={{ uri: selfieUri }}
-                style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: '#c9beed' }}
-              />
-            ) : (
-              <Icon.User size={30} color="#c9beed" />
-            )}
-            {selfieUri && (
-              <TouchableOpacity
-                onPress={(e) => {
-                  if (selfieUploadState === 'failed') { e.stopPropagation?.(); onRetryUpload?.(); }
-                }}
-                disabled={selfieUploadState !== 'failed'}
-                activeOpacity={selfieUploadState === 'failed' ? 0.6 : 1}
-                hitSlop={8}
-                style={{
-                  position: 'absolute', top: -2, right: -2, width: 10, height: 10,
-                  borderRadius: 5, backgroundColor: selfieDotColor(selfieUploadState),
-                  borderWidth: 2, borderColor: C.bg,
-                }}
-              />
-            )}
-          </TouchableOpacity>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-            {runnerFirstName ? (
-              <Text style={[s.welcome, { color: '#c9beed', fontSize: 17 }]} numberOfLines={1}>
-                Hello {runnerFirstName}
-              </Text>
-            ) : (
-              <>
-                <Text style={[s.welcome, { color: '#c9beed', fontSize: 17 }]} numberOfLines={1}>Bienvenue sur </Text>
-                <Icon.Logo width={36} color="#c9beed" />
-              </>
-            )}
-          </View>
-        </View>
+      {/* Header mirror Accueil : Logo gauche + Hello + burger droite.
+          Le burger ouvre le drawer (mirror onOpenProfile = setBurgerMenu). */}
+      <View style={{ marginHorizontal: -20 }}>
+        <AppHeader
+          runnerFirstName={runnerFirstName || ''}
+          selfieUri={selfieUri}
+          selfieUploadState={selfieUploadState}
+          onOpenProfile={onOpenProfile}
+          onLogoPress={onLogoPress}
+        />
       </View>
-
-      {onToggleFollow && !isFollowing && (
-        <View style={{ marginTop: 8, marginBottom: -24, position: 'relative' }}>
-          <TouchableOpacity onPress={onToggleFollow} activeOpacity={0.88}>
-            <LinearGradient
-              colors={['#7B2FFF', '#5E1AD6']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={{
-                borderTopLeftRadius: 16, borderTopRightRadius: 16,
-                paddingTop: 14, paddingBottom: 14 + 16, paddingHorizontal: 18,
-                shadowColor: '#7B2FFF', shadowOpacity: 0.3,
-                shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
-                  <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
-                </Svg>
-                <Text
-                  numberOfLines={2}
-                  ellipsizeMode="tail"
-                  style={{ color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat', flexShrink: 1 }}
-                >
-                  Mets en favoris pour suivre cet event,{'\n'}
-                  <Text style={{ fontWeight: '400' }}>tes photos arrivent dès leur publication</Text>
-                </Text>
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
-          <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.6)']}
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: 0, right: 0,
-              bottom: 0, height: 36,
-            }}
-          />
-        </View>
-      )}
 
       <View style={{ position: 'relative', zIndex: 1 }}>
         <View style={[s.eventCard, { marginBottom: 0, height: undefined }]}>
@@ -534,22 +465,25 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
         </View>
       ) : (
         <>
-          {uniqueRaces.length > 1 && photos.length > 0 && (() => {
-            return (
-              <View>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <RaceDropdown
-                    items={[{ key: 'all', label: 'Toutes les photos' }, ...uniqueRaces.map(r => ({ key: String(r), label: raceTabLabel(String(r)) }))]}
-                    activeKey={activeRaceFilter}
-                    onChange={(key) => {
-                      LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
-                      setActiveRaceFilter(key);
-                      if (key === 'all') setActiveKmFilter('all');
-                    }}
-                    accent={C.primary}
-                    bg="#f5f3ff"
-                  />
-                  {activeRaceFilter !== 'all' && kmsForActiveRace.length > 1 && (
+          {photos.length > 0 && (
+            <View>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {/* Filtres race + km : seulement si l'event a plusieurs distances. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexShrink: 1, minWidth: 0 }}>
+                  {uniqueRaces.length > 1 && (
+                    <RaceDropdown
+                      items={[{ key: 'all', label: 'Toutes les photos' }, ...uniqueRaces.map(r => ({ key: String(r), label: raceTabLabel(String(r)) }))]}
+                      activeKey={activeRaceFilter}
+                      onChange={(key) => {
+                        LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+                        setActiveRaceFilter(key);
+                        if (key === 'all') setActiveKmFilter('all');
+                      }}
+                      accent={C.primary}
+                      bg="#EDE4FF"
+                    />
+                  )}
+                  {uniqueRaces.length > 1 && activeRaceFilter !== 'all' && kmsForActiveRace.length > 1 && (
                     <RaceDropdown
                       items={[{ key: 'all', label: 'km' }, ...kmsForActiveRace.map(k => ({
                         key: k,
@@ -558,57 +492,59 @@ function EventDetailScreenInner({ event, onClose, onOpenSelfie, selfieUri, onDel
                       activeKey={activeKmFilter}
                       onChange={setActiveKmFilter}
                       accent={C.primary}
-                      bg="#f5f3ff"
+                      bg="#EDE4FF"
                       compact
                     />
                   )}
+                </View>
+                {/* Tri chronologique + favoris : toujours visibles des qu'il y
+                    a au moins une photo (independamment du nombre de distances). */}
+                <TouchableOpacity
+                  onPress={() => {
+                    try { Haptics?.selectionAsync?.(); } catch {}
+                    setSortDesc(v => !v);
+                  }}
+                  hitSlop={10}
+                  activeOpacity={0.7}
+                  accessibilityLabel={sortDesc ? 'Trier du plus ancien au plus recent' : 'Trier du plus recent au plus ancien'}
+                  style={{
+                    width: 30, height: 30, borderRadius: 15,
+                    backgroundColor: '#EDE4FF',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                    <Path d="M7 4v16M3 16l4 4 4-4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    <Path d="M17 20V4M13 8l4-4 4 4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  </Svg>
+                </TouchableOpacity>
+                {isAuthed && (
                   <TouchableOpacity
                     onPress={() => {
                       try { Haptics?.selectionAsync?.(); } catch {}
-                      setSortDesc(v => !v);
+                      setFavOnly(v => !v);
                     }}
                     hitSlop={10}
                     activeOpacity={0.7}
-                    accessibilityLabel={sortDesc ? 'Trier du plus ancien au plus recent' : 'Trier du plus recent au plus ancien'}
+                    accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
                     style={{
                       width: 30, height: 30, borderRadius: 15,
-                      backgroundColor: '#f5f3ff',
+                      backgroundColor: favOnly ? C.primary : '#EDE4FF',
                       alignItems: 'center', justifyContent: 'center',
+                      marginLeft: 6,
                     }}
                   >
-                    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                      <Path d="M7 4v16M3 16l4 4 4-4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                      <Path d="M17 20V4M13 8l4-4 4 4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                    </Svg>
+                    <FavStar
+                      size={14}
+                      fill={favOnly ? '#fff' : C.primary}
+                      stroke={favOnly ? '#fff' : C.primary}
+                      strokeWidth={1.8}
+                    />
                   </TouchableOpacity>
-                  {isAuthed && (
-                    <TouchableOpacity
-                      onPress={() => {
-                        try { Haptics?.selectionAsync?.(); } catch {}
-                        setFavOnly(v => !v);
-                      }}
-                      hitSlop={10}
-                      activeOpacity={0.7}
-                      accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
-                      style={{
-                        width: 30, height: 30, borderRadius: 15,
-                        backgroundColor: favOnly ? C.primary : '#f5f3ff',
-                        alignItems: 'center', justifyContent: 'center',
-                        marginLeft: 6,
-                      }}
-                    >
-                      <FavStar
-                        size={14}
-                        fill={favOnly ? '#fff' : C.primary}
-                        stroke={favOnly ? '#fff' : C.primary}
-                        strokeWidth={1.8}
-                      />
-                    </TouchableOpacity>
-                  )}
-                </View>
+                )}
               </View>
-            );
-          })()}
+            </View>
+          )}
         </>
       )}
     </View>

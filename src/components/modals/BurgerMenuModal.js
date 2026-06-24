@@ -38,6 +38,7 @@ export function BurgerMenuModal({
   onDeleteAccount,
   onOpenAuthLogin,
   onOpenAuthSignup,
+  onViewSelfie,
 }) {
   const selfieOk = !!selfieUri && selfieUploadState !== 'failed' && selfieUploadState !== 'uploading';
 
@@ -120,7 +121,11 @@ export function BurgerMenuModal({
                     <Text style={styles.profileActionText}>Mes photos</Text>
                   </TouchableOpacity>
                 </View>
-                <View style={styles.profileThumbWrap}>
+                <TouchableOpacity
+                  style={styles.profileThumbWrap}
+                  onPress={selfieUri ? fire(onViewSelfie) : fire(onOpenAccount)}
+                  activeOpacity={0.85}
+                >
                   <View style={styles.profileThumb}>
                     {selfieUri ? (
                       <ExpoImage
@@ -138,7 +143,7 @@ export function BurgerMenuModal({
                     )}
                   </View>
                   <View style={[styles.profileDot, { backgroundColor: selfieOk ? '#10B981' : '#ef4444' }]} />
-                </View>
+                </TouchableOpacity>
               </View>
             ) : null}
 
@@ -230,7 +235,7 @@ const styles = StyleSheet.create({
   greeting: {
     fontFamily: 'AVEstiana',
     fontSize: 26,
-    color: C.primary,
+    color: '#c9beed',
     letterSpacing: -0.2,
     lineHeight: 28,
   },

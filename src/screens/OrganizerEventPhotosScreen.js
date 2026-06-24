@@ -398,7 +398,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
 
   return (
     <GridErrorBoundary>
-      <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <View style={{ flex: 1, backgroundColor: '#F5F3FF' }}>
         <FlatList
           data={loading ? [] : filteredPhotos.slice(0, visibleCount)}
           numColumns={3}

@@ -12,6 +12,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { Image as ExpoImage } from 'expo-image';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Icon } from '../Icon';
 import { InfoRow } from '../InfoRow';
 import { PasswordInput } from '../PasswordInput';
@@ -19,14 +20,26 @@ import { C } from '../../constants/colors';
 import { s } from '../../constants/styles';
 import { authStyles, profileCardStyles } from '../../constants/formStyles';
 
+// Helpers date naissance : ISO yyyy-mm-dd <-> JJ/MM/AAAA pour l'affichage FR.
+const formatDobFr = (iso) => {
+  if (!iso) return '';
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+};
+const dateToIso = (d) => {
+  if (!d) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 export function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload }) {
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [postalCode, setPostalCode] = useState('');
-  const [city, setCity] = useState('');
-  const [citySuggestions, setCitySuggestions] = useState([]);
-  const [cityFetchFailed, setCityFetchFailed] = useState(false);
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [showDobPicker, setShowDobPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [changingPwd, setChangingPwd] = useState(false);
   const [currentPwd, setCurrentPwd] = useState('');
@@ -60,54 +73,13 @@ export function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake
     }
   };
 
-  // Parse "27400 Louviers" -> postalCode "27400", city "Louviers"
-  const parseDept = (str = '') => {
-    const m = String(str).match(/^(\d{5})\s+(.+)$/);
-    return m ? { postalCode: m[1], city: m[2] } : { postalCode: '', city: str };
-  };
-
   useEffect(() => {
     if (editing && profile) {
       setFirstName(profile.firstName || '');
       setLastName(profile.lastName || '');
-      const { postalCode: pc, city: cy } = parseDept(profile.department);
-      setPostalCode(pc);
-      setCity(cy);
+      setDateOfBirth(profile.dateOfBirth || '');
     }
   }, [editing, profile]);
-
-  // Suggestions ville
-  useEffect(() => {
-    if (!editing) return;
-    if (!/^\d{5}$/.test(postalCode)) {
-      setCitySuggestions([]);
-      setCityFetchFailed(false);
-      return;
-    }
-    let cancelled = false;
-    const ctl = new AbortController();
-    ctl.timedOut = false;
-    const timeoutId = setTimeout(() => { ctl.timedOut = true; ctl.abort(); }, 3000);
-    (async () => {
-      try {
-        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`, { signal: ctl.signal });
-        clearTimeout(timeoutId);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const data = await r.json();
-        if (cancelled) return;
-        const cities = (data || []).map(c => c.nom);
-        setCitySuggestions(cities);
-        setCityFetchFailed(cities.length === 0);
-      } catch (e) {
-        clearTimeout(timeoutId);
-        if (cancelled) return;
-        if (e?.name === 'AbortError' && !ctl.timedOut) return;
-        setCitySuggestions([]);
-        setCityFetchFailed(true);
-      }
-    })();
-    return () => { cancelled = true; ctl.abort(); clearTimeout(timeoutId); };
-  }, [postalCode, editing]);
 
   const save = async () => {
     setBusy(true);
@@ -115,7 +87,7 @@ export function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake
       await onUpdateProfile?.({
         firstName,
         lastName,
-        department: `${postalCode} ${city}`.trim(),
+        dateOfBirth,
       });
       setEditing(false);
     } finally {
@@ -230,7 +202,7 @@ export function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake
                   <InfoRow label="Prénom" value={profile.firstName} />
                   <InfoRow label="Nom" value={profile.lastName} />
                   <InfoRow label="Email" value={profile.email} />
-                  <InfoRow label="Ville" value={profile.department} last />
+                  <InfoRow label="Date de naissance" value={formatDobFr(profile.dateOfBirth)} last />
                   <TouchableOpacity
                     onPress={() => setEditing(true)}
                     style={{ marginTop: 14, alignItems: 'center' }}
@@ -253,53 +225,35 @@ export function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake
                     value={lastName} onChangeText={setLastName}
                     style={authStyles.input}
                   />
-                  <TextInput
-                    placeholder="Code postal" placeholderTextColor={C.textSoft}
-                    value={postalCode}
-                    onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
-                    keyboardType="number-pad" maxLength={5}
-                    style={authStyles.input}
-                  />
-                  {citySuggestions.length > 0 && !city && (
-                    <ScrollView
-                      style={{ maxHeight: 140, marginBottom: 10, borderRadius: 12, backgroundColor: '#f5f3ff' }}
-                      keyboardShouldPersistTaps="handled"
-                    >
-                      {citySuggestions.map((c) => (
-                        <TouchableOpacity
-                          key={c}
-                          onPress={() => { setCity(c); setCitySuggestions([]); }}
-                          style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
-                        >
-                          <Text style={{ color: C.text, fontSize: 14 }}>{c}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
+                  <TouchableOpacity
+                    onPress={() => setShowDobPicker(true)}
+                    style={[authStyles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                  >
+                    <Text style={{ color: dateOfBirth ? C.text : C.textSoft, fontSize: 15 }}>
+                      {dateOfBirth ? formatDobFr(dateOfBirth) : 'Date de naissance'}
+                    </Text>
+                    <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+                  </TouchableOpacity>
+                  {showDobPicker && (
+                    <DateTimePicker
+                      value={dateOfBirth ? new Date(dateOfBirth) : new Date(2000, 0, 1)}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      maximumDate={new Date()}
+                      onChange={(event, selectedDate) => {
+                        if (Platform.OS === 'android') setShowDobPicker(false);
+                        if (selectedDate) setDateOfBirth(dateToIso(selectedDate));
+                      }}
+                    />
                   )}
-                  {cityFetchFailed && !city && (
-                    <View style={{ marginBottom: 10 }}>
-                      <Text style={{ color: C.textSoft, fontSize: 12, marginBottom: 4 }}>
-                        Recherche de villes indisponible. Saisis ta ville manuellement.
-                      </Text>
-                      <TextInput
-                        placeholder="Ta ville"
-                        placeholderTextColor={C.textSoft}
-                        value={city}
-                        onChangeText={setCity}
-                        autoCapitalize="words"
-                        style={authStyles.input}
-                      />
-                    </View>
-                  )}
-                  {city ? (
+                  {Platform.OS === 'ios' && showDobPicker && (
                     <TouchableOpacity
-                      onPress={() => setCity('')}
-                      style={[authStyles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                      onPress={() => setShowDobPicker(false)}
+                      style={{ alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 16, marginBottom: 8 }}
                     >
-                      <Text style={{ color: C.text, fontSize: 15 }}>{city}</Text>
-                      <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+                      <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>OK</Text>
                     </TouchableOpacity>
-                  ) : null}
+                  )}
 
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <TouchableOpacity

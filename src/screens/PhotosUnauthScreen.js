@@ -10,7 +10,7 @@ import { C } from '../constants/colors';
 
 export function PhotosUnauthScreen({ onSignup, onLogin }) {
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F3FF' }}>
       <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24 }}>
         <View style={{ alignItems: 'center', marginBottom: 16 }}>
           <SelfieIllustration size={96} />
