@@ -78,7 +78,7 @@ import * as Updates from 'expo-updates';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Battery from 'expo-battery';
 
-import { API_URL, R2_PUBLIC, PRICE_PER_PHOTO_EUR } from './src/constants/api';
+import { API_URL, PRICE_PER_PHOTO_EUR } from './src/constants/api';
 import {
   UPLOAD_QUEUE_KEY,
   LAST_CAPTURE_KEY,
