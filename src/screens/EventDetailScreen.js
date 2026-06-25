@@ -49,28 +49,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   const [activeKmFilter, setActiveKmFilter] = useState('all');
   const [sortDesc, setSortDesc] = useState(true);
   const [favOnly, setFavOnly] = useState(false);
-  const [infoSheetOpen, setInfoSheetOpen] = useState(false);
-  // 2026-06-25 : carte statique geocodee via BAN (api-adresse.data.gouv.fr)
-  // -> URL staticmap.openstreetmap.de (community, sans cle, sans install
-  // natif). Si event.address est vide ou que le geocoding echoue, mapUrl
-  // reste null et la carte n est pas affichee.
-  const [mapUrl, setMapUrl] = useState(null);
-  useEffect(() => {
-    if (!event?.address) { setMapUrl(null); return; }
-    let cancelled = false;
-    fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(event.address)}&limit=1`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (cancelled) return;
-        const feat = d?.features?.[0];
-        const coords = feat?.geometry?.coordinates;
-        if (!coords || coords.length < 2) return;
-        const [lng, lat] = coords;
-        setMapUrl(`https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=15&size=600x300&markers=${lat},${lng},red-pushpin`);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [event?.address]);
+  // Si l event est upcoming et n a pas encore de photos, on ouvre les
+  // infos pratiques par defaut (le user a besoin de voir les infos)
+  // au lieu de l ecran "Photos disponibles le jour J" seul. Mirror du
+  // pattern vitrine event/index.html.
+  const upcomingNoPhotosYet = useMemo(() => {
+    return isUpcoming(event?.event_date, event?.event_date_end);
+  }, [event?.event_date, event?.event_date_end]);
+  const [infoSheetOpen, setInfoSheetOpen] = useState(upcomingNoPhotosYet);
   const raceTabLayoutsRef = useRef({});
   const kmTabLayoutsRef = useRef({});
   const raceIndicatorX = useRef(new Animated.Value(0)).current;
@@ -403,46 +389,35 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             {event.address ? (
               <View style={{
                 marginTop: distances.length > 0 ? 14 : 4,
-                borderRadius: 12,
-                overflow: 'hidden',
+                flexDirection: 'row', alignItems: 'center',
+                justifyContent: 'space-between',
                 backgroundColor: `${tint}14`,
+                paddingVertical: 10, paddingHorizontal: 14,
+                borderRadius: 12,
+                gap: 12,
                 alignSelf: 'stretch',
               }}>
-                {mapUrl ? (
-                  <Image
-                    source={{ uri: mapUrl }}
-                    style={{ width: '100%', height: 160 }}
-                    resizeMode="cover"
-                  />
-                ) : null}
-                <View style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingVertical: 10, paddingHorizontal: 14,
-                  gap: 12,
-                }}>
-                  <Text
-                    numberOfLines={1}
-                    style={{ color: tint, fontSize: 13, fontWeight: '500', flex: 1, fontFamily: 'Montserrat' }}
-                  >
-                    {event.address}
+                <Text
+                  numberOfLines={1}
+                  style={{ color: tint, fontSize: 13, fontWeight: '500', flex: 1, fontFamily: 'Montserrat' }}
+                >
+                  {event.address}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`;
+                    Linking.openURL(url).catch(() => {});
+                  }}
+                  activeOpacity={0.7}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <Text style={{ color: tint, fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>
+                    Itinéraire
                   </Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`;
-                      Linking.openURL(url).catch(() => {});
-                    }}
-                    activeOpacity={0.7}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                  >
-                    <Text style={{ color: tint, fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>
-                      Itinéraire
-                    </Text>
-                    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-                      <Path d="M5 12h14M13 6l6 6-6 6" stroke={tint} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-                    </Svg>
-                  </TouchableOpacity>
-                </View>
+                  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                    <Path d="M5 12h14M13 6l6 6-6 6" stroke={tint} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                  </Svg>
+                </TouchableOpacity>
               </View>
             ) : null}
 
