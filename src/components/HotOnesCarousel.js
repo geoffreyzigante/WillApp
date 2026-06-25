@@ -127,14 +127,25 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
   // Track la carte au centre du viewport pour n'afficher la pastille "Hot"
   // que sur celle-ci (mirror site mobile : pastille active uniquement).
   const [activeIdx, setActiveIdx] = useState(0);
-  // Infinity slide manuel : cards dupliquees 2x. Quand le user swipe
-  // au-dela du 1er set (x >= loopWidth), reset scrollTo({x: x - loopWidth})
-  // instant -> visuellement identique (1ere card du 2e set = 1ere card du
-  // 1er set), loop transparent. Symetrique a gauche (x <= 0).
+  // Infinity slide manuel : cards dupliquees 2x. Init scrollLeft au
+  // milieu (debut du 2e set) -> user a 1 set de marge dans chaque
+  // direction. Reset transparent UNIQUEMENT a la fin du momentum
+  // (onMomentumScrollEnd) pour ne pas casser l inertie iOS pendant le
+  // fling.
   const duplicated = [...hotOnes, ...hotOnes];
   const scrollRef = useRef(null);
+  const initRef = useRef(false);
   const itemW = CARD_W + 14;
   const loopWidth = hotOnes.length * itemW;
+  useEffect(() => {
+    if (initRef.current || hotOnes.length === 0) return;
+    // Init au centre apres mount (laisse le ScrollView mesurer son content).
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollTo({ x: loopWidth, animated: false });
+      initRef.current = true;
+    }, 50);
+    return () => clearTimeout(t);
+  }, [hotOnes.length, loopWidth]);
 
   if (hotOnes.length === 0) return null;
 
@@ -148,18 +159,23 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
         decelerationRate="fast"
         snapToInterval={itemW}
         snapToAlignment="start"
-        onScroll={(e) => {
+        onMomentumScrollEnd={(e) => {
           const x = e.nativeEvent.contentOffset.x;
-          // Reset transparent quand on traverse la moitie -> loop infini.
-          if (x >= loopWidth) {
+          // Reset seulement aux extremes (>95% / <5%) une fois le momentum
+          // termine, pour rester invisible pour l user.
+          const max = loopWidth * 2;
+          if (x >= max * 0.95) {
             scrollRef.current?.scrollTo({ x: x - loopWidth, animated: false });
-          } else if (x <= 0) {
+          } else if (x <= max * 0.05) {
             scrollRef.current?.scrollTo({ x: x + loopWidth, animated: false });
           }
+        }}
+        onScroll={(e) => {
+          const x = e.nativeEvent.contentOffset.x;
           const idx = Math.round(x / itemW) % hotOnes.length;
           if (idx !== activeIdx) setActiveIdx(idx);
         }}
-        scrollEventThrottle={16}
+        scrollEventThrottle={32}
       >
         {duplicated.map((ev, i) => (
           <HotCard
