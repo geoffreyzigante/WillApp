@@ -403,27 +403,61 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           }}>
             {distances.length > 0 && (
               <View>
-                {distances.map((d, i) => (
-                  <View key={i} style={{
-                    paddingVertical: 12,
-                    borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
-                    borderBottomColor: `${tint}40`,
-                  }}>
-                    <View style={{ marginBottom: 4 }}>
-                      <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: tint, fontSize: 15, fontWeight: '700' }}>
-                        {raceTitle(d)}
-                      </Text>
+                {distances.map((d, i) => {
+                  // Mirror du pattern vitrine event/index.html : layout
+                  // grid 4 colonnes (label | km | Depart | Denivele), avec
+                  // mot-cle (Depart/Denivele) et valeur sur 2 lignes.
+                  // La col label prend 1.5fr, les 3 autres 1fr.
+                  const hasLabel = !!(d && d.label && String(d.label).trim());
+                  const km = d && d.km !== undefined && d.km !== null && d.km !== ''
+                    ? `${d.km} km` : '';
+                  const labelText = hasLabel ? String(d.label).trim() : km;
+                  const kmSecondary = hasLabel ? km : '';
+                  const time = d && d.time && String(d.time).trim() ? String(d.time).trim() : '';
+                  const elev = d && d.elevation && String(d.elevation).trim() ? String(d.elevation).trim() : '';
+                  return (
+                    <View key={i} style={{
+                      paddingVertical: 12,
+                      borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
+                      borderBottomColor: `${tint}40`,
+                      flexDirection: 'row',
+                      alignItems: 'flex-start',
+                    }}>
+                      {/* Col 1.5 : label de course en gras tint. Wrap autorise. */}
+                      <View style={{ flex: 1.5, paddingRight: 8 }}>
+                        <Text style={{ color: tint, fontSize: 15, fontWeight: '700' }}>
+                          {labelText}
+                        </Text>
+                      </View>
+                      {/* Col 1 : km secondaire en petit, meme tint. */}
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        {kmSecondary ? (
+                          <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontWeight: '500' }}>
+                            {kmSecondary}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {/* Col 1 : Depart key/value sur 2 lignes. */}
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        {time ? (
+                          <>
+                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontWeight: '500' }}>Départ</Text>
+                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontWeight: '500' }}>{time}</Text>
+                          </>
+                        ) : null}
+                      </View>
+                      {/* Col 1 : Denivele key/value sur 2 lignes. */}
+                      <View style={{ flex: 1 }}>
+                        {elev ? (
+                          <>
+                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontWeight: '500' }}>Dénivelé</Text>
+                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontWeight: '500' }}>{elev} mD+</Text>
+                          </>
+                        ) : null}
+                      </View>
                     </View>
-                    <View style={{ flexDirection: 'row', gap: 16 }}>
-                      <Text style={{ color: tint, fontSize: 12, opacity: 0.85 }}>
-                        Départ {d.time || '—'}
-                      </Text>
-                      <Text style={{ color: tint, fontSize: 12, opacity: 0.85 }}>
-                        Dénivelé {d.elevation ? `${d.elevation} mD+` : '—'}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             )}
 
