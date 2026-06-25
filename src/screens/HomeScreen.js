@@ -252,16 +252,78 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
             </Text>
           </View>
         ) : (
-          filtered.map((event) => (
-            <EventCard
-              key={event.code}
-              event={event}
-              onPress={() => onOpenEvent(event)}
-              isFollowing={follows.includes(event.code)}
-              onToggleFollow={() => onToggleFollow(event.code)}
-              style={{ marginBottom: 8 }}
-            />
-          ))
+          <>
+            {filtered.map((event) => (
+              <EventCard
+                key={event.code}
+                event={event}
+                onPress={() => onOpenEvent(event)}
+                isFollowing={follows.includes(event.code)}
+                onToggleFollow={() => onToggleFollow(event.code)}
+                style={{ marginBottom: 8 }}
+              />
+            ))}
+            {/* Padding placeholder cards (mirror vitrine PAD_TO=5).
+                Sur app on padde a 4 cards visibles. 1ere placeholder en
+                tab "upcoming" = CTA "Lancer mon event". */}
+            {tab === 'upcoming' && filtered.length < 4 && (() => {
+              const missing = 4 - filtered.length;
+              return Array.from({ length: missing }).map((_, i) => {
+                const isCta = i === 0;
+                return isCta ? (
+                  <TouchableOpacity
+                    key={`cta-${i}`}
+                    activeOpacity={0.85}
+                    onPress={() => onOpenOrgRole && onOpenOrgRole('orga')}
+                    style={{
+                      backgroundColor: '#EDE7FF',
+                      borderRadius: 16,
+                      paddingVertical: 22,
+                      paddingHorizontal: 22,
+                      marginBottom: 8,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{
+                      color: '#C9B6FF',
+                      fontFamily: 'AVEstiana',
+                      fontSize: 16,
+                      textAlign: 'center',
+                      marginBottom: 12,
+                      lineHeight: 19,
+                    }}>
+                      Tu veux utiliser Will{'\n'}sur ton prochain event ?
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={{
+                        color: '#7B2FFF',
+                        fontFamily: 'Montserrat',
+                        fontSize: 13,
+                        fontWeight: '700',
+                      }}>
+                        Lancer mon event
+                      </Text>
+                      <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                        <Path d="m9 18 6-6-6-6" stroke="#7B2FFF" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+                      </Svg>
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <View
+                    key={`ph-${i}`}
+                    pointerEvents="none"
+                    style={{
+                      height: 108,
+                      backgroundColor: '#EDE7FF',
+                      borderRadius: 16,
+                      marginBottom: 8,
+                      opacity: 0.6,
+                    }}
+                  />
+                );
+              });
+            })()}
+          </>
         )}
       </Animated.View>
     </RefreshableScrollView>
