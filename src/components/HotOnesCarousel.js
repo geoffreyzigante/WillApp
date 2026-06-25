@@ -118,19 +118,17 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
   // Track la carte au centre du viewport pour n'afficher la pastille "Hot"
   // que sur celle-ci (mirror site mobile : pastille active uniquement).
   const [activeIdx, setActiveIdx] = useState(0);
-  // Infinity slide manuel : cards dupliquees 2x. Init scrollLeft au
-  // milieu (debut du 2e set) -> user a 1 set de marge dans chaque
-  // direction. Reset transparent UNIQUEMENT a la fin du momentum
-  // (onMomentumScrollEnd) pour ne pas casser l inertie iOS pendant le
-  // fling.
-  const duplicated = [...hotOnes, ...hotOnes];
+  // Vrai infinity slide : cards dupliquees 3x. Le 2e set est le centre
+  // visible apres init. Le user a 1 set entier de marge dans chaque
+  // direction. Reset transparent dans onMomentumScrollEnd quand le
+  // user atteint le 1er ou 3e set.
+  const duplicated = [...hotOnes, ...hotOnes, ...hotOnes];
   const scrollRef = useRef(null);
   const initRef = useRef(false);
   const itemW = CARD_W + 14;
   const loopWidth = hotOnes.length * itemW;
   useEffect(() => {
     if (initRef.current || hotOnes.length === 0) return;
-    // Init au centre apres mount (laisse le ScrollView mesurer son content).
     const t = setTimeout(() => {
       scrollRef.current?.scrollTo({ x: loopWidth, animated: false });
       initRef.current = true;
@@ -152,12 +150,11 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
         snapToAlignment="start"
         onMomentumScrollEnd={(e) => {
           const x = e.nativeEvent.contentOffset.x;
-          // Reset seulement aux extremes (>95% / <5%) une fois le momentum
-          // termine, pour rester invisible pour l user.
-          const max = loopWidth * 2;
-          if (x >= max * 0.95) {
+          // Reset quand le user a traverse vers le 1er ou 3e set
+          // (= ressorti du centre confortable).
+          if (x >= 2 * loopWidth) {
             scrollRef.current?.scrollTo({ x: x - loopWidth, animated: false });
-          } else if (x <= max * 0.05) {
+          } else if (x <= loopWidth * 0.5) {
             scrollRef.current?.scrollTo({ x: x + loopWidth, animated: false });
           }
         }}
