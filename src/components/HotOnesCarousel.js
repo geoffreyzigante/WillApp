@@ -127,29 +127,14 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
   // Track la carte au centre du viewport pour n'afficher la pastille "Hot"
   // que sur celle-ci (mirror site mobile : pastille active uniquement).
   const [activeIdx, setActiveIdx] = useState(0);
-  // Infinity slide : duplicate les cards 2x pour le seamless loop.
-  // Auto-scroll continu en setInterval qui ramene a 0 quand on atteint
-  // la moitie (1ere card du 2e set = visuellement identique au 0 du 1er).
+  // Infinity slide manuel : cards dupliquees 2x. Quand le user swipe
+  // au-dela du 1er set (x >= loopWidth), reset scrollTo({x: x - loopWidth})
+  // instant -> visuellement identique (1ere card du 2e set = 1ere card du
+  // 1er set), loop transparent. Symetrique a gauche (x <= 0).
   const duplicated = [...hotOnes, ...hotOnes];
   const scrollRef = useRef(null);
-  const offsetRef = useRef(0);
-  const userInteractingRef = useRef(false);
   const itemW = CARD_W + 14;
   const loopWidth = hotOnes.length * itemW;
-  useEffect(() => {
-    if (hotOnes.length === 0) return undefined;
-    const interval = setInterval(() => {
-      if (userInteractingRef.current) return;
-      offsetRef.current += 0.6;
-      if (offsetRef.current >= loopWidth) {
-        offsetRef.current = 0;
-        scrollRef.current?.scrollTo({ x: 0, animated: false });
-      } else {
-        scrollRef.current?.scrollTo({ x: offsetRef.current, animated: false });
-      }
-    }, 16);
-    return () => clearInterval(interval);
-  }, [hotOnes.length, loopWidth]);
 
   if (hotOnes.length === 0) return null;
 
@@ -161,14 +146,16 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         decelerationRate="fast"
-        onScrollBeginDrag={() => { userInteractingRef.current = true; }}
-        onScrollEndDrag={() => {
-          // Resume auto-scroll apres 4s d inactivite.
-          setTimeout(() => { userInteractingRef.current = false; }, 4000);
-        }}
+        snapToInterval={itemW}
+        snapToAlignment="start"
         onScroll={(e) => {
           const x = e.nativeEvent.contentOffset.x;
-          offsetRef.current = x;
+          // Reset transparent quand on traverse la moitie -> loop infini.
+          if (x >= loopWidth) {
+            scrollRef.current?.scrollTo({ x: x - loopWidth, animated: false });
+          } else if (x <= 0) {
+            scrollRef.current?.scrollTo({ x: x + loopWidth, animated: false });
+          }
           const idx = Math.round(x / itemW) % hotOnes.length;
           if (idx !== activeIdx) setActiveIdx(idx);
         }}
