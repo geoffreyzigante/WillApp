@@ -41,7 +41,7 @@ export const SpinningLoader = ({ size = 24, color = '#c9beed' }) => {
 
 export const PULL_THRESHOLD = 45;
 
-export const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, children, ...props }, ref) => {
+export const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefresh, topOffset = 0, children, ...props }, ref) => {
   const [refreshing, setRefreshing] = useState(false);
   const scrollPosRef = useRef(0);
   const refreshingRef = useRef(false);
@@ -122,8 +122,9 @@ export const RefreshableScrollView = React.forwardRef(({ onRefresh, hideTopRefre
     <View style={{ flex: 1 }}>
       {!hideTopRefresh && (
         <Animated.View pointerEvents="none" style={{
-          position: 'absolute', top: 0, left: 0, right: 0,
+          position: 'absolute', top: topOffset, left: 0, right: 0,
           alignItems: 'center', zIndex: 1000,
+          elevation: 1000,
           opacity: opacityAnim,
           transform: [{ translateY: translateYAnim }],
         }}>

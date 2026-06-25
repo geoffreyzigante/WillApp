@@ -118,11 +118,10 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
   // Track la carte au centre du viewport pour n'afficher la pastille "Hot"
   // que sur celle-ci (mirror site mobile : pastille active uniquement).
   const [activeIdx, setActiveIdx] = useState(0);
-  // Vrai infinity slide : cards dupliquees 3x. Le 2e set est le centre
-  // visible apres init. Le user a 1 set entier de marge dans chaque
-  // direction. Reset transparent dans onMomentumScrollEnd quand le
-  // user atteint le 1er ou 3e set.
-  const duplicated = [...hotOnes, ...hotOnes, ...hotOnes];
+  // Vrai infinity slide : cards dupliquees 4x. Init au debut du 2e set.
+  // Reset transparent dans onMomentumScrollEnd quand le user atteint
+  // le 4e set ou revient au 1er.
+  const duplicated = [...hotOnes, ...hotOnes, ...hotOnes, ...hotOnes];
   const scrollRef = useRef(null);
   const initRef = useRef(false);
   const itemW = CARD_W + 14;
@@ -150,12 +149,13 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
         snapToAlignment="start"
         onMomentumScrollEnd={(e) => {
           const x = e.nativeEvent.contentOffset.x;
-          // Reset quand le user a traverse vers le 1er ou 3e set
-          // (= ressorti du centre confortable).
-          if (x >= 2 * loopWidth) {
-            scrollRef.current?.scrollTo({ x: x - loopWidth, animated: false });
+          // Reset quand le user atteint le 4e set (= x >= 3 * loopWidth)
+          // ou revient au 1er (x <= loopWidth * 0.5). Saut de 2 sets
+          // pour rester confortablement au centre.
+          if (x >= 3 * loopWidth) {
+            scrollRef.current?.scrollTo({ x: x - 2 * loopWidth, animated: false });
           } else if (x <= loopWidth * 0.5) {
-            scrollRef.current?.scrollTo({ x: x + loopWidth, animated: false });
+            scrollRef.current?.scrollTo({ x: x + 2 * loopWidth, animated: false });
           }
         }}
         onScroll={(e) => {

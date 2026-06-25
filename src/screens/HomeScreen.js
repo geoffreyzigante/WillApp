@@ -96,7 +96,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
 
   return (
     <View style={{ flex: 1 }}>
-    <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} onScroll={onScrollWatch} style={s.scroll} contentContainerStyle={{ paddingTop: headerH, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+    <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} onScroll={onScrollWatch} style={s.scroll} contentContainerStyle={{ paddingTop: headerH, paddingBottom: 120 }} showsVerticalScrollIndicator={false} topOffset={headerH}>
       {/* Header retire : il est maintenant rendu UNE FOIS dans App.js
           (AppHeader.js) au-dessus du tab container -> aucun re-mount au
           switch Accueil <-> Photos. */}
