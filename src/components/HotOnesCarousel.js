@@ -88,11 +88,20 @@ function HotCard({ event, onPress, isActive }) {
           locations={[0.45, 0.65, 1]}
           style={StyleSheet.absoluteFillObject}
         />
-        <Animated.View style={[styles.hotPill, { opacity: pillOpacity }]} pointerEvents="none">
-          <Svg width={11} height={11} viewBox="0 0 17.61 17.61">
-            <Path d={HOT_ICON_PATH} fill="#fff" />
-          </Svg>
-          <Text style={styles.hotPillText}>Hot</Text>
+        <Animated.View
+          style={[
+            styles.hotPill,
+            event.featured_new ? styles.hotPillNew : null,
+            { opacity: pillOpacity },
+          ]}
+          pointerEvents="none"
+        >
+          {!event.featured_new ? (
+            <Svg width={11} height={11} viewBox="0 0 17.61 17.61">
+              <Path d={HOT_ICON_PATH} fill="#fff" />
+            </Svg>
+          ) : null}
+          <Text style={styles.hotPillText}>{event.featured_new ? 'New' : 'Hot'}</Text>
         </Animated.View>
         <View style={styles.overlay}>
           <Text style={styles.name} numberOfLines={2}>{event.name || 'Sans nom'}</Text>
@@ -106,10 +115,14 @@ function HotCard({ event, onPress, isActive }) {
 }
 
 export function HotOnesCarousel({ events, onOpenEvent }) {
-  const hotOnes = (events || [])
-    .filter(e => e && e.has_photos && !isUpcoming(e.event_date, e.event_date_end))
-    .sort((a, b) => (b.event_date_end || b.event_date || '').localeCompare(a.event_date_end || a.event_date || ''))
-    .slice(0, MAX_ITEMS);
+  // featured_new (admin) -> en tete du carousel, suivi des events passes
+  // avec photos. dedup pour eviter qu un featured_new past apparaisse 2x.
+  const newOnes = (events || []).filter(e => e?.featured_new === true);
+  const newCodes = new Set(newOnes.map(e => e.code));
+  const past = (events || [])
+    .filter(e => e && !newCodes.has(e.code) && e.has_photos && !isUpcoming(e.event_date, e.event_date_end))
+    .sort((a, b) => (b.event_date_end || b.event_date || '').localeCompare(a.event_date_end || a.event_date || ''));
+  const hotOnes = [...newOnes, ...past].slice(0, MAX_ITEMS);
 
   // Track la carte au centre du viewport pour n'afficher la pastille "Hot"
   // que sur celle-ci (mirror site mobile : pastille active uniquement).
@@ -180,6 +193,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#7B2FFF',
     zIndex: 2,
   },
+  hotPillNew: { backgroundColor: '#10b981' },
   hotPillText: {
     color: '#fff',
     fontSize: 11,
