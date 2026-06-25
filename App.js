@@ -5971,7 +5971,17 @@ export default function App() {
         photographerApiFetch={photographerApiFetch}
         // Bouton retour : sort du mode sans effacer la session — le
         // photographe peut revenir avec un seul tap (pas de re-saisie mdp).
-        onExit={() => setInPhotographerMode(false)}
+        // 2026-06-25 : renvoie sur la page event correspondante (= preview
+        // de la galerie qu il vient d alimenter). Si l event n est pas
+        // dans la liste runner (cas frequent : photographe pur sans
+        // compte runner), fallback sur session.event (objet partiel).
+        onExit={() => {
+          setInPhotographerMode(false);
+          const code = session?.event?.code;
+          if (!code) return;
+          const ev = events.find(e => e.code === code) || session.event;
+          if (ev) setOpenedEvent(ev);
+        }}
         // Vraie déconnexion : efface la session SecureStore + queue locale.
         // Au prochain login (meme event ou autre), la galerie repart vide :
         // les photos uploadees restent consultables via le dashboard orga.
