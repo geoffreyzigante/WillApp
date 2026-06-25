@@ -88,19 +88,10 @@ function HotCard({ event, onPress, isActive }) {
           locations={[0.45, 0.65, 1]}
           style={StyleSheet.absoluteFillObject}
         />
-        <Animated.View
-          style={[
-            styles.hotPill,
-            event.featured_new ? styles.hotPillNew : null,
-            { opacity: pillOpacity },
-          ]}
-          pointerEvents="none"
-        >
-          {!event.featured_new ? (
-            <Svg width={11} height={11} viewBox="0 0 17.61 17.61">
-              <Path d={HOT_ICON_PATH} fill="#fff" />
-            </Svg>
-          ) : null}
+        <Animated.View style={[styles.hotPill, { opacity: pillOpacity }]} pointerEvents="none">
+          <Svg width={11} height={11} viewBox="0 0 17.61 17.61">
+            <Path d={HOT_ICON_PATH} fill="#fff" />
+          </Svg>
           <Text style={styles.hotPillText}>{event.featured_new ? 'New' : 'Hot'}</Text>
         </Animated.View>
         <View style={styles.overlay}>
@@ -228,7 +219,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#7B2FFF',
     zIndex: 2,
   },
-  hotPillNew: { backgroundColor: '#10b981' },
   hotPillText: {
     color: '#fff',
     fontSize: 11,
