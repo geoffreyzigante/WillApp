@@ -127,28 +127,60 @@ export function HotOnesCarousel({ events, onOpenEvent }) {
   // Track la carte au centre du viewport pour n'afficher la pastille "Hot"
   // que sur celle-ci (mirror site mobile : pastille active uniquement).
   const [activeIdx, setActiveIdx] = useState(0);
+  // Infinity slide : duplicate les cards 2x pour le seamless loop.
+  // Auto-scroll continu en setInterval qui ramene a 0 quand on atteint
+  // la moitie (1ere card du 2e set = visuellement identique au 0 du 1er).
+  const duplicated = [...hotOnes, ...hotOnes];
+  const scrollRef = useRef(null);
+  const offsetRef = useRef(0);
+  const userInteractingRef = useRef(false);
+  const itemW = CARD_W + 14;
+  const loopWidth = hotOnes.length * itemW;
+  useEffect(() => {
+    if (hotOnes.length === 0) return undefined;
+    const interval = setInterval(() => {
+      if (userInteractingRef.current) return;
+      offsetRef.current += 0.6;
+      if (offsetRef.current >= loopWidth) {
+        offsetRef.current = 0;
+        scrollRef.current?.scrollTo({ x: 0, animated: false });
+      } else {
+        scrollRef.current?.scrollTo({ x: offsetRef.current, animated: false });
+      }
+    }, 16);
+    return () => clearInterval(interval);
+  }, [hotOnes.length, loopWidth]);
 
   if (hotOnes.length === 0) return null;
 
   return (
     <View style={styles.section}>
       <ScrollView
+        ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         decelerationRate="fast"
-        snapToInterval={CARD_W + 14}
-        snapToAlignment="start"
-        snapToOffsets={hotOnes.map((_, i) => i * (CARD_W + 14))}
+        onScrollBeginDrag={() => { userInteractingRef.current = true; }}
+        onScrollEndDrag={() => {
+          // Resume auto-scroll apres 4s d inactivite.
+          setTimeout(() => { userInteractingRef.current = false; }, 4000);
+        }}
         onScroll={(e) => {
           const x = e.nativeEvent.contentOffset.x;
-          const idx = Math.round(x / (CARD_W + 14));
+          offsetRef.current = x;
+          const idx = Math.round(x / itemW) % hotOnes.length;
           if (idx !== activeIdx) setActiveIdx(idx);
         }}
         scrollEventThrottle={16}
       >
-        {hotOnes.map((ev, i) => (
-          <HotCard key={ev.code} event={ev} onPress={() => onOpenEvent(ev)} isActive={i === activeIdx} />
+        {duplicated.map((ev, i) => (
+          <HotCard
+            key={`${ev.code}-${i}`}
+            event={ev}
+            onPress={() => onOpenEvent(ev)}
+            isActive={i % hotOnes.length === activeIdx}
+          />
         ))}
       </ScrollView>
       {/* Fade-out a droite (mirror site .hot-section::after) : suggere
