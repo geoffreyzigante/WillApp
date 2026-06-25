@@ -379,21 +379,65 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
               </View>
             )}
 
+            {event.address ? (
+              <View style={{
+                marginTop: distances.length > 0 ? 14 : 4,
+                flexDirection: 'row', alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: `${tint}14`,
+                paddingVertical: 10, paddingHorizontal: 14,
+                borderRadius: 12,
+                gap: 12,
+                alignSelf: 'stretch',
+              }}>
+                <Text
+                  numberOfLines={1}
+                  style={{ color: tint, fontSize: 13, fontWeight: '500', flex: 1, fontFamily: 'Montserrat' }}
+                >
+                  {event.address}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`;
+                    Linking.openURL(url).catch(() => {});
+                  }}
+                  activeOpacity={0.7}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <Text style={{ color: tint, fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>
+                    Itinéraire
+                  </Text>
+                  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                    <Path d="M5 12h14M13 6l6 6-6 6" stroke={tint} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                  </Svg>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
             {event.website ? (
               <TouchableOpacity
                 onPress={openWebsite}
-                activeOpacity={0.6}
+                activeOpacity={0.85}
                 style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 6,
-                  marginTop: distances.length > 0 ? 14 : 4,
+                  backgroundColor: tint,
+                  paddingVertical: 11, paddingHorizontal: 20,
+                  borderRadius: 999,
+                  flexDirection: 'row', alignItems: 'center',
+                  gap: 8,
+                  marginTop: (distances.length > 0 || event.address) ? 14 : 4,
                   alignSelf: 'flex-start',
+                  shadowColor: tint,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.22,
+                  shadowRadius: 14,
+                  elevation: 3,
                 }}
               >
-                <Text style={{ color: tint, fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat' }}>
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', fontFamily: 'Montserrat' }}>
                   Site organisateur
                 </Text>
                 <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-                  <Path d="M5 12h14M13 6l6 6-6 6" stroke={tint} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
                 </Svg>
               </TouchableOpacity>
             ) : null}

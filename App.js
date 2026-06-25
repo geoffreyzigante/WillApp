@@ -2935,6 +2935,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   const [cityFetchFailed, setCityFetchFailed] = useState(false);
   const [eventType, setEventType] = useState('');
   const [website, setWebsite] = useState('');
+  // 2026-06-25 : adresse precise saisie par l orga (champ event.address worker).
+  // Sert a afficher la carte / bouton Itineraire cote coureur dans EventDetail.
+  // Distinct du "location" (ville/CP) qui sert pour les listes.
+  const [address, setAddress] = useState('');
+  // 2026-06-25 : flag listed (default true). False = event masque des listes
+  // publiques (annuaire vitrine, /public-events) mais reste accessible par
+  // lien direct + visible par les coureurs deja consentis.
+  const [listed, setListed] = useState(true);
   const [contact, setContact] = useState('');
   // UI-12 : contact administratif separe du contact public. Pre-rempli avec
   // l email de login orga (pattern existant) mais editable independamment.
@@ -3008,6 +3016,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         setPostalCode(pc); setCity(cy); setCitySuggestions([]);
         setEventType(editEvent.event_type || '');
         setWebsite(editEvent.website || '');
+        setAddress(editEvent.address || '');
+        // listed default true si absent (events legacy sans le champ).
+        setListed(editEvent.listed !== false);
         // Fallback en cascade : contact (email saisi à la creation) -> email orga -> ''.
         // organizerSession est structuré { token, profile } — l'email est sous profile.
         setContact(editEvent.contact || organizerSession?.profile?.email || '');
@@ -3224,6 +3235,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         event_date: eventDate ? eventDate.toISOString().slice(0, 10) : '',
         event_date_end: eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : '',
         location: city ? `${city} (${postalCode})` : '',
+        address: address.trim(),
+        listed,
         event_type: eventType,
         website,
         distances: distances
@@ -3607,11 +3620,15 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               <View style={sectionCardStyle}>
                 <SettingsRow label="Lieu" value={previewLocation} onPress={() => setEditingField('location')} />
                 <View style={rowSeparatorStyle} />
+                <SettingsRow label="Adresse précise" value={address || 'Non renseignée'} onPress={() => setEditingField('address')} />
+                <View style={rowSeparatorStyle} />
                 <SettingsRow label="Téléphone" value={phone} onPress={() => setEditingField('phone')} />
                 <View style={rowSeparatorStyle} />
                 <SettingsRow label="Email contact" value={contact} onPress={() => setEditingField('email')} />
                 <View style={rowSeparatorStyle} />
                 <SettingsRow label="Site web" value={website} onPress={() => setEditingField('website')} />
+                <View style={rowSeparatorStyle} />
+                <SettingsRow label="Visibilité" value={listed ? 'Listé' : 'Non listé'} onPress={() => setEditingField('listed')} />
               </View>
 
               {/* ───── DISTANCES ───── */}
@@ -3953,6 +3970,72 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
             }}
             busy={partialBusy}
           />
+
+          {/* ─── Sub-modal: Adresse precise ─── */}
+          <SubModalInputText
+            visible={editingField === 'address'}
+            title="Adresse précise"
+            value={address}
+            onChangeText={setAddress}
+            autoCapitalize="sentences"
+            placeholder="12 Rue de la Paix, 27400 Louviers"
+            onClose={() => setEditingField(null)}
+            onSave={async () => {
+              const v = (address || '').trim();
+              const ok = await savePartial({ address: v });
+              if (ok) {
+                setAddress(v);
+                setEditingField(null);
+              }
+            }}
+            busy={partialBusy}
+          />
+
+          {/* ─── Sub-modal: Visibilite (listed toggle) ─── */}
+          <Modal visible={editingField === 'listed'} animationType="slide" transparent onRequestClose={() => setEditingField(null)}>
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
+              <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 }}>
+                <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Visibilité publique</Text>
+                <Text style={{ fontSize: 13, color: C.textSoft, marginBottom: 20, lineHeight: 18 }}>
+                  Si non listé, ton event est masqué de la liste publique Will mais reste accessible par lien direct et tes coureurs déjà inscrits voient toujours leurs photos.
+                </Text>
+                {[true, false].map((val) => (
+                  <TouchableOpacity
+                    key={String(val)}
+                    onPress={async () => {
+                      const ok = await savePartial({ listed: val });
+                      if (ok) {
+                        setListed(val);
+                        setEditingField(null);
+                      }
+                    }}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center',
+                      paddingVertical: 14, paddingHorizontal: 16,
+                      backgroundColor: listed === val ? '#F5F3FF' : '#fff',
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: listed === val ? '#7B2FFF' : '#E5E5EA',
+                      marginBottom: 10,
+                    }}
+                  >
+                    <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: C.text }}>
+                      {val ? 'Listé' : 'Non listé'}
+                    </Text>
+                    {listed === val ? (
+                      <Text style={{ color: '#7B2FFF', fontWeight: '700', fontSize: 18 }}>✓</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  onPress={() => setEditingField(null)}
+                  style={{ marginTop: 8, padding: 14, alignItems: 'center' }}
+                >
+                  <Text style={{ color: C.textSoft, fontSize: 15 }}>Annuler</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
 
           {/* ─── Sub-modal: Site web ─── */}
           <SubModalInputText
