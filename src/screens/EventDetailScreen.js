@@ -49,14 +49,18 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   const [activeKmFilter, setActiveKmFilter] = useState('all');
   const [sortDesc, setSortDesc] = useState(true);
   const [favOnly, setFavOnly] = useState(false);
-  // Si l event est upcoming et n a pas encore de photos, on ouvre les
-  // infos pratiques par defaut (le user a besoin de voir les infos)
-  // au lieu de l ecran "Photos disponibles le jour J" seul. Mirror du
-  // pattern vitrine event/index.html.
-  const upcomingNoPhotosYet = useMemo(() => {
-    return isUpcoming(event?.event_date, event?.event_date_end);
-  }, [event?.event_date, event?.event_date_end]);
-  const [infoSheetOpen, setInfoSheetOpen] = useState(upcomingNoPhotosYet);
+  // Infos pratiques : ouvertes automatiquement quand on detecte qu il
+  // n y a pas de photos (event upcoming ou tout simplement vide).
+  // Si l user clique sur le toggle ensuite, son choix est respecte
+  // (userToggledRef = true bloque tout auto-update ulterieur).
+  const [infoSheetOpen, setInfoSheetOpen] = useState(false);
+  const userToggledRef = useRef(false);
+  useEffect(() => {
+    if (userToggledRef.current) return;
+    if (!loading && photos.length === 0) {
+      setInfoSheetOpen(true);
+    }
+  }, [loading, photos.length]);
   const raceTabLayoutsRef = useRef({});
   const kmTabLayoutsRef = useRef({});
   const raceIndicatorX = useRef(new Animated.Value(0)).current;
@@ -311,7 +315,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             </View>
             <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginTop: 14, marginBottom: 12 }} />
             <TouchableOpacity
-              onPress={() => setInfoSheetOpen(v => !v)}
+              onPress={() => {
+                userToggledRef.current = true;
+                setInfoSheetOpen(v => !v);
+              }}
               activeOpacity={0.7}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
             >
