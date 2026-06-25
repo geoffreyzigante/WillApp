@@ -61,6 +61,40 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       setInfoSheetOpen(true);
     }
   }, [loading, photos.length]);
+  // Mini-carte : 1 tile CartoDB Positron (sans cle, sans install RN) centree
+  // sur lat/lng (issu de BAN). Marker brand violet pose en overlay au pixel
+  // exact, calcule depuis la position fractionnaire dans la tile.
+  const [mapInfo, setMapInfo] = useState(null);
+  useEffect(() => {
+    if (!event?.address) { setMapInfo(null); return; }
+    let cancelled = false;
+    fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(event.address)}&limit=1`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (cancelled) return;
+        const coords = d?.features?.[0]?.geometry?.coordinates;
+        if (!coords || coords.length < 2) return;
+        const [lng, lat] = coords;
+        const zoom = 15;
+        const n = Math.pow(2, zoom);
+        const xExact = (lng + 180) / 360 * n;
+        const latRad = lat * Math.PI / 180;
+        const yExact = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+        const x = Math.floor(xExact);
+        const y = Math.floor(yExact);
+        // Subdomain a..d aleatoire pour repartir la charge.
+        const sub = ['a', 'b', 'c', 'd'][Math.floor(Math.random() * 4)];
+        setMapInfo({
+          tileUrl: `https://${sub}.basemaps.cartocdn.com/light_all/${zoom}/${x}/${y}@2x.png`,
+          // Position du marker en % dans la tile (0-1).
+          markerXPct: xExact - x,
+          markerYPct: yExact - y,
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [event?.address]);
+
   const raceTabLayoutsRef = useRef({});
   const kmTabLayoutsRef = useRef({});
   const raceIndicatorX = useRef(new Animated.Value(0)).current;
@@ -385,7 +419,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                         Départ {d.time || '—'}
                       </Text>
                       <Text style={{ color: tint, fontSize: 12, opacity: 0.85 }}>
-                        Dénivelé {d.elevation || '—'}
+                        Dénivelé {d.elevation ? `${d.elevation} mD+` : '—'}
                       </Text>
                     </View>
                   </View>
@@ -396,35 +430,69 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             {event.address ? (
               <View style={{
                 marginTop: distances.length > 0 ? 14 : 4,
-                flexDirection: 'row', alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: `${tint}14`,
-                paddingVertical: 10, paddingHorizontal: 14,
                 borderRadius: 12,
-                gap: 12,
+                overflow: 'hidden',
+                backgroundColor: `${tint}14`,
                 alignSelf: 'stretch',
               }}>
-                <Text
-                  numberOfLines={1}
-                  style={{ color: tint, fontSize: 13, fontWeight: '500', flex: 1, fontFamily: 'Montserrat' }}
-                >
-                  {event.address}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`;
-                    Linking.openURL(url).catch(() => {});
-                  }}
-                  activeOpacity={0.7}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                >
-                  <Text style={{ color: tint, fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>
-                    Itinéraire
+                {mapInfo ? (
+                  <View style={{ width: '100%', aspectRatio: 2.4, position: 'relative' }}>
+                    <Image
+                      source={{ uri: mapInfo.tileUrl }}
+                      style={{ width: '100%', height: '100%' }}
+                      resizeMode="cover"
+                    />
+                    {/* Marker positionne au pixel exact dans la tile (les
+                        markerXPct/markerYPct viennent du calcul tile +
+                        coordonnees fractionnaires). */}
+                    <View
+                      pointerEvents="none"
+                      style={{
+                        position: 'absolute',
+                        left: `${mapInfo.markerXPct * 100}%`,
+                        top: `${mapInfo.markerYPct * 100}%`,
+                        width: 28, height: 28,
+                        marginLeft: -14, marginTop: -14,
+                        backgroundColor: '#7B2FFF',
+                        borderRadius: 14,
+                        borderWidth: 3, borderColor: '#fff',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 4,
+                        elevation: 4,
+                      }}
+                    />
+                  </View>
+                ) : null}
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingVertical: 10, paddingHorizontal: 14,
+                  gap: 12,
+                }}>
+                  <Text
+                    numberOfLines={1}
+                    style={{ color: tint, fontSize: 13, fontWeight: '500', flex: 1, fontFamily: 'Montserrat' }}
+                  >
+                    {event.address}
                   </Text>
-                  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-                    <Path d="M5 12h14M13 6l6 6-6 6" stroke={tint} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-                  </Svg>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`;
+                      Linking.openURL(url).catch(() => {});
+                    }}
+                    activeOpacity={0.7}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                  >
+                    <Text style={{ color: tint, fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>
+                      Itinéraire
+                    </Text>
+                    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                      <Path d="M5 12h14M13 6l6 6-6 6" stroke={tint} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : null}
 
