@@ -87,6 +87,7 @@
       "./plugins/with-exposure-reader",
       "./plugins/with-shutter-lock",
       "./plugins/with-photo-metadata-burner",
+      "./plugins/with-photo-quality-scorer",
       "./plugins/with-heic-capture",
       "./plugins/with-background-uploader",
       "./plugins/with-thermal-monitor"
