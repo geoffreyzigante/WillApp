@@ -89,8 +89,8 @@ import {
   MAX_RETRIES_DEFAULT,
   STORAGE_WARN_BYTES,
   DISK_LOW_BYTES,
+  DISK_CRITICAL_PERCENT,
   QUEUE_WARN_THRESHOLD,
-  MAX_QUEUE_SIZE,
   retryDelayMs,
 } from './src/constants/queue';
 import {
@@ -877,6 +877,55 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     }
   }, [batteryLevel, batteryState]);
 
+  // Disk usage guard. Poll 30s sur le JS thread : lectures statiques
+  // (Paths.totalDiskSpace + Paths.availableDiskSpace = getters caches iOS,
+  // microsecondes), zero impact sur la worklet frame processor ni sur
+  // AVCapture qui vivent sur leurs threads dedies. La capture rafale n'est
+  // jamais ralentie : on agit en flip de ref (memes mecanique que le garde
+  // batterie ci-dessus).
+  //
+  // Si totalDiskSpace renvoie 0/undefined (legacy iOS), on skip silencieusement
+  // -- le garde STORAGE_WARN_BYTES (5 Go pendingDir, dans captureBurstLoop)
+  // reste la 2e ligne de defense.
+  const lastDiskCriticalWarnAtRef = useRef(0);
+  const [diskUsagePercent, setDiskUsagePercent] = useState(0);
+  useEffect(() => {
+    const tick = () => {
+      if (!isMountedRef.current) return;
+      try {
+        const total = Paths.totalDiskSpace;
+        const free = Paths.availableDiskSpace;
+        if (typeof total !== 'number' || typeof free !== 'number' || total <= 0) return;
+        setDiskUsagePercent((total - free) / total);
+      } catch {}
+    };
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Reagit au pourcentage disque : pause auto-capture si >= seuil critique.
+  // Plus de FIFO drop dans enqueueBurstItems : la zero-perte exige que la
+  // back-pressure se fasse en amont de l'ecriture disque. On desarme la
+  // capture avant saturation pour eviter une corruption d'ecriture HEIC.
+  // Reactivation MANUELLE par le photographe une fois l'upload draine
+  // (pas d'auto-restart : si on est arrive a 95%, l'auto-restart le
+  // ramenerait dans la meme situation au moindre upload bloque).
+  useEffect(() => {
+    if (diskUsagePercent >= DISK_CRITICAL_PERCENT && isAutoArmedRef.current) {
+      isAutoArmedRef.current = false;
+      setIsAutoArmed(false);
+      const now = Date.now();
+      if (now - lastDiskCriticalWarnAtRef.current > 5 * 60 * 1000) {
+        lastDiskCriticalWarnAtRef.current = now;
+        Alert.alert(
+          'Stockage iPhone presque plein',
+          `${Math.round(diskUsagePercent * 100)}% du disque utilise. Capture pausee pour eviter une corruption d'ecriture. Libere de la place ou attend l'upload, puis re-arme la capture.`,
+        );
+      }
+    }
+  }, [diskUsagePercent]);
+
   useEffect(() => {
     Animated.sequence([
       Animated.timing(badgeOpacity, { toValue: 0.5, duration: 120, useNativeDriver: true }),
@@ -1339,35 +1388,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         km: r.km,
       });
     }
-    let next = [...queueRef.current, ...newQueueItems];
+    const next = [...queueRef.current, ...newQueueItems];
 
-    // FIFO eviction : si la queue depasse MAX_QUEUE_SIZE (200), on vire les
-    // plus anciens items 'pending' ou 'failed' (jamais 'uploading' ni
-    // 'processing' pour ne pas casser un worker en cours). Delete les
-    // fichiers locaux + sidecar (si brut) pour liberer le stockage.
-    if (next.length > MAX_QUEUE_SIZE) {
-      const excess = next.length - MAX_QUEUE_SIZE;
-      const dropped = [];
-      const kept = [];
-      let droppedCount = 0;
-      for (const it of next) {
-        const inFlight = it.status === 'uploading' || it.status === 'processing';
-        if (droppedCount < excess && !inFlight) {
-          dropped.push(it);
-          droppedCount++;
-        } else {
-          kept.push(it);
-        }
-      }
-      for (const it of dropped) {
-        try { new File(it.localUri).delete(); } catch {}
-        if (it.processed === false && it.id) deleteSidecar(it.id);
-      }
-      if (dropped.length > 0) {
-        console.warn(`[upload] FIFO drop ${dropped.length} oldest items (queue at max ${MAX_QUEUE_SIZE})`);
-      }
-      next = kept;
-    }
+    // Zero-perte : plus de FIFO drop silencieux. La back-pressure est
+    // assuree en amont par captureBurstLoop (cap pipeline + cap disque
+    // STORAGE_WARN_BYTES) et par le garde-fou disque 95% qui desarme
+    // l'auto-capture avant saturation.
     await commitQueue(next);
 
     // Timestamp de dernière capture — utilisé par l'alerte de reprise au démarrage.
@@ -1382,18 +1408,16 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       );
     }
 
-    // Warning si beaucoup de photos en attente (throttle 5 min). Mentionne
-    // explicitement le FIFO eviction au-dela de MAX_QUEUE_SIZE pour que le
-    // photographe sache qu'il risque de perdre les plus anciennes.
+    // Warning si beaucoup de photos en attente (throttle 5 min). Aucune
+    // photo n'est plus droppee automatiquement : la queue ne perd jamais
+    // d'item, la back-pressure se fait via les garde-fous disque (5 Go
+    // pendingDir + 95% disque iPhone) qui desarment l'auto-capture.
     const now = Date.now();
     if (next.length >= QUEUE_WARN_THRESHOLD && now - lastQueueWarnAtRef.current > 5 * 60 * 1000) {
       lastQueueWarnAtRef.current = now;
-      const tail = next.length >= MAX_QUEUE_SIZE
-        ? ` Au-dela de ${MAX_QUEUE_SIZE}, les plus anciennes sont supprimees automatiquement.`
-        : '';
       Alert.alert(
         'Beaucoup de photos en attente',
-        `${next.length} photos en attente d'upload. Pense à retrouver du réseau pour les envoyer.${tail}`,
+        `${next.length} photos en attente d'upload. Pense à retrouver du réseau pour les envoyer.`,
       );
     }
 
@@ -1886,13 +1910,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // moins de parasites possibles a la sortie.
   const MAX_IN_FLIGHT = 3;
 
-  // Cap dur du pipeline (queue persistante + in-flight). Aligne sur
-  // MAX_QUEUE_SIZE (1000) : on autorise la capture tant qu'on n'a pas atteint
-  // le seuil FIFO drop. Defense memoire obsolete depuis le refactor pipeline
-  // mai 2026 (les photos sont disque-backed via pendingDir/raw|processed,
-  // queueRef ne contient que ~200 octets de metadonnees par item).
-  // Le vrai garde-fou physique est le check disque ci-dessous via
-  // pendingDirSizeBytesCached > STORAGE_WARN_BYTES (5 Go).
+  // Cap dur du pipeline (queue persistante + in-flight). Defense memoire
+  // douce : les photos sont disque-backed via pendingDir/raw|processed,
+  // queueRef ne contient que ~200 octets de metadonnees par item. Le vrai
+  // garde-fou physique est le check disque dans captureBurstLoop via
+  // pendingDirSizeBytesCached > STORAGE_WARN_BYTES (5 Go), double par le
+  // garde-fou disque 95% qui desarme l'auto-capture.
   const MAX_TOTAL_IN_PIPELINE = 1000;
 
   // Boucle de capture pipelinée (Palier 1, cf échange 2026-05-20).
@@ -1944,10 +1967,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
         // Backpressure dur — deux gardes independantes :
         //
-        // 1. Queue + in-flight atteint MAX_TOTAL_IN_PIPELINE (1000) : on est
-        //    sur le point de declencher la FIFO eviction (MAX_QUEUE_SIZE).
-        //    Plutot que d'enqueuer pour pousser une ancienne dehors, on stoppe
-        //    le burst -- la prochaine photo en captureerait une autre derriere.
+        // 1. Queue + in-flight atteint MAX_TOTAL_IN_PIPELINE (1000) : cap
+        //    memoire doux du suivi en RAM. Pas de FIFO drop : si on l'atteint
+        //    c'est qu'on accumule plus vite qu'on n'envoie, on stoppe la
+        //    rafale courante pour laisser drainQueue rattraper.
         //
         // 2. pendingDir disque > STORAGE_WARN_BYTES (5 Go) : circuit breaker
         //    physique. Throttle 30s (pendingDirSizeBytesCached) car walk

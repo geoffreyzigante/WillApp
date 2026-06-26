@@ -10,7 +10,10 @@
 // dense entier meme avec 4G saturee.
 //
 // QUEUE_WARN_THRESHOLD = moitie du cap : suffisamment haut pour ne pas
-// spammer en event 4G lente normale, laisse marge avant le FIFO drop.
+// spammer en event 4G lente normale. La queue n'est plus jamais tronquee
+// silencieusement : la zero-perte est garantie par les garde-fous disque
+// (5 Go pendingDir + DISK_CRITICAL_PERCENT du volume iPhone) qui desarment
+// l'auto-capture en amont.
 
 export const UPLOAD_QUEUE_KEY = '@will_upload_queue';
 export const LAST_CAPTURE_KEY = '@will_last_capture_at';
@@ -24,6 +27,10 @@ export const STORAGE_WARN_BYTES = 5 * 1024 * 1024 * 1024; // 5 Go pendingDir
 export const DISK_LOW_BYTES = 1 * 1024 * 1024 * 1024;     // 1 Go iPhone restant
 export const QUEUE_WARN_THRESHOLD = 500;
 export const MAX_QUEUE_SIZE = 1000;
+// Seuil dur d'utilisation disque iPhone : au-dela, on coupe l'auto-capture
+// pour eviter la corruption d'ecriture / crash OOM. Reactivation manuelle
+// par le photographe une fois l'upload draine.
+export const DISK_CRITICAL_PERCENT = 0.95;
 
 // Backoff exponentiel borne : delai (ms) avant retry #n. Plafonne a 8s.
 // Reutilise par le worker upload ET le worker burn EXIF (meme bareme).
