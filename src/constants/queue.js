@@ -32,6 +32,13 @@ export const MAX_QUEUE_SIZE = 1000;
 // par le photographe une fois l'upload draine.
 export const DISK_CRITICAL_PERCENT = 0.95;
 
+// === Tri qualite local (cf CONCEPTION_TRI_QUALITE_LOCAL.md) ===
+// Timeout pour la passe scorer natif. Vise 80-150 ms typique, on cap a 5 s
+// pour absorber un iPhone bas de gamme ou un cas pathologique sans pour
+// autant bloquer processQueue. Au-dela : score_failed=true, photo uploadee
+// telle quelle (failsafe zero-perte).
+export const SCORE_TIMEOUT_MS = 5000;
+
 // Backoff exponentiel borne : delai (ms) avant retry #n. Plafonne a 8s.
 // Reutilise par le worker upload ET le worker burn EXIF (meme bareme).
 export function retryDelayMs(retries) {

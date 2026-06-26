@@ -93,6 +93,7 @@ import {
   QUEUE_WARN_THRESHOLD,
   retryDelayMs,
 } from './src/constants/queue';
+import { scorePhotoSafely } from './src/services/qualityScorer';
 import {
   formatShutter,
   formatEV,
@@ -1541,6 +1542,37 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           it.id === item.id ? { ...it, status: 'processing' } : it
         );
         await commitQueue(beforeProcess);
+
+        // ─── Tri qualite local (sous-etape B) ─────────────────────────────
+        // Scorer natif sur DispatchQueue serial QoS .utility, isole de la
+        // capture (cf CONCEPTION_TRI_QUALITE_LOCAL.md §3). On stocke les
+        // signaux bruts sur l'item de queue : survit au kill via
+        // commitQueue/AsyncStorage. Le composite scoreComposite est calcule
+        // plus tard par le reducer (cf sous-etape C) pour rester runtime-
+        // tunable (cf sous-etape F).
+        //
+        // ÉCHEC = pas un drop : score_failed=true signale au reducer
+        // "score inconnu" et la photo reste candidate au top-N par defaut
+        // (failsafe zero-perte).
+        if (!item.qualityScore && !item.qualityScoreFailed) {
+          const scoreSrcPath = item.localUri.startsWith('file://')
+            ? item.localUri.slice(7)
+            : item.localUri;
+          const res = await scorePhotoSafely(scoreSrcPath);
+          const scorePatch = res.ok
+            ? { qualityScore: res.signals, qualityScoredAt: Date.now() }
+            : { qualityScoreFailed: true, qualityScoreFailReason: res.reason, qualityScoredAt: Date.now() };
+          const scored = queueRef.current.map(it =>
+            it.id === item.id ? { ...it, ...scorePatch } : it
+          );
+          await commitQueue(scored);
+          if (res.ok) {
+            console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)}`);
+          } else {
+            console.warn(`[score] ${item.id} FAILED reason=${res.reason} ${res.error || ''}`);
+          }
+        }
+        // ────────────────────────────────────────────────────────────────
 
         // Calcule le label EXIF depuis sidecar (shutter / ISO / aperture).
         const sidecar = readSidecar(item.id);
