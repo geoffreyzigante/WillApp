@@ -30,6 +30,47 @@ export const QUALITY_DEFAULT_WEIGHTS = Object.freeze({
 // est lineaire. Tunable au calibrage E.
 export const QUALITY_DEFAULT_FACE_AREA_NORM = 0.05;
 
+// Sanitize une config quality venue de /config (worker, donc untrusted).
+// Garde-fous :
+//   - poids tous numeriques + non negatifs
+//   - Σ poids ∈ [0.9 ; 1.1] (sinon fallback default complet pour eviter
+//     une formule degeneree silencieuse)
+//   - faceAreaNorm ∈ ]0, 1]
+//   - topN entier >= 1
+// Retourne TOUJOURS un objet utilisable (jamais d'exception).
+export function sanitizeQualityConfig(cfg) {
+  const fallback = {
+    weights: { ...QUALITY_DEFAULT_WEIGHTS },
+    faceAreaNorm: QUALITY_DEFAULT_FACE_AREA_NORM,
+    topN: PASSAGE_KEEP_TOP_N_MOBILE,
+    reduceDelayMs: BURST_REDUCE_DELAY_MS,
+    sanitized: false,
+  };
+  if (!cfg || typeof cfg !== 'object') return fallback;
+  const w = cfg.weights;
+  if (!w || typeof w !== 'object') return fallback;
+  const keys = ['faceConfidence', 'brightness', 'eyesOpen', 'faceArea', 'yaw'];
+  let sum = 0;
+  const safe = {};
+  for (const k of keys) {
+    const v = Number(w[k]);
+    if (!Number.isFinite(v) || v < 0) return fallback;
+    safe[k] = v;
+    sum += v;
+  }
+  if (sum < 0.9 || sum > 1.1) return fallback;
+  const norm = Number(cfg.faceAreaNorm);
+  const topN = Number(cfg.topN);
+  const reduceDelayMs = Number(cfg.reduceDelayMs);
+  return {
+    weights: safe,
+    faceAreaNorm: Number.isFinite(norm) && norm > 0 && norm <= 1 ? norm : QUALITY_DEFAULT_FACE_AREA_NORM,
+    topN: Number.isFinite(topN) && topN >= 1 ? Math.floor(topN) : PASSAGE_KEEP_TOP_N_MOBILE,
+    reduceDelayMs: Number.isFinite(reduceDelayMs) && reduceDelayMs > 0 ? reduceDelayMs : BURST_REDUCE_DELAY_MS,
+    sanitized: true,
+  };
+}
+
 // Score pour un item en qualityScoreFailed dans le tri composite. Negatif
 // pour qu'un item failed tombe sous tout item scoré, sans pour autant
 // faire planter la formule (NaN safety).

@@ -95,7 +95,8 @@ import {
   retryDelayMs,
 } from './src/constants/queue';
 import { scorePhotoSafely } from './src/services/qualityScorer';
-import { reduceBursts } from './src/services/qualityReducer';
+import { reduceBursts, sanitizeQualityConfig } from './src/services/qualityReducer';
+import { recordScore, recordBurstReduction, getSummary as getQualitySummary } from './src/services/qualityTelemetry';
 import {
   formatShutter,
   formatEV,
@@ -439,6 +440,25 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       shutterSpeed: 1000, // legacy, non utilise depuis 2026-05
       shutterSpeedMaxBright: 0,
       shutterSpeedMaxDim: 500,
+    },
+    // Tri qualite local. Tous les poids sont tunables runtime via
+    // /config (worker). Defaut = miroir serveur + bonus face_area + yaw
+    // (cf CONCEPTION_TRI_QUALITE_LOCAL.md §4.1).
+    quality: {
+      weights: {
+        faceConfidence: 0.40,
+        brightness:     0.27,
+        eyesOpen:       0.13,
+        faceArea:       0.10,
+        yaw:            0.10,
+      },
+      faceAreaNorm:    0.05,
+      topN:            3,
+      reduceDelayMs:   8000,
+      // dropEnabled : kill switch pour la sous-etape D. Tant que D n'est
+      // pas codee, drainQueue ignore les flags de toute facon. Une fois
+      // D livree, dropEnabled=false coupera le drop sans rebuild.
+      dropEnabled:     false,
     },
   });
 
@@ -1180,19 +1200,26 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     return () => clearInterval(t);
   }, []);
 
-  // ─── Quality reducer tick (sous-etape C) ──────────────────────────────
+  // ─── Quality reducer tick (sous-etape C, config runtime via F) ────────
   // Toutes les 2s, regroupe les items scores par burstTs, calcule le
-  // composite, et marque upload_kept/upload_skipped + qualityComposite.
-  // NE SUPPRIME RIEN : drainQueue ignore les flags jusqu'a la sous-etape D.
+  // composite avec les poids COURANTS de eventConfig.quality (runtime-
+  // tunable depuis /config), et marque upload_kept/upload_skipped +
+  // qualityComposite. NE SUPPRIME RIEN tant que sous-etape D pas livree.
+  //
   // Failsafe encode en dur dans reduceBursts :
   //   - burst dont tous les items sont en qualityScoreFailed -> kept all
   //   - burst dont tous les items sont scores bas -> top-1 toujours kept
   //     (par construction du sort DESC)
+  //
+  // sanitizeQualityConfig garantit qu'une config malformee (Σ poids hors
+  // [0.9, 1.1], champ non-numerique, etc.) tombe sur les defaults au lieu
+  // d'attribuer un composite faux.
   useEffect(() => {
     const t = setInterval(() => {
       const queue = queueRef.current;
       if (!queue || queue.length === 0) return;
-      const { patches, bursts } = reduceBursts(queue);
+      const opts = sanitizeQualityConfig(eventConfig.quality);
+      const { patches, bursts } = reduceBursts(queue, opts);
       const patchIds = Object.keys(patches);
       if (patchIds.length === 0) return;
       const next = queue.map(it => {
@@ -1201,9 +1228,28 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       });
       commitQueue(next);
       for (const b of bursts) {
+        recordBurstReduction(b);
         console.log(`[reducer] burstTs=${b.burstTs} total=${b.total} kept=${b.kept} skipped=${b.skipped} allFailed=${b.allFailed}`);
       }
     }, QUALITY_REDUCER_TICK_MS);
+    return () => clearInterval(t);
+  }, [eventConfig.quality]);
+
+  // Telemetrie : log summary toutes les 60s pour visibilite au calibrage E
+  // (distribution signaux + composite + temps d'execution scorer).
+  // getQualitySummary() est pur, pas d'effet de bord.
+  useEffect(() => {
+    const t = setInterval(() => {
+      const s = getQualitySummary();
+      if (s.counters.scored === 0 && s.counters.scoreFailed === 0) return;
+      console.log('[quality-summary]', JSON.stringify({
+        c: s.counters,
+        photos: s.photosScored,
+        bursts: s.burstsReduced,
+        signals: s.signals,
+        burstSize: s.burstSizeDistribution,
+      }));
+    }, 60000);
     return () => clearInterval(t);
   }, []);
   // ───────────────────────────────────────────────────────────────────────
@@ -1596,6 +1642,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             it.id === item.id ? { ...it, ...scorePatch } : it
           );
           await commitQueue(scored);
+          recordScore(item, res);
           if (res.ok) {
             console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)}`);
           } else {
