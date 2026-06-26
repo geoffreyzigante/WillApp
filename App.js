@@ -607,6 +607,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // perdues (vs simplement en queue). Toute perte = log loud + bump ici.
   const lostCountRef = useRef(0);
   const [lostCount, setLostCount] = useState(0);
+  // Photos volontairement jetees par le tri qualite local (sous-etape D).
+  // Distinct de lostCount : ici c'est un choix produit (top-N par burst),
+  // pas une perte involontaire. Permet au photographe + a nous de voir
+  // combien le filtre a coupe sans melanger les compteurs.
+  const lostByQualityCountRef = useRef(0);
+  const [lostByQualityCount, setLostByQualityCount] = useState(0);
   // "En vol" -- Set de Promises captureOne en cours d'execution (mode burst
   // pipeline). Le burst loop attend (Promise.race) si la taille atteint
   // MAX_IN_FLIGHT. RAM borne, parasites de sortie bornes (max = MAX_IN_FLIGHT).
@@ -1745,10 +1751,18 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // le cooldown nextAttemptAt (backoff exponentiel).
       // processed===true uniquement : les bruts non traites sont gerees par
       // processQueue, jamais uploades tels quels.
+      // Filtre tri qualite local (sous-etape D) : si dropEnabled, on
+      // n'upload pas les items marques upload_skipped par le reducer. Le
+      // kill switch eventConfig.quality.dropEnabled (defaut false) permet
+      // de couper l'effet sans rebuild via /config worker. Tant qu'il est
+      // false, les upload_skipped partent comme avant : zero changement
+      // de comportement par defaut.
+      const dropEnabled = !!eventConfig.quality?.dropEnabled;
       const uploadable = arr
         .map((it, i) => ({ it, i }))
         .filter(({ it }) => it.processed === true
           && it.status === 'pending'
+          && !(dropEnabled && it.upload_skipped === true)
           && (!it.nextAttemptAt || it.nextAttemptAt <= now));
       if (uploadable.length === 0) {
         drainingRef.current = false;
@@ -1801,6 +1815,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         uploadingIds.has(it.id) ? { ...it, status: 'uploading', nextAttemptAt: null } : it
       );
       await commitQueue(initialCommit);
+
+      // Tri qualite (sous-etape D) : accumule les burstTs des items kept
+      // confirmes par PUT 200 OK. Le cleanup des skipped freres se fait
+      // APRES le merge-commit, en dehors du worker -> pas de mutation
+      // concurrente de queueRef.current pendant la phase upload, et la
+      // cleanup voit le queueRef DEFINITIF (post-merge avec items capture
+      // pendant le drain).
+      const confirmedKeptBurstTs = new Set();
 
       async function worker() {
         while (cursor < uploadable.length) {
@@ -1862,6 +1884,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               arr[i] = null;
               uploadedCountRef.current += 1;
               if (isMountedRef.current) setUploadedCount(uploadedCountRef.current);
+              // Tri qualite (sous-etape D) : un kept du burst vient d'etre
+              // confirme sur R2. On note le burstTs pour declencher le
+              // cleanup des freres upload_skipped APRES le merge-commit
+              // (en dehors du worker pour ne pas muter queueRef pendant
+              // la phase upload, et pour profiter du queueRef post-merge
+              // qui contient peut-etre des items enqueues pendant le drain).
+              if (dropEnabled
+                  && item.upload_kept === true
+                  && item.burstTs != null) {
+                confirmedKeptBurstTs.add(item.burstTs);
+              }
               if (verbose) {
                 const m = `[upload] OK ${item.id} (key=${item.key}) via=${hasBackgroundUploader ? 'bg' : 'fetch'}`;
                 console.log(m); addDebugLog(m);
@@ -1912,6 +1945,36 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         .filter(it => !droppedIds.has(it.id))
         .map(it => updatedById.has(it.id) ? updatedById.get(it.id) : it);
       await commitQueue(finalCommit);
+
+      // ─── Tri qualite (sous-etape D) : cleanup safe des skipped freres ──
+      // Pour chaque burstTs dont au moins un kept a ete confirme sur R2,
+      // on supprime du disque + queue les freres upload_skipped. Garantie
+      // forte : un skipped n'est JAMAIS supprime avant qu'un kept du meme
+      // burst soit en R2. Si tous les kept echouent (pas dans
+      // confirmedKeptBurstTs), les skipped restent intacts sur disque.
+      if (dropEnabled && confirmedKeptBurstTs.size > 0) {
+        const cur = queueRef.current;
+        const toCleanup = cur.filter(it =>
+             it.upload_skipped === true
+          && it.burstTs != null
+          && confirmedKeptBurstTs.has(it.burstTs)
+          && it.status !== 'uploading'
+          && it.status !== 'processing'
+        );
+        if (toCleanup.length > 0) {
+          const cleanupIds = new Set(toCleanup.map(it => it.id));
+          for (const it of toCleanup) {
+            try { new File(it.localUri).delete(); } catch {}
+            if (it.processed === false && it.id) deleteSidecar(it.id);
+          }
+          lostByQualityCountRef.current += toCleanup.length;
+          if (isMountedRef.current) setLostByQualityCount(lostByQualityCountRef.current);
+          const cleaned = queueRef.current.filter(it => !cleanupIds.has(it.id));
+          await commitQueue(cleaned);
+          console.log(`[quality-cleanup] removed ${toCleanup.length} upload_skipped photo(s) for ${confirmedKeptBurstTs.size} confirmed burst(s)`);
+        }
+      }
+      // ──────────────────────────────────────────────────────────────────
     } catch (e) {
       console.warn('drainQueue', e?.message);
     } finally {
