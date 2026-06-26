@@ -91,9 +91,11 @@ import {
   DISK_LOW_BYTES,
   DISK_CRITICAL_PERCENT,
   QUEUE_WARN_THRESHOLD,
+  QUALITY_REDUCER_TICK_MS,
   retryDelayMs,
 } from './src/constants/queue';
 import { scorePhotoSafely } from './src/services/qualityScorer';
+import { reduceBursts } from './src/services/qualityReducer';
 import {
   formatShutter,
   formatEV,
@@ -1177,6 +1179,34 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     const t = setInterval(() => { processQueue(); drainQueue(); }, 30000);
     return () => clearInterval(t);
   }, []);
+
+  // ─── Quality reducer tick (sous-etape C) ──────────────────────────────
+  // Toutes les 2s, regroupe les items scores par burstTs, calcule le
+  // composite, et marque upload_kept/upload_skipped + qualityComposite.
+  // NE SUPPRIME RIEN : drainQueue ignore les flags jusqu'a la sous-etape D.
+  // Failsafe encode en dur dans reduceBursts :
+  //   - burst dont tous les items sont en qualityScoreFailed -> kept all
+  //   - burst dont tous les items sont scores bas -> top-1 toujours kept
+  //     (par construction du sort DESC)
+  useEffect(() => {
+    const t = setInterval(() => {
+      const queue = queueRef.current;
+      if (!queue || queue.length === 0) return;
+      const { patches, bursts } = reduceBursts(queue);
+      const patchIds = Object.keys(patches);
+      if (patchIds.length === 0) return;
+      const next = queue.map(it => {
+        const p = patches[it.id];
+        return p ? { ...it, ...p } : it;
+      });
+      commitQueue(next);
+      for (const b of bursts) {
+        console.log(`[reducer] burstTs=${b.burstTs} total=${b.total} kept=${b.kept} skipped=${b.skipped} allFailed=${b.allFailed}`);
+      }
+    }, QUALITY_REDUCER_TICK_MS);
+    return () => clearInterval(t);
+  }, []);
+  // ───────────────────────────────────────────────────────────────────────
 
   // AppState : retour foreground → kick les deux workers (au cas où la
   // connexion soit revenue pendant que l'app était en background, ou que des

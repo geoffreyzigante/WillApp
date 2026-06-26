@@ -39,6 +39,19 @@ export const DISK_CRITICAL_PERCENT = 0.95;
 // telle quelle (failsafe zero-perte).
 export const SCORE_TIMEOUT_MS = 5000;
 
+// Top N photos conservees par burst (= 1 passage cote mobile, cf
+// CONCEPTION §5.1). MIRROIRE le PASSAGE_KEEP_TOP_N=3 du serveur worker.
+export const PASSAGE_KEEP_TOP_N_MOBILE = 3;
+
+// Au-dela de ce delai depuis le 1er shot du burst, le reducer agit meme
+// si tous les shots ne sont pas encore scores. Un MAX_BURST_SHOTS=15 a
+// 5 ph/s prend ~3 s, 8 s c'est large + marge.
+export const BURST_REDUCE_DELAY_MS = 8000;
+
+// Tick reducer : assez frequent pour rattraper rapidement, assez espace
+// pour ne pas consommer de CPU inutilement entre 2 captures.
+export const QUALITY_REDUCER_TICK_MS = 2000;
+
 // Backoff exponentiel borne : delai (ms) avant retry #n. Plafonne a 8s.
 // Reutilise par le worker upload ET le worker burn EXIF (meme bareme).
 export function retryDelayMs(retries) {
