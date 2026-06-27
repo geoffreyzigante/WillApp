@@ -35,17 +35,17 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   const [resetCode, setResetCode] = useState('');
   const [resetNewPassword, setResetNewPassword] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
-  // PIN error UI (photographe) : shake + message inline + compteur tentatives.
+  // PIN error UI (photographe) : shake + message inline. Plus de compteur
+  // tentatives ni de rate limit : le worker accepte les tentatives illimitees
+  // depuis 2026-06-27 (cf worker fix(auth) c1942d3).
   const [pinError, setPinError] = useState('');
   const [pinErrorTick, setPinErrorTick] = useState(0);
-  const [pinAttempts, setPinAttempts] = useState(0);
-  const [rateLimited, setRateLimited] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setCode(''); setPassword('');
       setResetMode('login'); setResetCode(''); setResetNewPassword('');
-      setPinError(''); setPinAttempts(0); setRateLimited(false);
+      setPinError('');
     }
   }, [visible]);
 
@@ -68,14 +68,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
       setBusy(false);
       if (!r?.token) {
         if (role === 'photographer') {
-          const isRate = r?.status === 429 || /5 minutes|rate/i.test(String(r?.error || ''));
-          if (isRate) {
-            setRateLimited(true);
-            setPinError('Trop de tentatives. Patiente 5 min.');
-          } else {
-            setPinAttempts(n => n + 1);
-            setPinError(pinAttempts + 1 >= 3 ? 'Trop de tentatives. Patiente 5 min.' : 'Code PIN incorrect');
-          }
+          setPinError('Code PIN incorrect');
           setPinErrorTick(t => t + 1);
           setPassword('');
         } else {
@@ -224,7 +217,6 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         useNumpad
                         error={!!pinError}
                         onComplete={(full) => {
-                          if (rateLimited) return;
                           doLogin(full);
                         }}
                       />
