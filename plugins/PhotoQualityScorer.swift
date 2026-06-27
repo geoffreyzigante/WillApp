@@ -34,10 +34,11 @@ import CoreImage
 import ImageIO
 import Vision
 
-// Bridge des types Obj-C de React Native vers Swift, cf PhotoMetadataBurner.swift
-// pour la justification (typedef RCTBridgeModule non visible sans bridging header).
-typealias RCTPromiseResolveBlock = (Any?) -> Void
-typealias RCTPromiseRejectBlock = (String?, String?, Error?) -> Void
+// RCTPromiseResolveBlock / RCTPromiseRejectBlock sont deja declares au
+// module-scope dans PhotoMetadataBurner.swift (meme module, meme target).
+// On les reutilise tels quels -- toute redeclaration locale provoque
+// "invalid redeclaration" et casse en cascade @escaping sur les 6 params
+// de fonction (l'attribut ne s'applique plus a un type fonction valide).
 
 @objc(PhotoQualityScorer)
 class PhotoQualityScorer: NSObject {
