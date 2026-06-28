@@ -200,16 +200,49 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
   }, 0);
   const isMulti = maxFacesInBurst >= 2 || items.length >= 7;
   if (isMulti) {
+    // Cutoff dur centrage : meme en mode multi, on skip les photos ou
+    // le visage est trop loin du centre horizontal (|cx - 0.5| > 0.3 =
+    // visage hors des 60% centraux). Cas signale 2026-06-28 : 2 coureurs
+    // mal cadres a gauche, gardes a tort en mode multi. Failsafe : si
+    // toutes les photos echouent ce cutoff, on garde tout quand meme
+    // (promesse "jamais 0").
+    const keptIds = new Set();
+    const skippedIds = new Set();
+    for (const it of items) {
+      const sig = it.qualityScore;
+      const cx = Array.isArray(sig?.biggestFaceCenter)
+        ? Number(sig.biggestFaceCenter[0])
+        : NaN;
+      const centered = !Number.isFinite(cx) || Math.abs(cx - 0.5) <= 0.3;
+      if (centered) keptIds.add(it.id);
+      else skippedIds.add(it.id);
+    }
+    if (keptIds.size === 0) {
+      // Failsafe : aucune photo centree -> garde tout pour ne livrer
+      // jamais 0 photo. Le worker fera le tri par runner par-dessus.
+      return {
+        kept: new Set(items.map(it => it.id)),
+        skipped: new Set(),
+        allFailed: false,
+        perItem: items.map(it => ({
+          id: it.id,
+          composite: it.qualityScore
+            ? computeComposite(it.qualityScore, weights, faceAreaNorm)
+            : FAILED_SCORE,
+          decision: 'kept-multi-fallback',
+        })),
+      };
+    }
     return {
-      kept: new Set(items.map(it => it.id)),
-      skipped: new Set(),
+      kept: keptIds,
+      skipped: skippedIds,
       allFailed: false,
       perItem: items.map(it => ({
         id: it.id,
         composite: it.qualityScore
           ? computeComposite(it.qualityScore, weights, faceAreaNorm)
           : FAILED_SCORE,
-        decision: 'kept-multi',
+        decision: keptIds.has(it.id) ? 'kept-multi' : 'skipped-offcenter',
       })),
     };
   }
