@@ -197,22 +197,26 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
   // biggest = celui le plus proche = bon proxy). A re-evaluer post-course
   // avec un scorer qui renvoie tous les centres (rebuild EAS necessaire).
   // Items sans qualityScore (score_failed) : in-zone par failsafe.
-  // ZONE_HALF_WIDTH = 0.18 : matche peu ou prou la zone de capture
-  // (captureZoneWidthPercent=30 -> demi-largeur 0.15) avec une tolerance
-  // de mouvement pendant le shutter (visage qui passe peut bouger ~20-30
-  // px entre trigger detection et takePhoto resolved, ~50-150ms).
-  // 0.18 = 36% centraux, cx in [0.32, 0.68] -> strict mais tolerable.
+  // isInZone : utilise facesInZone calcule par le scorer natif Swift
+  // (PhotoQualityScorer.swift). Compte les visages dont le centre
+  // horizontal est dans la zone 36% centraux. Si >= 1 visage dans la
+  // zone, la photo est in-zone. Plus de heuristique sur biggestFaceCenter.
+  // Fallback : si facesInZone absent (vieille build sans le champ),
+  // retombe sur biggestFaceCenter pour ne pas casser.
   function isInZone(item) {
-    const ZONE_HALF_WIDTH = 0.18;
     const sig = item.qualityScore;
     if (!sig) return true;
+    if (typeof sig.facesInZone === 'number') {
+      return sig.facesInZone >= 1;
+    }
+    // Fallback legacy
     const fc = sig.faceCount ?? 0;
     if (fc === 0) return false;
     const cx = Array.isArray(sig.biggestFaceCenter)
       ? Number(sig.biggestFaceCenter[0])
       : NaN;
     if (!Number.isFinite(cx)) return true;
-    return Math.abs(cx - 0.5) <= ZONE_HALF_WIDTH;
+    return Math.abs(cx - 0.5) <= 0.18;
   }
   const inZoneItems = items.filter(isInZone);
   const outOfZoneIds = new Set(
@@ -237,9 +241,15 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
     };
   }
 
-  // Mode multi : determine sur les inZoneItems. Si >=2 visages OU burst
-  // long (>=7 photos), on garde toutes les inZoneItems. Sinon top-N.
+  // Mode multi : determine sur les inZoneItems. Si une photo a >=2
+  // visages DANS LA ZONE (vrai peloton), OU burst long (>=7 photos
+  // inZone), on garde toutes les inZoneItems. Sinon top-N. Utilise
+  // facesInZone (calcule par scorer natif) plutot que faceCount qui
+  // compte les faux positifs hors zone (affiches, ombres, etc.).
   const maxFacesInZone = inZoneItems.reduce((max, it) => {
+    const fz = it.qualityScore?.facesInZone;
+    if (typeof fz === 'number') return fz > max ? fz : max;
+    // Fallback legacy : faceCount
     const fc = it.qualityScore?.faceCount;
     return (typeof fc === 'number' && fc > max) ? fc : max;
   }, 0);

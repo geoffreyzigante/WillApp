@@ -162,8 +162,18 @@ class PhotoQualityScorer: NSObject {
     let observations = (landmarksRequest.results) ?? []
     let faceCount = observations.count
 
-    // 0 visage : on retourne tot, signaux a 0 cote visage, brightness
-    // calculee, le JS attribuera le faceConfidence=0 etc.
+    // facesInZone : compte les visages dont le centre horizontal est dans
+    // la zone centrale (|cx - 0.5| <= ZONE_HALF_WIDTH). C est CE qui
+    // compte pour le tri, pas le plus grand visage. Decision user
+    // 2026-06-28 event J : si 0 visage dans la zone, on supprime.
+    let zoneHalfWidth: Double = 0.18
+    let facesInZone = observations.reduce(0) { count, obs in
+      let cx = Double(obs.boundingBox.midX)
+      return abs(cx - 0.5) <= zoneHalfWidth ? count + 1 : count
+    }
+
+    // 0 visage detecte : on retourne tot, signaux a 0 cote visage,
+    // brightness calculee, facesInZone=0 (le JS skip).
     if faceCount == 0 {
       let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
       resolver(Self.emptyResult(brightness: brightness, elapsedMs: elapsedMs))
@@ -237,6 +247,7 @@ class PhotoQualityScorer: NSObject {
 
     resolver([
       "faceCount":            faceCount,
+      "facesInZone":          facesInZone,
       "faceConfidence":       faceConfidence,
       "biggestFaceArea":      biggestArea,
       "biggestFaceCenter":    [centerX, centerY],
@@ -258,6 +269,7 @@ class PhotoQualityScorer: NSObject {
   private static func emptyResult(brightness: Double, elapsedMs: Int) -> [String: Any] {
     return [
       "faceCount":            0,
+      "facesInZone":          0,
       "faceConfidence":       0.0,
       "biggestFaceArea":      0.0,
       "biggestFaceCenter":    [0.5, 0.5],
