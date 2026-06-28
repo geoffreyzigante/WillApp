@@ -697,6 +697,18 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // pour economiser CPU/NPU + thermal sur event long. Retour immediat a normal
   // des qu'un visage est vu (cf onHumansDetectedJS).
   const idleModeSV = useMemo(() => Worklets.createSharedValue(0), []);
+  // Etape A AUDIT_BATTERIE.md : early-return Vision face detection si pas
+  // armed OU detection desactivee. Le worklet detectHumans tournait meme
+  // quand isDetectionEnabledRef=false (le check se faisait dans
+  // onHumansDetectedJS post-detect, donc 10 fps NPU brules pour rien).
+  // Sync depuis les states React via useEffect : a chaque toggle Go/Stop
+  // ou mount/unmount screen, on pousse au worklet via .value.
+  // Le bloc isoTick + readExposure reste actif (voyant lumiere depend de
+  // la preview en continu, independant de armed/detection).
+  const isAutoArmedSV = useMemo(() => Worklets.createSharedValue(false), []);
+  const isDetectionEnabledSV = useMemo(() => Worklets.createSharedValue(false), []);
+  useEffect(() => { isAutoArmedSV.value = isAutoArmed; }, [isAutoArmed, isAutoArmedSV]);
+  useEffect(() => { isDetectionEnabledSV.value = isDetectionEnabled; }, [isDetectionEnabled, isDetectionEnabledSV]);
 
   // Caméra ancrée juste sous le header (au lieu de absoluteFill + letterbox 4:3
   // qui laissait un grand vide noir entre le header et l'image visible sur les
@@ -1035,6 +1047,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       if (exp && exp.iso) onExposureSampleJS(exp);
     }
 
+    // Etape A AUDIT_BATTERIE.md : skip la passe Vision face detection si
+    // l app n est pas armee OU detection desactivee. On garde le voyant
+    // expoTick (bloc au-dessus) actif car independant. Quand l user re-arme,
+    // la 1ere frame Vision tombe au plus tard 1/3 frame plus tard (~33 ms a
+    // 30 fps), donc imperceptible. Pas de reset des compteurs : frameSkipSV
+    // reprend ou il etait au prochain detect, drift max 2 frames a la
+    // reactivation.
+    if (!isAutoArmedSV.value || !isDetectionEnabledSV.value) return;
+
     // Skip dynamique : 1/3 (10 fps) en normal, 1/6 (5 fps) en idle.
     // idleModeSV est togglee par onHumansDetectedJS (cf timeout 30s).
     const skipMod = idleModeSV.value === 1 ? 6 : 3;
@@ -1046,7 +1067,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     });
     const count = result?.count ?? 0;
     onHumansDetectedJS(count);
-  }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV, idleModeSV]);
+  }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV, idleModeSV, isAutoArmedSV, isDetectionEnabledSV]);
 
   // === Mode offline-first : queue persistante ===
   // - Photos copiées dans Paths.document/will_pending/ (survit au kill app)
