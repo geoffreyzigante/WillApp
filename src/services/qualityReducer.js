@@ -185,9 +185,34 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
     };
   }
 
-  // Mode peloton DESACTIVE 2026-06-28 (event J en cours, 7 photos solo
-  // au lieu de 3, faux positifs MediaPipe presumes). Top-N strict par
-  // burst, quel que soit le faceCount. On re-evaluera apres la course.
+  // Mode "garde tout" 2026-06-28 (event J en cours) : on garde tout si
+  //   (a) au moins 1 photo a faceCount >= 2 (peloton ou 2e coureur dans
+  //       le cadre)
+  //   (b) le burst contient >= 7 photos (suggere plusieurs coureurs passes
+  //       sur la duree, meme s ils n etaient jamais simultanement dans
+  //       le cadre). Cas signale : 2 coureurs espaces ou le 2e n etait
+  //       jamais sur la meme photo que le 1er.
+  // Top-3 strict applique UNIQUEMENT au cas solo court (1 visage, burst
+  // <= 6 photos).
+  const maxFacesInBurst = items.reduce((max, it) => {
+    const fc = it.qualityScore?.faceCount;
+    return (typeof fc === 'number' && fc > max) ? fc : max;
+  }, 0);
+  const isMulti = maxFacesInBurst >= 2 || items.length >= 7;
+  if (isMulti) {
+    return {
+      kept: new Set(items.map(it => it.id)),
+      skipped: new Set(),
+      allFailed: false,
+      perItem: items.map(it => ({
+        id: it.id,
+        composite: it.qualityScore
+          ? computeComposite(it.qualityScore, weights, faceAreaNorm)
+          : FAILED_SCORE,
+        decision: 'kept-multi',
+      })),
+    };
+  }
 
   // Tri composite DESC. Items en score_failed -> composite = FAILED_SCORE
   // (ils tombent sous tout item scoré et ne pousseront pas un scored item
