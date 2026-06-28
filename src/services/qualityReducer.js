@@ -163,6 +163,31 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
     };
   }
 
+  // Mode peloton : si au moins une photo du burst contient >=2 visages,
+  // on garde TOUT (decision user 2026-06-28 : un coureur seul -> top 3,
+  // peloton ≥2 coureurs -> tout garde, on laisse le worker faire le tri
+  // par runner). Sans ca, un peloton de 5 coureurs avec top-3 par burst
+  // ferait louper certains runners qui n apparaitraient que dans les
+  // photos rejetees.
+  const maxFacesInBurst = items.reduce((max, it) => {
+    const fc = it.qualityScore?.faceCount;
+    return (typeof fc === 'number' && fc > max) ? fc : max;
+  }, 0);
+  if (maxFacesInBurst >= 2) {
+    return {
+      kept: new Set(items.map(it => it.id)),
+      skipped: new Set(),
+      allFailed: false,
+      perItem: items.map(it => ({
+        id: it.id,
+        composite: it.qualityScore
+          ? computeComposite(it.qualityScore, weights, faceAreaNorm)
+          : FAILED_SCORE,
+        decision: 'kept-peloton',
+      })),
+    };
+  }
+
   // Tri composite DESC. Items en score_failed -> composite = FAILED_SCORE
   // (ils tombent sous tout item scoré et ne pousseront pas un scored item
   // hors du top-N).
