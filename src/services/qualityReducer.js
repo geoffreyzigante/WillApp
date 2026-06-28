@@ -19,11 +19,17 @@ import { PASSAGE_KEEP_TOP_N_MOBILE, BURST_REDUCE_DELAY_MS } from '../constants/q
 //   - Bonus locaux : face_area 0.10 (tunable au calibrage E),
 //     yaw 0.10 (face camera).
 export const QUALITY_DEFAULT_WEIGHTS = Object.freeze({
-  faceConfidence: 0.40,
-  brightness:     0.27,
-  eyesOpen:       0.13,
+  faceConfidence: 0.30,
+  brightness:     0.20,
+  eyesOpen:       0.10,
   faceArea:       0.10,
   yaw:            0.10,
+  // Centrage du visage : decision user 2026-06-28 event J. Le user veut
+  // garder les photos ou il est le plus au milieu de l image. Le scorer
+  // renvoyait deja biggestFaceCenter [cx, cy] (oublie d integrer au
+  // composite a l implementation). Poids 0.20 (fort) pour matcher
+  // l intention produit.
+  center:         0.20,
 });
 
 // 5 % de l'aire image = score plein (visage proche). Sous 5 %, le score
@@ -92,6 +98,20 @@ function clamp01(x) {
   return x;
 }
 
+// Centrage du visage : 1 si parfaitement centre (cx=0.5, cy=0.5), 0 si
+// dans un coin. Distance euclidienne au centre / distance max (sqrt(0.5)).
+function centerScore(centerArr) {
+  if (!Array.isArray(centerArr) || centerArr.length < 2) return 0;
+  const cx = Number(centerArr[0]);
+  const cy = Number(centerArr[1]);
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return 0;
+  const dx = cx - 0.5;
+  const dy = cy - 0.5;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const maxDist = Math.SQRT1_2; // sqrt(0.5) ≈ 0.7071
+  return Math.max(0, Math.min(1, 1 - dist / maxDist));
+}
+
 // Calcule scoreComposite ∈ [0, 1] a partir des signaux bruts du scorer
 // natif et des poids courants. Pure (testable sans device).
 export function computeComposite(signals, weights = QUALITY_DEFAULT_WEIGHTS, faceAreaNorm = QUALITY_DEFAULT_FACE_AREA_NORM) {
@@ -104,12 +124,14 @@ export function computeComposite(signals, weights = QUALITY_DEFAULT_WEIGHTS, fac
     (signals.eyesOpenApplicable && signals.eyesOpen) ? 1 : 0;
   const faceAreaContrib = clamp01((signals.biggestFaceArea ?? 0) / norm);
   const yawContrib = yawScore(signals.yaw ?? 0);
+  const centerContrib = centerScore(signals.biggestFaceCenter);
   return (
       w.faceConfidence * faceConf
     + w.brightness     * brightness
     + w.eyesOpen       * eyesOpenContrib
     + w.faceArea       * faceAreaContrib
     + w.yaw            * yawContrib
+    + (w.center || 0)  * centerContrib
   );
 }
 
@@ -163,17 +185,18 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
     };
   }
 
-  // Mode peloton : si au moins une photo du burst contient >=2 visages,
-  // on garde TOUT (decision user 2026-06-28 : un coureur seul -> top 3,
-  // peloton ≥2 coureurs -> tout garde, on laisse le worker faire le tri
-  // par runner). Sans ca, un peloton de 5 coureurs avec top-3 par burst
-  // ferait louper certains runners qui n apparaitraient que dans les
-  // photos rejetees.
+  // Mode peloton : seuil DURCI 2026-06-28 (event J) a >=3 visages au lieu
+  // de >=2. MediaPipe avait des faux positifs (visage detecte sur poster /
+  // ombre / autre coureur en arriere-plan) qui faisaient passer un solo en
+  // mode peloton et gardait tout. >=3 visages = vrai peloton sur la
+  // majorite des cas terrain. Si une affiche dans le decor contient 1
+  // visage, on tolere. Si plusieurs personnes dans le cadre = vraie scene
+  // de peloton.
   const maxFacesInBurst = items.reduce((max, it) => {
     const fc = it.qualityScore?.faceCount;
     return (typeof fc === 'number' && fc > max) ? fc : max;
   }, 0);
-  if (maxFacesInBurst >= 2) {
+  if (maxFacesInBurst >= 3) {
     return {
       kept: new Set(items.map(it => it.id)),
       skipped: new Set(),
