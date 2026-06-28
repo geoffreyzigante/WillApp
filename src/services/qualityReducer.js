@@ -197,7 +197,13 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
   // biggest = celui le plus proche = bon proxy). A re-evaluer post-course
   // avec un scorer qui renvoie tous les centres (rebuild EAS necessaire).
   // Items sans qualityScore (score_failed) : in-zone par failsafe.
+  // ZONE_HALF_WIDTH = 0.18 : matche peu ou prou la zone de capture
+  // (captureZoneWidthPercent=30 -> demi-largeur 0.15) avec une tolerance
+  // de mouvement pendant le shutter (visage qui passe peut bouger ~20-30
+  // px entre trigger detection et takePhoto resolved, ~50-150ms).
+  // 0.18 = 36% centraux, cx in [0.32, 0.68] -> strict mais tolerable.
   function isInZone(item) {
+    const ZONE_HALF_WIDTH = 0.18;
     const sig = item.qualityScore;
     if (!sig) return true;
     const fc = sig.faceCount ?? 0;
@@ -206,7 +212,7 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
       ? Number(sig.biggestFaceCenter[0])
       : NaN;
     if (!Number.isFinite(cx)) return true;
-    return Math.abs(cx - 0.5) <= 0.3;
+    return Math.abs(cx - 0.5) <= ZONE_HALF_WIDTH;
   }
   const inZoneItems = items.filter(isInZone);
   const outOfZoneIds = new Set(
