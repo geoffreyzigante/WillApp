@@ -185,31 +185,9 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
     };
   }
 
-  // Mode peloton : seuil DURCI 2026-06-28 (event J) a >=3 visages au lieu
-  // de >=2. MediaPipe avait des faux positifs (visage detecte sur poster /
-  // ombre / autre coureur en arriere-plan) qui faisaient passer un solo en
-  // mode peloton et gardait tout. >=3 visages = vrai peloton sur la
-  // majorite des cas terrain. Si une affiche dans le decor contient 1
-  // visage, on tolere. Si plusieurs personnes dans le cadre = vraie scene
-  // de peloton.
-  const maxFacesInBurst = items.reduce((max, it) => {
-    const fc = it.qualityScore?.faceCount;
-    return (typeof fc === 'number' && fc > max) ? fc : max;
-  }, 0);
-  if (maxFacesInBurst >= 3) {
-    return {
-      kept: new Set(items.map(it => it.id)),
-      skipped: new Set(),
-      allFailed: false,
-      perItem: items.map(it => ({
-        id: it.id,
-        composite: it.qualityScore
-          ? computeComposite(it.qualityScore, weights, faceAreaNorm)
-          : FAILED_SCORE,
-        decision: 'kept-peloton',
-      })),
-    };
-  }
+  // Mode peloton DESACTIVE 2026-06-28 (event J en cours, 7 photos solo
+  // au lieu de 3, faux positifs MediaPipe presumes). Top-N strict par
+  // burst, quel que soit le faceCount. On re-evaluera apres la course.
 
   // Tri composite DESC. Items en score_failed -> composite = FAILED_SCORE
   // (ils tombent sous tout item scoré et ne pousseront pas un scored item

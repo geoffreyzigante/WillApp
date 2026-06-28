@@ -1755,18 +1755,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // le cooldown nextAttemptAt (backoff exponentiel).
       // processed===true uniquement : les bruts non traites sont gerees par
       // processQueue, jamais uploades tels quels.
-      // Filtre tri qualite local (sous-etape D) : si dropEnabled, on
-      // n'upload pas les items marques upload_skipped par le reducer. Le
-      // kill switch eventConfig.quality.dropEnabled (defaut false) permet
-      // de couper l'effet sans rebuild via /config worker. Tant qu'il est
-      // false, les upload_skipped partent comme avant : zero changement
-      // de comportement par defaut.
-      const dropEnabled = !!eventConfig.quality?.dropEnabled;
+      // Drop FORCE EN DUR 2026-06-28 (event J en cours). On ignore
+      // eventConfig.quality.dropEnabled qui n etait pas effectif (config
+      // serveur ecrasait, kill incomplet, etc.). Tout upload_skipped est
+      // strict skip. A re-evaluer apres la course.
+      const dropEnabled = true;
+      console.log('[drain] dropEnabled=', dropEnabled);
       const uploadable = arr
         .map((it, i) => ({ it, i }))
         .filter(({ it }) => it.processed === true
           && it.status === 'pending'
-          && !(dropEnabled && it.upload_skipped === true)
+          && it.upload_skipped !== true
           && (!it.nextAttemptAt || it.nextAttemptAt <= now));
       if (uploadable.length === 0) {
         drainingRef.current = false;

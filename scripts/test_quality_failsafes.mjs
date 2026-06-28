@@ -166,28 +166,8 @@ console.log('\n[TEST 5 edge] Burst single → toujours kept (jamais 0)');
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Test 6 : Mode peloton (>=2 visages dans le burst -> garde tout)
+// Test 6 RETIRE 2026-06-28 : mode peloton desactive (cf qualityReducer).
 // ──────────────────────────────────────────────────────────────────────
-console.log('\n[TEST 6] Mode peloton (>=2 visages) → garde TOUT');
-{
-  const burst = [
-    { id: 'p1', burstTs: 5000, status: 'pending',
-      qualityScore: { faceCount: 1, faceConfidence: 0.9, biggestFaceArea: 0.07, yaw: 0, eyesOpen: true, eyesOpenApplicable: true, brightness: 0.55 } },
-    { id: 'p2', burstTs: 5000, status: 'pending',
-      qualityScore: { faceCount: 5, faceConfidence: 0.85, biggestFaceArea: 0.06, yaw: 0.1, eyesOpen: true, eyesOpenApplicable: true, brightness: 0.50 } },
-    { id: 'p3', burstTs: 5000, status: 'pending',
-      qualityScore: { faceCount: 3, faceConfidence: 0.80, biggestFaceArea: 0.05, yaw: 0.2, eyesOpen: true, eyesOpenApplicable: true, brightness: 0.45 } },
-    { id: 'p4', burstTs: 5000, status: 'pending',
-      qualityScore: { faceCount: 4, faceConfidence: 0.75, biggestFaceArea: 0.04, yaw: 0.3, eyesOpen: true, eyesOpenApplicable: true, brightness: 0.40 } },
-    { id: 'p5', burstTs: 5000, status: 'pending',
-      qualityScore: { faceCount: 2, faceConfidence: 0.70, biggestFaceArea: 0.03, yaw: 0.4, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.35 } },
-  ];
-  const out = reduceBurst(burst);
-  assert(out.kept.size === burst.length, `kept.size === ${burst.length} (TOUT garde en peloton)`);
-  assert(out.skipped.size === 0, 'skipped.size === 0 en peloton');
-  assert(out.perItem.every(p => p.decision === 'kept-peloton'),
-         'tous les items marques decision kept-peloton');
-}
 
 // ──────────────────────────────────────────────────────────────────────
 // Test 7 : Solo (max faceCount = 1) -> top-3 normal
