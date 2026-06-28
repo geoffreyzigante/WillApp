@@ -455,10 +455,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       faceAreaNorm:    0.05,
       topN:            3,
       reduceDelayMs:   8000,
-      // dropEnabled : kill switch pour la sous-etape D. Tant que D n'est
-      // pas codee, drainQueue ignore les flags de toute facon. Une fois
-      // D livree, dropEnabled=false coupera le drop sans rebuild.
-      dropEnabled:     false,
+      // dropEnabled : true par defaut depuis 2026-06-28 (event J). Le
+      // worker /config retourne SON propre quality (filtres serveur
+      // enabled/preset/criteria), distinct du quality local mobile.
+      // Le merge shallow ecrasait quality local -> on filtre cfg.quality
+      // pour ne pas l importer.
+      dropEnabled:     true,
     },
   });
 
@@ -467,10 +469,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       .then(r => r.ok ? r.json() : null)
       .then(cfg => {
         if (!cfg) return;
-        setEventConfig(prev => ({ ...prev, ...cfg }));
-        // Note : will_shutter.json n'est plus ecrit -> WillShutterController
-        // a ete neutralise 2026-05 (rendu iPhone natif, exposition auto
-        // continue, plus de shutter custom).
+        // IMPORTANT : ne pas importer cfg.quality (serveur) qui ecrase le
+        // quality local mobile (dropEnabled, weights, etc.). Conflit de
+        // noms. Le quality serveur (enabled/preset/criteria) sert au filtre
+        // qualite worker, sans rapport avec le tri local.
+        const { quality: _ignoredServerQuality, ...rest } = cfg;
+        setEventConfig(prev => ({ ...prev, ...rest }));
       })
       .catch(() => {});
   }, []);
