@@ -213,8 +213,16 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
       const cx = Array.isArray(sig?.biggestFaceCenter)
         ? Number(sig.biggestFaceCenter[0])
         : NaN;
-      const centered = !Number.isFinite(cx) || Math.abs(cx - 0.5) <= 0.3;
-      if (centered) keptIds.add(it.id);
+      const fc = sig?.faceCount ?? 0;
+      const biggestCentered = !Number.isFinite(cx) || Math.abs(cx - 0.5) <= 0.3;
+      // On garde si :
+      //  - le plus grand visage est centre (cas standard)
+      //  - OU la photo a >=2 visages (le scorer natif ne renvoie que le
+      //    centre du plus grand ; les autres visages peuvent etre dans
+      //    la zone, on prefere la securite de garder)
+      // On skip uniquement si 1 seul visage et hors zone, ou aucun visage.
+      const keep = biggestCentered || fc >= 2;
+      if (keep) keptIds.add(it.id);
       else skippedIds.add(it.id);
     }
     if (keptIds.size === 0) {
