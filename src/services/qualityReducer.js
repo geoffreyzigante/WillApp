@@ -185,23 +185,23 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
     };
   }
 
-  // Pre-filter : skip toutes les photos ou aucun visage n est dans la zone.
-  // Critere "dans la zone" (decision user 2026-06-28 event J) :
-  //   - faceCount === 0       -> hors zone (aucun visage)
-  //   - faceCount === 1       -> dans la zone SSI le visage est centre
-  //                              (|cx - 0.5| <= 0.3 = 60% centraux)
-  //   - faceCount >= 2        -> dans la zone (le scorer ne renvoie que
-  //                              le centre du plus grand visage ; un
-  //                              autre visage peut etre centre, on prend
-  //                              la securite)
-  // Les items sans qualityScore (score_failed) sont consideres in-zone
-  // par defaut (failsafe : pas de scoring -> on ne sait pas, on garde).
+  // Pre-filter : skip toutes les photos sans coureur dans la zone.
+  // Critere strict (decision user 2026-06-28 event J) : le plus grand
+  // visage doit etre dans les 60% centraux horizontalement.
+  //   - faceCount === 0                -> hors zone (skip)
+  //   - faceCount >= 1, biggest centre  -> dans zone (keep)
+  //   - faceCount >= 1, biggest hors   -> hors zone (skip)
+  // Limitation : le scorer renvoie SEULEMENT biggestFaceCenter. Si une
+  // photo a 2 visages dont le plus grand hors zone et le 2e centre,
+  // on skip a tort. Cas rare en pratique (coureurs ~meme distance =
+  // biggest = celui le plus proche = bon proxy). A re-evaluer post-course
+  // avec un scorer qui renvoie tous les centres (rebuild EAS necessaire).
+  // Items sans qualityScore (score_failed) : in-zone par failsafe.
   function isInZone(item) {
     const sig = item.qualityScore;
     if (!sig) return true;
     const fc = sig.faceCount ?? 0;
     if (fc === 0) return false;
-    if (fc >= 2) return true;
     const cx = Array.isArray(sig.biggestFaceCenter)
       ? Number(sig.biggestFaceCenter[0])
       : NaN;
