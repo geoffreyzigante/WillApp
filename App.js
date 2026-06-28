@@ -537,10 +537,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     }
   }, [eventConfig?.capture?.focus]);
 
+  // Stabilisation video : priorite 'standard' (Etape A AUDIT_BATTERIE.md).
+  // cinematic-extended/cinematic consomment du GPU en continu pour de la
+  // stab cinema 24/30 fps, sans aucun apport sur la photo (la photo a sa
+  // propre stab interne ISP) ni sur la detection face (Vision est insensible
+  // au micro-jitter de preview). 'standard' suffit largement pour la preview
+  // ; fallback 'off' si non supporte (tous les iPhones modernes ont 'standard').
   const videoStabilizationMode = useMemo(() => {
     const modes = format?.videoStabilizationModes || [];
-    if (modes.includes('cinematic-extended')) return 'cinematic-extended';
-    if (modes.includes('cinematic')) return 'cinematic';
     if (modes.includes('standard')) return 'standard';
     return 'off';
   }, [format]);
