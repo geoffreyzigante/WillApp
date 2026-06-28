@@ -33,18 +33,19 @@ function assert(cond, label) {
 // ──────────────────────────────────────────────────────────────────────
 console.log('\n[TEST 1] Toutes basses → garde la meilleure (top-N, min top-1)');
 {
-  // 4 photos, toutes avec des signaux "mauvais" mais legerement differents
-  // pour qu'un sort soit possible. Aucun visage, brightness moyenne basse,
-  // yaw en biais.
+  // 4 photos avec visage centre (in-zone) mais scores "mauvais" sur les
+  // autres criteres. faceCount=1 + biggestFaceCenter=[0.5, 0.5] pour
+  // passer le pre-filter in-zone. brightness differents pour permettre
+  // un sort.
   const burst = [
     { id: 'a', burstTs: 1000, status: 'pending',
-      qualityScore: { faceCount: 0, faceConfidence: 0,    biggestFaceArea: 0,    yaw: 0.7, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.10 } },
+      qualityScore: { faceCount: 1, faceConfidence: 0.1, biggestFaceArea: 0.01, biggestFaceCenter: [0.5, 0.5], yaw: 0.7, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.10 } },
     { id: 'b', burstTs: 1000, status: 'pending',
-      qualityScore: { faceCount: 0, faceConfidence: 0,    biggestFaceArea: 0,    yaw: 0.6, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.12 } },
+      qualityScore: { faceCount: 1, faceConfidence: 0.1, biggestFaceArea: 0.01, biggestFaceCenter: [0.5, 0.5], yaw: 0.6, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.12 } },
     { id: 'c', burstTs: 1000, status: 'pending',
-      qualityScore: { faceCount: 0, faceConfidence: 0,    biggestFaceArea: 0,    yaw: 0.8, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.20 } },
+      qualityScore: { faceCount: 1, faceConfidence: 0.1, biggestFaceArea: 0.01, biggestFaceCenter: [0.5, 0.5], yaw: 0.8, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.20 } },
     { id: 'd', burstTs: 1000, status: 'pending',
-      qualityScore: { faceCount: 0, faceConfidence: 0,    biggestFaceArea: 0,    yaw: 0.9, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.08 } },
+      qualityScore: { faceCount: 1, faceConfidence: 0.1, biggestFaceArea: 0.01, biggestFaceCenter: [0.5, 0.5], yaw: 0.9, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.08 } },
   ];
   const out = reduceBurst(burst);
   const composites = burst.map(it => ({

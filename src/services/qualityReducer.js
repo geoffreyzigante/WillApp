@@ -185,101 +185,99 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
     };
   }
 
-  // Mode "garde tout" 2026-06-28 (event J en cours) : on garde tout si
-  //   (a) au moins 1 photo a faceCount >= 2 (peloton ou 2e coureur dans
-  //       le cadre)
-  //   (b) le burst contient >= 7 photos (suggere plusieurs coureurs passes
-  //       sur la duree, meme s ils n etaient jamais simultanement dans
-  //       le cadre). Cas signale : 2 coureurs espaces ou le 2e n etait
-  //       jamais sur la meme photo que le 1er.
-  // Top-3 strict applique UNIQUEMENT au cas solo court (1 visage, burst
-  // <= 6 photos).
-  const maxFacesInBurst = items.reduce((max, it) => {
-    const fc = it.qualityScore?.faceCount;
-    return (typeof fc === 'number' && fc > max) ? fc : max;
-  }, 0);
-  const isMulti = maxFacesInBurst >= 2 || items.length >= 7;
-  if (isMulti) {
-    // Cutoff dur centrage : meme en mode multi, on skip les photos ou
-    // le visage est trop loin du centre horizontal (|cx - 0.5| > 0.3 =
-    // visage hors des 60% centraux). Cas signale 2026-06-28 : 2 coureurs
-    // mal cadres a gauche, gardes a tort en mode multi. Failsafe : si
-    // toutes les photos echouent ce cutoff, on garde tout quand meme
-    // (promesse "jamais 0").
-    const keptIds = new Set();
-    const skippedIds = new Set();
-    for (const it of items) {
-      const sig = it.qualityScore;
-      const cx = Array.isArray(sig?.biggestFaceCenter)
-        ? Number(sig.biggestFaceCenter[0])
-        : NaN;
-      const fc = sig?.faceCount ?? 0;
-      const biggestCentered = !Number.isFinite(cx) || Math.abs(cx - 0.5) <= 0.3;
-      // On garde si :
-      //  - le plus grand visage est centre (cas standard)
-      //  - OU la photo a >=2 visages (le scorer natif ne renvoie que le
-      //    centre du plus grand ; les autres visages peuvent etre dans
-      //    la zone, on prefere la securite de garder)
-      // On skip uniquement si 1 seul visage et hors zone, ou aucun visage.
-      const keep = biggestCentered || fc >= 2;
-      if (keep) keptIds.add(it.id);
-      else skippedIds.add(it.id);
-    }
-    if (keptIds.size === 0) {
-      // Failsafe : aucune photo centree -> garde tout pour ne livrer
-      // jamais 0 photo. Le worker fera le tri par runner par-dessus.
-      return {
-        kept: new Set(items.map(it => it.id)),
-        skipped: new Set(),
-        allFailed: false,
-        perItem: items.map(it => ({
-          id: it.id,
-          composite: it.qualityScore
-            ? computeComposite(it.qualityScore, weights, faceAreaNorm)
-            : FAILED_SCORE,
-          decision: 'kept-multi-fallback',
-        })),
-      };
-    }
+  // Pre-filter : skip toutes les photos ou aucun visage n est dans la zone.
+  // Critere "dans la zone" (decision user 2026-06-28 event J) :
+  //   - faceCount === 0       -> hors zone (aucun visage)
+  //   - faceCount === 1       -> dans la zone SSI le visage est centre
+  //                              (|cx - 0.5| <= 0.3 = 60% centraux)
+  //   - faceCount >= 2        -> dans la zone (le scorer ne renvoie que
+  //                              le centre du plus grand visage ; un
+  //                              autre visage peut etre centre, on prend
+  //                              la securite)
+  // Les items sans qualityScore (score_failed) sont consideres in-zone
+  // par defaut (failsafe : pas de scoring -> on ne sait pas, on garde).
+  function isInZone(item) {
+    const sig = item.qualityScore;
+    if (!sig) return true;
+    const fc = sig.faceCount ?? 0;
+    if (fc === 0) return false;
+    if (fc >= 2) return true;
+    const cx = Array.isArray(sig.biggestFaceCenter)
+      ? Number(sig.biggestFaceCenter[0])
+      : NaN;
+    if (!Number.isFinite(cx)) return true;
+    return Math.abs(cx - 0.5) <= 0.3;
+  }
+  const inZoneItems = items.filter(isInZone);
+  const outOfZoneIds = new Set(
+    items.filter(it => !isInZone(it)).map(it => it.id),
+  );
+
+  // Failsafe absolu : aucune photo n a de visage dans la zone -> garde
+  // tout pour ne livrer JAMAIS 0 photo. Le worker fera le tri par runner
+  // par-dessus si necessaire.
+  if (inZoneItems.length === 0) {
     return {
-      kept: keptIds,
-      skipped: skippedIds,
+      kept: new Set(items.map(it => it.id)),
+      skipped: new Set(),
       allFailed: false,
       perItem: items.map(it => ({
         id: it.id,
         composite: it.qualityScore
           ? computeComposite(it.qualityScore, weights, faceAreaNorm)
           : FAILED_SCORE,
-        decision: keptIds.has(it.id) ? 'kept-multi' : 'skipped-offcenter',
+        decision: 'kept-nofailsafe',
       })),
     };
   }
 
-  // Tri composite DESC. Items en score_failed -> composite = FAILED_SCORE
-  // (ils tombent sous tout item scoré et ne pousseront pas un scored item
-  // hors du top-N).
-  const scored = items.map(it => ({
-    item: it,
-    composite: it.qualityScore
-      ? computeComposite(it.qualityScore, weights, faceAreaNorm)
-      : FAILED_SCORE,
-  }));
-  scored.sort((a, b) => b.composite - a.composite);
+  // Mode multi : determine sur les inZoneItems. Si >=2 visages OU burst
+  // long (>=7 photos), on garde toutes les inZoneItems. Sinon top-N.
+  const maxFacesInZone = inZoneItems.reduce((max, it) => {
+    const fc = it.qualityScore?.faceCount;
+    return (typeof fc === 'number' && fc > max) ? fc : max;
+  }, 0);
+  const isMulti = maxFacesInZone >= 2 || inZoneItems.length >= 7;
 
-  const kept = new Set();
-  const skipped = new Set();
-  const perItem = [];
-  for (let i = 0; i < scored.length; i++) {
-    const { item, composite } = scored[i];
-    if (i < TOP_N) {
-      kept.add(item.id);
-      perItem.push({ id: item.id, composite, decision: 'kept' });
-    } else {
-      skipped.add(item.id);
-      perItem.push({ id: item.id, composite, decision: 'skipped' });
-    }
+  let inZoneKeptIds;
+  if (isMulti) {
+    // Garde toutes les inZoneItems (peloton ou plusieurs coureurs).
+    inZoneKeptIds = new Set(inZoneItems.map(it => it.id));
+  } else {
+    // Solo court : top-N sur les inZoneItems.
+    const scored = inZoneItems.map(it => ({
+      item: it,
+      composite: it.qualityScore
+        ? computeComposite(it.qualityScore, weights, faceAreaNorm)
+        : FAILED_SCORE,
+    }));
+    scored.sort((a, b) => b.composite - a.composite);
+    inZoneKeptIds = new Set(
+      scored.slice(0, TOP_N).map(s => s.item.id),
+    );
   }
-  return { kept, skipped, allFailed: false, perItem };
+
+  // Skipped = out-of-zone + inZone non retenus par top-N.
+  const skipped = new Set(outOfZoneIds);
+  for (const it of inZoneItems) {
+    if (!inZoneKeptIds.has(it.id)) skipped.add(it.id);
+  }
+
+  return {
+    kept: inZoneKeptIds,
+    skipped,
+    allFailed: false,
+    perItem: items.map(it => {
+      const composite = it.qualityScore
+        ? computeComposite(it.qualityScore, weights, faceAreaNorm)
+        : FAILED_SCORE;
+      let decision;
+      if (inZoneKeptIds.has(it.id)) decision = isMulti ? 'kept-multi' : 'kept-topN';
+      else if (outOfZoneIds.has(it.id)) decision = 'skipped-outzone';
+      else decision = 'skipped-topN';
+      return { id: it.id, composite, decision };
+    }),
+  };
 }
 
 // API principale : prend la queue complete, retourne un patch a appliquer
