@@ -17,10 +17,11 @@
       "bundleIdentifier": "com.geoffreyzigante.will",
       "infoPlist": {
         "CFBundleDisplayName": "Will",
-        "NSCameraUsageDescription": "Will utilise la camera pour detecter les coureurs et prendre des photos automatiquement.",
+        "NSCameraUsageDescription": "Will utilise la caméra pour détecter les coureurs et prendre des photos automatiquement, et pour capturer votre selfie afin de retrouver vos photos grâce à la reconnaissance faciale.",
         "NSMicrophoneUsageDescription": "Will n'enregistre pas d'audio. Cette permission est requise par la librairie camera mais n'est pas utilisee par l'application.",
         "NSPhotoLibraryUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
         "NSPhotoLibraryAddUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
+        "NSLocationWhenInUseUsageDescription": "Will peut utiliser votre position pour associer vos photos à l'événement sportif correspondant.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -55,7 +56,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Will utilise la camera pour detecter les coureurs et prendre des photos."
+          "cameraPermission": "Will utilise la caméra pour détecter les coureurs et prendre des photos automatiquement, et pour capturer votre selfie afin de retrouver vos photos grâce à la reconnaissance faciale."
         }
       ],
       [
@@ -69,7 +70,7 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Will utilise la camera pour detecter les coureurs et prendre des photos.",
+          "cameraPermissionText": "Will utilise la caméra pour détecter les coureurs et prendre des photos automatiquement, et pour capturer votre selfie afin de retrouver vos photos grâce à la reconnaissance faciale.",
           "enableFrameProcessors": true
         }
       ],
