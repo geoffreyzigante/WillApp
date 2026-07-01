@@ -143,6 +143,7 @@ import {
 } from './src/services/thermalMonitor';
 import CriticalAlert from './src/components/CriticalAlert';
 import { photographerRuntime } from './src/utils/photographerRuntime';
+import { startHeartbeat, enqueueAlert } from './src/services/heartbeat';
 
 // Cle AsyncStorage : 'true' tant qu on est activement en mode photographe
 // (persistee au setInPhotographerMode(true), effacee sur exit intentionnel
@@ -565,6 +566,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // declenche captureOne. Quand false, le frame processor logue mais ne
   // tire pas. Ref pour le worklet, state pour le rendu du bouton.
   const isAutoArmedRef = useRef(false);
+  // Timestamp ms de la derniere capture (equivalent AsyncStorage LAST_CAPTURE_KEY
+  // en RAM, pour lecture synchrone dans le heartbeat sans await).
+  const lastCaptureTsRef = useRef(0);
 
   const [isShooting, setIsShooting] = useState(false);
   const [isAutoArmed, setIsAutoArmed] = useState(false);
@@ -1397,7 +1401,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     await commitQueue(next);
 
     // Timestamp de dernière capture — utilisé par l'alerte de reprise au démarrage.
-    AsyncStorage.setItem(LAST_CAPTURE_KEY, String(Date.now())).catch(() => {});
+    const nowCapTs = Date.now();
+    AsyncStorage.setItem(LAST_CAPTURE_KEY, String(nowCapTs)).catch(() => {});
+    lastCaptureTsRef.current = nowCapTs;
 
     // Alerte de stockage local (pendingDir) — déjà en place
     const sizeBytes = pendingDirSizeBytes();
@@ -2321,6 +2327,43 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     if (!rawCriticalKind) { setDismissedKind(null); return; }
     if (rawCriticalKind !== dismissedKind) setDismissedKind(null);
   }, [rawCriticalKind, dismissedKind]);
+
+  // ─── Heartbeat + queue alertes offline (LOT 1.6) ─────────────────────
+  // Ref des infos live lues a chaque heartbeat / drain. Mise a jour a
+  // chaque render pour rester fraiche sans re-abonner startHeartbeat.
+  const heartbeatCtxRef = useRef({});
+  heartbeatCtxRef.current = {
+    eventCode: session?.event?.code || null,
+    pendingCount,
+    armed: isAutoArmed,
+    lastUploadAt: lastCaptureTsRef?.current || null,
+  };
+  // Start/stop du service : 1 seule instance globale, cleanup au unmount.
+  useEffect(() => {
+    let cleanup = null;
+    let cancelled = false;
+    startHeartbeat(photographerApiFetch, () => heartbeatCtxRef.current)
+      .then(fn => {
+        if (cancelled) { try { fn?.(); } catch {} return; }
+        cleanup = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      try { cleanup?.(); } catch {}
+    };
+  }, [photographerApiFetch]);
+  // Detecte les changements de rawCriticalKind pour enfiler une alerte a
+  // chaque nouveau kind. Ne renvoie pas si le meme kind se reproduit sans
+  // avoir disparu entre-temps (dedupe cote enqueueAlert).
+  const lastAlertKindRef = useRef(null);
+  useEffect(() => {
+    if (rawCriticalKind && rawCriticalKind !== lastAlertKindRef.current) {
+      lastAlertKindRef.current = rawCriticalKind;
+      enqueueAlert(rawCriticalKind).catch(() => {});
+    }
+    if (!rawCriticalKind) lastAlertKindRef.current = null;
+  }, [rawCriticalKind]);
 
   // Garde-fou UX avant sortie d'ecran : si des photos sont encore en transit
   // (in-flight ou en queue pending/uploading), on previent le benevole pour
