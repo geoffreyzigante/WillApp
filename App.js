@@ -559,6 +559,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const [isShooting, setIsShooting] = useState(false);
   const [isAutoArmed, setIsAutoArmed] = useState(false);
   const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
+  // Toast auto-armement au mount du screen photographe. Timestamp du dernier
+  // auto-arm : le toast s affiche 3s puis se cache. Reset a chaque nouvel
+  // auto-arm (utile si le screen est remonte apres crash iOS ou re-entry).
+  const [autoArmToastAt, setAutoArmToastAt] = useState(0);
   // Caméra physique (prop isActive de <VisionCamera>). Distincte de
   // isAutoArmed (intention de capturer). Pilotée par AppState : iOS suspend
   // l'AVCaptureSession en background ; on toggle false→true au retour
@@ -1855,9 +1859,42 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       Animated.timing(headerSlideY, { toValue: 0, duration: 300, useNativeDriver: true }),
       Animated.timing(footerSlideY, { toValue: 0, duration: 300, useNativeDriver: true }),
     ]).start();
-    return () => stopSession();
+    // Auto-armement de la capture. Cible : benevole pose son doigt sur
+    // aucun bouton, la capture demarre seule ~1s apres le login. Gardes :
+    // - camera permission requise (sinon armer = fond rouge sans photos).
+    // - batterie ok (le useEffect batterie plus bas desarmera si <10%).
+    // Delai 900ms : laisse VisionCamera terminer son isActive=true initial.
+    const armTimer = setTimeout(() => {
+      if (!hasPermission) return;
+      if (isAutoArmedRef.current) return;
+      isAutoArmedRef.current = true;
+      setIsAutoArmed(true);
+      setAutoArmToastAt(Date.now());
+      console.log('[auto] auto-arm at mount (photographerScreen)');
+    }, 900);
+    return () => {
+      clearTimeout(armTimer);
+      stopSession();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Auto-arm rattrapage : si la permission camera n a pas ete accordee au
+  // mount, l auto-arm ci-dessus est skip. On re-tente des que hasPermission
+  // bascule a true (benevole autorise ensuite via l Alert systeme).
+  useEffect(() => {
+    if (!hasPermission) return;
+    if (isAutoArmedRef.current) return;
+    isAutoArmedRef.current = true;
+    setIsAutoArmed(true);
+    setAutoArmToastAt(Date.now());
+    console.log('[auto] auto-arm after permission granted');
+  }, [hasPermission]);
+  // Auto-hide toast auto-arm 3.2s apres son affichage.
+  useEffect(() => {
+    if (!autoArmToastAt) return;
+    const t = setTimeout(() => setAutoArmToastAt(0), 3200);
+    return () => clearTimeout(t);
+  }, [autoArmToastAt]);
 
   // Bouton Go/Stop : toggle de l'auto-capture.
   function onCapturePress() {
@@ -2896,6 +2933,38 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           </TouchableOpacity>
         </View>
       </Modal>
+
+      {/* Toast auto-armement : s affiche 3s au mount de l ecran photographe
+          quand la capture demarre automatiquement. Positionne au-dessus du
+          bouton Go/Stop pour rester dans le champ visuel du benevole. */}
+      {autoArmToastAt > 0 ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 20,
+            right: 20,
+            bottom: 190,
+            backgroundColor: 'rgba(16, 160, 92, 0.96)',
+            borderRadius: 18,
+            paddingVertical: 14,
+            paddingHorizontal: 18,
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.25,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 4 },
+            zIndex: 9998,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', textAlign: 'center' }}>
+            Capture démarrée automatiquement
+          </Text>
+          <Text style={{ color: '#fff', fontSize: 13, marginTop: 4, textAlign: 'center', opacity: 0.92 }}>
+            Tape « Stop » quand la course est finie.
+          </Text>
+        </View>
+      ) : null}
 
     </View>
   );
