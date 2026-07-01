@@ -476,18 +476,28 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   });
 
   useEffect(() => {
-    fetch(`${API_URL}/config`)
-      .then(r => r.ok ? r.json() : null)
-      .then(cfg => {
-        if (!cfg) return;
-        // IMPORTANT : ne pas importer cfg.quality (serveur) qui ecrase le
-        // quality local mobile (dropEnabled, weights, etc.). Conflit de
-        // noms. Le quality serveur (enabled/preset/criteria) sert au filtre
-        // qualite worker, sans rapport avec le tri local.
-        const { quality: _ignoredServerQuality, ...rest } = cfg;
-        setEventConfig(prev => ({ ...prev, ...rest }));
-      })
-      .catch(() => {});
+    const fetchConfig = () => {
+      fetch(`${API_URL}/config`)
+        .then(r => r.ok ? r.json() : null)
+        .then(cfg => {
+          if (!cfg) return;
+          // IMPORTANT : ne pas importer cfg.quality (serveur) qui ecrase le
+          // quality local mobile (dropEnabled, weights, etc.). Conflit de
+          // noms. Le quality serveur (enabled/preset/criteria) sert au filtre
+          // qualite worker, sans rapport avec le tri local. Le nouveau
+          // namespace pilote (drop_enabled kill switch) n a pas ce conflit.
+          const { quality: _ignoredServerQuality, ...rest } = cfg;
+          setEventConfig(prev => ({ ...prev, ...rest }));
+        })
+        .catch(() => {});
+    };
+    // Fetch initial au mount + refetch toutes les 5 min pour propager les
+    // changements de kill switch (Q-B01 pilote.drop_enabled) a chaud sans
+    // rebuild EAS. Cost = 1 req R2 GET toutes les 5 min par appareil,
+    // negligeable meme sur un event 500 coureurs.
+    fetchConfig();
+    const t = setInterval(fetchConfig, 5 * 60 * 1000);
+    return () => clearInterval(t);
   }, []);
 
   // Format 4:3 binne du capteur principal. Heuristique ratio-moitie : sur
@@ -1812,12 +1822,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // le cooldown nextAttemptAt (backoff exponentiel).
       // processed===true uniquement : les bruts non traites sont gerees par
       // processQueue, jamais uploades tels quels.
-      // Drop FORCE EN DUR 2026-06-28 (event J en cours). On ignore
-      // eventConfig.quality.dropEnabled qui n etait pas effectif (config
-      // serveur ecrasait, kill incomplet, etc.). Tout upload_skipped est
-      // strict skip. A re-evaluer apres la course.
-      const dropEnabled = true;
-      console.log('[drain] dropEnabled=', dropEnabled);
+      // Kill switch pilote (Q-B01) : lecture eventConfig.pilote.drop_enabled
+      // depuis /config worker. Refetch toutes les 5 min pendant la session
+      // photographe (cf useEffect au mount App), donc modifiable a chaud
+      // via PUT /admin/config sans rebuild EAS.
+      // Defaut true : le drain skip les items upload_skipped=true (tri
+      // qualite local applique). Si l orga voit des faux positifs massifs
+      // pendant l event, il set pilote.drop_enabled=false cote serveur ->
+      // le prochain refetch /config bascule dropEnabled a false -> tout
+      // upload_skipped devient uploadable.
+      const dropEnabled = eventConfig.pilote?.drop_enabled ?? true;
+      console.log('[drain] dropEnabled=', dropEnabled, '(from /config, refetch 5 min)');
       const uploadable = arr
         .map((it, i) => ({ it, i }))
         .filter(({ it }) => it.processed === true
