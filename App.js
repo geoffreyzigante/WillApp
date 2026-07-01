@@ -142,6 +142,14 @@ import {
   thermalEmitter,
 } from './src/services/thermalMonitor';
 import CriticalAlert from './src/components/CriticalAlert';
+import { photographerRuntime } from './src/utils/photographerRuntime';
+
+// Cle AsyncStorage : 'true' tant qu on est activement en mode photographe
+// (persistee au setInPhotographerMode(true), effacee sur exit intentionnel
+// ou logout). Au boot, si cette cle vaut 'true' + session valide, l app
+// considere qu un crash iOS a eu lieu et re-entre automatiquement en mode
+// photographe (LOT 1.5 pilote).
+const PHOTOGRAPHER_ACTIVE_KEY = '@will_photographer_active';
 import { C, TYPE_COLORS, colorForType } from './src/constants/colors';
 import {
   cartChangeListeners,
@@ -5066,9 +5074,28 @@ export default function App() {
       // Boot : on lit la session pour permettre un retour rapide en mode
       // photographe (sans re-saisir le mdp), mais on ouvre par défaut sur
       // l'accueil. L'utilisateur tap "Photographe" pour entrer dans le mode.
-      Secure.getItem('@will_photographer_session').then(v => {
-        if (v) try { setSession(JSON.parse(v)); } catch {}
-      });
+      //
+      // LOT 1.5 pilote : si PHOTOGRAPHER_ACTIVE_KEY === 'true' au boot ET
+      // qu on retrouve une session valide, c est qu on a ete tue par iOS
+      // pendant l event (le exit intentionnel aurait efface la cle).
+      // -> re-entree automatique en mode photographe + flag runtime pour
+      //    que le heartbeat previenne l orga d un crash.
+      const photographerSessionRaw = await Secure.getItem('@will_photographer_session').catch(() => null);
+      if (photographerSessionRaw) {
+        try {
+          const parsed = JSON.parse(photographerSessionRaw);
+          setSession(parsed);
+          const wasActive = await AsyncStorage.getItem(PHOTOGRAPHER_ACTIVE_KEY).catch(() => null);
+          if (wasActive === 'true' && (parsed?.role === 'photographer' || parsed?.role === 'organizer')) {
+            photographerRuntime.recoveredFromCrash = true;
+            photographerRuntime.recoveredAt = Date.now();
+            // Laisse React consommer setSession avant de rebasculer sur
+            // le mode photographe : delai court pour eviter un flicker.
+            setTimeout(() => setInPhotographerMode(true), 200);
+            console.log('[pilote] crash recovery : re-entry mode photographe');
+          }
+        } catch {}
+      }
     })();
   }, []);
 
@@ -5402,7 +5429,7 @@ export default function App() {
   // handlePhotographerAuthFailure (parite avec logoutRunner / logoutOrganizer).
   // Le rendu PhotographerScreen.onLogout l utilise aussi.
   const logoutPhotographer = useCallback(async () => {
-    try { await AsyncStorage.multiRemove([UPLOAD_QUEUE_KEY, LAST_CAPTURE_KEY]); } catch {}
+    try { await AsyncStorage.multiRemove([UPLOAD_QUEUE_KEY, LAST_CAPTURE_KEY, PHOTOGRAPHER_ACTIVE_KEY]); } catch {}
     try { const d = pendingDir(); if (d.exists) d.delete(); } catch {}
     setSession(null);
     setInPhotographerMode(false);
@@ -5922,6 +5949,7 @@ export default function App() {
     // bouton retour), on entre direct sans redemander le mdp.
     if (session?.role === 'photographer') {
       setInPhotographerMode(true);
+      AsyncStorage.setItem(PHOTOGRAPHER_ACTIVE_KEY, 'true').catch(() => {});
       return;
     }
     setLoginRole(role);
@@ -6135,6 +6163,8 @@ export default function App() {
         // compte runner), fallback sur session.event (objet partiel).
         onExit={() => {
           setInPhotographerMode(false);
+          // Sortie intentionnelle : on efface le flag de re-entree post-crash.
+          AsyncStorage.removeItem(PHOTOGRAPHER_ACTIVE_KEY).catch(() => {});
           const code = session?.event?.code;
           if (!code) return;
           const ev = events.find(e => e.code === code) || session.event;
@@ -6593,6 +6623,7 @@ export default function App() {
           const next = { ...r, event: mergedEvent, role: loginRole };
           setSession(next);
           setInPhotographerMode(true);
+          AsyncStorage.setItem(PHOTOGRAPHER_ACTIVE_KEY, 'true').catch(() => {});
           // Persistance pour accès hors ligne (sessions photographe / organizer event)
           Secure.setItem('@will_photographer_session', JSON.stringify(next)).catch(() => {});
           // Téléchargement du cover en local pour affichage offline. On met à
