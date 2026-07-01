@@ -143,7 +143,18 @@ import {
   hasThermalMonitor,
   concurrencyForThermal,
   getCurrentThermalState,
+  thermalEmitter,
 } from './src/services/thermalMonitor';
+import CriticalAlert from './src/components/CriticalAlert';
+import { photographerRuntime } from './src/utils/photographerRuntime';
+import { startHeartbeat, enqueueAlert } from './src/services/heartbeat';
+
+// Cle AsyncStorage : 'true' tant qu on est activement en mode photographe
+// (persistee au setInPhotographerMode(true), effacee sur exit intentionnel
+// ou logout). Au boot, si cette cle vaut 'true' + session valide, l app
+// considere qu un crash iOS a eu lieu et re-entre automatiquement en mode
+// photographe (LOT 1.5 pilote).
+const PHOTOGRAPHER_ACTIVE_KEY = '@will_photographer_active';
 import { C, TYPE_COLORS, colorForType } from './src/constants/colors';
 import {
   cartChangeListeners,
@@ -586,16 +597,35 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // declenche captureOne. Quand false, le frame processor logue mais ne
   // tire pas. Ref pour le worklet, state pour le rendu du bouton.
   const isAutoArmedRef = useRef(false);
+  // Timestamp ms de la derniere capture (equivalent AsyncStorage LAST_CAPTURE_KEY
+  // en RAM, pour lecture synchrone dans le heartbeat sans await).
+  const lastCaptureTsRef = useRef(0);
 
   const [isShooting, setIsShooting] = useState(false);
   const [isAutoArmed, setIsAutoArmed] = useState(false);
   const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
+  // Toast auto-armement au mount du screen photographe. Timestamp du dernier
+  // auto-arm : le toast s affiche 3s puis se cache. Reset a chaque nouvel
+  // auto-arm (utile si le screen est remonte apres crash iOS ou re-entry).
+  const [autoArmToastAt, setAutoArmToastAt] = useState(0);
   // Caméra physique (prop isActive de <VisionCamera>). Distincte de
   // isAutoArmed (intention de capturer). Pilotée par AppState : iOS suspend
   // l'AVCaptureSession en background ; on toggle false→true au retour
   // foreground pour forcer vision-camera à réattacher caméra + frame processor
   // (sans ce toggle, onHumansDetectedJS n'est plus appelé même si Go! reste actif).
   const [cameraActive, setCameraActive] = useState(true);
+  // Etats agreges pour l overlay CriticalAlert (LOT 1.2 pilote). Cible :
+  // remplacer les Alert.alert critiques par un overlay plein ecran non
+  // dismissible-par-hasard. Priorite calculee dans criticalKind (useMemo).
+  const [thermalStateStr, setThermalStateStr] = useState(() => (
+    typeof getCurrentThermalState === 'function' ? getCurrentThermalState() : 'nominal'
+  ));
+  const [offlineSince, setOfflineSince] = useState(null); // timestamp ms du debut offline
+  const [freeDiskGB, setFreeDiskGB] = useState(999);
+  // Kind actuellement masque par le benevole (bouton OK sur alerte dismissable).
+  // Reset des que la condition retombe (rawCriticalKind === null) : la prochaine
+  // occurrence re-affichera l overlay.
+  const [dismissedKind, setDismissedKind] = useState(null);
   // Compteur de session "Capturees" -- incremente a chaque enqueue (succes
   // takePhoto + write disque). Reset au mount du screen (session photographe).
   // Ref pour l'increment cote captureOne, state pour le rendu du badge UI.
@@ -1509,7 +1539,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     await commitQueue(next);
 
     // Timestamp de dernière capture — utilisé par l'alerte de reprise au démarrage.
-    AsyncStorage.setItem(LAST_CAPTURE_KEY, String(Date.now())).catch(() => {});
+    const nowCapTs = Date.now();
+    AsyncStorage.setItem(LAST_CAPTURE_KEY, String(nowCapTs)).catch(() => {});
+    lastCaptureTsRef.current = nowCapTs;
 
     // Alerte de stockage local (pendingDir) — déjà en place
     const sizeBytes = pendingDirSizeBytes();
@@ -2079,9 +2111,86 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       Animated.timing(headerSlideY, { toValue: 0, duration: 300, useNativeDriver: true }),
       Animated.timing(footerSlideY, { toValue: 0, duration: 300, useNativeDriver: true }),
     ]).start();
-    return () => stopSession();
+    // Auto-armement de la capture. Cible : benevole pose son doigt sur
+    // aucun bouton, la capture demarre seule ~1s apres le login. Gardes :
+    // - camera permission requise (sinon armer = fond rouge sans photos).
+    // - batterie ok (le useEffect batterie plus bas desarmera si <10%).
+    // Delai 900ms : laisse VisionCamera terminer son isActive=true initial.
+    const armTimer = setTimeout(() => {
+      if (!hasPermission) return;
+      if (isAutoArmedRef.current) return;
+      isAutoArmedRef.current = true;
+      setIsAutoArmed(true);
+      setAutoArmToastAt(Date.now());
+      console.log('[auto] auto-arm at mount (photographerScreen)');
+    }, 900);
+    return () => {
+      clearTimeout(armTimer);
+      stopSession();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Auto-arm rattrapage : si la permission camera n a pas ete accordee au
+  // mount, l auto-arm ci-dessus est skip. On re-tente des que hasPermission
+  // bascule a true (benevole autorise ensuite via l Alert systeme).
+  useEffect(() => {
+    if (!hasPermission) return;
+    if (isAutoArmedRef.current) return;
+    isAutoArmedRef.current = true;
+    setIsAutoArmed(true);
+    setAutoArmToastAt(Date.now());
+    console.log('[auto] auto-arm after permission granted');
+  }, [hasPermission]);
+  // Auto-hide toast auto-arm 3.2s apres son affichage.
+  useEffect(() => {
+    if (!autoArmToastAt) return;
+    const t = setTimeout(() => setAutoArmToastAt(0), 3200);
+    return () => clearTimeout(t);
+  }, [autoArmToastAt]);
+
+  // ─── Alimentation criticalKind (LOT 1.2) ───────────────────────────────
+  // Listener natif thermal (iOS). Idempotent, cleanup au unmount.
+  useEffect(() => {
+    if (!thermalEmitter) return;
+    const sub = thermalEmitter.addListener('ThermalStateChanged', (evt) => {
+      if (evt && typeof evt.state === 'string') setThermalStateStr(evt.state);
+    });
+    return () => sub.remove();
+  }, []);
+  // offlineSince = ms depuis quand la connexion est tombee. Nul si en ligne.
+  // Recalcule quand isOnline bascule. Sert au seuil "network > 60s".
+  useEffect(() => {
+    if (isOnline) {
+      if (offlineSince) setOfflineSince(null);
+      return;
+    }
+    if (!offlineSince) setOfflineSince(Date.now());
+  }, [isOnline]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Force re-render toutes les 15s tant qu on est offline : sinon le useMemo
+  // criticalKind ne recalcule pas Date.now() - offlineSince et l alerte
+  // reseau n apparait jamais si le user ne bouge pas d etat.
+  useEffect(() => {
+    if (isOnline) return;
+    const t = setInterval(() => setOfflineSince(s => (s ? s : Date.now())), 15000);
+    return () => clearInterval(t);
+  }, [isOnline]);
+  // freeDiskGB : poll toutes les 30s via Paths.document.availableSpace.
+  useEffect(() => {
+    const readFree = () => {
+      try {
+        const free = Paths.document?.availableSpace ?? Paths.cache?.availableSpace;
+        if (typeof free === 'number' && free > 0) {
+          setFreeDiskGB(free / (1024 * 1024 * 1024));
+        }
+      } catch {}
+    };
+    readFree();
+    const t = setInterval(readFree, 30000);
+    return () => clearInterval(t);
+  }, []);
+  // rawCriticalKind + effectiveCriticalKind : calcules plus bas, apres la
+  // definition de pendingCount (dependent de queueStats + inFlight qui sont
+  // calcules pres du render).
 
   // Bouton Go/Stop : toggle de l'auto-capture.
   function onCapturePress() {
@@ -2419,6 +2528,65 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const pendingCount = inFlight + queueStats.pending + queueStats.uploading;
   const cloudActive = pendingCount > 0;
   const cloudColor = cloudActive ? '#3B82F6' : 'rgba(255,255,255,0.85)';
+
+  // ─── criticalKind pour CriticalAlert overlay (LOT 1.2) ───────────────
+  // Priorite decroissante camera > storage > battery > thermal > network > queue.
+  // Depend de pendingCount → declare ici, apres son calcul.
+  const rawCriticalKind = useMemo(() => {
+    if (!hasPermission) return 'camera';
+    if (freeDiskGB < 2) return 'storage';
+    const charging = batteryState === Battery.BatteryState.CHARGING || batteryState === Battery.BatteryState.FULL;
+    if (batteryLevel <= 0.15 && !charging) return 'battery';
+    if (thermalStateStr === 'serious' || thermalStateStr === 'critical') return 'thermal';
+    if (offlineSince && (Date.now() - offlineSince > 60000)) return 'network';
+    if (pendingCount > 700) return 'queue';
+    return null;
+  }, [hasPermission, freeDiskGB, batteryLevel, batteryState, thermalStateStr, offlineSince, pendingCount]);
+  const effectiveCriticalKind = rawCriticalKind && rawCriticalKind !== dismissedKind ? rawCriticalKind : null;
+  // Reset dismissedKind quand la condition disparait ou change de nature :
+  // la prochaine occurrence du meme kind reaffichera l overlay.
+  useEffect(() => {
+    if (!dismissedKind) return;
+    if (!rawCriticalKind) { setDismissedKind(null); return; }
+    if (rawCriticalKind !== dismissedKind) setDismissedKind(null);
+  }, [rawCriticalKind, dismissedKind]);
+
+  // ─── Heartbeat + queue alertes offline (LOT 1.6) ─────────────────────
+  // Ref des infos live lues a chaque heartbeat / drain. Mise a jour a
+  // chaque render pour rester fraiche sans re-abonner startHeartbeat.
+  const heartbeatCtxRef = useRef({});
+  heartbeatCtxRef.current = {
+    eventCode: session?.event?.code || null,
+    pendingCount,
+    armed: isAutoArmed,
+    lastUploadAt: lastCaptureTsRef?.current || null,
+  };
+  // Start/stop du service : 1 seule instance globale, cleanup au unmount.
+  useEffect(() => {
+    let cleanup = null;
+    let cancelled = false;
+    startHeartbeat(photographerApiFetch, () => heartbeatCtxRef.current)
+      .then(fn => {
+        if (cancelled) { try { fn?.(); } catch {} return; }
+        cleanup = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      try { cleanup?.(); } catch {}
+    };
+  }, [photographerApiFetch]);
+  // Detecte les changements de rawCriticalKind pour enfiler une alerte a
+  // chaque nouveau kind. Ne renvoie pas si le meme kind se reproduit sans
+  // avoir disparu entre-temps (dedupe cote enqueueAlert).
+  const lastAlertKindRef = useRef(null);
+  useEffect(() => {
+    if (rawCriticalKind && rawCriticalKind !== lastAlertKindRef.current) {
+      lastAlertKindRef.current = rawCriticalKind;
+      enqueueAlert(rawCriticalKind).catch(() => {});
+    }
+    if (!rawCriticalKind) lastAlertKindRef.current = null;
+  }, [rawCriticalKind]);
 
   // Garde-fou UX avant sortie d'ecran : si des photos sont encore en transit
   // (in-flight ou en queue pending/uploading), on previent le benevole pour
@@ -3119,6 +3287,47 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           </TouchableOpacity>
         </View>
       </Modal>
+
+      {/* CriticalAlert overlay : perm camera / stockage / batterie / thermal /
+          reseau / queue. Se hisse par-dessus tout le reste. Kind calcule par
+          rawCriticalKind (priorite) + dismissedKind (masquage temporaire). */}
+      <CriticalAlert
+        kind={effectiveCriticalKind}
+        onDismiss={(k) => setDismissedKind(k)}
+        onAction={() => {}}
+      />
+
+      {/* Toast auto-armement : s affiche 3s au mount de l ecran photographe
+          quand la capture demarre automatiquement. Positionne au-dessus du
+          bouton Go/Stop pour rester dans le champ visuel du benevole. */}
+      {autoArmToastAt > 0 ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: 20,
+            right: 20,
+            bottom: 190,
+            backgroundColor: 'rgba(16, 160, 92, 0.96)',
+            borderRadius: 18,
+            paddingVertical: 14,
+            paddingHorizontal: 18,
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.25,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 4 },
+            zIndex: 9998,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', textAlign: 'center' }}>
+            Capture démarrée automatiquement
+          </Text>
+          <Text style={{ color: '#fff', fontSize: 13, marginTop: 4, textAlign: 'center', opacity: 0.92 }}>
+            Tape « Stop » quand la course est finie.
+          </Text>
+        </View>
+      ) : null}
 
     </View>
   );
@@ -5131,9 +5340,28 @@ export default function App() {
       // Boot : on lit la session pour permettre un retour rapide en mode
       // photographe (sans re-saisir le mdp), mais on ouvre par défaut sur
       // l'accueil. L'utilisateur tap "Photographe" pour entrer dans le mode.
-      Secure.getItem('@will_photographer_session').then(v => {
-        if (v) try { setSession(JSON.parse(v)); } catch {}
-      });
+      //
+      // LOT 1.5 pilote : si PHOTOGRAPHER_ACTIVE_KEY === 'true' au boot ET
+      // qu on retrouve une session valide, c est qu on a ete tue par iOS
+      // pendant l event (le exit intentionnel aurait efface la cle).
+      // -> re-entree automatique en mode photographe + flag runtime pour
+      //    que le heartbeat previenne l orga d un crash.
+      const photographerSessionRaw = await Secure.getItem('@will_photographer_session').catch(() => null);
+      if (photographerSessionRaw) {
+        try {
+          const parsed = JSON.parse(photographerSessionRaw);
+          setSession(parsed);
+          const wasActive = await AsyncStorage.getItem(PHOTOGRAPHER_ACTIVE_KEY).catch(() => null);
+          if (wasActive === 'true' && (parsed?.role === 'photographer' || parsed?.role === 'organizer')) {
+            photographerRuntime.recoveredFromCrash = true;
+            photographerRuntime.recoveredAt = Date.now();
+            // Laisse React consommer setSession avant de rebasculer sur
+            // le mode photographe : delai court pour eviter un flicker.
+            setTimeout(() => setInPhotographerMode(true), 200);
+            console.log('[pilote] crash recovery : re-entry mode photographe');
+          }
+        } catch {}
+      }
     })();
   }, []);
 
@@ -5467,7 +5695,7 @@ export default function App() {
   // handlePhotographerAuthFailure (parite avec logoutRunner / logoutOrganizer).
   // Le rendu PhotographerScreen.onLogout l utilise aussi.
   const logoutPhotographer = useCallback(async () => {
-    try { await AsyncStorage.multiRemove([UPLOAD_QUEUE_KEY, LAST_CAPTURE_KEY]); } catch {}
+    try { await AsyncStorage.multiRemove([UPLOAD_QUEUE_KEY, LAST_CAPTURE_KEY, PHOTOGRAPHER_ACTIVE_KEY]); } catch {}
     try { const d = pendingDir(); if (d.exists) d.delete(); } catch {}
     setSession(null);
     setInPhotographerMode(false);
@@ -5987,6 +6215,7 @@ export default function App() {
     // bouton retour), on entre direct sans redemander le mdp.
     if (session?.role === 'photographer') {
       setInPhotographerMode(true);
+      AsyncStorage.setItem(PHOTOGRAPHER_ACTIVE_KEY, 'true').catch(() => {});
       return;
     }
     setLoginRole(role);
@@ -6200,6 +6429,8 @@ export default function App() {
         // compte runner), fallback sur session.event (objet partiel).
         onExit={() => {
           setInPhotographerMode(false);
+          // Sortie intentionnelle : on efface le flag de re-entree post-crash.
+          AsyncStorage.removeItem(PHOTOGRAPHER_ACTIVE_KEY).catch(() => {});
           const code = session?.event?.code;
           if (!code) return;
           const ev = events.find(e => e.code === code) || session.event;
@@ -6658,6 +6889,7 @@ export default function App() {
           const next = { ...r, event: mergedEvent, role: loginRole };
           setSession(next);
           setInPhotographerMode(true);
+          AsyncStorage.setItem(PHOTOGRAPHER_ACTIVE_KEY, 'true').catch(() => {});
           // Persistance pour accès hors ligne (sessions photographe / organizer event)
           Secure.setItem('@will_photographer_session', JSON.stringify(next)).catch(() => {});
           // Téléchargement du cover en local pour affichage offline. On met à
