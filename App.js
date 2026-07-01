@@ -5752,6 +5752,12 @@ export default function App() {
   const handlePhotographerAuthFailure = useCallback(() => {
     if (photographerAuthHandledRef.current) return;
     photographerAuthHandledRef.current = true;
+    // F-I01 fix : efface PHOTOGRAPHER_ACTIVE_KEY IMMEDIATEMENT (pas dans
+    // logoutPhotographer via onPress OK). Sinon un crash / kill iOS avec
+    // l Alert encore ouverte laisse la cle a 'true' -> au boot suivant,
+    // re-entree mode photographe -> nouveau 401 -> handlePhotographerAuthFailure
+    // -> boucle. Sans compter le Discord spam recovered_from_crash.
+    AsyncStorage.removeItem(PHOTOGRAPHER_ACTIVE_KEY).catch(() => {});
     Alert.alert(
       'Session expirée',
       'Reconnecte-toi pour continuer.',
