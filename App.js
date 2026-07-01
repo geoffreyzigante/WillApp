@@ -139,7 +139,9 @@ import {
   hasThermalMonitor,
   concurrencyForThermal,
   getCurrentThermalState,
+  thermalEmitter,
 } from './src/services/thermalMonitor';
+import CriticalAlert from './src/components/CriticalAlert';
 import { C, TYPE_COLORS, colorForType } from './src/constants/colors';
 import {
   cartChangeListeners,
@@ -569,6 +571,18 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // foreground pour forcer vision-camera à réattacher caméra + frame processor
   // (sans ce toggle, onHumansDetectedJS n'est plus appelé même si Go! reste actif).
   const [cameraActive, setCameraActive] = useState(true);
+  // Etats agreges pour l overlay CriticalAlert (LOT 1.2 pilote). Cible :
+  // remplacer les Alert.alert critiques par un overlay plein ecran non
+  // dismissible-par-hasard. Priorite calculee dans criticalKind (useMemo).
+  const [thermalStateStr, setThermalStateStr] = useState(() => (
+    typeof getCurrentThermalState === 'function' ? getCurrentThermalState() : 'nominal'
+  ));
+  const [offlineSince, setOfflineSince] = useState(null); // timestamp ms du debut offline
+  const [freeDiskGB, setFreeDiskGB] = useState(999);
+  // Kind actuellement masque par le benevole (bouton OK sur alerte dismissable).
+  // Reset des que la condition retombe (rawCriticalKind === null) : la prochaine
+  // occurrence re-affichera l overlay.
+  const [dismissedKind, setDismissedKind] = useState(null);
   // Compteur de session "Capturees" -- incremente a chaque enqueue (succes
   // takePhoto + write disque). Reset au mount du screen (session photographe).
   // Ref pour l'increment cote captureOne, state pour le rendu du badge UI.
@@ -1896,6 +1910,50 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     return () => clearTimeout(t);
   }, [autoArmToastAt]);
 
+  // ─── Alimentation criticalKind (LOT 1.2) ───────────────────────────────
+  // Listener natif thermal (iOS). Idempotent, cleanup au unmount.
+  useEffect(() => {
+    if (!thermalEmitter) return;
+    const sub = thermalEmitter.addListener('ThermalStateChanged', (evt) => {
+      if (evt && typeof evt.state === 'string') setThermalStateStr(evt.state);
+    });
+    return () => sub.remove();
+  }, []);
+  // offlineSince = ms depuis quand la connexion est tombee. Nul si en ligne.
+  // Recalcule quand isOnline bascule. Sert au seuil "network > 60s".
+  useEffect(() => {
+    if (isOnline) {
+      if (offlineSince) setOfflineSince(null);
+      return;
+    }
+    if (!offlineSince) setOfflineSince(Date.now());
+  }, [isOnline]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Force re-render toutes les 15s tant qu on est offline : sinon le useMemo
+  // criticalKind ne recalcule pas Date.now() - offlineSince et l alerte
+  // reseau n apparait jamais si le user ne bouge pas d etat.
+  useEffect(() => {
+    if (isOnline) return;
+    const t = setInterval(() => setOfflineSince(s => (s ? s : Date.now())), 15000);
+    return () => clearInterval(t);
+  }, [isOnline]);
+  // freeDiskGB : poll toutes les 30s via Paths.document.availableSpace.
+  useEffect(() => {
+    const readFree = () => {
+      try {
+        const free = Paths.document?.availableSpace ?? Paths.cache?.availableSpace;
+        if (typeof free === 'number' && free > 0) {
+          setFreeDiskGB(free / (1024 * 1024 * 1024));
+        }
+      } catch {}
+    };
+    readFree();
+    const t = setInterval(readFree, 30000);
+    return () => clearInterval(t);
+  }, []);
+  // rawCriticalKind + effectiveCriticalKind : calcules plus bas, apres la
+  // definition de pendingCount (dependent de queueStats + inFlight qui sont
+  // calcules pres du render).
+
   // Bouton Go/Stop : toggle de l'auto-capture.
   function onCapturePress() {
     const next = !isAutoArmedRef.current;
@@ -2233,6 +2291,28 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const pendingCount = inFlight + queueStats.pending + queueStats.uploading;
   const cloudActive = pendingCount > 0;
   const cloudColor = cloudActive ? '#3B82F6' : 'rgba(255,255,255,0.85)';
+
+  // ─── criticalKind pour CriticalAlert overlay (LOT 1.2) ───────────────
+  // Priorite decroissante camera > storage > battery > thermal > network > queue.
+  // Depend de pendingCount → declare ici, apres son calcul.
+  const rawCriticalKind = useMemo(() => {
+    if (!hasPermission) return 'camera';
+    if (freeDiskGB < 2) return 'storage';
+    const charging = batteryState === Battery.BatteryState.CHARGING || batteryState === Battery.BatteryState.FULL;
+    if (batteryLevel <= 0.15 && !charging) return 'battery';
+    if (thermalStateStr === 'serious' || thermalStateStr === 'critical') return 'thermal';
+    if (offlineSince && (Date.now() - offlineSince > 60000)) return 'network';
+    if (pendingCount > 700) return 'queue';
+    return null;
+  }, [hasPermission, freeDiskGB, batteryLevel, batteryState, thermalStateStr, offlineSince, pendingCount]);
+  const effectiveCriticalKind = rawCriticalKind && rawCriticalKind !== dismissedKind ? rawCriticalKind : null;
+  // Reset dismissedKind quand la condition disparait ou change de nature :
+  // la prochaine occurrence du meme kind reaffichera l overlay.
+  useEffect(() => {
+    if (!dismissedKind) return;
+    if (!rawCriticalKind) { setDismissedKind(null); return; }
+    if (rawCriticalKind !== dismissedKind) setDismissedKind(null);
+  }, [rawCriticalKind, dismissedKind]);
 
   // Garde-fou UX avant sortie d'ecran : si des photos sont encore en transit
   // (in-flight ou en queue pending/uploading), on previent le benevole pour
@@ -2933,6 +3013,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           </TouchableOpacity>
         </View>
       </Modal>
+
+      {/* CriticalAlert overlay : perm camera / stockage / batterie / thermal /
+          reseau / queue. Se hisse par-dessus tout le reste. Kind calcule par
+          rawCriticalKind (priorite) + dismissedKind (masquage temporaire). */}
+      <CriticalAlert
+        kind={effectiveCriticalKind}
+        onDismiss={(k) => setDismissedKind(k)}
+        onAction={() => {}}
+      />
 
       {/* Toast auto-armement : s affiche 3s au mount de l ecran photographe
           quand la capture demarre automatiquement. Positionne au-dessus du
