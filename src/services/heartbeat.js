@@ -32,6 +32,12 @@ const DEVICE_ID_KEY = '@will:photographer_device_id';
 let heartbeatTimer = null;
 let getContext = null; // callback qui renvoie l etat live du screen
 let netUnsub = null;
+// Cache module-level du dernier contexte capture (eventCode + deviceId).
+// Utilise par enqueueAlert pour stamper l alerte AU MOMENT ou elle est
+// creee (audit code 2026-07-01 : sans ca, une alerte enfilee sous
+// eventA puis drainee sous eventB serait envoyee avec le mauvais code).
+let lastKnownEventCode = null;
+let lastKnownDeviceId = null;
 
 async function getDeviceId() {
   let id = await AsyncStorage.getItem(DEVICE_ID_KEY).catch(() => null);
@@ -44,31 +50,52 @@ async function getDeviceId() {
 
 // Public : appele par PhotographerScreen des qu un rawCriticalKind bascule
 // a une nouvelle valeur. On garde started_at (moment ou le probleme a
-// vraiment commence). Dedupe : une seule entree active par kind.
+// vraiment commence). Dedupe : une seule entree active PAR (kind, event_code).
+// event_code / device_id : stampes ici (pas au drain) pour survivre a un
+// switch d event pendant l offline (une alerte de eventA drainee sous
+// eventB doit garder eventA -- sinon le worker rejette 403 event_mismatch).
 export async function enqueueAlert(kind, detail = null) {
   const now = Date.now();
+  const eventCode = lastKnownEventCode;
+  const deviceId = lastKnownDeviceId;
+  // Sans contexte connu (avant premier heartbeat), on met en attente : le
+  // stampage se fera au premier heartbeat qui hydrate lastKnownEventCode.
+  // Cas rare car startHeartbeat resout deviceId synchronement au mount.
   try {
     const raw = await AsyncStorage.getItem(ALERT_QUEUE_KEY);
     const q = raw ? JSON.parse(raw) : [];
-    // Deja en queue non envoye : ne pas dupliquer.
-    if (q.some(a => a.kind === kind && !a.sent_at)) return;
-    q.push({ kind, detail, started_at: now, sent_at: null });
+    // Dedupe strict : meme kind + meme event + toujours en attente.
+    if (q.some(a => a.kind === kind && !a.sent_at && a.event_code === eventCode)) return;
+    q.push({
+      kind,
+      detail,
+      event_code: eventCode || null,
+      device_id: deviceId || null,
+      started_at: now,
+      sent_at: null,
+    });
     await AsyncStorage.setItem(ALERT_QUEUE_KEY, JSON.stringify(q));
   } catch {}
 }
 
-async function drainAlertQueue(apiFetch, eventCode, deviceId) {
-  if (!eventCode || !deviceId) return;
+// Drain : envoie les alertes en attente dont l event_code == currentEventCode.
+// Une alerte stampee sur un autre event reste en queue jusqu au prochain
+// startHeartbeat sur cet event-la (rare : app photographe = 1 event / session).
+async function drainAlertQueue(apiFetch, currentEventCode, currentDeviceId) {
+  if (!currentEventCode || !currentDeviceId) return;
   try {
     const raw = await AsyncStorage.getItem(ALERT_QUEUE_KEY);
     const q = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(q) || q.length === 0) return;
-    const pending = q.filter(a => !a.sent_at);
-    if (pending.length === 0) return;
+    // Toutes les alertes non-envoyees. On backfill event_code / device_id
+    // si l entree est nue (enqueueAlert avant premier heartbeat).
     const now = Date.now();
-    const batch = pending.map(a => ({
-      event_code: eventCode,
-      device_id: deviceId,
+    const pending = q.filter(a => !a.sent_at);
+    const toSend = pending.filter(a => (a.event_code || currentEventCode) === currentEventCode);
+    if (toSend.length === 0) return;
+    const batch = toSend.map(a => ({
+      event_code: a.event_code || currentEventCode,
+      device_id: a.device_id || currentDeviceId,
       kind: a.kind,
       detail: a.detail || null,
       started_at: a.started_at,
@@ -80,10 +107,17 @@ async function drainAlertQueue(apiFetch, eventCode, deviceId) {
       body: JSON.stringify({ alerts: batch }),
     });
     if (!res?.ok) return;
-    // Marquer envoyees + trim (queue max 100 items, purge apres 24h).
-    const updated = q.map(a => (!a.sent_at ? { ...a, sent_at: now } : a));
+    // Marque envoyees UNIQUEMENT celles envoyees dans ce batch. On les
+    // identifie par started_at (assez unique en pratique : ms + kind).
+    const sentSignatures = new Set(toSend.map(a => `${a.kind}:${a.started_at}`));
+    const updated = q.map(a => {
+      if (a.sent_at) return a;
+      const sig = `${a.kind}:${a.started_at}`;
+      if (sentSignatures.has(sig)) return { ...a, sent_at: now };
+      return a;
+    });
     const cutoff = now - 24 * 60 * 60 * 1000;
-    const trimmed = updated.filter(a => a.sent_at && a.sent_at >= cutoff).slice(-100);
+    const trimmed = updated.filter(a => !a.sent_at || a.sent_at >= cutoff).slice(-100);
     await AsyncStorage.setItem(ALERT_QUEUE_KEY, JSON.stringify(trimmed));
   } catch (e) {
     console.warn('[heartbeat] drainAlertQueue failed', e?.message);
@@ -142,18 +176,22 @@ async function sendHeartbeat(apiFetch) {
 }
 
 // Public : demarre le service. contextGetter doit renvoyer :
-//   { eventCode, deviceId, pendingCount, armed, lastUploadAt }
+//   { eventCode, pendingCount, armed, lastUploadAt }
+// (deviceId est injecte ici, PhotographerScreen n a pas a le connaitre).
 // Retourne une cleanup function.
 export async function startHeartbeat(apiFetch, contextGetter) {
-  getContext = contextGetter;
   const deviceId = await getDeviceId();
-  // Injecte deviceId dans le ctx pour buildContext.
+  lastKnownDeviceId = deviceId;
+  // Wrappe le getter pour injecter deviceId + hydrater le cache module.
   const wrappedGetter = () => {
     const live = contextGetter() || {};
+    if (live.eventCode) lastKnownEventCode = live.eventCode;
     return { ...live, deviceId };
   };
   getContext = wrappedGetter;
-  // Premier envoi immediat (au mount du screen).
+  // Premier envoi immediat (au mount du screen). Fire-and-forget : si
+  // offline, il rate silencieusement, le netInfo listener redemarrera
+  // au retour reseau.
   sendHeartbeat(apiFetch);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(() => { sendHeartbeat(apiFetch); }, HEARTBEAT_INTERVAL_MS);
@@ -169,5 +207,9 @@ export async function startHeartbeat(apiFetch, contextGetter) {
     heartbeatTimer = null;
     if (netUnsub) { try { netUnsub(); } catch {} netUnsub = null; }
     getContext = null;
+    // Note : on garde lastKnownEventCode / lastKnownDeviceId pour que les
+    // alertes queued survivent au unmount (ex: retour bouton Retour puis
+    // remount, les alertes offline non-drainees seront envoyees au 1er
+    // heartbeat post-remount).
   };
 }

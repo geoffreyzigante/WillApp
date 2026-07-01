@@ -2166,14 +2166,18 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     }
     if (!offlineSince) setOfflineSince(Date.now());
   }, [isOnline]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Force re-render toutes les 15s tant qu on est offline : sinon le useMemo
-  // criticalKind ne recalcule pas Date.now() - offlineSince et l alerte
-  // reseau n apparait jamais si le user ne bouge pas d etat.
+  // Force re-render toutes les 15s tant qu on est offline via un ticker
+  // dedie : sans ca, le useMemo criticalKind ne recalcule pas la valeur
+  // Date.now() - offlineSince et l alerte reseau n apparait jamais quand
+  // l utilisateur reste immobile (aucune autre dep du useMemo ne change).
+  // Correctif audit 2026-07-01 : setOfflineSince(s => s) etait dedupliquee
+  // par React et ne re-renderait pas -> tick separe qui incremente.
+  const [offlineTick, setOfflineTick] = useState(0);
   useEffect(() => {
-    if (isOnline) return;
-    const t = setInterval(() => setOfflineSince(s => (s ? s : Date.now())), 15000);
+    if (isOnline) { if (offlineTick !== 0) setOfflineTick(0); return; }
+    const t = setInterval(() => setOfflineTick(c => c + 1), 15000);
     return () => clearInterval(t);
-  }, [isOnline]);
+  }, [isOnline]); // eslint-disable-line react-hooks/exhaustive-deps
   // freeDiskGB : poll toutes les 30s via Paths.document.availableSpace.
   useEffect(() => {
     const readFree = () => {
@@ -2541,7 +2545,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     if (offlineSince && (Date.now() - offlineSince > 60000)) return 'network';
     if (pendingCount > 700) return 'queue';
     return null;
-  }, [hasPermission, freeDiskGB, batteryLevel, batteryState, thermalStateStr, offlineSince, pendingCount]);
+    // offlineTick dans les deps pour que Date.now() - offlineSince soit
+    // re-evalue toutes les 15s tant qu on est offline (cf correctif audit).
+  }, [hasPermission, freeDiskGB, batteryLevel, batteryState, thermalStateStr, offlineSince, offlineTick, pendingCount]);
   const effectiveCriticalKind = rawCriticalKind && rawCriticalKind !== dismissedKind ? rawCriticalKind : null;
   // Reset dismissedKind quand la condition disparait ou change de nature :
   // la prochaine occurrence du meme kind reaffichera l overlay.
