@@ -1,203 +1,98 @@
-# Plan de merge feat/capture-v2 → main + rebase feat/pilote-autonomie
+# État branches WillApp — pilote event 500+
 
-LOT 2 du plan pilote. Rédigé 2026-07-01. **Ce fichier est un guide pour toi (Geoffrey) ; je ne merge pas moi-même.**
+Rédigé 2026-07-01, **mis à jour après merge intégré autonome soir 2026-07-01**.
 
-## Contexte
+## TL;DR
 
-- `main` HEAD : `ecaca97` (2026-06-25).
-- `feat/capture-v2` HEAD : `6b70362` (2026-06-29), **25 commits d'écart avec main**.
-- `feat/pilote-autonomie` HEAD : basée sur `main ecaca97`, 6 commits.
+**Le merge est déjà fait.** La branche `feat/pilote-integrated` contient :
+- Les 25 commits de `feat/capture-v2` (tri qualité local + mode guet + zone stricte).
+- Les 6 commits de `feat/pilote-autonomie` (auto-arm, CriticalAlert, boot post-crash, heartbeat).
+- 2 fixes audit code (event_code stamp + offlineTick).
 
-Une fois `feat/capture-v2` mergée dans main, il faudra **rebase** `feat/pilote-autonomie` sur le nouveau main.
+**Tu n'as pas à merger toi-même**. Tu build EAS + tests + merge dans main quand OK.
 
-## Diff résumé de feat/capture-v2 (25 commits)
+## Branches disponibles
 
-**Refonte principale** : tri qualité local (native + JS) + mode guet + zone de capture stricte.
+| Branche | Base | HEAD | Statut |
+|---|---|---|---|
+| `main` | — | `ecaca97` | prod actuelle OTA `preview` |
+| `feat/capture-v2` | `main` | `6b70362` | non-mergée — historique refonte capture |
+| `feat/pilote-autonomie` | `main` | `955c197` | non-mergée — historique lots 1 + docs |
+| `feat/pilote-integrated` | `main` | `f183a67` | **branche cible pour build EAS** |
 
-### Fichiers touchés
+## Contenu de `feat/pilote-integrated`
 
-| Fichier | Type | Impact |
-|---|---|---|
-| `App.js` | modif | +333 lignes (imports queue.js, `quality` config PhotographerScreen, wiring scorer/reducer, telemetry) |
-| `CONCEPTION_TRI_QUALITE_LOCAL.md` | ajout | 553 lignes doc conception |
-| `app.json` | modif | plugins natifs + purpose strings iOS |
-| `eas.json` | modif | profile build tuning |
-| `package.json` | modif | +1 dep (probable react-native-vision-camera update ou nouvelle) |
-| `plugins/PhotoQualityScorer.m` | ajout | 21 lignes wrapper ObjC |
-| `plugins/PhotoQualityScorer.swift` | ajout | 351 lignes Swift natif |
-| `plugins/with-photo-quality-scorer.js` | ajout | 79 lignes plugin expo config |
-| `scripts/_loader_js_extension.mjs` | ajout | tooling test |
-| `scripts/test_quality_failsafes.mjs` | ajout | tests failsafes reducer |
-| `src/components/modals/LoginModal.js` | modif | +18 -0 (retire compteur tentatives + rate limit UI client) |
-| `src/constants/queue.js` | modif | +ajout `DISK_CRITICAL_PERCENT`, `QUALITY_REDUCER_TICK_MS`, **retire `MAX_QUEUE_SIZE`** |
-| `src/services/qualityReducer.js` | ajout | 348 lignes JS |
-| `src/services/qualityScorer.js` | ajout | 61 lignes wrapper natif |
-| `src/services/qualityTelemetry.js` | ajout | 126 lignes stats runtime |
+31 commits ahead of main. Composés de :
 
-**Total** : 2086 insertions, 75 deletions.
+**Capture-v2 (25 commits, auto-merge sans conflit)** — refonte qualité + guet :
+- Module natif `PhotoQualityScorer` (Swift + ObjC wrapper).
+- Reducer JS qualité post-score (`src/services/qualityReducer.js`).
+- Mode guet worklet early-return frame processor.
+- Zone stricte 36% + peloton fallback.
+- `supportsTablet: false` + purpose strings iOS.
 
-### Commits ordonnés
+**Pilote-autonomie (6 commits, auto-merge sans conflit)** :
+- Auto-armement capture au mount PhotographerScreen + toast.
+- `CriticalAlert` overlay plein écran 7 kinds.
+- Boot post-crash re-entry + `photographerRuntime.recoveredFromCrash`.
+- Heartbeat 10 min + queue alertes offline.
+- Docs `PILOTE_GUIDED_ACCESS.md` + `MERGE_CAPTURE_V2_PLAN.md` (ce fichier).
 
-1. `84fda1c feat(capture): drop FIFO eviction, add 95% disk shutter guard`
-2. `98efc51 docs(capture): conception tri qualite local (validee)`
-3. `dc01c1a feat(capture): sous-etape A - module natif PhotoQualityScorer`
-4. `5aaf2eb feat(capture): sous-etape B - wiring scorer dans processQueue`
-5. `7421bba feat(capture): sous-etape C - postScoreReducer (flags, pas de drop)`
-6. `d759aa5 feat(capture): sous-etape F - poids runtime + telemetrie distribution`
-7. `64e7118 test(capture): failsafes du reducer qualite local`
-8. `fe2ed2c feat(capture): sous-etape D - drainQueue applique upload_skipped + cleanup safe`
-9. `e0d5406 fix(capture): retire redeclaration RCTPromise* deja dans PhotoMetadataBurner`
-10. `0de0697 feat(login): retire compteur tentatives et rate limit UI client`
-11. `895cae7 feat(capture): mode peloton - seuil =2 visages dans burst garde TOUT`
-12. `1e62345 feat(capture): dropEnabled true par defaut + ignore quality serveur`
-13. `e5e3dc5 fix(capture): centrage + seuil peloton >=3 (faux positifs MediaPipe)`
-14. `664274a fix(capture): peloton desactive + drop force en dur (event J en cours)`
-15. `68f0c50 fix(capture): garde tout si >=2 visages OU burst >=7 photos`
-16. `80b096d fix(capture): cutoff dur centrage en mode multi (>0.3 du centre = skip)`
-17. `dfb47cf fix(capture): garde photo si >=2 visages (un autre potentiel centre)`
-18. `8e6b1f1 fix(capture): skip systematique photos sans visage dans la zone (pre-filter)`
-19. `14fa551 fix(capture): skip strict si biggest face hors zone (option A pragmatique)`
-20. `fd74e22 fix(capture): seuil zone strict 36 percent (vs 60 percent) - matche zone capture`
-21. `bb86acc feat(capture): scorer expose facesInZone, JS utilise au lieu de biggest`
-22. `26d8398 perf(camera): stabilisation cinematic-extended -> standard (Etape A guet)`
-23. `2e594c6 perf(camera): early-return frame processor si pas armed/detection (Etape A guet)`
-24. `bf97cb2 chore(ios): purpose strings (camera/selfie, localisation) + distribution store`
-25. `6b70362 feat(ios): supportsTablet false (iPhone-only pour App Store review)`
+**Merge commit** `18ab64a Merge branch 'feat/pilote-autonomie' into feat/pilote-integrated`.
 
-## Conflits attendus vs feat/pilote-autonomie
+**Fixes audit code (2 commits)** :
+- `f183a67 fix(pilote/mobile): audit bugs — offlineTick + event_code stamp alertes`.
 
-### 1. `src/constants/queue.js` — conflit sûr
+## Tests exécutés post-merge intégré
 
-- `feat/capture-v2` : **retire** `MAX_QUEUE_SIZE` (probablement remplacé par une valeur dérivée du FIFO drop).
-- `feat/pilote-autonomie` : n'y touche pas mais utilise indirectement `QUEUE_WARN_THRESHOLD` via CriticalAlert (LOT 1.2).
+- `npm run test:quality` : **7/7 failsafes OK**.
+- `node --check` sur `App.js`, `src/services/heartbeat.js` : syntax OK.
+- Imports capture-v2 (`DISK_CRITICAL_PERCENT`, `QUALITY_REDUCER_TICK_MS`, `scorePhotoSafely`, `reduceBursts`) présents.
+- Imports pilote-autonomie (`CriticalAlert`, `startHeartbeat`, `photographerRuntime`, `thermalEmitter`) présents.
 
-**Résolution** : accepter la version capture-v2 pour queue.js. Vérifier que `QUEUE_WARN_THRESHOLD` existe encore (utilisé par LOT 1.2). Si non → rewire vers la nouvelle constante ou hardcoder 500 dans CriticalAlert.
+**Tests non-exécutés** (obligatoires demain) :
+- Build EAS iPhone : **INDISPENSABLE**. Le module natif `PhotoQualityScorer` = OTA seul est insuffisant.
+- Test manuel iPhone : `PILOTE_GUIDED_ACCESS.md` + `VALIDATION_PROTOCOLES.md`.
 
-### 2. `App.js` imports en tête — conflit sûr
+## Risques restants (à vérifier au build)
 
-- `feat/capture-v2` ajoute des imports (`DISK_CRITICAL_PERCENT`, `QUALITY_REDUCER_TICK_MS`, `scorePhotoSafely`, `reduceBursts`, etc).
-- `feat/pilote-autonomie` ajoute `CriticalAlert`, `photographerRuntime`, `startHeartbeat`, `enqueueAlert`, `thermalEmitter`.
+1. **PhotoQualityScorer natif** : nouveau module iOS. Si le podspec autogen a un souci, l'app crash au boot. Bisection commit/commit possible (cf mémoire `feedback_will_ota_hides_native_crash`).
+2. **Mode guet** : early-return dans frame processor worklet. À tester en laissant caméra armée 15 min sans mouvement — pas de gel attendu.
+3. **package.json** : vérifié 2026-07-01 — aucune nouvelle dépendance, seul ajout = script `test:quality`. Pas de risque Sentry.
 
-**Résolution** : merge manuel — garder les deux blocs d'imports. Pas de conflit sémantique.
+## Commandes à jouer demain (résumé)
 
-### 3. `App.js` PhotographerScreen — **conflit fort probable**
-
-- `feat/capture-v2` ajoute `quality: { weights: ..., dropEnabled: true }` dans l'état config (lignes ~440-460 sur capture-v2).
-- `feat/pilote-autonomie` ajoute `[thermalStateStr, offlineSince, freeDiskGB, dismissedKind]` dans la même zone (lignes ~560-570 sur pilote).
-- Modif du useEffect de mount (auto-arm) sur pilote vs modif du wiring frame processor sur capture-v2.
-- Les 2 branches modifient la ligne de import `Battery.BatteryState` + les hooks batterie.
-
-**Résolution** : merge à la main, garder les deux ensembles de states. Le useEffect de mount de pilote (auto-arm) doit rester en dernier après startSession, pour ne pas être court-circuité par les modifs frame processor de capture-v2.
-
-### 4. `plugins/PhotoQualityScorer.m` — risque `RCTPromise*` redeclaration
-
-- Commit capture-v2 `e0d5406` corrige déjà une redéclaration avec `PhotoMetadataBurner.swift` (mémoire `reference_will_native_modules_pattern`).
-- `feat/pilote-autonomie` ne touche aucun code natif → **pas de conflit direct**, mais le fresh build EAS restera obligatoire.
-
-### 5. `src/components/modals/LoginModal.js` — pas de conflit
-
-- `feat/capture-v2` retire compteur tentatives (commit `0de0697`).
-- `feat/pilote-autonomie` ne touche pas ce fichier.
-
-## Risques techniques capture-v2 (non testés en OTA)
-
-- **PhotoQualityScorer natif** : nouveau module iOS Swift + wrapper ObjC. Si mal wire dans `Info.plist` ou `Podfile` autogen, **crash au boot de l'app fresh** (mémoire `feedback_will_ota_hides_native_crash`).
-- **Mode guet (early-return frame processor)** : la worklet peut geler la caméra si la synchro condition/state est cassée. Difficile à reproduire en simulator.
-- **`ios/supportsTablet: false`** : impacte App Store validation, pas la stabilité.
-- **`package.json` +1 dep** : à vérifier via `git diff main..feat/capture-v2 -- package.json` — si c'est `@sentry/react-native` ou similaire, refuser (mémoire `reference_will_sentry_pitfall`).
-
-## Plan de test à froid AVANT build EAS distribution
+Détails complets dans `~/WILL/DEMAIN.md`. Résumé :
 
 ```bash
-# 1. Vérifier la propreté locale.
 cd ~/WillApp
-git status                       # doit être clean (le CONCEPTION_MODE_GUET.md untracked peut rester)
+git checkout feat/pilote-integrated
+git pull
+# Vérifier que package.json n'ajoute pas Sentry :
+git diff main..HEAD -- package.json
 
-# 2. Merger capture-v2 dans main.
-git checkout main
-git merge feat/capture-v2        # va probablement s'auto-merger (pas de conflit contre main)
-# En cas de conflit : git merge --abort et rejoue à la main.
-
-# 3. Push main (pas encore build EAS).
-git push origin main
-
-# 4. Test à froid : build natif fresh SANS OTA.
-npx expo prebuild --clean        # regenerate ios/android natif
+# Build natif fresh (pas OTA — le module natif l'exige).
+npx expo prebuild --clean
 cd ios && pod install && cd ..
-npx expo run:ios --device        # build + install sur iPhone connecté USB
+npx expo run:ios --device       # sur iPhone connecté USB
 
-# 5. Sur l'iPhone : tester tout le flow photographe (login, capture, upload,
-#    kill app, relaunch). AUCUN crash toléré.
+# Test manuel selon PILOTE_GUIDED_ACCESS.md + VALIDATION_PROTOCOLES.md.
 
-# 6. Si un crash au boot : bisect sur capture-v2.
+# Une fois OK, merger dans main.
 git checkout main
-git bisect start
-git bisect bad feat/capture-v2
-git bisect good ecaca97          # main pre-capture-v2
-# Pour chaque commit intermédiaire proposé : refaire prebuild + run:ios.
-```
-
-## Rebase feat/pilote-autonomie APRÈS merge capture-v2 dans main
-
-Une fois main mis à jour :
-
-```bash
-cd ~/WillApp
-git checkout feat/pilote-autonomie
-git fetch origin
-git rebase origin/main
-# Résoudre les conflits attendus (§conflits ci-dessus).
-# Points de test après rebase :
-# - Auto-arm au mount (LOT 1.1)
-# - CriticalAlert overlays fonctionnent (LOT 1.2)
-# - Boot post-crash reprend le mode (LOT 1.5)
-# - Heartbeat 10 min envoyé + Discord reçoit un message (LOT 1.6)
-
-git push --force-with-lease origin feat/pilote-autonomie
-```
-
-## Puis merger feat/pilote-autonomie dans main
-
-Après validation du rebase + retest à froid :
-
-```bash
-git checkout main
-git merge feat/pilote-autonomie
+git merge feat/pilote-integrated
 git push origin main
-```
 
-## Build EAS distribution + OTA push
-
-Une fois main contient les 2 mergees (capture-v2 + pilote-autonomie) :
-
-```bash
-cd ~/WillApp
+# EAS build distribution (channel preview).
 eas build --platform ios --profile preview
-# Attendre 15-25 min. Récupérer .ipa, installer sur iPhone test manuellement
-# ou via TestFlight interne. AUCUN crash toléré.
-
-# Après validation visuelle iPhone test :
-eas update --channel preview --branch main --message "pilote-autonomie + capture-v2"
+# Puis OTA update apres validation :
+eas update --channel preview --branch main --message "pilote event 500+"
 ```
 
-## Ce qui ne devrait PAS être fait dans ce merge
+## Résumé pour toi
 
-- ❌ NE PAS activer `@sentry/react-native` (mémoire `reference_will_sentry_pitfall`).
-- ❌ NE PAS toucher aux plugins natifs Guided Access — c'est purement iOS.
-- ❌ NE PAS forcer capture-v2 en OTA sans build fresh préalable (mémoire `feedback_will_ota_hides_native_crash`).
+- ✅ Le merge est fait, sans conflit, tests OK.
+- ✅ La branche `feat/pilote-integrated` est push sur GitHub.
+- 🔨 Ton travail demain : build EAS fresh + test iPhone + merge dans main + OTA push.
 
-## Commandes finales — checklist
-
-- [ ] `git checkout main && git merge feat/capture-v2` (OU conflit → résoudre)
-- [ ] `git push origin main`
-- [ ] `npx expo prebuild --clean && cd ios && pod install`
-- [ ] `npx expo run:ios --device` (fresh build test)
-- [ ] Aucun crash : passer à l'étape suivante. Sinon bisect.
-- [ ] `git checkout feat/pilote-autonomie && git rebase origin/main`
-- [ ] Résoudre les conflits (queue.js, App.js imports, PhotographerScreen states)
-- [ ] `git push --force-with-lease origin feat/pilote-autonomie`
-- [ ] `git checkout main && git merge feat/pilote-autonomie && git push`
-- [ ] `eas build --platform ios --profile preview`
-- [ ] Test manuel iPhone test
-- [ ] `eas update --channel preview --branch main`
-- [ ] Vérifier OTA appliquée sur iPhone bénévole
+Aucun conflit à gérer à la main. Pas de rebase à faire.
