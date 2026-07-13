@@ -28,6 +28,12 @@ import { photographerRuntime } from '../utils/photographerRuntime';
 const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 const ALERT_QUEUE_KEY = '@will:photographer_alerts_queue';
 const DEVICE_ID_KEY = '@will:photographer_device_id';
+// F-I02 : cle de persistance pour lastKnownEventCode. Permet a enqueueAlert
+// d avoir un event_code correct meme AVANT le premier heartbeat post-boot
+// (cas : app tuee alors qu une alerte etait deja bufferisee ; sans cette
+// hydratation, la queue serait drainee avec un event_code null ou celui du
+// nouvel event -> worker 403 event_mismatch).
+const LAST_EVENT_CODE_KEY = '@will:photographer_last_event_code';
 
 let heartbeatTimer = null;
 let getContext = null; // callback qui renvoie l etat live du screen
@@ -38,6 +44,17 @@ let netUnsub = null;
 // eventA puis drainee sous eventB serait envoyee avec le mauvais code).
 let lastKnownEventCode = null;
 let lastKnownDeviceId = null;
+
+// F-I02 : hydratation asynchrone au chargement du module. Best-effort ;
+// si le read AsyncStorage n a pas encore rendu quand enqueueAlert tire,
+// on retombe sur le fallback historique (null -> backfill au drain).
+// Idempotent : startHeartbeat n ecrase pas lastKnownEventCode si deja set.
+(async () => {
+  try {
+    const stored = await AsyncStorage.getItem(LAST_EVENT_CODE_KEY);
+    if (stored && !lastKnownEventCode) lastKnownEventCode = stored;
+  } catch {}
+})();
 
 async function getDeviceId() {
   let id = await AsyncStorage.getItem(DEVICE_ID_KEY).catch(() => null);
@@ -185,7 +202,11 @@ export async function startHeartbeat(apiFetch, contextGetter) {
   // Wrappe le getter pour injecter deviceId + hydrater le cache module.
   const wrappedGetter = () => {
     const live = contextGetter() || {};
-    if (live.eventCode) lastKnownEventCode = live.eventCode;
+    if (live.eventCode && live.eventCode !== lastKnownEventCode) {
+      lastKnownEventCode = live.eventCode;
+      // F-I02 : persiste pour reboot. Fire-and-forget (best-effort).
+      AsyncStorage.setItem(LAST_EVENT_CODE_KEY, live.eventCode).catch(() => {});
+    }
     return { ...live, deviceId };
   };
   getContext = wrappedGetter;
