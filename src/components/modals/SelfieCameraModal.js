@@ -18,9 +18,11 @@ import { s } from '../../constants/styles';
 export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   const cameraRef = useRef(null);
   const { hasPermission, requestPermission } = useCameraPermission();
-  const device = useCameraDevice('front', {
-    physicalDevices: ['wide-angle-camera'],
-  });
+  // U-I05 : pas de contrainte physicalDevices. Sur Android, imposer
+  // 'wide-angle-camera' fait retourner undefined selon le modele (Samsung,
+  // OnePlus…) et bloque le selfie sur ecran noir. iOS a toujours au moins un
+  // wide-angle en caméra frontale, la contrainte etait redondante.
+  const device = useCameraDevice('front');
   const [busy, setBusy] = useState(false);
   const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
   const cameraPermissionDenied = hasRequestedCameraPermission && !hasPermission;
