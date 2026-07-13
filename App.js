@@ -1912,6 +1912,19 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // log loud + bump lostCount. La cause racine (burn natif qui
           // resout sans ecrire ? purge iOS ?) reste a investiguer mais
           // au moins le photographe la voit.
+          //
+          // F-I05 : guard item.localUri null AVANT new File(). Sans ce
+          // guard, new File(null) throw -> catch avale l'exception ->
+          // fileExists=false, item droppe avec log "missing at null" peu
+          // parlant. Cas typique : commit persiste apres burn success mais
+          // localUri jamais assigne (race condition rare processQueue).
+          if (item.localUri == null) {
+            console.error(`[upload] LOST: id=${item.id} key=${item.key} (localUri null : burn commit sans localUri)`);
+            lostCountRef.current += 1;
+            if (isMountedRef.current) setLostCount(lostCountRef.current);
+            arr[i] = null;
+            continue;
+          }
           let fileExists = false;
           try { fileExists = new File(item.localUri).exists; } catch {}
           if (!fileExists) {
