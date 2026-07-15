@@ -40,12 +40,21 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   // depuis 2026-06-27 (cf worker fix(auth) c1942d3).
   const [pinError, setPinError] = useState('');
   const [pinErrorTick, setPinErrorTick] = useState(0);
+  // Search : filtre client-side de la liste upcoming par nom/lieu.
+  // Cohere avec le search dashboard PhotographerEventList.js.
+  const [searchQuery, setSearchQuery] = useState('');
+  // Saisie directe d un code event : couvre les events non listes
+  // (listed:false) qui ne sortent pas de /public-events. Le worker
+  // handleLoginEvent ne filtre pas sur listed, seule active=true est
+  // requise. Cohere avec la meme fonctionnalite cote dashboard.
+  const [codeInput, setCodeInput] = useState('');
 
   useEffect(() => {
     if (visible) {
       setCode(''); setPassword('');
       setResetMode('login'); setResetCode(''); setResetNewPassword('');
       setPinError('');
+      setSearchQuery(''); setCodeInput('');
     }
   }, [visible]);
 
@@ -53,6 +62,15 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   const upcoming = events
     .filter(e => isUpcoming(e.event_date, e.event_date_end))
     .sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
+
+  // Normalise pour comparaison accent/case-insensitive.
+  const normalize = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const upcomingSearched = searchQuery.trim()
+    ? upcoming.filter(e => {
+        const q = normalize(searchQuery.trim());
+        return normalize(e.name).includes(q) || normalize(e.location).includes(q);
+      })
+    : upcoming;
 
   const doLogin = async (pwdOverride) => {
     const pwd = (pwdOverride ?? password).trim();
@@ -166,13 +184,39 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
             {role === 'photographer' ? (
               <>
                 <Text style={[formSectionStyle.heading, { marginTop: 0 }]}>Événement</Text>
-                <ScrollView style={{ maxHeight: 260, marginBottom: 12 }}>
-                  {upcoming.length === 0 && (
+                {/* Search : filtre client. Masque quand un code est deja
+                    selectionne (la liste se reduit alors a l event actif
+                    et le PIN a la main, search inutile). */}
+                {!code && (
+                  <TextInput
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Rechercher…"
+                    placeholderTextColor={C.textSoft}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={{
+                      backgroundColor: '#faf9ff',
+                      borderRadius: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                      fontSize: 14,
+                      color: C.text,
+                      marginBottom: 10,
+                    }}
+                  />
+                )}
+                <ScrollView style={{ maxHeight: 230, marginBottom: 12 }}>
+                  {upcomingSearched.length === 0 && (
                     <View style={{ padding: 24, alignItems: 'center' }}>
-                      <Text style={{ color: C.textSoft, fontSize: 13 }}>Aucun événement à venir</Text>
+                      <Text style={{ color: C.textSoft, fontSize: 13 }}>
+                        {upcoming.length === 0
+                          ? 'Aucun événement à venir'
+                          : 'Aucun résultat pour cette recherche'}
+                      </Text>
                     </View>
                   )}
-                  {(code ? upcoming.filter(e => e.code === code) : upcoming).map(e => {
+                  {(code ? upcomingSearched.filter(e => e.code === code) : upcomingSearched).map(e => {
                     const active = code === e.code;
                     return (
                       <TouchableOpacity
@@ -205,6 +249,68 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                     );
                   })}
                 </ScrollView>
+                {/* Saisie directe d un code event. Placee EN BAS de la
+                    liste, avant le PIN : le comportement standard reste la
+                    liste + search, le code entry est un fallback pour les
+                    events non listes (test permanent, code oral orga...).
+                    Masque quand un code est deja selectionne. */}
+                {!code && (
+                  <View style={{
+                    marginTop: 4, marginBottom: 12,
+                    paddingTop: 14,
+                    borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.06)',
+                  }}>
+                    <Text style={{
+                      fontSize: 11, fontWeight: '700', color: C.textSoft,
+                      letterSpacing: 0.5, textTransform: 'uppercase',
+                      marginBottom: 8,
+                    }}>
+                      Ou entre un code event
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TextInput
+                        value={codeInput}
+                        onChangeText={setCodeInput}
+                        placeholder="code-de-ton-event"
+                        placeholderTextColor={C.textSoft}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        style={{
+                          flex: 1,
+                          backgroundColor: '#faf9ff',
+                          borderRadius: 12,
+                          paddingHorizontal: 14,
+                          paddingVertical: 10,
+                          fontSize: 14,
+                          color: C.text,
+                        }}
+                      />
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        disabled={!codeInput.trim()}
+                        onPress={() => {
+                          const raw = codeInput.trim().toLowerCase().replace(/\s+/g, '-');
+                          if (!raw) return;
+                          setCode(raw);
+                        }}
+                        style={{
+                          backgroundColor: codeInput.trim() ? C.pinkPill : '#faf9ff',
+                          borderRadius: 12,
+                          paddingHorizontal: 16,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{
+                          color: codeInput.trim() ? '#fff' : C.textSoft,
+                          fontSize: 13, fontWeight: '700',
+                        }}>
+                          Ouvrir
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
                 {code ? (
                   <>
                     <Text style={[formSectionStyle.heading, { marginTop: 0 }]}>Code PIN photographe</Text>
