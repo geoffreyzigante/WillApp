@@ -16,11 +16,3 @@ export const photographerRuntime = {
   recoveredFromCrash: false,
   recoveredAt: 0,
 };
-
-export function consumeCrashRecoveryFlag() {
-  const was = photographerRuntime.recoveredFromCrash;
-  if (was) {
-    photographerRuntime.recoveredFromCrash = false;
-  }
-  return was;
-}

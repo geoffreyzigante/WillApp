@@ -32,10 +32,6 @@ function emptyState() {
 
 let state = emptyState();
 
-export function resetTelemetry() {
-  state = emptyState();
-}
-
 export function recordScore(item, result) {
   if (state.perPhoto.length >= SESSION_CAP) {
     state.capReached = true;
@@ -118,9 +114,4 @@ export function getSummary() {
     },
     burstSizeDistribution: summarize(state.perBurst.map(b => b.total)),
   };
-}
-
-// Dump JSON brut pour analyse offline (calibrage E).
-export function getRawTelemetry() {
-  return JSON.parse(JSON.stringify(state));
 }
