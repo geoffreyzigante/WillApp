@@ -48,6 +48,10 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   // handleLoginEvent ne filtre pas sur listed, seule active=true est
   // requise. Cohere avec la meme fonctionnalite cote dashboard.
   const [codeInput, setCodeInput] = useState('');
+  // Event non liste fetche par /public-events/{code} quand la searchQuery
+  // matche un code exact (typiquement `test` permanent). Bypass le filtre
+  // isUpcoming : intention explicite = code exact.
+  const [searchExtra, setSearchExtra] = useState(null);
 
   useEffect(() => {
     if (visible) {
@@ -55,8 +59,25 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
       setResetMode('login'); setResetCode(''); setResetNewPassword('');
       setPinError('');
       setSearchQuery(''); setCodeInput('');
+      setSearchExtra(null);
     }
   }, [visible]);
+
+  // Fetch on-demand par code exact pour reach les events non listes.
+  // Debounce 250ms + guard cleanup pour eviter setState post-unmount.
+  useEffect(() => {
+    const raw = searchQuery.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!raw || !/^[a-z0-9-]+$/.test(raw)) { setSearchExtra(null); return; }
+    if (upcoming.some(e => e.code === raw)) { setSearchExtra(null); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetch(`${API_URL}/public-events/${encodeURIComponent(raw)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(ev => { if (!cancelled) setSearchExtra(ev && ev.code ? ev : null); })
+        .catch(() => { if (!cancelled) setSearchExtra(null); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [searchQuery, upcoming]);
 
   // Tri ASC strict (decision user 2026-06-04, toutes les listes d events).
   const upcoming = events
@@ -66,10 +87,22 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   // Normalise pour comparaison accent/case-insensitive.
   const normalize = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const upcomingSearched = searchQuery.trim()
-    ? upcoming.filter(e => {
+    ? (() => {
         const q = normalize(searchQuery.trim());
-        return normalize(e.name).includes(q) || normalize(e.location).includes(q);
-      })
+        const base = upcoming.filter(e =>
+          normalize(e.name).includes(q)
+          || normalize(e.location).includes(q)
+          || normalize(e.code).includes(q)
+        );
+        // Injection searchExtra : bypass isUpcoming filter, unshift si match.
+        if (searchExtra && searchExtra.code && !base.some(e => e.code === searchExtra.code)) {
+          const matches = normalize(searchExtra.name || '').includes(q)
+            || normalize(searchExtra.location || '').includes(q)
+            || normalize(searchExtra.code).includes(q);
+          if (matches) base.unshift(searchExtra);
+        }
+        return base;
+      })()
     : upcoming;
 
   const doLogin = async (pwdOverride) => {
