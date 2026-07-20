@@ -241,11 +241,16 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
     };
   }
 
-  // Mode multi : determine sur les inZoneItems. Si une photo a >=2
-  // visages DANS LA ZONE (vrai peloton), OU burst long (>=7 photos
-  // inZone), on garde toutes les inZoneItems. Sinon top-N. Utilise
-  // facesInZone (calcule par scorer natif) plutot que faceCount qui
+  // Mode multi : critere UNIQUEMENT sur le nombre de VISAGES dans la zone.
+  // Si au moins une photo du burst capture >=2 visages centres, c est un vrai
+  // peloton, on garde tout. Sinon top-N.
+  // Utilise facesInZone (calcule par scorer natif) plutot que faceCount qui
   // compte les faux positifs hors zone (affiches, ombres, etc.).
+  //
+  // L ancien fallback "inZoneItems.length >= 7 = peloton" (retire 2026-07-20)
+  // etait un proxy bancal : un coureur seul qui restait ~1.5s+ en zone genere
+  // 7+ photos et basculait a tort en mode peloton, gardant tout au lieu de
+  // top-N. Diag complet dans ~/WILL/AUDIT_TROP_PHOTOS.md.
   const maxFacesInZone = inZoneItems.reduce((max, it) => {
     const fz = it.qualityScore?.facesInZone;
     if (typeof fz === 'number') return fz > max ? fz : max;
@@ -253,7 +258,7 @@ export function reduceBurst(items, weights, faceAreaNorm, topN) {
     const fc = it.qualityScore?.faceCount;
     return (typeof fc === 'number' && fc > max) ? fc : max;
   }, 0);
-  const isMulti = maxFacesInZone >= 2 || inZoneItems.length >= 7;
+  const isMulti = maxFacesInZone >= 2;
 
   let inZoneKeptIds;
   if (isMulti) {
