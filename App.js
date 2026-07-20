@@ -429,7 +429,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // - enabled:false pour bypasser temporairement (debug).
       postCaptureFilter: { enabled: true, minFaceWidthPx: 40, minQuality: 0 },
     },
-    upload: { mode: "immediate", batchSize: 10, maxRetries: 5, compressBeforeUpload: false },
+    // gate_enabled : true = drain uploade UNIQUEMENT les items upload_kept===true
+    // (tri qualite local decide avant upload, cf CONCEPTION_TRI_SOLO_UPLOAD.md
+    // etape A). Un item non encore decide par le reducer attend le prochain
+    // drain kick post-decision. Failsafes reducer (allFailed, no-in-zone) posent
+    // upload_kept sur TOUS les items -> "jamais 0 photo uploadee" garanti.
+    // Kill switch runtime via /config : PUT /admin/config {upload.gate_enabled:
+    // false} -> drain retombe sur filtre legacy (upload_skipped !== true, laisse
+    // fuir les undecided). Bascule 5 min via refetch /config, pas de rebuild EAS.
+    upload: { mode: "immediate", batchSize: 10, maxRetries: 5, compressBeforeUpload: false, gate_enabled: true },
     debug: {
       verboseLogs: true, skipRekognition: false, saveUnmatchedFrames: false,
     },
@@ -1832,12 +1840,22 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // le prochain refetch /config bascule dropEnabled a false -> tout
       // upload_skipped devient uploadable.
       const dropEnabled = eventConfig.pilote?.drop_enabled ?? true;
-      console.log('[drain] dropEnabled=', dropEnabled, '(from /config, refetch 5 min)');
+      // gateEnabled : cf CONCEPTION_TRI_SOLO_UPLOAD.md etape A. Filtre strict
+      // upload_kept===true uniquement -> les items non encore decides par le
+      // reducer attendent (drain les prendra au prochain kick post-decision).
+      // Reducer garantit une decision en <=10s (BURST_REDUCE_DELAY_MS=8s +
+      // tick 2s) + failsafes allFailed / no-in-zone posent upload_kept sur
+      // TOUS les items -> jamais 0 photo uploadee pour un passage.
+      // Legacy path (gate_enabled=false, kill switch runtime) : filtre
+      // permissif upload_skipped !== true, laisse fuir les undecided -> permet
+      // un rollback immediat via /config sans OTA en cas de regression.
+      const gateEnabled = eventConfig.upload?.gate_enabled ?? true;
+      console.log('[drain] dropEnabled=', dropEnabled, 'gateEnabled=', gateEnabled, '(from /config, refetch 5 min)');
       const uploadable = arr
         .map((it, i) => ({ it, i }))
         .filter(({ it }) => it.processed === true
           && it.status === 'pending'
-          && it.upload_skipped !== true
+          && (gateEnabled ? it.upload_kept === true : it.upload_skipped !== true)
           && (!it.nextAttemptAt || it.nextAttemptAt <= now));
       if (uploadable.length === 0) {
         drainingRef.current = false;
