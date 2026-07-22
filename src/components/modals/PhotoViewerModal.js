@@ -419,8 +419,20 @@ export function PhotoViewerModal({
     ? { shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } }
     : null;
 
+  // Fix 2026-07-22 : le zoom (scale + zoomTranslateX) etait pilote par
+  // pinch/double-tap dans les shared values mais AUCUN style visuel ne les
+  // consommait. Resultat : geste enregistre mais image immobile. On applique
+  // maintenant les 3 transforms (translateX/Y + scale) au wrapper de la
+  // FlatList. Consequence : quand scale > 1, toute la liste zoome mais l item
+  // courant est deja centre par pagingEnabled donc reste visible. Le swipe
+  // horizontal est neutralise par le panGesture qui prend le controle quand
+  // scale > 1 (cf onUpdate ligne 234).
   const vertStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    transform: [
+      { translateX: zoomTranslateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
   }));
   const photoListRef = useRef(null);
 
