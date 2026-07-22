@@ -227,6 +227,26 @@ export function PhotoViewerModal({
   const currentIndexRef = useRef(0);
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
 
+  // Bornes zoom + clamping proportionnel au scale.
+  // Fix 2026-07-22 : au dezoom, les translations s accumulaient en pixels
+  // absolus et restaient grandes meme quand scale diminuait -> image derivait
+  // hors cadre. Solution : maxTx/maxTy = (scale-1) * halfSize ; a scale=1
+  // les bornes sont 0 = image forcement centree ; a scale=2 elles laissent
+  // pan jusqu au bord ; etc. Applique dans pinch + pan + double-tap.
+  const MAX_SCALE = 5;
+  const SNAP_THRESHOLD = 1.15; // en dessous : snap-back a 1x
+  const clampTranslations = (s) => {
+    'worklet';
+    const halfW = winWidth / 2;
+    const halfH = winHeight / 2;
+    const maxTx = Math.max(0, (s - 1) * halfW);
+    const maxTy = Math.max(0, (s - 1) * halfH);
+    if (zoomTranslateX.value > maxTx) zoomTranslateX.value = maxTx;
+    if (zoomTranslateX.value < -maxTx) zoomTranslateX.value = -maxTx;
+    if (translateY.value > maxTy) translateY.value = maxTy;
+    if (translateY.value < -maxTy) translateY.value = -maxTy;
+  };
+
   const panGesture = Gesture.Pan()
     .activeOffsetY([-15, 15])
     .failOffsetX([-30, 30])
@@ -234,6 +254,7 @@ export function PhotoViewerModal({
       if (scale.value > 1) {
         zoomTranslateX.value = savedZoomTranslateX.value + e.translationX;
         translateY.value = savedTranslateY.value + e.translationY;
+        clampTranslations(scale.value);
       } else {
         translateY.value = e.translationY;
       }
@@ -253,18 +274,24 @@ export function PhotoViewerModal({
 
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
-      scale.value = Math.max(1, savedScale.value * e.scale);
+      const next = savedScale.value * e.scale;
+      scale.value = Math.max(1, Math.min(MAX_SCALE, next));
+      // Reclamp les translations en continu : sinon au dezoom l image derive.
+      clampTranslations(scale.value);
     })
     .onEnd(() => {
-      if (scale.value < 1.05) {
-        scale.value = withTiming(1);
-        zoomTranslateX.value = withTiming(0);
-        translateY.value = withTiming(0);
+      if (scale.value < SNAP_THRESHOLD) {
+        // Snap-back complet : scale=1, translations=0 avec anim douce.
+        scale.value = withTiming(1, { duration: 200 });
+        zoomTranslateX.value = withTiming(0, { duration: 200 });
+        translateY.value = withTiming(0, { duration: 200 });
         savedScale.value = 1;
         savedZoomTranslateX.value = 0;
         savedTranslateY.value = 0;
       } else {
         savedScale.value = scale.value;
+        savedZoomTranslateX.value = zoomTranslateX.value;
+        savedTranslateY.value = translateY.value;
       }
     });
 
@@ -273,6 +300,7 @@ export function PhotoViewerModal({
     .maxDelay(280)
     .onEnd(() => {
       if (scale.value > 1) {
+        // Reset complet vers 1x + recentrage.
         scale.value = withTiming(1, { duration: 180 });
         savedScale.value = 1;
         zoomTranslateX.value = withTiming(0, { duration: 180 });
@@ -280,8 +308,13 @@ export function PhotoViewerModal({
         translateY.value = withTiming(0, { duration: 180 });
         savedTranslateY.value = 0;
       } else {
+        // Zoom in a 2.5x, translations restent 0 (centre).
         scale.value = withTiming(2.5, { duration: 180 });
         savedScale.value = 2.5;
+        zoomTranslateX.value = withTiming(0, { duration: 180 });
+        translateY.value = withTiming(0, { duration: 180 });
+        savedZoomTranslateX.value = 0;
+        savedTranslateY.value = 0;
       }
     });
 
