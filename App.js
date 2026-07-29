@@ -95,6 +95,10 @@ import {
   retryDelayMs,
 } from './src/constants/queue';
 import { scorePhotoSafely } from './src/services/qualityScorer';
+// Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
+import { useDeviceTilt } from './src/hooks/useDeviceTilt';
+import FramingGuide from './src/components/FramingGuide';
+import { fovFromFormat, TARGET_DISTANCE_M, MOUNT_HEIGHT_M } from './src/services/framingGuide';
 import { reduceBursts, sanitizeQualityConfig } from './src/services/qualityReducer';
 import { recordScore, recordBurstReduction, getSummary as getQualitySummary } from './src/services/qualityTelemetry';
 import {
@@ -549,6 +553,18 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   }, [device]);
   const cameraRef = useRef(null);
 
+  // ── Guide de cadrage : champ reel de l'appareil (§1.8) ───────────────────
+  // fieldOfView vient du format actif : aucune valeur codee en dur, donc juste
+  // sur tous les modeles. L'hypothese 'portrait' (app verrouillee portrait,
+  // donc axe long du capteur = vertical de l'image) reste A VERIFIER au metre
+  // ruban sur le premier build : elle change la largeur de zone d'un facteur
+  // 1,35. Precedent : le choix axis 'midX'/'midY' du HumanDetectorPlugin a du
+  // etre tranche empiriquement pour la meme raison.
+  const framingFov = useMemo(
+    () => fovFromFormat(format?.fieldOfView ?? 68, 'portrait'),
+    [format?.fieldOfView],
+  );
+
   // Log device + format -> deplaces cote Swift NSLog [WILL-CAM] (hook
   // WillShutterController.attachDevice). console.log JS n'apparait pas
   // dans Console.app sur build EAS preview ; NSLog est lui visible.
@@ -770,6 +786,24 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const previewH = Math.min(winH, previewW * (4 / 3));
   // Strip galerie supprime, viewer demarre juste sous le header (148).
   const CAMERA_TOP = 148;
+
+  // ── Guide de cadrage : etat, capteur, cible (§1.8) ───────────────────────
+  // Mode reglage : affiche un point a l'endroit ideal de passage du coureur.
+  // Le benevole pose ce point au milieu du chemin, rien d'autre a comprendre.
+  // Repere indicatif, pas un instrument de mesure.
+  // NB : declare ICI et pas plus bas avec les autres etats d'UI — useDeviceTilt
+  // consomme framingMode juste apres, un const declare plus loin serait en
+  // zone morte temporelle (ReferenceError au montage).
+  const [framingMode, setFramingMode] = useState(false);
+  const [mountHeight, setMountHeight] = useState(MOUNT_HEIGHT_M.barriere);
+  // L'accelerometre ne tourne QUE pendant le reglage : inutile de le laisser
+  // vivre les 4-6 h d'un event.
+  const { pitch: framingPitch, roll: framingRoll, available: tiltAvailable } =
+    useDeviceTilt(framingMode);
+  // La cible decoule de la discipline de l'event : l'organisateur ne regle
+  // rien, le benevole encore moins.
+  const framingTarget =
+    TARGET_DISTANCE_M[eventConfig.camera?.discipline] ?? TARGET_DISTANCE_M.default;
 
   // Course + km posté
   const [selectedRace, setSelectedRace] = useState(null); // null = "Toutes les courses"
@@ -2721,6 +2755,63 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         );
       })()}
 
+      {/* ─── GUIDE DE CADRAGE (§1.8) ─────────────────────────────────────
+          Un point a l'endroit ideal de passage. Le benevole le pose au milieu
+          du chemin. Meme geometrie de preview que l'overlay zone ci-dessus :
+          les deux doivent rester alignes, sinon le point ment. */}
+      {framingMode && tiltAvailable && (
+        <FramingGuide
+          targetDistance={framingTarget}
+          height={mountHeight}
+          pitch={framingPitch}
+          roll={framingRoll}
+          halfFovH={framingFov.halfFovH}
+          halfFovV={framingFov.halfFovV}
+          rect={{ top: CAMERA_TOP, height: previewH, marginH: PREVIEW_MARGIN_H }}
+        />
+      )}
+
+      {/* Selecteur de hauteur de pose : presets uniquement. La distance est
+          proportionnelle a la hauteur, c'est la principale source d'erreur —
+          une saisie libre inviterait a une fausse precision. */}
+      {framingMode && tiltAvailable && (
+        <View
+          style={{
+            position: 'absolute', left: PREVIEW_MARGIN_H, right: PREVIEW_MARGIN_H,
+            top: CAMERA_TOP + previewH + 12,
+            flexDirection: 'row', gap: 8, zIndex: 12,
+          }}
+        >
+          {[
+            ['Au sol', MOUNT_HEIGHT_M.sol],
+            ['Barrière', MOUNT_HEIGHT_M.barriere],
+            ['Trépied', MOUNT_HEIGHT_M.trepied],
+          ].map(([label, h]) => {
+            const active = Math.abs(mountHeight - h) < 1e-6;
+            return (
+              <TouchableOpacity
+                key={label}
+                onPress={() => setMountHeight(h)}
+                activeOpacity={0.7}
+                style={{
+                  flex: 1, paddingVertical: 10, borderRadius: 10,
+                  alignItems: 'center',
+                  backgroundColor: active ? '#3DDC84' : 'rgba(255,255,255,0.12)',
+                }}
+              >
+                <Text style={{
+                  color: active ? '#0b0b0b' : '#fff',
+                  fontSize: 13, fontWeight: active ? '700' : '400',
+                  fontFamily: 'Montserrat',
+                }}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {/* ─── FLASH RAFALE (full-screen, blanc, 120ms) ─── */}
       <Animated.View
         pointerEvents="none"
@@ -3077,6 +3168,27 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
                 <Path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
                 <Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="#fff" strokeWidth={1.8} />
+              </Svg>
+            </TouchableOpacity>
+            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 16 }} />
+
+            {/* Reglage du cadrage (§1.8) : affiche le point de passage ideal.
+                Place avant "Infos" car c'est une action de mise en place, a
+                faire une fois en arrivant au poste. */}
+            <TouchableOpacity
+              onPress={() => { setMenuOpen(false); setFramingMode(v => !v); }}
+              activeOpacity={0.5}
+              style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingVertical: 13, paddingHorizontal: 16,
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '400', fontFamily: 'Montserrat' }}>
+                {framingMode ? 'Terminer le réglage' : 'Régler le cadrage'}
+              </Text>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                <Path d="M12 21s7-5.686 7-11a7 7 0 1 0-14 0c0 5.314 7 11 7 11z" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                <Path d="M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" stroke="#fff" strokeWidth={1.8} />
               </Svg>
             </TouchableOpacity>
             <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 16 }} />
