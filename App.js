@@ -854,8 +854,93 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const IDLE_AFTER_MS = 30000;
   const idleTimeoutRef = useRef(null);
 
+  // ── GARDE ANTI-SCENE-STATIQUE ────────────────────────────────────────────
+  // Probleme corrige : MAX_BURST_SHOTS borne UNE rafale, rien ne bornait leur
+  // REPETITION. Tant qu'un visage reste dans la zone, onHumansDetectedJS
+  // relance captureBurstLoop a la frame suivante -> 15 prises, ~0,1 s de
+  // pause, 15 prises... indefiniment. Avec le tri a 3 par rafale, ca fait
+  // ~3 photos uploadees toutes les 2,6 s, soit ~70/min, sur un simple badaud
+  // poste dans le cadre, un photographe qui se teste, une affiche ou une
+  // peluche.
+  //
+  // Principe : un vrai coureur traverse le cadre a plusieurs dizaines de
+  // pourcents d'image par seconde. Une scene dont le plus grand visage ne
+  // bouge quasiment pas sur une seconde n'est pas un coureur -> on bloque la
+  // RELANCE (la premiere rafale a deja eu lieu a son arrivee).
+  //
+  // Marge : a 3 m/s et 2-6 m de distance, un coureur parcourt 0,5 a 1,5
+  // largeur d'image par seconde. Le seuil est a 0,05 -> facteur 10 a 30 de
+  // marge. Aucun risque de bloquer un coureur reel.
+  const faceTrailRef = useRef([]);
+  const staticBlockedRef = useRef(false);
+  const staticGuardCfgRef = useRef({ enabled: true, eps: 0.05, windowMs: 1000 });
+
+  useEffect(() => {
+    staticGuardCfgRef.current = {
+      enabled: eventConfig.camera?.staticGuardEnabled ?? true,
+      eps: eventConfig.camera?.staticGuardEps ?? 0.05,
+      windowMs: eventConfig.camera?.staticGuardWindowMs ?? 1000,
+    };
+  }, [
+    eventConfig.camera?.staticGuardEnabled,
+    eventConfig.camera?.staticGuardEps,
+    eventConfig.camera?.staticGuardWindowMs,
+  ]);
+
+  // Alimente la trace du plus grand visage. Appelee a CHAQUE frame analysee,
+  // y compris pendant une rafale : sinon la trace aurait des trous et le
+  // deplacement serait sous-estime.
+  function updateFaceTrail(count, bigX, bigY) {
+    const cfg = staticGuardCfgRef.current;
+    if (count <= 0 || bigX < 0) {
+      // Plus de visage : on repart de zero. Une nouvelle arrivee ne doit pas
+      // etre jugee sur l'historique du precedent.
+      if (faceTrailRef.current.length) faceTrailRef.current = [];
+      if (staticBlockedRef.current) {
+        staticBlockedRef.current = false;
+        console.log('[static-guard] zone videe -> deblocage');
+      }
+      return;
+    }
+    const now = Date.now();
+    const trail = faceTrailRef.current;
+    trail.push({ t: now, x: bigX, y: bigY });
+    // Fenetre glissante, avec un peu de marge pour toujours couvrir windowMs.
+    const cutoff = now - cfg.windowMs * 1.5;
+    while (trail.length && trail[0].t < cutoff) trail.shift();
+  }
+
+  // true = scene immobile, on bloque la relance de rafale.
+  // Prudence : tant qu'on n'a pas au moins windowMs d'historique, on AUTORISE
+  // (mieux vaut une photo de trop qu'un coureur rate).
+  function staticSceneBlocks() {
+    const cfg = staticGuardCfgRef.current;
+    if (!cfg.enabled) return false;
+    const trail = faceTrailRef.current;
+    if (trail.length < 4) return false;
+    const span = trail[trail.length - 1].t - trail[0].t;
+    if (span < cfg.windowMs) return false;
+    // Diagonale de la boite englobant toute la trace : capte aussi bien une
+    // immobilite parfaite qu'un simple tremblement du detecteur.
+    let minX = 1, maxX = 0, minY = 1, maxY = 0;
+    for (let i = 0; i < trail.length; i++) {
+      const p = trail[i];
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const spread = Math.hypot(maxX - minX, maxY - minY);
+    const blocked = spread < cfg.eps;
+    if (blocked !== staticBlockedRef.current) {
+      staticBlockedRef.current = blocked;
+      console.log(`[static-guard] ${blocked ? 'BLOQUE' : 'libere'} spread=${spread.toFixed(3)} seuil=${cfg.eps} span=${span}ms`);
+    }
+    return blocked;
+  }
+
   const onHumansDetectedJS = useMemo(
-    () => Worklets.createRunOnJS((count) => {
+    () => Worklets.createRunOnJS((count, bigX, bigY, bigArea) => {
       // Met à jour faceInZoneRef à CHAQUE frame analysée (count>=1 OU 0) et
       // incrémente frameSeqRef pour que la boucle puisse détecter l'arrivée
       // d'une analyse fraîche post-capture. Si armé + visage en zone +
@@ -865,6 +950,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       frameSeqRef.current += 1;
       lastFrameAtRef.current = Date.now();
       faceInZoneRef.current = count > 0;
+      updateFaceTrail(count, bigX, bigY);
       // Cadence Vision dynamique : visage detecte -> repasse immediatement
       // a 10 fps. Si pas de visage -> arme un timeout 30s qui bascule en idle
       // (5 fps Vision) jusqu'au prochain visage. Le worklet lit idleModeSV
@@ -884,6 +970,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       if (!isAutoArmedRef.current) return;
       if (!faceInZoneRef.current) return;
       if (burstLoopRef.current) return;
+      // Scene immobile : on ne relance pas. Kill switch /config
+      // camera.staticGuardEnabled=false pour revenir au comportement d'avant.
+      if (staticSceneBlocks()) return;
       captureBurstLoop();
     }),
     [],
@@ -1150,7 +1239,19 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       axis: 'midX',
     });
     const count = result?.count ?? 0;
-    onHumansDetectedJS(count);
+    // v2 du plugin : on reduit les bbox DANS le worklet et on ne fait
+    // traverser que des scalaires. Passer un tableau d'objets worklet -> JS
+    // est couteux et fragile ; seul le plus grand visage sert ici.
+    let bx = -1, by = -1, ba = 0;
+    const faces = result?.faces;
+    if (faces) {
+      for (let i = 0; i < faces.length; i++) {
+        const f = faces[i];
+        const a = f.w * f.h;
+        if (a > ba) { ba = a; bx = f.cx; by = f.cy; }
+      }
+    }
+    onHumansDetectedJS(count, bx, by, ba);
   }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV, idleModeSV, isAutoArmedSV, isDetectionEnabledSV]);
 
   // === Mode offline-first : queue persistante ===

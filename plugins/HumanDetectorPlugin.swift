@@ -19,7 +19,23 @@
 //  purement interne, le code RN ne bouge pas.
 //
 //  Appel JS (worklet) :
-//      const { count } = detectHumans(frame, { zoneWidthPercent: 0.3 })
+//      const { count, ts, faces } = detectHumans(frame, { zoneWidthPercent: 0.3 })
+//
+//  2026-07-29 — v2 : exposition des bounding box (cf.
+//  CONCEPTION_DECLENCHEMENT_LIGNES.md §1.1). Elles etaient DEJA calculees pour
+//  le filtrage de zone puis jetees ; on les renvoie desormais. Aucun travail
+//  Vision supplementaire, seul le cout de serialisation s'ajoute (<= ~10 petits
+//  dicts a 10 fps : negligeable).
+//
+//    count : INCHANGE — visages dans la zone. Compat onHumansDetectedJS.
+//    ts    : presentation timestamp du buffer, en secondes. Base monotone
+//            propre a la session : seules les DIFFERENCES ont un sens
+//            (estimation de vitesse). Ne pas comparer a Date.now().
+//    faces : TOUS les visages, pas seulement ceux en zone — le tracker doit
+//            voir un coureur approcher AVANT qu'il entre dans la zone, sinon
+//            il n'a aucune vitesse au franchissement de la premiere ligne.
+//            Coordonnees normalisees [0,1] dans le repere image apres rotation
+//            cgOrientation. cx/cy = centre, w/h = taille.
 //
 //  Performance : ~3-5 ms par frame sur iPhone 12+ (face detector plus leger
 //  que human detector). Tourne sur la queue VisionCamera (background).
@@ -51,8 +67,13 @@ public class HumanDetectorPlugin: FrameProcessorPlugin {
     guard CMSampleBufferIsValid(frame.buffer),
           let pixelBuffer = CMSampleBufferGetImageBuffer(frame.buffer)
     else {
-      return ["count": 0]
+      return ["count": 0, "ts": 0.0, "faces": [[String: Any]]()]
     }
+
+    // Horloge du buffer, pas l'horloge murale : monotone, sans gigue de
+    // dispatch. Le tracker n'en utilise que les differences.
+    let pts = CMSampleBufferGetPresentationTimeStamp(frame.buffer)
+    let ts = CMTimeGetSeconds(pts)
 
     let orientation = cgOrientation(from: frame.orientation)
     let handler = VNImageRequestHandler(
@@ -89,6 +110,20 @@ public class HumanDetectorPlugin: FrameProcessorPlugin {
         return c >= zMin && c <= zMax
       }.count
 
+      // v2 : TOUS les visages, zone comprise ou non (cf. en-tete). Vision
+      // renvoie ses bbox avec l'origine en BAS a gauche ; on bascule cy en
+      // repere image (origine en haut) pour coller aux conventions JS/RN et
+      // eviter une inversion silencieuse cote tracker.
+      let faces: [[String: Any]] = results.map { obs in
+        let b = obs.boundingBox
+        return [
+          "cx": Double(b.midX),
+          "cy": 1.0 - Double(b.midY),
+          "w":  Double(b.width),
+          "h":  Double(b.height),
+        ]
+      }
+
       // DEBUG : log enrichi aux transitions du count. Dump des DEUX axes
       // par bbox pour pouvoir trancher quel axe matche la bande visuelle
       // sur chaque lentille. orient = hint VisionCamera applique pour la
@@ -103,10 +138,10 @@ public class HumanDetectorPlugin: FrameProcessorPlugin {
         lastLoggedFiltered = filtered
       }
 
-      return ["count": filtered]
+      return ["count": filtered, "ts": ts, "faces": faces]
     } catch {
       NSLog("[FaceDetector] perform failed: \(error.localizedDescription)")
-      return ["count": 0]
+      return ["count": 0, "ts": ts, "faces": [[String: Any]]()]
     }
   }
 
