@@ -237,8 +237,13 @@ export function framingVerdict(measuredDistance, targetDistance, {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Arbitre entre nombre de photos (plus loin = mieux) et taille du visage
- *  pour la reconnaissance (plus près = mieux). À recalibrer une fois
- *  l'orientation du champ tranchée sur device. */
+ *  pour la reconnaissance (plus près = mieux).
+ *
+ *  ⚠️ Ces valeurs sont des cibles THÉORIQUES issues du §1.6. Le terrain
+ *  (2026-07-29) rapporte des passages à ~2 m — bien en deçà. Le bénévole doit
+ *  donc pouvoir choisir la distance réelle : un repère placé à 3,5 m sur un
+ *  chemin qui passe à 2 m n'aide personne. La cible sert de valeur de départ,
+ *  pas de contrainte. */
 export const TARGET_DISTANCE_M = {
   marche: 2.5,
   route: 3.5,
@@ -246,8 +251,12 @@ export const TARGET_DISTANCE_M = {
   cross: 4.5,
   triathlon: 4.0,
   velo: 6.0,
-  default: 3.5,
+  default: 3.0,
 };
+
+/** Choix offerts au bénévole. Couvre la plage de pose réelle constatée (2-6 m)
+ *  sans donner l'illusion d'un réglage continu. */
+export const DISTANCE_CHOICES_M = [2, 2.5, 3, 3.5, 4, 5];
 
 /** Présets plutôt que saisie libre : d ∝ h, c'est la principale source
  *  d'erreur du dispositif. */

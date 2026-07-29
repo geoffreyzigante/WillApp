@@ -50,14 +50,19 @@ export function useDeviceTilt(enabled = true) {
 
       Accelerometer.setUpdateInterval(UPDATE_MS);
       sub = Accelerometer.addListener(({ x, y, z }) => {
-        // expo-sensors renvoie l'accélération en g, gravité INCLUSE. Appareil
-        // posé => c'est la gravité pure. Le lissage absorbe les secousses de
-        // manipulation pendant le réglage.
+        // CONVENTION — corrigée le 2026-07-29 après test terrain.
         //
-        // Convention : le vecteur mesuré pointe à l'OPPOSÉ de la gravité
-        // (force spécifique). On le renverse pour retrouver « vers le bas ».
-        const g = { x: -x, y: -y, z: -z };
-        const a = attitudeFromGravity(g);
+        // Sur iOS, CMAccelerometerData.acceleration donne DÉJÀ la direction de
+        // la gravité, pas son opposé : appareil à plat écran vers le haut =
+        // (0, 0, -1). On l'utilise donc tel quel.
+        //
+        // La version initiale renversait le vecteur, ce qui inversait le
+        // tangage : un téléphone légèrement incliné vers le sol était
+        // interprété comme visant le ciel, et le point remontait vers le haut
+        // du cadre au lieu de descendre. Symptôme observé sur device.
+        //
+        // Le lissage absorbe les secousses de manipulation pendant le réglage.
+        const a = attitudeFromGravity({ x, y, z });
         const prev = smoothed.current;
         const next = prev
           ? {

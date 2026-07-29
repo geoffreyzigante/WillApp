@@ -98,7 +98,7 @@ import { scorePhotoSafely } from './src/services/qualityScorer';
 // Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
-import { fovFromFormat, TARGET_DISTANCE_M, MOUNT_HEIGHT_M } from './src/services/framingGuide';
+import { fovFromFormat, TARGET_DISTANCE_M, MOUNT_HEIGHT_M, DISTANCE_CHOICES_M } from './src/services/framingGuide';
 import { reduceBursts, sanitizeQualityConfig } from './src/services/qualityReducer';
 import { recordScore, recordBurstReduction, getSummary as getQualitySummary } from './src/services/qualityTelemetry';
 import {
@@ -800,10 +800,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // vivre les 4-6 h d'un event.
   const { pitch: framingPitch, roll: framingRoll, available: tiltAvailable } =
     useDeviceTilt(framingMode);
-  // La cible decoule de la discipline de l'event : l'organisateur ne regle
-  // rien, le benevole encore moins.
-  const framingTarget =
-    TARGET_DISTANCE_M[eventConfig.camera?.discipline] ?? TARGET_DISTANCE_M.default;
+  // Distance visee : la discipline donne la valeur de DEPART, le benevole
+  // ajuste. Le terrain rapporte des passages a ~2 m, donc une cible figee
+  // serait un repere pose la ou personne ne passe.
+  const [framingDistance, setFramingDistance] = useState(
+    TARGET_DISTANCE_M[eventConfig.camera?.discipline] ?? TARGET_DISTANCE_M.default,
+  );
 
   // Course + km posté
   const [selectedRace, setSelectedRace] = useState(null); // null = "Toutes les courses"
@@ -2761,7 +2763,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           les deux doivent rester alignes, sinon le point ment. */}
       {framingMode && tiltAvailable && (
         <FramingGuide
-          targetDistance={framingTarget}
+          targetDistance={framingDistance}
           height={mountHeight}
           pitch={framingPitch}
           roll={framingRoll}
@@ -2771,44 +2773,86 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         />
       )}
 
-      {/* Selecteur de hauteur de pose : presets uniquement. La distance est
-          proportionnelle a la hauteur, c'est la principale source d'erreur —
-          une saisie libre inviterait a une fausse precision. */}
+      {/* Reglages du guide : DANS la preview, en haut.
+          Sous la preview ils chevauchaient le bouton Stop et les selecteurs
+          course/poste (constate sur device 2026-07-29). En haut, la seule
+          collision possible est le bandeau de luminosite, qui est transitoire.
+          Deux reglages seulement : la hauteur (dont la distance depend
+          proportionnellement) et la distance visee — le terrain rapporte des
+          passages a 2 m, donc une cible figee a 3,5 m serait inutilisable. */}
       {framingMode && tiltAvailable && (
         <View
+          pointerEvents="box-none"
           style={{
-            position: 'absolute', left: PREVIEW_MARGIN_H, right: PREVIEW_MARGIN_H,
-            top: CAMERA_TOP + previewH + 12,
-            flexDirection: 'row', gap: 8, zIndex: 12,
+            position: 'absolute',
+            top: CAMERA_TOP + 10,
+            left: PREVIEW_MARGIN_H + 8, right: PREVIEW_MARGIN_H + 8,
+            zIndex: 14, gap: 6,
           }}
         >
-          {[
-            ['Au sol', MOUNT_HEIGHT_M.sol],
-            ['Barrière', MOUNT_HEIGHT_M.barriere],
-            ['Trépied', MOUNT_HEIGHT_M.trepied],
-          ].map(([label, h]) => {
-            const active = Math.abs(mountHeight - h) < 1e-6;
-            return (
-              <TouchableOpacity
-                key={label}
-                onPress={() => setMountHeight(h)}
-                activeOpacity={0.7}
-                style={{
-                  flex: 1, paddingVertical: 10, borderRadius: 10,
-                  alignItems: 'center',
-                  backgroundColor: active ? '#3DDC84' : 'rgba(255,255,255,0.12)',
-                }}
-              >
-                <Text style={{
-                  color: active ? '#0b0b0b' : '#fff',
-                  fontSize: 13, fontWeight: active ? '700' : '400',
-                  fontFamily: 'Montserrat',
-                }}>
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {[
+              ['Au sol', MOUNT_HEIGHT_M.sol],
+              ['Barrière', MOUNT_HEIGHT_M.barriere],
+              ['Trépied', MOUNT_HEIGHT_M.trepied],
+            ].map(([label, h]) => {
+              const active = Math.abs(mountHeight - h) < 1e-6;
+              return (
+                <TouchableOpacity
+                  key={label}
+                  onPress={() => setMountHeight(h)}
+                  activeOpacity={0.7}
+                  style={{
+                    flex: 1, paddingVertical: 7, borderRadius: 8,
+                    alignItems: 'center',
+                    backgroundColor: active ? '#3DDC84' : 'rgba(0,0,0,0.55)',
+                  }}
+                >
+                  <Text style={{
+                    color: active ? '#0b0b0b' : '#fff',
+                    fontSize: 12, fontWeight: active ? '700' : '400',
+                    fontFamily: 'Montserrat',
+                  }}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {DISTANCE_CHOICES_M.map((d) => {
+              const active = Math.abs(framingDistance - d) < 1e-6;
+              return (
+                <TouchableOpacity
+                  key={d}
+                  onPress={() => setFramingDistance(d)}
+                  activeOpacity={0.7}
+                  style={{
+                    flex: 1, paddingVertical: 7, borderRadius: 8,
+                    alignItems: 'center',
+                    backgroundColor: active ? '#3DDC84' : 'rgba(0,0,0,0.55)',
+                  }}
+                >
+                  <Text style={{
+                    color: active ? '#0b0b0b' : '#fff',
+                    fontSize: 12, fontWeight: active ? '700' : '400',
+                    fontFamily: 'Montserrat',
+                  }}>
+                    {String(d).replace('.', ',')}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {/* Tangage en clair : permet de verifier le capteur sans rebuild.
+              Telephone a plat, ecran vers le haut => doit afficher ~90. */}
+          <Text style={{
+            color: 'rgba(255,255,255,0.85)', fontSize: 11,
+            fontFamily: 'Montserrat',
+            textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3,
+          }}>
+            {`inclinaison ${Math.round(framingPitch * 180 / Math.PI)}°`}
+          </Text>
         </View>
       )}
 

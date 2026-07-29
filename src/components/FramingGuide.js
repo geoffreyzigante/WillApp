@@ -82,9 +82,13 @@ export default function FramingGuide({
             />
           </View>
           {showLabel && (
+            // width fixe + numberOfLines : sans ça le Text se retrouve
+            // contraint par le parent et casse en « 3 » / « m » sur deux
+            // lignes (constaté sur device le 2026-07-29).
             <Text
+              numberOfLines={1}
               style={{
-                position: 'absolute', left: DOT + 6, top: 1,
+                position: 'absolute', left: DOT + 6, top: 1, width: 64,
                 color: COLOR, fontSize: 12, fontWeight: '700',
                 textShadowColor: 'rgba(0,0,0,0.7)', textShadowRadius: 3,
               }}
