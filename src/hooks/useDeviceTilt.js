@@ -12,7 +12,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Accelerometer } from 'expo-sensors';
-import { attitudeFromGravity } from './framingGuide';
+// framingGuide vit dans src/services/ (module de calcul pur, partage avec
+// FramingGuide.js). Ce hook est dans src/hooks/ : chemin remontant obligatoire.
+import { attitudeFromGravity } from '../services/framingGuide';
 
 const UPDATE_MS = 100;   // 10 Hz : largement suffisant pour un appareil posé
 const ALPHA = 0.15;      // lissage EMA — plus bas = plus stable, plus lent
