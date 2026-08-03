@@ -95,6 +95,8 @@ import {
   retryDelayMs,
 } from './src/constants/queue';
 import { scorePhotoSafely } from './src/services/qualityScorer';
+// Declenchement par lignes (cf. CONCEPTION_LIGNES_NOTE.md).
+import { createLineTrigger } from './src/services/lineTrigger';
 // Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
@@ -460,6 +462,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // captureZoneWidthPercent = bande verticale capture (filtre bbox face).
     camera: {
       captureZoneWidthPercent: 30,
+      // Declenchement par lignes. Les DEUX a false = comportement historique
+      // (mitraillage + tri). Bascule et rollback par un PUT /config, sans
+      // rebuild : linesShadow observe, linesEnabled bascule.
+      linesShadow: false,
+      linesEnabled: false,
       shutterSpeed: 1000, // legacy, non utilise depuis 2026-05
       shutterSpeedMaxBright: 0,
       shutterSpeedMaxDim: 500,
@@ -939,8 +946,30 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     return blocked;
   }
 
+  // ── Declenchement par lignes ────────────────────────────────────────────
+  // Refs (et non state) : onHumansDetectedJS est fige a la creation par
+  // createRunOnJS (deps []), il ne verrait jamais un state qui change.
+  const lineCfgRef = useRef({ enabled: false, shadow: false });
+  const lineTriggerRef = useRef(null);
+  if (lineTriggerRef.current === null) lineTriggerRef.current = createLineTrigger();
+
+  // Programme la capture decidee par le tracker. `delayMs` porte l'anticipation
+  // (franchissement prevu moins la latence systeme) : on le respecte tel quel.
+  const scheduleLineCapture = (action) => {
+    const fire = () => {
+      if (!isMountedRef.current || !isAutoArmedRef.current) return;
+      if (!isDetectionEnabledRef.current) return;
+      // burstTs = instant reel du tir, idx 0 : chaque capture est unitaire.
+      // Le cron serveur regroupe par ecarts <= 30 s, donc trois captures
+      // espacees de ~150 ms restent un seul passage.
+      captureOne({ burstTs: Date.now(), idx: 0, lineTriggered: true });
+    };
+    if (action.delayMs > 0) setTimeout(fire, action.delayMs);
+    else fire();
+  };
+
   const onHumansDetectedJS = useMemo(
-    () => Worklets.createRunOnJS((count, bigX, bigY, bigArea) => {
+    () => Worklets.createRunOnJS((count, bigX, bigY, bigArea, flat) => {
       // Met à jour faceInZoneRef à CHAQUE frame analysée (count>=1 OU 0) et
       // incrémente frameSeqRef pour que la boucle puisse détecter l'arrivée
       // d'une analyse fraîche post-capture. Si armé + visage en zone +
@@ -968,6 +997,37 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         }, IDLE_AFTER_MS);
       }
       if (!isAutoArmedRef.current) return;
+
+      // ── Declenchement par lignes ──────────────────────────────────────
+      // Le tracker recoit TOUS les visages (pas seulement ceux en zone) : il
+      // doit voir un coureur approcher pour avoir une vitesse au moment du
+      // franchissement.
+      const lineCfg = lineCfgRef.current;
+      if ((lineCfg.enabled || lineCfg.shadow) && flat && lineTriggerRef.current) {
+        let actions = [];
+        try {
+          actions = lineTriggerRef.current.ingest(flat);
+        } catch (e) {
+          // Le tracker ne doit jamais faire tomber la capture : en cas de
+          // pepin on retombe silencieusement sur l'ancien pipeline.
+          console.warn('[lines] ingest error', e?.message || e);
+        }
+        for (let i = 0; i < actions.length; i++) {
+          const a = actions[i];
+          if (lineCfg.enabled) {
+            scheduleLineCapture(a);
+          } else {
+            console.log(`[lines-shadow] would-fire reason=${a.reason} `
+              + `delay=${Math.round(a.delayMs)}ms track=${a.trackId} `
+              + `credited=${a.creditedIds.join('+')} lines=${a.lines.join('+')}`);
+          }
+        }
+      }
+      // Lignes actives : l'ancien pipeline est debranche. La garde statique
+      // devient sans objet — une ligne consommee l'est definitivement, ce qui
+      // borne la scene immobile par construction.
+      if (lineCfg.enabled) return;
+
       if (!faceInZoneRef.current) return;
       if (burstLoopRef.current) return;
       // Scene immobile : on ne relance pas. Kill switch /config
@@ -1160,6 +1220,27 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     const pct = eventConfig.camera?.captureZoneWidthPercent ?? 30;
     zoneSV.value = Math.max(0.1, Math.min(1, pct / 100));
   }, [eventConfig.camera?.captureZoneWidthPercent, zoneSV]);
+
+  // Sync des flags et de la zone vers le tracker de lignes. Les seuils
+  // (ecartement, latence, cooldown...) restent aux defauts du module tant
+  // qu'aucune valeur n'est poussee par /config.
+  useEffect(() => {
+    const cam = eventConfig.camera || {};
+    lineCfgRef.current = {
+      enabled: cam.linesEnabled === true,
+      shadow: cam.linesShadow === true,
+    };
+    const pct = cam.captureZoneWidthPercent ?? 30;
+    if (lineTriggerRef.current) {
+      lineTriggerRef.current.setZone(Math.max(0.1, Math.min(1, pct / 100)));
+    }
+    console.log('[lines] enabled=', lineCfgRef.current.enabled,
+      'shadow=', lineCfgRef.current.shadow, '(from /config)');
+  }, [
+    eventConfig.camera?.linesEnabled,
+    eventConfig.camera?.linesShadow,
+    eventConfig.camera?.captureZoneWidthPercent,
+  ]);
 
   // Axe de filtrage detection wide 1x : hypothese theorique midX (Vision
   // avec frame.orientation=.right rotate l'image en portrait -> midX =
@@ -1708,6 +1789,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         isRaw: !!r.isRaw,
         race: r.race,
         km: r.km,
+        // Declenchement par lignes : ce qui est capture est ce qui est envoye.
+        // upload_kept pose des la creation -> le reducer, qui ne traite que les
+        // items non decides, devient un no-op naturel (pas de debranchement).
+        // Le scorer est saute : le quality_score utilise par le serveur est
+        // calcule cote worker (processPhotoAsync), pas ici.
+        ...(r.lineTriggered ? { lineTriggered: true, upload_kept: true } : {}),
       });
     }
     const next = [...queueRef.current, ...newQueueItems];
@@ -1877,7 +1964,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         // ÉCHEC = pas un drop : score_failed=true signale au reducer
         // "score inconnu" et la photo reste candidate au top-N par defaut
         // (failsafe zero-perte).
-        if (!item.qualityScore && !item.qualityScoreFailed) {
+        if (!item.qualityScore && !item.qualityScoreFailed && !item.lineTriggered) {
           const scoreSrcPath = item.localUri.startsWith('file://')
             ? item.localUri.slice(7)
             : item.localUri;
@@ -2568,6 +2655,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // est managee par captureBurstLoop. setIsShooting est centralise dans
   // updateInFlight (true ssi >=1 capture en vol).
   async function captureOne(burstCtx = null) {
+    // lineTriggered : capture decidee par le tracker de lignes. L'item
+    // sera pose upload_kept=true et sautera le scorer (cf. enqueue).
+    const lineTriggered = burstCtx?.lineTriggered === true;
     if (!cameraRef.current || !isMountedRef.current) return;
     if (!isDetectionEnabledRef.current) return;
 
@@ -2621,6 +2711,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         // selectedKm = null -> non posté ; 0 = "Départ" ; 'arrivee' = "Arrivée" ; N = km N.
         km: selectedKmRef.current !== null ? String(selectedKmRef.current) : null,
         exif,
+        lineTriggered,
       }]);
       capturedCountRef.current += 1;
       if (isMountedRef.current) setCapturedCount(capturedCountRef.current);
