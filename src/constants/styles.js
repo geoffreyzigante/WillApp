@@ -9,7 +9,7 @@
 import { StyleSheet, Dimensions } from 'react-native';
 import { C } from './colors';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 export const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F5F3FF' },
@@ -83,7 +83,8 @@ export const s = StyleSheet.create({
   navLabel: { fontSize: 12, color: C.text, marginTop: 2 },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: C.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 40 },
+  // maxHeight garde la safe area top libre (status bar / notch) même clavier ouvert.
+  modalSheet: { backgroundColor: C.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 40, maxHeight: SCREEN_H * 0.9 },
   modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#D0CCE3', alignSelf: 'center', marginBottom: 18 },
   modalTitle: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 22, fontWeight: '700', color: C.text, textAlign: 'center', marginBottom: 6 },
   modalSub: { color: C.textSoft, textAlign: 'center', marginBottom: 18, fontSize: 13 },

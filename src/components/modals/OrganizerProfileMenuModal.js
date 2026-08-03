@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
+  Modal, View, Text, TouchableOpacity, TextInput, ScrollView, SafeAreaView,
   KeyboardAvoidingView, ActivityIndicator, Alert, Platform, StyleSheet,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -69,9 +69,10 @@ export function OrganizerProfileMenuModal({ visible, onClose, organizerSession, 
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      {/* Backdrop frosted glass (alignement UX modaux auth photographe/orga). */}
+      <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+      <SafeAreaView style={{ flex: 1 }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        {/* Backdrop frosted glass (alignement UX modaux auth photographe/orga). */}
-        <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
         <TouchableOpacity activeOpacity={1} style={[s.modalBackdrop, { backgroundColor: 'transparent' }]} onPress={onClose}>
           <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
             <TouchableOpacity onPress={onClose} hitSlop={20}>
@@ -186,6 +187,7 @@ export function OrganizerProfileMenuModal({ visible, onClose, organizerSession, 
           </TouchableOpacity>
         </TouchableOpacity>
       </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }

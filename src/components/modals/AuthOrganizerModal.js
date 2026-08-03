@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, TextInput,
+  Modal, View, Text, TouchableOpacity, TextInput, SafeAreaView,
   KeyboardAvoidingView, Animated, ActivityIndicator, Platform, StyleSheet,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -71,10 +71,11 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={{ flex: 1 }}>
-          <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
-          <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
+      <View style={{ flex: 1 }}>
+        <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+        <SafeAreaView style={{ flex: 1 }}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
             <Animated.View style={{ transform: [{ translateY: sheetTranslate }] }}>
             <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
               <View {...handlePanHandlers} style={{ paddingVertical: 6, alignItems: 'center' }}>
@@ -120,9 +121,10 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
             </TouchableOpacity>
             </TouchableOpacity>
             </Animated.View>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </View>
     </Modal>
   );
 }
