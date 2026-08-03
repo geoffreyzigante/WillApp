@@ -15,10 +15,16 @@ import { RefreshableScrollView } from '../components/loaders';
 import { C } from '../constants/colors';
 import { s } from '../constants/styles';
 import { isUpcoming } from '../utils/format';
+import { API_URL } from '../constants/api';
 
 export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, cartTotal = 0, onOpenPanier, headerH = 0 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  // Event resolu par code exact via /public-events/{code}. Couvre les events
+  // non listes (listed:false) qui ne sortent JAMAIS de /public-events : sans
+  // ce chemin, un event prive est inatteignable depuis l'app coureur.
+  // Meme motif que LoginModal (debounce 250 ms + guard cleanup).
+  const [searchExtra, setSearchExtra] = useState(null);
   // Indicateur violet qui glisse entre les 3 pills. Mesure une fois la largeur
   // du conteneur (- padding), divise par 3 = largeur d un slot. Spring sur
   // translateX synchronise avec le state tab.
@@ -59,11 +65,42 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
     if (tab === 'follows') return follows.includes(e.code);
     return true;
   });
-  const q = searchQuery.trim().toLowerCase();
+  // Normalise pour comparaison accent/casse-insensitive (cf. LoginModal).
+  const normalize = (v) => (v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const q = normalize(searchQuery.trim());
   const filtered = (q
-    ? tabFiltered.filter(e => (e.name || '').toLowerCase().includes(q))
+    ? (() => {
+        const base = tabFiltered.filter(e =>
+          normalize(e.name).includes(q)
+          || normalize(e.location).includes(q)
+          || normalize(e.code).includes(q)
+        );
+        // searchExtra bypasse le filtre d'onglet (a venir / passes / favoris) :
+        // saisir un code exact est une intention explicite, elle prime sur
+        // l'onglet courant. Unshift = toujours en tete de liste.
+        if (searchExtra && searchExtra.code && !base.some(e => e.code === searchExtra.code)) {
+          base.unshift(searchExtra);
+        }
+        return base;
+      })()
     : tabFiltered
   ).slice().sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
+  // Resolution on-demand du code exact. Ne tire que si la saisie ressemble
+  // a un slug et qu'aucun event deja charge ne porte ce code.
+  useEffect(() => {
+    const raw = searchQuery.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!raw || !/^[a-z0-9-]+$/.test(raw)) { setSearchExtra(null); return; }
+    if (events.some(e => e.code === raw)) { setSearchExtra(null); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetch(`${API_URL}/public-events/${encodeURIComponent(raw)}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(ev => { if (!cancelled) setSearchExtra(ev && ev.code ? ev : null); })
+        .catch(() => { if (!cancelled) setSearchExtra(null); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [searchQuery, events]);
+
   const scrollRef = useRef(null);
   const [showBackTop, setShowBackTop] = useState(false);
   const backTopOpacity = useRef(new Animated.Value(0)).current;
