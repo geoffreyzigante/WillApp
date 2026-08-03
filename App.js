@@ -952,6 +952,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const lineCfgRef = useRef({ enabled: false, shadow: false });
   const lineTriggerRef = useRef(null);
   if (lineTriggerRef.current === null) lineTriggerRef.current = createLineTrigger();
+  // Signature JSON des seuils /config appliques au tracker. Sert a ne le
+  // recreer QUE quand un seuil change reellement (le refetch /config toutes
+  // les 5 min recree l'objet camera sans changer les valeurs).
+  const lineParamsSigRef = useRef('');
 
   // Programme la capture decidee par le tracker. `delayMs` porte l'anticipation
   // (franchissement prevu moins la latence systeme) : on le respecte tel quel.
@@ -1221,26 +1225,52 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     zoneSV.value = Math.max(0.1, Math.min(1, pct / 100));
   }, [eventConfig.camera?.captureZoneWidthPercent, zoneSV]);
 
-  // Sync des flags et de la zone vers le tracker de lignes. Les seuils
-  // (ecartement, latence, cooldown...) restent aux defauts du module tant
-  // qu'aucune valeur n'est poussee par /config.
+  // Sync flags + zone + seuils du tracker depuis /config (camera.line*).
+  // Tout est tunable a chaud, sans rebuild. Le tracker est RECREE quand un
+  // seuil change : les tracks en cours sont perdus, sans consequence entre
+  // deux passages (changer la config en plein passage est un geste d'admin,
+  // pas de terrain). Cle absente -> defaut du module (lineTrigger.js).
+  // ATTENTION worker : mergeWithDefaults ne sert que les cles presentes dans
+  // defaultGlobalConfig — toute nouvelle cle camera.* doit y etre declaree.
   useEffect(() => {
     const cam = eventConfig.camera || {};
     lineCfgRef.current = {
       enabled: cam.linesEnabled === true,
       shadow: cam.linesShadow === true,
     };
-    const pct = cam.captureZoneWidthPercent ?? 30;
-    if (lineTriggerRef.current) {
-      lineTriggerRef.current.setZone(Math.max(0.1, Math.min(1, pct / 100)));
+    const MAP = {
+      lineOffsets: 'lineOffsets',
+      lineLatencyMs: 'latencyMs',
+      lineHorizonMs: 'horizonMs',
+      lineCooldownMs: 'cooldownMs',
+      lineGateFactor: 'gateFactor',
+      lineGateFloor: 'gateFloor',
+      lineGateBootstrapFactor: 'gateBootstrapFactor',
+      lineCoastMs: 'coastMs',
+      lineResurrectMs: 'resurrectMs',
+      lineResurrectStaticMs: 'resurrectStaticMs',
+      lineCreditMinArea: 'creditMinArea',
+      lineMaxPer10s: 'maxPer10s',
+      lineStaticV: 'staticV',
+      lineStaticMs: 'staticMs',
+      lineVelAlpha: 'velAlpha',
+      lineMaxFaces: 'maxFaces',
+    };
+    const params = {};
+    for (const k of Object.keys(MAP)) {
+      if (cam[k] !== undefined && cam[k] !== null) params[MAP[k]] = cam[k];
     }
+    const sig = JSON.stringify(params);
+    if (sig !== lineParamsSigRef.current) {
+      lineParamsSigRef.current = sig;
+      lineTriggerRef.current = createLineTrigger(params);
+      console.log('[lines] tracker recree, params /config =', sig);
+    }
+    const pct = cam.captureZoneWidthPercent ?? 30;
+    lineTriggerRef.current.setZone(Math.max(0.1, Math.min(1, pct / 100)));
     console.log('[lines] enabled=', lineCfgRef.current.enabled,
       'shadow=', lineCfgRef.current.shadow, '(from /config)');
-  }, [
-    eventConfig.camera?.linesEnabled,
-    eventConfig.camera?.linesShadow,
-    eventConfig.camera?.captureZoneWidthPercent,
-  ]);
+  }, [eventConfig.camera]);
 
   // Axe de filtrage detection wide 1x : hypothese theorique midX (Vision
   // avec frame.orientation=.right rotate l'image en portrait -> midX =
