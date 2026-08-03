@@ -9,9 +9,9 @@
 //
 // Sheet slide-in + drag-to-dismiss via useDismissibleSheet hook.
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
+  Modal, View, Text, TouchableOpacity, TextInput, ScrollView, SafeAreaView,
   KeyboardAvoidingView, Animated, ActivityIndicator, Alert, Platform, StyleSheet,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -52,6 +52,12 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   // matche un code exact (typiquement `test` permanent). Bypass le filtre
   // isUpcoming : intention explicite = code exact.
   const [searchExtra, setSearchExtra] = useState(null);
+  // Chemin "code direct", independant de la liste (modele du site). L'event
+  // resolu par code y est stocke a part : il n'a aucune raison de figurer dans
+  // upcoming, puisque justement il n'est pas liste.
+  const [manualEvent, setManualEvent] = useState(null);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState('');
 
   useEffect(() => {
     if (visible) {
@@ -60,8 +66,24 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
       setPinError('');
       setSearchQuery(''); setCodeInput('');
       setSearchExtra(null);
+      setManualEvent(null); setCodeLoading(false); setCodeError('');
     }
   }, [visible]);
+
+  // Tri ASC strict (decision user 2026-06-04, toutes les listes d events).
+  //
+  // Declare AVANT l'effet de fetch ci-dessous, qui le lit et l'a en dependance.
+  // useMemo est obligatoire : .filter().sort() renvoie un NOUVEAU tableau a
+  // chaque rendu, donc sans memoisation la dependance change systematiquement.
+  // L'effet se relancait alors a chaque rendu et, comme il appelle
+  // setSearchExtra avec un objet frais, il se re-declenchait lui-meme -> un
+  // fetch toutes les 250 ms sans jamais se stabiliser.
+  const upcoming = useMemo(
+    () => events
+      .filter(e => isUpcoming(e.event_date, e.event_date_end))
+      .sort((a, b) => (a.event_date || '').localeCompare(b.event_date || '')),
+    [events],
+  );
 
   // Fetch on-demand par code exact pour reach les events non listes.
   // Debounce 250ms + guard cleanup pour eviter setState post-unmount.
@@ -78,11 +100,6 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
   }, [searchQuery, upcoming]);
-
-  // Tri ASC strict (decision user 2026-06-04, toutes les listes d events).
-  const upcoming = events
-    .filter(e => isUpcoming(e.event_date, e.event_date_end))
-    .sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
 
   // Normalise pour comparaison accent/case-insensitive.
   const normalize = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -195,13 +212,14 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={{ flex: 1 }}>
-          {/* Backdrop : iOS systemThinMaterialDark (givre frostal natif,
-              plus leger qu'un Gaussian blur dense). Fade-in herite du
-              animationType="fade" du Modal. */}
-          <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
-          <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
+      <View style={{ flex: 1 }}>
+        {/* Backdrop : iOS systemThinMaterialDark (givre frostal natif,
+            plus leger qu'un Gaussian blur dense). Fade-in herite du
+            animationType="fade" du Modal. */}
+        <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+        <SafeAreaView style={{ flex: 1 }}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
             <Animated.View style={{ transform: [{ translateY: sheetTranslate }] }}>
             <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
               <View {...handlePanHandlers} style={{ paddingVertical: 6, alignItems: 'center' }}>
@@ -221,23 +239,112 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                     selectionne (la liste se reduit alors a l event actif
                     et le PIN a la main, search inutile). */}
                 {!code && (
-                  <TextInput
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    placeholder="Rechercher…"
-                    placeholderTextColor={C.textSoft}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={{
-                      backgroundColor: '#faf9ff',
-                      borderRadius: 12,
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      fontSize: 14,
-                      color: C.text,
-                      marginBottom: 10,
-                    }}
-                  />
+                  <View style={{
+                    borderWidth: 1,
+                    borderColor: C.pinkPill,
+                    borderRadius: 14,
+                    backgroundColor: '#faf9ff',
+                    marginBottom: 10,
+                    overflow: 'hidden',
+                  }}>
+                    <TextInput
+                      value={searchQuery}
+                      onChangeText={setSearchQuery}
+                      placeholder="Rechercher un event"
+                      placeholderTextColor={C.textSoft}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      style={{
+                        paddingHorizontal: 14,
+                        paddingVertical: 11,
+                        fontSize: 14,
+                        color: C.text,
+                      }}
+                    />
+                    <View style={{ height: 1, backgroundColor: 'rgba(0,0,0,0.06)' }} />
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <TextInput
+                        value={codeInput}
+                        onChangeText={(v) => { setCodeInput(v); if (codeError) setCodeError(''); }}
+                        placeholder="Code event"
+                        placeholderTextColor={C.textSoft}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="go"
+                        onSubmitEditing={() => { const raw = codeInput.trim().toLowerCase().replace(/\s+/g, '-');
+                          if (!raw || codeLoading) return;
+                          setCodeError('');
+                          setCodeLoading(true);
+                          // Meme endpoint que la page /event/{code} du site :
+                          // il ignore `listed`, seul active=true est requis,
+                          // donc il atteint les events masques.
+                          fetch(`${API_URL}/public-events/${encodeURIComponent(raw)}`)
+                            .then(r => (r.ok ? r.json() : null))
+                            .then(ev => {
+                              if (ev && ev.code) {
+                                setManualEvent(ev);
+                                setCode(ev.code);
+                              } else {
+                                setCodeError('Aucun événement actif avec ce code.');
+                              }
+                            })
+                            .catch(() => setCodeError('Connexion impossible. Vérifie ton réseau.'))
+                            .finally(() => setCodeLoading(false)); }}
+                        style={{
+                          flex: 1,
+                          paddingHorizontal: 14,
+                          paddingVertical: 11,
+                          fontSize: 14,
+                          color: C.text,
+                        }}
+                      />
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        disabled={!codeInput.trim() || codeLoading}
+                        onPress={() => {
+                          const raw = codeInput.trim().toLowerCase().replace(/\s+/g, '-');
+                          if (!raw || codeLoading) return;
+                          setCodeError('');
+                          setCodeLoading(true);
+                          // Meme endpoint que la page /event/{code} du site :
+                          // il ignore `listed`, seul active=true est requis,
+                          // donc il atteint les events masques.
+                          fetch(`${API_URL}/public-events/${encodeURIComponent(raw)}`)
+                            .then(r => (r.ok ? r.json() : null))
+                            .then(ev => {
+                              if (ev && ev.code) {
+                                setManualEvent(ev);
+                                setCode(ev.code);
+                              } else {
+                                setCodeError('Aucun événement actif avec ce code.');
+                              }
+                            })
+                            .catch(() => setCodeError('Connexion impossible. Vérifie ton réseau.'))
+                            .finally(() => setCodeLoading(false));
+                        }}
+                        style={{
+                          paddingHorizontal: 16,
+                          paddingVertical: 11,
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Text style={{
+                          color: codeInput.trim() ? C.pinkPill : C.textSoft,
+                          fontSize: 14, fontWeight: '700',
+                        }}>
+                          {codeLoading ? '…' : 'Ouvrir'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    {!!codeError && (
+                      <Text style={{
+                        paddingHorizontal: 14, paddingBottom: 10,
+                        fontSize: 12, color: '#D6455B',
+                      }}>
+                        {codeError}
+                      </Text>
+                    )}
+                  </View>
                 )}
                 <ScrollView style={{ maxHeight: 230, marginBottom: 12 }}>
                   {upcomingSearched.length === 0 && (
@@ -249,7 +356,12 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                       </Text>
                     </View>
                   )}
-                  {(code ? upcomingSearched.filter(e => e.code === code) : upcomingSearched).map(e => {
+                  {(code
+                      ? (upcomingSearched.filter(e => e.code === code).length
+                          ? upcomingSearched.filter(e => e.code === code)
+                          : (manualEvent && manualEvent.code === code ? [manualEvent] : []))
+                      : upcomingSearched
+                    ).map(e => {
                     const active = code === e.code;
                     return (
                       <TouchableOpacity
@@ -287,63 +399,6 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                     liste + search, le code entry est un fallback pour les
                     events non listes (test permanent, code oral orga...).
                     Masque quand un code est deja selectionne. */}
-                {!code && (
-                  <View style={{
-                    marginTop: 4, marginBottom: 12,
-                    paddingTop: 14,
-                    borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.06)',
-                  }}>
-                    <Text style={{
-                      fontSize: 11, fontWeight: '700', color: C.textSoft,
-                      letterSpacing: 0.5, textTransform: 'uppercase',
-                      marginBottom: 8,
-                    }}>
-                      Ou entre un code event
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      <TextInput
-                        value={codeInput}
-                        onChangeText={setCodeInput}
-                        placeholder="code-de-ton-event"
-                        placeholderTextColor={C.textSoft}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        style={{
-                          flex: 1,
-                          backgroundColor: '#faf9ff',
-                          borderRadius: 12,
-                          paddingHorizontal: 14,
-                          paddingVertical: 10,
-                          fontSize: 14,
-                          color: C.text,
-                        }}
-                      />
-                      <TouchableOpacity
-                        activeOpacity={0.85}
-                        disabled={!codeInput.trim()}
-                        onPress={() => {
-                          const raw = codeInput.trim().toLowerCase().replace(/\s+/g, '-');
-                          if (!raw) return;
-                          setCode(raw);
-                        }}
-                        style={{
-                          backgroundColor: codeInput.trim() ? C.pinkPill : '#faf9ff',
-                          borderRadius: 12,
-                          paddingHorizontal: 16,
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <Text style={{
-                          color: codeInput.trim() ? '#fff' : C.textSoft,
-                          fontSize: 13, fontWeight: '700',
-                        }}>
-                          Ouvrir
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
                 {code ? (
                   <>
                     <Text style={[formSectionStyle.heading, { marginTop: 0 }]}>Code PIN photographe</Text>
@@ -487,9 +542,10 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
             )}
             </TouchableOpacity>
             </Animated.View>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </View>
     </Modal>
   );
 }
