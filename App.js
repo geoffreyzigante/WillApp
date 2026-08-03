@@ -1239,19 +1239,44 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       axis: 'midX',
     });
     const count = result?.count ?? 0;
-    // v2 du plugin : on reduit les bbox DANS le worklet et on ne fait
-    // traverser que des scalaires. Passer un tableau d'objets worklet -> JS
-    // est couteux et fragile ; seul le plus grand visage sert ici.
+    // v2 du plugin : on reduit les bbox DANS le worklet. Deux sorties :
+    //
+    //   1. 4 scalaires (plus grand visage) — consommes par la garde statique
+    //      legacy. Inchange.
+    //   2. `flat`, tableau PLAT DE NOMBRES [ts, n, cx,cy,w,h, ...] pour le
+    //      tracker de lignes. JAMAIS d'objets ni de tableau d'objets a travers
+    //      la frontiere worklet : couteux et fragile (cf. commentaire d'origine
+    //      ci-dessus, conserve dans l'esprit). Cap a 8 visages, tries par aire
+    //      decroissante, par insertion — un sort() avec comparateur dans un
+    //      worklet est evitable ici.
+    //
+    // `faces` contient TOUS les visages, pas seulement ceux en zone : le
+    // tracker doit voir un coureur approcher AVANT qu'il entre, sinon il n'a
+    // aucune vitesse au franchissement de la premiere ligne. `count`, lui,
+    // reste le compte EN ZONE — les deux ne sont pas interchangeables.
     let bx = -1, by = -1, ba = 0;
+    let flat = null;
     const faces = result?.faces;
-    if (faces) {
+    if (faces && faces.length > 0) {
+      const CAP = 8;
+      const ax = [], ay = [], aw = [], ah = [], aa = [];
       for (let i = 0; i < faces.length; i++) {
         const f = faces[i];
         const a = f.w * f.h;
         if (a > ba) { ba = a; bx = f.cx; by = f.cy; }
+        let pos = aa.length;
+        while (pos > 0 && aa[pos - 1] < a) pos--;
+        if (pos >= CAP) continue;
+        aa.splice(pos, 0, a); ax.splice(pos, 0, f.cx); ay.splice(pos, 0, f.cy);
+        aw.splice(pos, 0, f.w); ah.splice(pos, 0, f.h);
+        if (aa.length > CAP) { aa.pop(); ax.pop(); ay.pop(); aw.pop(); ah.pop(); }
+      }
+      flat = [result?.ts || 0, aa.length];
+      for (let i = 0; i < aa.length; i++) {
+        flat.push(ax[i], ay[i], aw[i], ah[i]);
       }
     }
-    onHumansDetectedJS(count, bx, by, ba);
+    onHumansDetectedJS(count, bx, by, ba, flat);
   }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV, idleModeSV, isAutoArmedSV, isDetectionEnabledSV]);
 
   // === Mode offline-first : queue persistante ===
