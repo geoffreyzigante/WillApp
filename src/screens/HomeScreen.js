@@ -84,7 +84,16 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
         return base;
       })()
     : tabFiltered
-  ).slice().sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
+  ).slice().sort((a, b) => {
+    const da = a.event_date || '';
+    const db = b.event_date || '';
+    // Event sans date ("Date a venir") : toujours en fin de liste. Le tri
+    // lexicographique seul les remonterait en tete ('' < toute date), donc
+    // devant les events reellement programmes. Meme regle que la vitrine.
+    if (!da !== !db) return da ? -1 : 1;
+    if (!da && !db) return (a.name || '').localeCompare(b.name || '');
+    return da.localeCompare(db);
+  });
   // Resolution on-demand du code exact. Ne tire que si la saisie ressemble
   // a un slug et qu'aucun event deja charge ne porte ce code.
   useEffect(() => {
