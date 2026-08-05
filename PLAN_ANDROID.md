@@ -16,9 +16,62 @@ Will est **deux applications dans un binaire** :
 
 Les 35 dépendances sont toutes cross-platform. **Le blocage est entièrement
 dans `plugins/`.** D'où la stratégie : sortir le coureur d'abord, garder les
-bénévoles sur iPhone (ils sont peu nombreux et c'est toi qui choisis leur
-matériel), porter la capture ensuite — une fois le déclenchement par lignes
-validé sur de vrais events.
+bénévoles sur iPhone au démarrage, porter la capture ensuite — une fois le
+déclenchement par lignes validé sur de vrais events.
+
+> **Décision du 2026-08-05 :** les bénévoles restent sur iPhone *au lancement
+> seulement*. Le rôle bénévole sera ouvert aux utilisateurs Android juste
+> après. **Le lot 3 n'est donc pas optionnel : il est engagé, seulement
+> différé.** Cela change la nature du lot 0 — cf. section suivante.
+
+---
+
+## Le vrai risque : une flotte non maîtrisée
+
+Tant que les bénévoles sont sur iPhone, tu choisis le matériel. Dès que
+*tout utilisateur Android* peut devenir bénévole, tu hérites de la
+fragmentation complète du marché — et le déclenchement par lignes repose sur
+un plancher de **150 ms par photo**, mesuré sur iPhone.
+
+Simulation en rejouant `lineTrigger.js` (zone 0.37, config actuelle) :
+
+```
+Vitesse max pour 3 photos (m/s à 4 m)
+cooldown |  k=0.45   k=0.60   k=0.75   k=0.90   k=1.00
+---------+------------------------------------------------
+   150ms |   3.0      4.2 OK   4.4 OK   5.5 OK   5.7 OK
+   200ms |   2.4      2.5      2.9      3.5 OK   4.2 OK
+   250ms |   1.7      2.3      2.6      3.5 OK   3.3 OK
+   300ms |   1.3      1.7      2.2      2.5      2.6
+   400ms |   0.9      1.3      1.5      1.8      2.0
+   500ms |   0.7      1.0      1.3      1.5      1.7
+```
+
+**Au-delà de ~280 ms par photo, aucun réglage ne permet 3 photos sur un
+coureur de route à 3 m/s.** Limite physique : le sujet ne reste pas assez
+longtemps entre les lignes. En dessous, ça se rattrape en écartant les
+lignes (à 200-250 ms : `lineOffsets` ±0.90 au lieu de ±0.75).
+
+### Conséquence : auto-calibration au lieu d'un réglage global
+
+Aujourd'hui `lineOffsets` est une valeur **globale** poussée par `/config`.
+Avec un parc hétérogène, une valeur unique est forcément mauvaise pour une
+partie des appareils.
+
+Proposition — au premier lancement en mode photographe, l'app :
+
+1. mesure sa **latence de capture réelle** (rafale de 5, médiane des écarts) ;
+2. en déduit `lineOffsets` par `k ≈ 2 × cooldown × v_cible / zone`, borné par
+   des min/max venant de `/config` ;
+3. **refuse le rôle bénévole au-delà de 280 ms**, avec un message honnête
+   plutôt qu'une galerie vide le jour de la course.
+
+C'est le principe habituel — le natif mesure, le JS décide — et ça profite
+aussi à iOS : un iPhone 12 et un 16 Pro n'ont pas la même latence, alors
+qu'ils reçoivent aujourd'hui le même réglage.
+
+**Charge estimée : 3-4 jours**, à faire **sur iOS d'abord** (où c'est
+vérifiable contre un comportement connu), avant tout code Android.
 
 ---
 
@@ -35,10 +88,15 @@ cibles réels** :
    de verrouillage de vitesse à 1/1000s — donc du flou sur les coureurs)*
 3. ML Kit tient-il 10 fps en détection de visages sans faire chauffer ?
 
-**Critère de sortie** — un tableau latence × modèle. Un appareil à 400 ms
-n'atteindra **jamais** 3 photos par coureur : il faudrait alors revoir
-l'architecture de capture, pas seulement la porter.
+**Critère de sortie** — un tableau latence × modèle, comparé au seuil de
+280 ms établi ci-dessus.
 
+> ⚠️ **Le rôle bénévole étant ouvert à tous les Android, l'échantillon ne
+> peut pas se limiter à 3 appareils choisis.** Il faut couvrir le milieu de
+> gamme, là où la latence se dégrade. La question n'est plus « nos appareils
+> passent-ils ? » mais **« quelle proportion du parc réel passe, et que
+> fait-on des autres ? »**.
+>
 > C'est le seul lot qui peut invalider le reste du plan. Le faire en premier
 > coûte 3 jours ; le découvrir en semaine 5 en coûte 25.
 
@@ -85,12 +143,14 @@ faciale exige une section dédiée dans le formulaire *Data safety*.
 
 ## LOT 3 — Capture Android
 
-**4 à 7 semaines, sous réserve du GO du lot 0.** Nécessite Kotlin + Camera2.
+**5 à 8 semaines, sous réserve du GO du lot 0.** Nécessite Kotlin + Camera2.
+**Engagé, pas optionnel** (décision du 2026-08-05).
 
 Ordre imposé par les dépendances :
 
 | Étape | Module | Charge | Note |
 |---|---|---|---|
+| 3.0 | **Auto-calibration + garde 280 ms** | 3-4 j | **À faire sur iOS d'abord.** Cf. « flotte non maîtrisée » |
 | 3.1 | `detectHumans` (ML Kit) | 1 sem. | **Bloquant** — rien ne marche sans lui |
 | 3.2 | Validation `lineTrigger` | 3 j | Aucun code à écrire : les 9 tests tournent déjà. On valide sur **traces réelles** |
 | 3.3 | `readExposure` + cap shutter | 1-2 sem. | Le point dur. Charge conditionnée par le lot 0 |
@@ -131,7 +191,8 @@ Semaine 5-11├─ Lot 3 capture (si GO du lot 0)
 | 1 | Compte Play **organisation** ou personnel ? | **Irréversible.** Détermine si tu perds 2 semaines |
 | 2 | Quels appareils cibles ? | Conditionne le lot 0. Sans liste, le spike ne prouve rien |
 | 3 | Photos Android en JPEG : accepté ? | **~2× le poids** à qualité égale → coût R2 et bande passante |
-| 4 | Les bénévoles restent-ils sur iPhone ? | Si oui, le lot 3 devient optionnel et le projet tient en 4 semaines |
+| 4 | ~~Les bénévoles restent-ils sur iPhone ?~~ | ✅ **Tranché** : iPhone au lancement, ouverture à Android juste après. Le lot 3 est engagé |
+| 5 | Que fait-on des appareils sous 280 ms ? | Refus du rôle bénévole, ou mode dégradé assumé à 2 photos ? Décision produit, pas technique |
 
 ---
 
