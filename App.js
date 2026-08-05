@@ -105,6 +105,8 @@ import { scorePhotoSafely } from './src/services/qualityScorer';
 import { reportFrameProcessor, describeCapabilities } from './src/services/capabilities';
 // Declenchement par lignes (cf. CONCEPTION_LIGNES_NOTE.md).
 import { createLineTrigger } from './src/services/lineTrigger';
+// Niveaux de capture : adapte le nombre de lignes au materiel et a la course.
+import { tierFor, createLatencyProbe } from './src/services/captureTier';
 // Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
@@ -475,6 +477,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // rebuild : linesShadow observe, linesEnabled bascule.
       linesShadow: false,
       linesEnabled: false,
+      // Niveaux de capture (1/2/3 = 3/2/1 photos) choisis d apres la latence
+      // mesuree et la discipline. false = lineOffsets global, comportement
+      // actuel. Bascule par PUT /config, sans rebuild.
+      tiersEnabled: false,
       shutterSpeed: 1000, // legacy, non utilise depuis 2026-05
       shutterSpeedMaxBright: 0,
       shutterSpeedMaxDim: 500,
@@ -964,6 +970,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // recreer QUE quand un seuil change reellement (le refetch /config toutes
   // les 5 min recree l'objet camera sans changer les valeurs).
   const lineParamsSigRef = useRef('');
+  // Calibration PASSIVE : on observe la duree des captures reelles au lieu
+  // d imposer une rafale au demarrage. Aucune photo gachee, et la mesure
+  // suit les conditions du moment (throttling thermique, pression disque).
+  const latencyProbeRef = useRef(null);
+  if (latencyProbeRef.current === null) latencyProbeRef.current = createLatencyProbe();
+  const tierRef = useRef(0);
+  // La sonde se remplit pendant les captures : sans ce tick, le niveau serait
+  // calcule une fois (latence inconnue -> niveau 1) et jamais reevalue.
+  // 10 s = large devant la duree d un passage, negligeable en CPU. Le tick
+  // ne tourne pas si le flag est a false.
+  const [tierTick, setTierTick] = useState(0);
 
   // Programme la capture decidee par le tracker. `delayMs` porte l'anticipation
   // (franchissement prevu moins la latence systeme) : on le respecte tel quel.
@@ -1268,6 +1285,21 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     for (const k of Object.keys(MAP)) {
       if (cam[k] !== undefined && cam[k] !== null) params[MAP[k]] = cam[k];
     }
+    // Niveaux de capture : le niveau choisit lineOffsets et ECRASE la valeur
+    // globale. Un niveau n est qu un tableau de longueur differente — le
+    // tracker n a aucune notion de "niveau", il voit juste 1, 2 ou 3 lignes.
+    // Flag a false -> lineOffsets global, comportement inchange.
+    if (cam.tiersEnabled === true) {
+      const latency = latencyProbeRef.current?.median();
+      const t = tierFor(latency, session?.event?.event_type, cam.tierMaxLatencyMs);
+      params.lineOffsets = t.offsets;
+      if (t.tier !== tierRef.current) {
+        tierRef.current = t.tier;
+        console.log(`[tier] niveau ${t.tier} (${t.photos} photo(s)) `
+          + `latence=${latency == null ? 'inconnue' : Math.round(latency) + 'ms'} `
+          + `discipline=${t.discipline}`);
+      }
+    }
     const sig = JSON.stringify(params);
     if (sig !== lineParamsSigRef.current) {
       lineParamsSigRef.current = sig;
@@ -1278,7 +1310,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     lineTriggerRef.current.setZone(Math.max(0.1, Math.min(1, pct / 100)));
     console.log('[lines] enabled=', lineCfgRef.current.enabled,
       'shadow=', lineCfgRef.current.shadow, '(from /config)');
-  }, [eventConfig.camera]);
+  }, [eventConfig.camera, session?.event?.event_type, tierTick]);
+
+  useEffect(() => {
+    if (eventConfig.camera?.tiersEnabled !== true) return undefined;
+    const id = setInterval(() => setTierTick((n) => n + 1), 10000);
+    return () => clearInterval(id);
+  }, [eventConfig.camera?.tiersEnabled]);
 
   // Axe de filtrage detection wide 1x : hypothese theorique midX (Vision
   // avec frame.orientation=.right rotate l'image en portrait -> midX =
@@ -2710,6 +2748,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         enableShutterSound: false,
       });
       const dt = Date.now() - t0;
+      // Alimente la sonde de latence (niveaux de capture). Mesure deja
+      // calculee pour le log : cout nul.
+      latencyProbeRef.current?.push(dt);
       let sizeKb = '?';
       try {
         const fpath = photo?.path?.startsWith('file://') ? photo.path : `file://${photo?.path}`;
