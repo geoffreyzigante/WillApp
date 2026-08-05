@@ -115,9 +115,15 @@ module.exports = function withHumanDetectorAndroid(config) {
         'Expo SDK 54 genere du Kotlin — ancre a revoir.'
       );
     }
-    const anchor = 'override fun onCreate() {';
+    // APRES super.onCreate() : le premier jet inserait juste apres la
+    // signature de onCreate(), donc AVANT super. Le registre etant statique
+    // ca fonctionnait, mais executer du code avant super.onCreate() dans une
+    // Application est une mauvaise pratique — le contexte n est pas encore
+    // pleinement initialise. Le JS n appelle initFrameProcessorPlugin que
+    // bien plus tard : rien n impose d enregistrer si tot.
+    const anchor = 'super.onCreate()';
     if (!src.includes(anchor)) {
-      throw new Error('[with-human-detector-android] onCreate() introuvable dans MainApplication');
+      throw new Error('[with-human-detector-android] super.onCreate() introuvable dans MainApplication');
     }
     src = src.replace(
       anchor,

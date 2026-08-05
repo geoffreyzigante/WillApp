@@ -1,7 +1,44 @@
 # Audit Android de la couche JS
 
 Fait le 2026-08-05 sur `feat/cleanup-technique`. Vérifié par bundle Android
-réel (`expo export --platform android` : 1466 modules, aucune erreur).
+réel (`expo export --platform android` : 1466 modules, aucune erreur) **et
+par un `expo prebuild -p android` complet**.
+
+## Résultat du premier prebuild Android
+
+```
+✔ Created native directory
+[with-human-detector-android] HumanDetectorPlugin.kt copié
+[with-human-detector-android] plugin enregistré sous "detectHumans"
+[with-human-detector-android] dépendance ML Kit ajoutée
+✔ Finished prebuild
+```
+
+Les trois ancres du config plugin ont tenu. Vérifications sur la sortie
+générée :
+
+| Point | État |
+|---|---|
+| `HumanDetectorPlugin.kt` dans `.../java/com/geoffreyzigante/will/` | ✅ package réécrit depuis `app.json` |
+| Enregistrement `"detectHumans"` dans `MainApplication.kt` | ✅ *(corrigé, cf. ci-dessous)* |
+| `implementation "com.google.mlkit:face-detection:16.1.7"` | ✅ dans `app/build.gradle` |
+| Permissions du manifeste | ✅ les 4 `blockedPermissions` portent `tools:node="remove"` |
+
+**Un défaut corrigé grâce à cette sortie** : l'enregistrement s'insérait
+juste après la signature de `onCreate()`, donc **avant `super.onCreate()`**.
+Le registre VisionCamera étant statique, ça fonctionnait — mais exécuter du
+code avant `super.onCreate()` dans une `Application` est fragile, le contexte
+n'est pas pleinement initialisé. L'ancre est passée à `super.onCreate()`.
+Le fichier déjà généré a été corrigé en place : pas besoin de `--clean`.
+
+**Reste à surveiller à la revue Play Store** : le manifeste contient
+`SYSTEM_ALERT_WINDOW` (injectée par le support de développement React
+Native). À vérifier qu'elle disparaît bien du build `production`, sinon
+c'est une justification de plus à fournir.
+
+> ⚠️ Le Kotlin reste **non compilé** : gradle exige un accès réseau dont je
+> ne dispose pas. La compilation se jouera au premier
+> `eas build -p android`.
 
 ## Verdict : la couche JS est en bien meilleur état que prévu
 
