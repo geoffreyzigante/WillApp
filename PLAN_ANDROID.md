@@ -47,10 +47,13 @@ cooldown |  k=0.45   k=0.60   k=0.75   k=0.90   k=1.00
    500ms |   0.7      1.0      1.3      1.5      1.7
 ```
 
-**Au-delà de ~280 ms par photo, aucun réglage ne permet 3 photos sur un
+**Au-delà de ~250 ms par photo, aucun réglage ne permet 3 photos sur un
 coureur de route à 3 m/s.** Limite physique : le sujet ne reste pas assez
 longtemps entre les lignes. En dessous, ça se rattrape en écartant les
 lignes (à 200-250 ms : `lineOffsets` ±0.90 au lieu de ±0.75).
+
+Ce seuil **n'exclut aucun appareil** : il marque la frontière entre les
+niveaux de capture définis ci-dessous.
 
 ### Conséquence : auto-calibration au lieu d'un réglage global
 
@@ -61,10 +64,59 @@ partie des appareils.
 Proposition — au premier lancement en mode photographe, l'app :
 
 1. mesure sa **latence de capture réelle** (rafale de 5, médiane des écarts) ;
-2. en déduit `lineOffsets` par `k ≈ 2 × cooldown × v_cible / zone`, borné par
-   des min/max venant de `/config` ;
-3. **refuse le rôle bénévole au-delà de 280 ms**, avec un message honnête
-   plutôt qu'une galerie vide le jour de la course.
+2. en déduit un **niveau de capture** (ci-dessous) ;
+3. applique le `lineOffsets` correspondant.
+
+### Niveaux de capture (décision produit 2026-08-05)
+
+Plutôt que refuser les appareils lents, on **dégrade par paliers**. Vérifié
+en rejouant `lineTrigger.js` :
+
+| Niveau | Config | Promesse | Tient jusqu'à |
+|---|---|---|---|
+| **1** | 3 lignes ±0.90 | 3 photos | **230 ms** |
+| **2** | 2 lignes ±0.90 | 2 photos | **530 ms** |
+| **3** | 1 ligne centrale | 1 photo | **2 000 ms** |
+
+**Coût de développement dans le tracker : zéro.** Un niveau n'est qu'un
+`lineOffsets` de longueur différente, et `computeLines` mappe déjà sur le
+tableau. Les 9 tests existants restent valides.
+
+Deux propriétés non évidentes, toutes deux vérifiées :
+
+- **Le niveau 3 ne rate jamais personne** — 1 photo garantie jusqu'à 5 m/s
+  sur un appareil à 700 ms, par construction (failsafe F1).
+- **Le palier produit de MEILLEURES photos, pas seulement un affichage
+  honnête.** À 300 ms, la config 3 lignes donne déjà 2 photos — mais ce sont
+  les deux premières lignes franchies, donc deux clichés quasi au même
+  endroit. La config 2 lignes donne les mêmes 2 photos, délibérément
+  espacées.
+
+### Le niveau dépend de la discipline, pas seulement du téléphone
+
+Photos obtenues avec 3 lignes ±0.90 :
+
+```
+latence | Marche 1,4 | Trail 2,0 | Route 3,0 | Vélo 6,0 m/s
+--------+------------+-----------+-----------+-------------
+  150ms |     3      |     3     |     3     |     2
+  250ms |     3      |     3     |     2     |     2
+  400ms |     3      |     2     |     2     |     1
+  700ms |     2      |     2     |     1     |     1
+```
+
+Un appareil à 400 ms est **niveau 1 sur une marche, niveau 2 sur un trail,
+niveau 3 sur du vélo**. Le niveau doit donc se calculer à l'entrée dans
+l'event, en croisant latence mesurée et `event_type` — déjà présent dans
+`event.json`.
+
+**Effet de bord favorable :** moins de photos sur les appareils lents = moins
+d'appels Rekognition. Un niveau 3 coûte le tiers d'un niveau 1 par coureur.
+
+**Point de vigilance :** dans un même event, un coureur vu par un niveau 1
+aura 3 photos et son voisin 1 seule. Se gère en affichant son niveau au
+bénévole et à l'organisateur, pour placer les meilleurs téléphones aux points
+clés (arrivée).
 
 C'est le principe habituel — le natif mesure, le JS décide — et ça profite
 aussi à iOS : un iPhone 12 et un 16 Pro n'ont pas la même latence, alors
@@ -88,8 +140,9 @@ cibles réels** :
    de verrouillage de vitesse à 1/1000s — donc du flou sur les coureurs)*
 3. ML Kit tient-il 10 fps en détection de visages sans faire chauffer ?
 
-**Critère de sortie** — un tableau latence × modèle, comparé au seuil de
-280 ms établi ci-dessus.
+**Critère de sortie** — un tableau latence × modèle, converti en
+**répartition par niveau** (combien d'appareils en niveau 1 / 2 / 3) pour
+chaque discipline.
 
 > ⚠️ **Le rôle bénévole étant ouvert à tous les Android, l'échantillon ne
 > peut pas se limiter à 3 appareils choisis.** Il faut couvrir le milieu de
@@ -150,7 +203,7 @@ Ordre imposé par les dépendances :
 
 | Étape | Module | Charge | Note |
 |---|---|---|---|
-| 3.0 | **Auto-calibration + garde 280 ms** | 3-4 j | **À faire sur iOS d'abord.** Cf. « flotte non maîtrisée » |
+| 3.0 | **Auto-calibration + niveaux 1/2/3** | 3-4 j | **À faire sur iOS d'abord.** Zéro changement dans `lineTrigger.js` |
 | 3.1 | `detectHumans` (ML Kit) | 1 sem. | **Bloquant** — rien ne marche sans lui |
 | 3.2 | Validation `lineTrigger` | 3 j | Aucun code à écrire : les 9 tests tournent déjà. On valide sur **traces réelles** |
 | 3.3 | `readExposure` + cap shutter | 1-2 sem. | Le point dur. Charge conditionnée par le lot 0 |
@@ -192,7 +245,8 @@ Semaine 5-11├─ Lot 3 capture (si GO du lot 0)
 | 2 | Quels appareils cibles ? | Conditionne le lot 0. Sans liste, le spike ne prouve rien |
 | 3 | Photos Android en JPEG : accepté ? | **~2× le poids** à qualité égale → coût R2 et bande passante |
 | 4 | ~~Les bénévoles restent-ils sur iPhone ?~~ | ✅ **Tranché** : iPhone au lancement, ouverture à Android juste après. Le lot 3 est engagé |
-| 5 | Que fait-on des appareils sous 280 ms ? | Refus du rôle bénévole, ou mode dégradé assumé à 2 photos ? Décision produit, pas technique |
+| 5 | ~~Que fait-on des appareils lents ?~~ | ✅ **Tranché** : paliers 1/2/3 (3, 2, 1 photo) plutôt qu'un refus. Aucun appareil exclu |
+| 6 | Montre-t-on le niveau au bénévole et à l'organisateur ? | Nécessaire pour placer les meilleurs téléphones à l'arrivée. Question d'UI |
 
 ---
 
