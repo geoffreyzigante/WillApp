@@ -42,6 +42,12 @@ function detectHumans(frame, options) {
 // Enregistre par le config plugin with-exposure-reader au build EAS.
 // Retourne { iso, shutter, brightness } ou null.
 const exposureReaderPlugin = VisionCameraProxy.initFrameProcessorPlugin('readExposure', {});
+
+// Publie l'etat des deux frame processors vers capabilities.js. On reutilise
+// la detection ci-dessus : pas de second initFrameProcessorPlugin.
+reportFrameProcessor('detectHumans', humanDetectorPlugin != null);
+reportFrameProcessor('readExposure', exposureReaderPlugin != null);
+console.log(describeCapabilities());
 function readExposure(frame, options) {
   'worklet';
   if (exposureReaderPlugin == null) {
@@ -95,6 +101,8 @@ import {
   retryDelayMs,
 } from './src/constants/queue';
 import { scorePhotoSafely } from './src/services/qualityScorer';
+// Capacites natives : cf src/services/capabilities.js + plugins/CONTRAT_NATIF.md.
+import { reportFrameProcessor, describeCapabilities } from './src/services/capabilities';
 // Declenchement par lignes (cf. CONCEPTION_LIGNES_NOTE.md).
 import { createLineTrigger } from './src/services/lineTrigger';
 // Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
