@@ -143,6 +143,18 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
   }, [searchQuery, events]);
 
   const scrollRef = useRef(null);
+  // Position de la barre de recherche dans le contenu scrollable. Mesuree au
+  // layout (elle depend de la hauteur du carrousel au-dessus), consommee au
+  // focus d un des deux champs.
+  const searchBarYRef = useRef(0);
+  const searchOpenRef = useRef(false);
+  // Amene la barre juste sous le header : les deux champs se retrouvent en
+  // haut de la zone visible, hors d atteinte du clavier quelle que soit sa
+  // hauteur (barre de suggestions, emoji, clavier tiers).
+  const scrollSearchIntoView = useCallback(() => {
+    const y = Math.max(0, searchBarYRef.current - headerH - 12);
+    scrollRef.current?.scrollTo({ y, animated: true });
+  }, [headerH]);
   const [showBackTop, setShowBackTop] = useState(false);
   const backTopOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -157,9 +169,15 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
     setShowBackTop(y > 400);
   }, []);
 
-  // Quand le clavier se ferme : remonter le scroll en haut
+  useEffect(() => { searchOpenRef.current = searchOpen; }, [searchOpen]);
+
+  // Quand le clavier se ferme : remonter le scroll en haut.
+  // SAUF si la recherche est ouverte — sinon fermer le clavier (tap hors
+  // champ) ferait redescendre la barre hors ecran alors qu elle est encore
+  // en cours d utilisation. Lecture par ref : la closure est figee (deps []).
   useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidHide', () => {
+      if (searchOpenRef.current) return;
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     });
     return () => sub.remove();
@@ -223,7 +241,13 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
         </View>
         <TouchableOpacity
           onPress={() => {
-            if (searchOpen) { setSearchQuery(''); Keyboard.dismiss(); }
+            if (searchOpen) {
+              setSearchQuery(''); setCodeInput(''); setCodeError('');
+              Keyboard.dismiss();
+              // Le listener keyboardDidHide est inhibe tant que la recherche
+              // est ouverte : on remonte explicitement a la fermeture.
+              scrollRef.current?.scrollTo({ y: 0, animated: true });
+            }
             setSearchOpen(o => !o);
           }}
           activeOpacity={0.85}
@@ -246,14 +270,17 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
           repondent a deux intentions differentes — explorer, ou rejoindre un
           event precis dont on a recu le code. */}
       {searchOpen && (
-        <View style={{
-          backgroundColor: '#fff',
-          borderRadius: 16,
-          borderWidth: 1.5,
-          borderColor: '#E5E0FF',
-          marginBottom: 8,
-          overflow: 'hidden',
-        }}>
+        <View
+          onLayout={(e) => { searchBarYRef.current = e.nativeEvent.layout.y; }}
+          style={{
+            backgroundColor: '#fff',
+            borderRadius: 16,
+            borderWidth: 1.5,
+            borderColor: '#E5E0FF',
+            marginBottom: 8,
+            overflow: 'hidden',
+          }}
+        >
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, gap: 8 }}>
             <TextInput
               value={searchQuery}
@@ -265,11 +292,13 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               autoCapitalize="none"
               autoCorrect={false}
               autoFocus
+              onFocus={scrollSearchIntoView}
             />
             <TouchableOpacity
               onPress={() => {
                 setSearchQuery(''); setCodeInput(''); setCodeError('');
                 setSearchOpen(false); Keyboard.dismiss();
+                scrollRef.current?.scrollTo({ y: 0, animated: true });
               }}
               hitSlop={10}
               style={{ paddingHorizontal: 6 }}
@@ -288,6 +317,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               autoCorrect={false}
               returnKeyType="go"
               onSubmitEditing={openByCode}
+              onFocus={scrollSearchIntoView}
               style={{ flex: 1, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: C.primary }}
             />
             <TouchableOpacity
