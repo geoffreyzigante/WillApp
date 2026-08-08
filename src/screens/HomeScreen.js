@@ -143,18 +143,9 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
   }, [searchQuery, events]);
 
   const scrollRef = useRef(null);
-  // Position de la barre de recherche dans le contenu scrollable. Mesuree au
-  // layout (elle depend de la hauteur du carrousel au-dessus), consommee au
-  // focus d un des deux champs.
-  const searchBarYRef = useRef(0);
+  const searchBarRef = useRef(null);
   const searchOpenRef = useRef(false);
-  // Amene la barre juste sous le header : les deux champs se retrouvent en
-  // haut de la zone visible, hors d atteinte du clavier quelle que soit sa
-  // hauteur (barre de suggestions, emoji, clavier tiers).
-  const scrollSearchIntoView = useCallback(() => {
-    const y = Math.max(0, searchBarYRef.current - headerH - 12);
-    scrollRef.current?.scrollTo({ y, animated: true });
-  }, [headerH]);
+  const scrollYRef = useRef(0);
   const [showBackTop, setShowBackTop] = useState(false);
   const backTopOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -166,10 +157,30 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
   }, [showBackTop, backTopOpacity]);
   const onScrollWatch = useCallback((e) => {
     const y = e.nativeEvent.contentOffset.y;
+    scrollYRef.current = y;
     setShowBackTop(y > 400);
   }, []);
 
   useEffect(() => { searchOpenRef.current = searchOpen; }, [searchOpen]);
+
+  // Clavier ouvert alors que la recherche est deployee : on ne remonte QUE
+  // de ce qui est reellement masque. Un scroll jusqu en haut ferait passer
+  // les onglets sous le header — l utilisateur perd ses reperes pour un
+  // probleme qui ne concerne que le bas de la barre.
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', (e) => {
+      if (!searchOpenRef.current || !searchBarRef.current) return;
+      const kbTop = e?.endCoordinates?.screenY;
+      if (!kbTop) return;
+      searchBarRef.current.measureInWindow((x, y, w, h) => {
+        // 16 px d air sous la barre pour ne pas la coller au clavier.
+        const cache = (y + h + 16) - kbTop;
+        if (cache <= 0) return;   // deja entierement visible : on ne bouge pas
+        scrollRef.current?.scrollTo({ y: scrollYRef.current + cache, animated: true });
+      });
+    });
+    return () => sub.remove();
+  }, []);
 
   // Quand le clavier se ferme : remonter le scroll en haut.
   // SAUF si la recherche est ouverte — sinon fermer le clavier (tap hors
@@ -271,7 +282,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
           event precis dont on a recu le code. */}
       {searchOpen && (
         <View
-          onLayout={(e) => { searchBarYRef.current = e.nativeEvent.layout.y; }}
+          ref={searchBarRef}
           style={{
             backgroundColor: '#fff',
             borderRadius: 16,
@@ -292,7 +303,6 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               autoCapitalize="none"
               autoCorrect={false}
               autoFocus
-              onFocus={scrollSearchIntoView}
             />
             <TouchableOpacity
               onPress={() => {
@@ -317,7 +327,6 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               autoCorrect={false}
               returnKeyType="go"
               onSubmitEditing={openByCode}
-              onFocus={scrollSearchIntoView}
               style={{ flex: 1, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: C.primary }}
             />
             <TouchableOpacity
