@@ -9,7 +9,11 @@ import { Modal, View, Text, TouchableOpacity } from 'react-native';
 import { C } from '../../constants/colors';
 import { formatDateForForm } from '../../utils/format';
 
-export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd, minDate, onConfirm }) {
+// allowTbd : ajoute l action "Date a venir" (date pas encore fixee).
+// onConfirm est alors appele avec (null, null) — les appelants doivent le
+// gerer. Opt-in plutot que par defaut : un futur appelant ne doit pas
+// heriter d une date optionnelle sans l avoir voulu.
+export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd, minDate, onConfirm, allowTbd = false }) {
   const today = useMemo(() => {
     const d = new Date(); d.setHours(0, 0, 0, 0); return d;
   }, []);
@@ -81,6 +85,12 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
   const handleConfirm = () => {
     if (!start) return;
     onConfirm(start, isSingle ? null : end);
+    onClose();
+  };
+  // Date non annoncee : la card affichera "Date a venir" et l event restera
+  // classe dans "A venir" (cf. utils/format.js:isUpcoming, branche !ref).
+  const handleTbd = () => {
+    onConfirm(null, null);
     onClose();
   };
 
@@ -162,6 +172,22 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
           <Text style={{ color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 14, paddingHorizontal: 4, lineHeight: 17 }}>
             {summary}
           </Text>
+          {allowTbd && (
+            <TouchableOpacity
+              onPress={handleTbd}
+              style={{
+                marginTop: 14, paddingVertical: 13, borderRadius: 14,
+                alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E0FF',
+              }}
+            >
+              <Text style={{ color: C.primary, fontSize: 14, fontWeight: '700' }}>
+                Date à venir
+              </Text>
+              <Text style={{ color: C.textSoft, fontSize: 11, marginTop: 2 }}>
+                La date n'est pas encore fixée
+              </Text>
+            </TouchableOpacity>
+          )}
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
             <TouchableOpacity onPress={onClose} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: '#f5f3ff' }}>
               <Text style={{ color: C.primary, fontSize: 15, fontWeight: '700' }}>Annuler</Text>

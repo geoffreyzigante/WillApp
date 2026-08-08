@@ -3870,6 +3870,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   // Audit B12b / UI-10 — geo.api.gouv.fr KO/timeout/sans match -> fallback saisie manuelle.
   const [cityFetchFailed, setCityFetchFailed] = useState(false);
   const [eventType, setEventType] = useState('');
+  const [dateTbd, setDateTbd] = useState(false);
   const [website, setWebsite] = useState('');
   // 2026-06-25 : adresse precise saisie par l orga (champ event.address worker).
   // Sert a afficher la carte / bouton Itineraire cote coureur dans EventDetail.
@@ -3943,6 +3944,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         setName(editEvent.name || '');
         setCode(editEvent.code || '');
         setPassword('');
+        setDateTbd(!editEvent.event_date);
         setEventDate(editEvent.event_date ? new Date(editEvent.event_date) : null);
         setEventDateEnd(editEvent.event_date_end ? new Date(editEvent.event_date_end) : null);
         setStartTime(editEvent.start_time || '');
@@ -3969,7 +3971,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         setPendingCoverLocal(null);
       } else {
         setName(''); setCode(''); setPassword('');
-        setEventDate(null); setEventDateEnd(null);
+        setEventDate(null); setEventDateEnd(null); setDateTbd(false);
         setStartTime(''); setPhotographerPwd(''); setRevealPwd(false);
         setPostalCode(''); setCity(''); setCitySuggestions([]);
         setEventType('');
@@ -4114,7 +4116,11 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   const emailOk = !contact?.trim() || emailPublicFormat;
   const locationOk = /^\d{5}$/.test(postalCode) && !!city?.trim();
   const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
-  const dateOk = !!eventDate && eventDate >= todayMidnight;
+  // dateTbd : l orga declare explicitement que la date n est pas fixee.
+  // A ne pas confondre avec eventDate=null, qui veut dire "pas encore
+  // renseignee" — sans cette distinction, l etape 1 serait validee par
+  // simple oubli du champ.
+  const dateOk = dateTbd || (!!eventDate && eventDate >= todayMidnight);
   // Distances optionnelles : un event peut être créé sans aucune course (event
   // type "course non chronométrée", marche libre, etc.). Si l'orga ajoute des
   // courses, chacune doit avoir un km > 0 pour rester cohérente.
@@ -4444,7 +4450,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
           eventDate.toISOString().slice(0, 10),
           eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : null,
         )
-      : 'Non définie';
+      : (dateTbd ? 'Date à venir' : 'Non définie');
     const previewLocation = city
       ? (postalCode ? `${city} (${postalCode})` : city)
       : (editEvent?.location || 'Non défini');
@@ -4690,13 +4696,18 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
             initialStart={eventDate}
             initialEnd={eventDateEnd}
             minDate={null}
+            allowTbd
             onConfirm={async (start, end) => {
+              // start null = "Date a venir" : on efface les deux champs cote
+              // serveur. Le PATCH accepte la chaine vide, et isUpcoming classe
+              // un event sans date dans "A venir" (app comme vitrine).
+              setDateTbd(!start);
               setEventDate(start);
               setEventDateEnd(end);
-              const startStr = start ? start.toISOString().slice(0, 10) : '';
-              const endStr = end ? end.toISOString().slice(0, 10) : '';
-              if (!startStr) { Alert.alert('Date requise'); return; }
-              await savePartial({ event_date: startStr, event_date_end: endStr });
+              await savePartial({
+                event_date: start ? start.toISOString().slice(0, 10) : '',
+                event_date_end: end ? end.toISOString().slice(0, 10) : '',
+              });
             }}
           />
 
@@ -5146,19 +5157,19 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                       onPress={() => setShowCalendar(true)}
                       style={[formSectionStyle.input, { justifyContent: 'center' }]}
                     >
-                      <Text style={{ color: eventDate ? C.text : C.textSoft, fontSize: 15 }}>
+                      <Text style={{ color: (eventDate || dateTbd) ? C.text : C.textSoft, fontSize: 15 }}>
                         {eventDate
                           ? formatDateForForm(
                               eventDate.toISOString().slice(0, 10),
                               eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : null,
                             )
-                          : 'Choisir une date (ou une plage)'}
+                          : (dateTbd ? 'Date à venir' : 'Choisir une date (ou une plage)')}
                       </Text>
                     </TouchableOpacity>
                     <Text style={{ color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
                       Tape 2 fois la même date pour un événement sur 1 jour.
                     </Text>
-                    {showErr[1] && !dateOk && <Text style={errStyle}>Date requise (pas dans le passé)</Text>}
+                    {showErr[1] && !dateOk && <Text style={errStyle}>Choisis une date, ou « Date à venir » si elle n'est pas fixée</Text>}
                   </ScrollView>
                 </View>
 
@@ -5406,7 +5417,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         initialStart={eventDate}
         initialEnd={eventDateEnd}
         minDate={(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; })()}
+        allowTbd
         onConfirm={(start, end) => {
+          // start null = l orga a choisi "Date a venir".
+          setDateTbd(!start);
           setEventDate(start);
           setEventDateEnd(end);
         }}
