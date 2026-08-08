@@ -4,7 +4,7 @@
 // EventCard ou empty state pedagogique (deconnecte + tab favoris).
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, TouchableOpacity, TextInput, Animated, Keyboard } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Animated, Keyboard, Pressable, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { Icon } from '../components/Icon';
@@ -146,6 +146,24 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
   const searchBarRef = useRef(null);
   const searchOpenRef = useRef(false);
   const scrollYRef = useRef(0);
+
+  // scrollTop : remonter en haut a la fermeture. Vrai pour une fermeture
+  // DELIBEREE (loupe, croix) — l utilisateur en a fini, on retrouve l etat
+  // d origine. Faux quand la fermeture est le sous-produit d un autre geste
+  // (tap dans la liste, scroll) : le rappeler en haut en plein mouvement
+  // serait brutal et lui ferait perdre sa position.
+  const closeSearch = useCallback(({ scrollTop = false } = {}) => {
+    setSearchQuery('');
+    setCodeInput('');
+    setCodeError('');
+    setSearchOpen(false);
+    Keyboard.dismiss();
+    if (scrollTop) {
+      // Le listener keyboardDidHide est inhibe tant que la recherche est
+      // ouverte : on remonte explicitement.
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  }, []);
   const [showBackTop, setShowBackTop] = useState(false);
   const backTopOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -203,7 +221,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
 
   return (
     <View style={{ flex: 1 }}>
-    <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} onScroll={onScrollWatch} style={s.scroll} contentContainerStyle={{ paddingTop: headerH, paddingBottom: 120 }} showsVerticalScrollIndicator={false} topOffset={headerH}>
+    <RefreshableScrollView ref={scrollRef} onRefresh={onRefresh} onScroll={onScrollWatch} onScrollBeginDrag={() => { if (searchOpen) closeSearch(); }} keyboardShouldPersistTaps="handled" style={s.scroll} contentContainerStyle={{ paddingTop: headerH, paddingBottom: 120 }} showsVerticalScrollIndicator={false} topOffset={headerH}>
       {/* Header retire : il est maintenant rendu UNE FOIS dans App.js
           (AppHeader.js) au-dessus du tab container -> aucun re-mount au
           switch Accueil <-> Photos. */}
@@ -252,14 +270,8 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
         </View>
         <TouchableOpacity
           onPress={() => {
-            if (searchOpen) {
-              setSearchQuery(''); setCodeInput(''); setCodeError('');
-              Keyboard.dismiss();
-              // Le listener keyboardDidHide est inhibe tant que la recherche
-              // est ouverte : on remonte explicitement a la fermeture.
-              scrollRef.current?.scrollTo({ y: 0, animated: true });
-            }
-            setSearchOpen(o => !o);
+            if (searchOpen) closeSearch({ scrollTop: true });
+            else setSearchOpen(true);
           }}
           activeOpacity={0.85}
           style={{
@@ -305,11 +317,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               autoFocus
             />
             <TouchableOpacity
-              onPress={() => {
-                setSearchQuery(''); setCodeInput(''); setCodeError('');
-                setSearchOpen(false); Keyboard.dismiss();
-                scrollRef.current?.scrollTo({ y: 0, animated: true });
-              }}
+              onPress={() => closeSearch({ scrollTop: true })}
               hitSlop={10}
               style={{ paddingHorizontal: 6 }}
             >
@@ -354,6 +362,16 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
       {/* Events list / etat vide. Cas special : Favoris en deconnecte
           -> empty state pedagogique 3 etapes (compte / selfie / favori). */}
       <Animated.View style={{ opacity: contentFade, transform: [{ translateX: contentSlideX }] }}>
+        {/* Recherche ouverte : un tap n importe ou dans la liste la referme.
+            Le voile est AU-DESSUS des cards et consomme le tap — sinon on
+            ouvrirait un event en voulant juste fermer la recherche. */}
+        {searchOpen && (
+          <Pressable
+            onPress={() => closeSearch()}
+            style={[StyleSheet.absoluteFillObject, { zIndex: 10 }]}
+            accessibilityLabel="Fermer la recherche"
+          />
+        )}
         {tab === 'follows' && !isAuthed ? (
           <View style={{ paddingVertical: 24, paddingHorizontal: 8, alignItems: 'center' }}>
             <SelfieIllustration size={84} />
