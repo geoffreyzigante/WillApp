@@ -25,6 +25,38 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
   // ce chemin, un event prive est inatteignable depuis l'app coureur.
   // Meme motif que LoginModal (debounce 250 ms + guard cleanup).
   const [searchExtra, setSearchExtra] = useState(null);
+  // Champ "Code event" : chemin DIRECT, independant de la liste et de la
+  // recherche textuelle. C'est le pendant exact de la barre composee du site
+  // (index.html #events-code-form) et de celle de LoginModal. La recherche
+  // textuelle resout deja les codes, mais sans affordance visible : un
+  // coureur a qui l'orga a donne un code cherche un champ "code", pas une
+  // loupe.
+  const [codeInput, setCodeInput] = useState('');
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState('');
+
+  const openByCode = useCallback(() => {
+    const raw = codeInput.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!raw || codeLoading) return;
+    setCodeError('');
+    setCodeLoading(true);
+    // Meme endpoint que la page /event/{code} du site : il ignore `listed`,
+    // seul active=true est requis, donc il atteint les events masques.
+    fetch(`${API_URL}/public-events/${encodeURIComponent(raw)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((ev) => {
+        if (ev && ev.code) {
+          setCodeInput('');
+          setSearchOpen(false);
+          Keyboard.dismiss();
+          onOpenEvent(ev);
+        } else {
+          setCodeError('Aucun événement actif avec ce code.');
+        }
+      })
+      .catch(() => setCodeError('Connexion impossible. Vérifie ton réseau.'))
+      .finally(() => setCodeLoading(false));
+  }, [codeInput, codeLoading, onOpenEvent]);
   // Indicateur violet qui glisse entre les 3 pills. Mesure une fois la largeur
   // du conteneur (- padding), divise par 3 = largeur d un slot. Spring sur
   // translateX synchronise avec le state tab.
@@ -209,35 +241,74 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
       </View>
 
       {/* Barre de recherche : visible UNIQUEMENT quand searchOpen. */}
+      {/* Barre composee, calquee sur celle du site : recherche libre en haut,
+          saisie du code event en bas. Les deux chemins coexistent parce qu'ils
+          repondent a deux intentions differentes — explorer, ou rejoindre un
+          event precis dont on a recu le code. */}
       {searchOpen && (
         <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
           backgroundColor: '#fff',
           borderRadius: 16,
           borderWidth: 1.5,
           borderColor: '#E5E0FF',
-          paddingHorizontal: 14,
-          paddingVertical: 4,
-          gap: 8,
           marginBottom: 8,
+          overflow: 'hidden',
         }}>
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Rechercher un event"
-            placeholderTextColor="#c9beed"
-            style={{ flex: 1, fontSize: 14, color: C.primary, fontWeight: '400', paddingVertical: 8 }}
-            returnKeyType="search"
-            autoFocus
-          />
-          <TouchableOpacity
-            onPress={() => { setSearchQuery(''); setSearchOpen(false); Keyboard.dismiss(); }}
-            hitSlop={10}
-            style={{ paddingHorizontal: 6 }}
-          >
-            <Text style={{ color: C.textSoft, fontSize: 16 }}>✕</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, gap: 8 }}>
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Rechercher un event"
+              placeholderTextColor="#c9beed"
+              style={{ flex: 1, fontSize: 14, color: C.primary, fontWeight: '400', paddingVertical: 11 }}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            <TouchableOpacity
+              onPress={() => {
+                setSearchQuery(''); setCodeInput(''); setCodeError('');
+                setSearchOpen(false); Keyboard.dismiss();
+              }}
+              hitSlop={10}
+              style={{ paddingHorizontal: 6 }}
+            >
+              <Text style={{ color: C.textSoft, fontSize: 16 }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ height: 1, backgroundColor: 'rgba(0,0,0,0.06)' }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TextInput
+              value={codeInput}
+              onChangeText={(v) => { setCodeInput(v); if (codeError) setCodeError(''); }}
+              placeholder="Code event"
+              placeholderTextColor="#c9beed"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="go"
+              onSubmitEditing={openByCode}
+              style={{ flex: 1, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: C.primary }}
+            />
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={!codeInput.trim() || codeLoading}
+              onPress={openByCode}
+              style={{ paddingHorizontal: 16, paddingVertical: 11, justifyContent: 'center' }}
+            >
+              <Text style={{
+                color: codeInput.trim() ? C.primary : C.textSoft,
+                fontSize: 14, fontWeight: '700',
+              }}>
+                {codeLoading ? '…' : 'Ouvrir'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {!!codeError && (
+            <Text style={{ paddingHorizontal: 14, paddingBottom: 10, fontSize: 12, color: '#D6455B' }}>
+              {codeError}
+            </Text>
+          )}
         </View>
       )}
 
