@@ -984,10 +984,31 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
   // Programme la capture decidee par le tracker. `delayMs` porte l'anticipation
   // (franchissement prevu moins la latence systeme) : on le respecte tel quel.
+  // Log de refus throttle : sans ca, un disque plein produirait une ligne par
+  // coureur qui passe.
+  const lineBackpressureWarnAtRef = useRef(0);
   const scheduleLineCapture = (action) => {
     const fire = () => {
       if (!isMountedRef.current || !isAutoArmedRef.current) return;
       if (!isDetectionEnabledRef.current) return;
+
+      // Contre-pression. Ces deux gardes vivaient DANS captureBurstLoop, que
+      // le mode lignes court-circuite : sans ce rappel, rien n arretait
+      // l ecriture disque avant le garde-fou 95 % qui, lui, desarme la
+      // capture pour le reste de la course. Mieux vaut sauter quelques
+      // photos que rendre le telephone inutilisable.
+      const pipelineLoad = queueRef.current.length + inFlightSetRef.current.size;
+      const diskBytes = pendingDirSizeBytesCached();
+      const sature = pipelineLoad >= MAX_TOTAL_IN_PIPELINE || diskBytes > STORAGE_WARN_BYTES;
+      if (sature) {
+        const now = Date.now();
+        if (now - lineBackpressureWarnAtRef.current > 30000) {
+          lineBackpressureWarnAtRef.current = now;
+          console.warn(`[lines] backpressure: pipeline=${pipelineLoad}/${MAX_TOTAL_IN_PIPELINE} `
+            + `disque=${(diskBytes / 1024 / 1024 / 1024).toFixed(1)}Go — capture sautee`);
+        }
+        return;
+      }
       // burstTs = instant reel du tir, idx 0 : chaque capture est unitaire.
       // Le cron serveur regroupe par ecarts <= 30 s, donc trois captures
       // espacees de ~150 ms restent un seul passage.
