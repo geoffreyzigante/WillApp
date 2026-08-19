@@ -106,7 +106,7 @@ import { reportFrameProcessor, describeCapabilities } from './src/services/capab
 // Declenchement par lignes (cf. CONCEPTION_LIGNES_NOTE.md).
 import { createLineTrigger } from './src/services/lineTrigger';
 // Niveaux de capture : adapte le nombre de lignes au materiel et a la course.
-import { tierFor, createLatencyProbe, photosPerRunnerFor } from './src/services/captureTier';
+import { tierFor, createLatencyProbe, createPhotoSizeProbe, photosPerRunnerFor } from './src/services/captureTier';
 // Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
@@ -992,6 +992,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // continu, on purge les plus anciens au-dela de 200 entrees.
   const trackShotsRef = useRef(new Map());
   const lineTierRef = useRef(3);
+  // Poids median d une photo, mesure sur les captures reelles. Le budget
+  // disque en depend : une valeur en dur serait fausse des que la lumiere,
+  // la resolution ou le format changent.
+  const photoSizeProbeRef = useRef(null);
+  if (photoSizeProbeRef.current === null) photoSizeProbeRef.current = createPhotoSizeProbe();
+  // Coureurs deja vus (tracks distincts credites). Sert a budgeter sur ce
+  // qui RESTE : budgeter sur le total ferait tomber le calcul a zero a
+  // mi-course.
+  const seenRunnersRef = useRef(0);
+  // Place libre en octets, rafraichie par le poll disque existant.
+  const freeBytesRef = useRef(0);
   const scheduleLineCapture = (action) => {
     const fire = () => {
       if (!isMountedRef.current || !isAutoArmedRef.current) return;
@@ -1008,7 +1019,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // mesure que le telephone se remplit. Couper net ferait repartir des
       // coureurs sans aucune photo — exactement ce que le failsafe F1 existe
       // pour empecher.
-      const maxPhotos = photosPerRunnerFor(diskBytes, pipelineLoad);
+      // Un track jamais vu = un coureur de plus. Compte AVANT le calcul :
+      // le budget doit deja tenir compte de celui qui passe.
+      if (action.trackId != null && !trackShotsRef.current.has(action.trackId)) {
+        seenRunnersRef.current += 1;
+      }
+      const attendus = Number(session?.event?.estimated_participants) || null;
+      const maxPhotos = photosPerRunnerFor(diskBytes, pipelineLoad, freeBytesRef.current, {
+        expectedRunners: attendus,
+        seenRunners: seenRunnersRef.current,
+        photoBytes: photoSizeProbeRef.current?.median(),
+      });
       if (maxPhotos !== lineTierRef.current) {
         lineTierRef.current = maxPhotos;
         console.log(`[lines] pression stockage -> ${maxPhotos} photo(s)/passage `
@@ -2609,6 +2630,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         const free = Paths.document?.availableSpace ?? Paths.cache?.availableSpace;
         if (typeof free === 'number' && free > 0) {
           setFreeDiskGB(free / (1024 * 1024 * 1024));
+          // Ref lue par scheduleLineCapture : le state serait fige dans la
+          // closure du callback worklet (createRunOnJS, deps []).
+          freeBytesRef.current = free;
         }
       } catch {}
     };
@@ -2808,7 +2832,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       try {
         const fpath = photo?.path?.startsWith('file://') ? photo.path : `file://${photo?.path}`;
         const sz = new File(fpath).size;
-        if (typeof sz === 'number') sizeKb = Math.round(sz / 1024);
+        if (typeof sz === 'number') {
+          sizeKb = Math.round(sz / 1024);
+          photoSizeProbeRef.current?.push(sz);
+        }
       } catch {}
       console.log(`[capture] takePhoto resolved ${sizeKb}kb in ${dt}ms`);
     } catch (e) {

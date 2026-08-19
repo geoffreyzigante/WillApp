@@ -110,7 +110,7 @@ export function tierFor(latencyMs, eventType, overrides = null) {
 // Mediane et non moyenne : une capture aberrante (GC, ecriture disque lente)
 // ne doit pas declasser l'appareil pour toute la course.
 
-export function createLatencyProbe(sampleSize = 9, minSamples = 5) {
+export function createRollingMedian(sampleSize = 9, minSamples = 5) {
   const samples = [];
   return {
     // dt : duree de takePhoto en ms.
@@ -133,35 +133,152 @@ export function createLatencyProbe(sampleSize = 9, minSamples = 5) {
   };
 }
 
+// La sonde de latence en est un cas particulier. Le poids des photos en est
+// un autre : meme besoin de mediane (une photo aberrante ne doit pas fausser
+// le budget), meme fenetre glissante (la taille varie avec la lumiere).
+export const createLatencyProbe = createRollingMedian;
+export const createPhotoSizeProbe = createRollingMedian;
+
 // ─── Pression de stockage ─────────────────────────────────────────────────
 //
-// Hors connexion, les photos s'empilent sur le telephone. Plutot que de
-// couper net a la saturation — ce qui fait repartir des coureurs SANS AUCUNE
-// photo — on reduit progressivement le nombre de photos par passage. Le
-// besoin de stockage est divise par trois avant l'arret, et chaque coureur
-// garde au moins une image.
+// Objectif : photographier TOUT LE MONDE, meme hors connexion. Plutot que de
+// couper a la saturation — ce qui fait repartir des coureurs sans aucune
+// photo — on reduit le nombre de photos par passage a mesure que le
+// telephone se remplit. Trois photos coutent trois fois plus qu une ; a
+// budget egal, une photo par coureur couvre trois fois plus de coureurs.
 //
-// Les paliers sont volontairement en-dessous de STORAGE_WARN_BYTES (5 Go) :
-// quand l'alerte se declenche, la degradation a deja commence depuis
-// longtemps. Le palier 0 n'est atteint qu'au-dela — la, le disque est
-// reellement en danger et ne plus ecrire est le seul choix raisonnable.
-export const STORAGE_PRESSURE_STEPS = [
-  { maxBytes: 2 * 1024 * 1024 * 1024, maxPipeline: 500, photos: 3 },
-  { maxBytes: 4 * 1024 * 1024 * 1024, maxPipeline: 750, photos: 2 },
-  { maxBytes: 6 * 1024 * 1024 * 1024, maxPipeline: 1000, photos: 1 },
+// La mesure est RELATIVE a la place reellement disponible, pas a un seuil
+// absolu. Un iPhone avec 60 Go libres n a aucune raison de se degrader parce
+// qu il a accumule 2 Go ; un telephone avec 4 Go libres doit se degrader
+// tres tot pour tenir toute la course.
+
+// Marge laissee au systeme. En dessous, iOS commence a mal se comporter
+// (echecs d ecriture, purge de caches) bien avant le disque plein reel.
+export const STORAGE_RESERVE_BYTES = 3 * 1024 * 1024 * 1024;
+
+// Part du budget utilisable deja consommee -> photos autorisees.
+export const STORAGE_USAGE_STEPS = [
+  { maxUsage: 0.40, photos: 3 },
+  { maxUsage: 0.70, photos: 2 },
+  { maxUsage: 0.92, photos: 1 },
 ];
 
-// Nombre de photos autorisees par passage, compte tenu de la place occupee
-// et du nombre d'items encore en file. On retient le palier le PLUS SEVERE
-// des deux : un disque encore libre mais une file de 900 items veut dire que
-// l'upload ne suit pas, la degradation est justifiee dans les deux cas.
-//
-// Retourne 0 = plus aucune capture (hors failsafe, gere par l'appelant).
-export function photosPerRunnerFor(pendingBytes, pipelineLoad, steps = STORAGE_PRESSURE_STEPS) {
-  const b = Number.isFinite(pendingBytes) && pendingBytes > 0 ? pendingBytes : 0;
-  const p = Number.isFinite(pipelineLoad) && pipelineLoad > 0 ? pipelineLoad : 0;
-  for (const s of steps) {
-    if (b < s.maxBytes && p < s.maxPipeline) return s.photos;
-  }
+// Repli quand la place libre est inconnue (API indisponible) : on retombe sur
+// des seuils absolus prudents plutot que de supposer un disque infini.
+export const STORAGE_ABSOLUTE_STEPS = [
+  { maxBytes: 2 * 1024 * 1024 * 1024, photos: 3 },
+  { maxBytes: 4 * 1024 * 1024 * 1024, photos: 2 },
+  { maxBytes: 6 * 1024 * 1024 * 1024, photos: 1 },
+];
+
+// Plafond memoire du suivi en RAM, independant du disque. Une file de 900
+// items veut dire que l upload ne suit pas : degrader est justifie meme si
+// le disque est vide.
+export const PIPELINE_STEPS = [
+  { maxLoad: 500, photos: 3 },
+  { maxLoad: 750, photos: 2 },
+  { maxLoad: 1000, photos: 1 },
+];
+
+function stepValue(steps, value, key) {
+  for (const s of steps) if (value < s[key]) return s.photos;
   return 0;
+}
+
+// Nombre de photos autorisees par passage. Retourne 0 = plus aucune capture.
+//
+//   pendingBytes : poids des photos en attente d upload
+//   pipelineLoad : items en file + captures en vol
+//   freeBytes    : place libre sur l appareil (null/0 = inconnue)
+//
+// On retient TOUJOURS le palier le plus severe des deux axes : disque et
+// file mesurent deux facons differentes de ne pas suivre.
+export function photosPerRunnerFor(pendingBytes, pipelineLoad, freeBytes = null, opts = {}) {
+  const pending = Number.isFinite(pendingBytes) && pendingBytes > 0 ? pendingBytes : 0;
+  const load = Number.isFinite(pipelineLoad) && pipelineLoad > 0 ? pipelineLoad : 0;
+  const free = Number.isFinite(freeBytes) && freeBytes > 0 ? freeBytes : 0;
+  const reserve = opts.reserveBytes ?? STORAGE_RESERVE_BYTES;
+
+  const parPipeline = stepValue(opts.pipelineSteps ?? PIPELINE_STEPS, load, 'maxLoad');
+
+  let parDisque;
+  if (free > 0) {
+    // Budget = ce qu on peut encore ecrire sans mordre sur la reserve. Les
+    // photos deja en attente en font partie : elles seront liberees a
+    // l upload, elles comptent donc dans le total, pas contre lui.
+    const budget = Math.max(0, free - reserve) + pending;
+    parDisque = budget <= 0 ? 0
+      : stepValue(opts.usageSteps ?? STORAGE_USAGE_STEPS, pending / budget, 'maxUsage');
+  } else {
+    parDisque = stepValue(opts.absoluteSteps ?? STORAGE_ABSOLUTE_STEPS, pending, 'maxBytes');
+  }
+
+  // Budget prospectif : combien peut-on tenir jusqu au dernier coureur ?
+  // Null si on ignore le nombre attendu ou le poids d une photo.
+  // Coureurs restant a couvrir. L appelant fournit soit le reste directement,
+  // soit attendus + deja vus.
+  let restants = null;
+  if (Number.isFinite(opts.remainingRunners)) {
+    restants = opts.remainingRunners;
+  } else if (Number.isFinite(opts.expectedRunners)) {
+    restants = opts.expectedRunners - (Number.isFinite(opts.seenRunners) ? opts.seenRunners : 0);
+  }
+
+  let parBudget;
+  if (restants !== null && restants <= 0) {
+    // Estimation DEPASSEE : il passe plus de monde que l organisateur n en
+    // annoncait. On ne sait plus combien il en reste — l hypothese prudente
+    // est qu il en reste beaucoup. On se rabat sur 1 photo pour etirer le
+    // budget au maximum, au lieu de redevenir genereux (ce que ferait un
+    // simple max(1, restants), qui vide le disque d autant plus vite).
+    parBudget = 1;
+  } else {
+    parBudget = photosPerRunnerForBudget(free, restants, opts.photoBytes, opts);
+  }
+
+  // Le plus severe des trois. Le budget seul ne suffit pas — si l estimation
+  // de l organisateur est trop basse, les paliers reactifs rattrapent.
+  const paliers = [parPipeline, parDisque];
+  if (parBudget !== null) paliers.push(parBudget);
+  return Math.min(...paliers);
+}
+
+// Photos par coureur que la place restante permet de tenir JUSQU AU BOUT.
+//
+// C est la piece maitresse. Les paliers d usage reagissent au remplissage :
+// genereux au debut, ils affament la fin. Simulation a 1000 coureurs sur un
+// telephone a 5 Go libres : 313 coureurs repartaient sans aucune photo.
+//
+// Ici on repartit le budget AVANT de commencer. Le nombre de coureurs vient
+// de l organisateur (estimated_participants) ; le poids d une photo est
+// mesure sur les captures reelles. A defaut de l un ou l autre, on ne se
+// prononce pas (null) et seuls les paliers reactifs s appliquent.
+//
+// ATTENTION — le compte doit etre celui des coureurs QUI RESTENT, pas du
+// total. Budgeter la place restante sur le total alors qu ils defilent fait
+// tomber le calcul a zero a mi-course : a 1000 coureurs sur un telephone a
+// 5 Go, la simulation coupait tout au 366e. Avec le reste a couvrir, le
+// budget se reevalue correctement a chaque passage.
+export function photosPerRunnerForBudget(freeBytes, remainingRunners, photoBytes, opts = {}) {
+  const reserve = opts.reserveBytes ?? STORAGE_RESERVE_BYTES;
+  if (!Number.isFinite(freeBytes) || freeBytes <= 0) return null;
+  if (!Number.isFinite(remainingRunners) || remainingRunners <= 0) return null;
+  if (!Number.isFinite(photoBytes) || photoBytes <= 0) return null;
+  const budget = Math.max(0, freeBytes - reserve);
+  const parCoureur = budget / (remainingRunners * photoBytes);
+  if (parCoureur >= 3) return 3;
+  if (parCoureur >= 2) return 2;
+  if (parCoureur >= 1) return 1;
+  return 0;   // le telephone ne peut pas couvrir l event, meme a 1 photo
+}
+
+// Combien de coureurs peut-on encore couvrir avec la place restante ?
+// Sert au message affiche au benevole : un chiffre concret vaut mieux qu une
+// jauge. Retourne null si la place libre est inconnue.
+export function runnersRemaining(freeBytes, photoBytes, photosPerRunner, reserveBytes = STORAGE_RESERVE_BYTES) {
+  if (!Number.isFinite(freeBytes) || freeBytes <= 0) return null;
+  if (!Number.isFinite(photoBytes) || photoBytes <= 0) return null;
+  if (!Number.isFinite(photosPerRunner) || photosPerRunner <= 0) return 0;
+  const budget = Math.max(0, freeBytes - reserveBytes);
+  return Math.floor(budget / (photoBytes * photosPerRunner));
 }
