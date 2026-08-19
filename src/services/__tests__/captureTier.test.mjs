@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import {
   tierFor, normalizeDiscipline, createLatencyProbe, TIERS, TIER_MAX_LATENCY_MS,
+  photosPerRunnerFor,
 } from './captureTier.js';
 
 let pass = 0;
@@ -124,6 +125,51 @@ t('probe : ignore les valeurs invalides', () => {
   [null, undefined, 0, -1, NaN, 'x'].forEach((v) => p.push(v));
   assert.equal(p.count(), 0);
   assert.equal(p.median(), null);
+});
+
+// ─── Pression de stockage ─────────────────────────────────────────────────
+const GB = 1024 * 1024 * 1024;
+
+t('pression : degradation 3 -> 2 -> 1 -> 0 selon le disque', () => {
+  assert.equal(photosPerRunnerFor(0, 0), 3);
+  assert.equal(photosPerRunnerFor(1.5 * GB, 0), 3);
+  assert.equal(photosPerRunnerFor(3 * GB, 0), 2);
+  assert.equal(photosPerRunnerFor(5 * GB, 0), 1);
+  assert.equal(photosPerRunnerFor(7 * GB, 0), 0);
+});
+
+t('pression : la file d attente degrade aussi, disque libre ou non', () => {
+  assert.equal(photosPerRunnerFor(0, 600), 2, 'file 600 -> 2 malgre disque vide');
+  assert.equal(photosPerRunnerFor(0, 900), 1);
+  assert.equal(photosPerRunnerFor(0, 1200), 0);
+});
+
+t('pression : on retient toujours le palier le PLUS severe', () => {
+  // Disque OK (palier 3) mais file saturee (palier 1) -> 1.
+  assert.equal(photosPerRunnerFor(0.5 * GB, 900), 1);
+  // Et l inverse.
+  assert.equal(photosPerRunnerFor(5 * GB, 10), 1);
+});
+
+t('pression : la degradation commence AVANT l alerte 5 Go', () => {
+  // STORAGE_WARN_BYTES = 5 Go. A ce niveau on doit deja etre a 1 photo,
+  // sinon l alerte arriverait alors qu on capture encore a plein regime.
+  assert.ok(photosPerRunnerFor(5 * GB, 0) <= 1);
+  assert.equal(photosPerRunnerFor(2.1 * GB, 0), 2, 'degradation des 2 Go');
+});
+
+t('pression : entrees invalides -> aucune degradation abusive', () => {
+  for (const v of [null, undefined, NaN, -1, 'x']) {
+    assert.equal(photosPerRunnerFor(v, v), 3, `valeur ${String(v)}`);
+  }
+});
+
+t('pression : paliers surchargeables', () => {
+  const steps = [{ maxBytes: 1e9, maxPipeline: 100, photos: 3 },
+                 { maxBytes: 2e9, maxPipeline: 200, photos: 1 }];
+  assert.equal(photosPerRunnerFor(0.5e9, 0, steps), 3);
+  assert.equal(photosPerRunnerFor(1.5e9, 0, steps), 1);
+  assert.equal(photosPerRunnerFor(3e9, 0, steps), 0);
 });
 
 console.log(`\n${pass} tests OK\n`);

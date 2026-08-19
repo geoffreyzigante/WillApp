@@ -132,3 +132,36 @@ export function createLatencyProbe(sampleSize = 9, minSamples = 5) {
     reset() { samples.length = 0; },
   };
 }
+
+// ─── Pression de stockage ─────────────────────────────────────────────────
+//
+// Hors connexion, les photos s'empilent sur le telephone. Plutot que de
+// couper net a la saturation — ce qui fait repartir des coureurs SANS AUCUNE
+// photo — on reduit progressivement le nombre de photos par passage. Le
+// besoin de stockage est divise par trois avant l'arret, et chaque coureur
+// garde au moins une image.
+//
+// Les paliers sont volontairement en-dessous de STORAGE_WARN_BYTES (5 Go) :
+// quand l'alerte se declenche, la degradation a deja commence depuis
+// longtemps. Le palier 0 n'est atteint qu'au-dela — la, le disque est
+// reellement en danger et ne plus ecrire est le seul choix raisonnable.
+export const STORAGE_PRESSURE_STEPS = [
+  { maxBytes: 2 * 1024 * 1024 * 1024, maxPipeline: 500, photos: 3 },
+  { maxBytes: 4 * 1024 * 1024 * 1024, maxPipeline: 750, photos: 2 },
+  { maxBytes: 6 * 1024 * 1024 * 1024, maxPipeline: 1000, photos: 1 },
+];
+
+// Nombre de photos autorisees par passage, compte tenu de la place occupee
+// et du nombre d'items encore en file. On retient le palier le PLUS SEVERE
+// des deux : un disque encore libre mais une file de 900 items veut dire que
+// l'upload ne suit pas, la degradation est justifiee dans les deux cas.
+//
+// Retourne 0 = plus aucune capture (hors failsafe, gere par l'appelant).
+export function photosPerRunnerFor(pendingBytes, pipelineLoad, steps = STORAGE_PRESSURE_STEPS) {
+  const b = Number.isFinite(pendingBytes) && pendingBytes > 0 ? pendingBytes : 0;
+  const p = Number.isFinite(pipelineLoad) && pipelineLoad > 0 ? pipelineLoad : 0;
+  for (const s of steps) {
+    if (b < s.maxBytes && p < s.maxPipeline) return s.photos;
+  }
+  return 0;
+}

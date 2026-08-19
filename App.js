@@ -106,7 +106,7 @@ import { reportFrameProcessor, describeCapabilities } from './src/services/capab
 // Declenchement par lignes (cf. CONCEPTION_LIGNES_NOTE.md).
 import { createLineTrigger } from './src/services/lineTrigger';
 // Niveaux de capture : adapte le nombre de lignes au materiel et a la course.
-import { tierFor, createLatencyProbe } from './src/services/captureTier';
+import { tierFor, createLatencyProbe, photosPerRunnerFor } from './src/services/captureTier';
 // Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
@@ -987,6 +987,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // Log de refus throttle : sans ca, un disque plein produirait une ligne par
   // coureur qui passe.
   const lineBackpressureWarnAtRef = useRef(0);
+  // Photos deja prises pour chaque track, afin d appliquer le plafond dicte
+  // par la pression de stockage. Map bornee : les tracks sont numerotes en
+  // continu, on purge les plus anciens au-dela de 200 entrees.
+  const trackShotsRef = useRef(new Map());
+  const lineTierRef = useRef(3);
   const scheduleLineCapture = (action) => {
     const fire = () => {
       if (!isMountedRef.current || !isAutoArmedRef.current) return;
@@ -999,15 +1004,42 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // photos que rendre le telephone inutilisable.
       const pipelineLoad = queueRef.current.length + inFlightSetRef.current.size;
       const diskBytes = pendingDirSizeBytesCached();
-      const sature = pipelineLoad >= MAX_TOTAL_IN_PIPELINE || diskBytes > STORAGE_WARN_BYTES;
-      if (sature) {
+      // Degradation PROGRESSIVE : 3 photos par passage, puis 2, puis 1 a
+      // mesure que le telephone se remplit. Couper net ferait repartir des
+      // coureurs sans aucune photo — exactement ce que le failsafe F1 existe
+      // pour empecher.
+      const maxPhotos = photosPerRunnerFor(diskBytes, pipelineLoad);
+      if (maxPhotos !== lineTierRef.current) {
+        lineTierRef.current = maxPhotos;
+        console.log(`[lines] pression stockage -> ${maxPhotos} photo(s)/passage `
+          + `(disque=${(diskBytes / 1024 / 1024 / 1024).toFixed(1)}Go, file=${pipelineLoad})`);
+      }
+
+      // Palier 0 = disque reellement en danger. On stoppe TOUT, failsafe
+      // compris : continuer a ecrire risquerait de corrompre un fichier, et
+      // une photo corrompue ne vaut pas mieux qu une photo absente.
+      if (maxPhotos === 0) {
         const now = Date.now();
         if (now - lineBackpressureWarnAtRef.current > 30000) {
           lineBackpressureWarnAtRef.current = now;
-          console.warn(`[lines] backpressure: pipeline=${pipelineLoad}/${MAX_TOTAL_IN_PIPELINE} `
-            + `disque=${(diskBytes / 1024 / 1024 / 1024).toFixed(1)}Go — capture sautee`);
+          console.warn(`[lines] stockage sature: pipeline=${pipelineLoad} `
+            + `disque=${(diskBytes / 1024 / 1024 / 1024).toFixed(1)}Go — capture stoppee`);
         }
         return;
+      }
+
+      // Au-dessus du palier 0, le failsafe "jamais zero photo" ignore le
+      // plafond : un coureur qui sortirait du cadre bredouille garde sa
+      // photo, meme quand la pression limite les autres a 1.
+      const estFailsafe = action.reason === 'exit-zero';
+      if (!estFailsafe && action.trackId != null) {
+        const deja = trackShotsRef.current.get(action.trackId) || 0;
+        if (deja >= maxPhotos) return;
+        trackShotsRef.current.set(action.trackId, deja + 1);
+        if (trackShotsRef.current.size > 200) {
+          const plusVieux = trackShotsRef.current.keys().next().value;
+          trackShotsRef.current.delete(plusVieux);
+        }
       }
       // burstTs = instant reel du tir, idx 0 : chaque capture est unitaire.
       // Le cron serveur regroupe par ecarts <= 30 s, donc trois captures
