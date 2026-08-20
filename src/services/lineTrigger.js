@@ -34,6 +34,27 @@ export const LINE_TRIGGER_DEFAULTS = {
   staticMs: 3000,              // F5 — duree avant bascule STATIQUE
   velAlpha: 0.4,               // EMA de vitesse (prediction / anticipation)
   maxFaces: 8,                 // cap defensif, miroir du worklet
+  // ─── Garantie de cadrage ────────────────────────────────────────────────
+  // Bande centrale, en fraction de la LARGEUR d image, dans laquelle le
+  // visage doit se trouver AU MOMENT OU L OBTURATEUR S OUVRE — pas au moment
+  // ou l on decide. 0.5 = les 50 % centraux, soit x dans [0.25, 0.75].
+  //
+  // Pourquoi c est necessaire alors que les lignes sont deja dans la zone :
+  // il existe DEUX voies de tir, et une seule compensait la latence.
+  //   - Anticipation (§5) : tire `delai - latence` en avance, la photo
+  //     atterrit PILE sur la ligne. Cadrage correct par construction.
+  //   - Franchissement detecte (§4) : tire avec delayMs = 0. Le
+  //     franchissement est deja passe quand on le voit, et l obturateur
+  //     ajoute encore son delai. Le sujet est donc AILLEURS sur la photo,
+  //     d autant plus loin qu il va vite. C est cette voie qui produisait
+  //     les coureurs collés au bord du cadre.
+  //
+  // La garde ci-dessous ne corrige pas le tir — on ne peut pas tirer dans le
+  // passe — elle le REFUSE quand la photo serait mal cadree. Le coureur
+  // gardera les autres lignes, et a defaut le filet F1.
+  //
+  // 0 desactive la garantie.
+  framingBand: 0.5,
 };
 
 const EPS = 1e-9;
@@ -120,6 +141,22 @@ export function createLineTrigger(userConfig = {}) {
     return tr.x + tr.vx * ((t - tr.lastTs) / 1000);
   }
 
+  // Le visage sera-t-il dans la bande centrale quand l obturateur s ouvrira ?
+  //
+  // On extrapole depuis la DERNIERE observation jusqu a l instant reel de la
+  // prise : instant de tir + latence d obturateur. C est ce que voit la
+  // photo, pas ce que voit le tracker. Un sujet rapide peut parcourir 15 %
+  // de la largeur d image entre la decision et l image.
+  //
+  // Vitesse inconnue (premiere frame) -> vx vaut 0, la prediction se reduit a
+  // la position courante : on ne refuse jamais par ignorance.
+  function willBeFramed(tr, tFire) {
+    const band = cfg.framingBand;
+    if (!(band > 0) || band >= 1) return true;      // garantie desactivee
+    const x = predictX(tr, tFire + cfg.latencyMs);
+    return Math.abs(x - 0.5) <= band / 2 + EPS;
+  }
+
   function area(tr) { return (tr.w || 0) * (tr.h || 0); }
 
   function limiterAllows(t) {
@@ -171,6 +208,14 @@ export function createLineTrigger(userConfig = {}) {
     if (!bypass) {
       if (tFire - lastFireT < cfg.cooldownMs) return false;
       if (!limiterAllows(t)) return false;
+      // Cadrage. Volontairement APRES cooldown et limiteur, et volontairement
+      // sous `bypass` : le filet F1 (sortie de zone a zero photo) passe
+      // outre. Une photo mal cadree vaut mieux que pas de photo du tout —
+      // c est la promesse de base du produit, et elle prime sur celle-ci.
+      //
+      // On ne consomme PAS la ligne en cas de refus : si le sujet revient
+      // dans la bande, elle reste disponible.
+      if (!willBeFramed(primary, tFire)) return false;
     }
     const credited = applyCredit(tFire, primary, linesToConsume);
     lastFireT = tFire;

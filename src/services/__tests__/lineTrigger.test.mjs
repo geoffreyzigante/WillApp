@@ -171,11 +171,131 @@ t('h. peloton de 5 -> <= 5 tirs au total', () => {
   for (const tr of trg.snapshot()) assert.ok(tr.photos > 0, `track ${tr.id} a 0 photo`);
 });
 
-console.log(`\n${pass} tests OK\n`);
 
 // ─── Diagnostic : jusqu'a quelle vitesse obtient-on 3 photos ? ────────────
 // Le plancher sequentiel du capteur (cooldown 150 ms) borne le nombre de tirs
 // sur la duree de traversee des lignes. Information de terrain, pas un test.
+// ─── GARANTIE DE CADRAGE ──────────────────────────────────────────────────
+// Regle produit : le visage doit se trouver dans les 50 % centraux de la
+// LARGEUR d image AU MOMENT OU L OBTURATEUR S OUVRE — pas au moment ou le
+// tracker decide. Les deux instants sont separes par la latence d obturateur,
+// et un coureur rapide parcourt beaucoup de cadre entre les deux.
+
+// Position reelle sur la PHOTO, telle que la verrait le coureur : la ou le
+// visage se trouve `latencyMs` apres le tir. Reimplementation independante
+// du module, volontairement naive.
+function xSurLaPhoto(xAuTir, vx, delayMs, latencyMs) {
+  return xAuTir + vx * ((delayMs + latencyMs) / 1000);
+}
+
+t('i. sujet rapide : aucun tir ne produit un visage hors des 50 % centraux', () => {
+  // vx = 1.2 largeur/s, latence 200 ms -> 0.24 de largeur parcourue entre la
+  // decision et l image. Sans garde, un tir sur la ligne de droite (0.5675)
+  // donnerait un visage a 0.81 : coureur colle au bord.
+  const LAT = 200;
+  const trg = createLineTrigger({ latencyMs: LAT, horizonMs: 400, framingBand: 0.5 });
+  const seq = passage(0, 0.10, 0.95, 1.2);
+
+  // On rejoue en gardant, pour chaque tir, l etat du sujet a cet instant.
+  const fires = [];
+  for (const { ts, faces } of seq) {
+    for (const a of trg.ingest(frame(ts, faces))) {
+      fires.push({ ...a, xAuTir: faces[0].x, vx: 1.2 });
+    }
+  }
+
+  const horsCadre = fires
+    .filter((f) => f.reason !== 'exit-zero')
+    .map((f) => xSurLaPhoto(f.xAuTir, f.vx, f.delayMs, LAT))
+    .filter((x) => Math.abs(x - 0.5) > 0.25 + 1e-6);
+
+  assert.deepEqual(horsCadre, [], `visages hors bande : ${horsCadre.map((x) => x.toFixed(3))}`);
+});
+
+t('i2. le meme sujet SANS la garantie sort effectivement du cadre', () => {
+  // Contre-epreuve : sans ce test, le precedent pourrait passer parce que la
+  // situation ne se produit jamais, et non parce que la garde fonctionne.
+  const LAT = 200;
+  const trg = createLineTrigger({ latencyMs: LAT, horizonMs: 400, framingBand: 0 });
+  const seq = passage(0, 0.10, 0.95, 1.2);
+
+  const fires = [];
+  for (const { ts, faces } of seq) {
+    for (const a of trg.ingest(frame(ts, faces))) {
+      fires.push({ ...a, xAuTir: faces[0].x });
+    }
+  }
+  const horsCadre = fires
+    .filter((f) => f.reason !== 'exit-zero')
+    .map((f) => xSurLaPhoto(f.xAuTir, 1.2, f.delayMs, LAT))
+    .filter((x) => Math.abs(x - 0.5) > 0.25 + 1e-6);
+
+  assert.ok(horsCadre.length > 0, 'la garde desactivee devrait laisser passer des photos mal cadrees');
+});
+
+t('j. passage lent : la garantie ne coute AUCUN tir', () => {
+  // Le cas nominal ne doit rien perdre. A 0.35/s et 50 ms de latence, le
+  // sujet ne bouge que de 0.0175 entre decision et image.
+  const avec = createLineTrigger({ framingBand: 0.5 });
+  const sans = createLineTrigger({ framingBand: 0 });
+  const seq = passage(0, 0.30, 0.70, 0.35);
+  assert.equal(run(avec, seq).length, run(sans, seq).length);
+  assert.equal(run(createLineTrigger({ framingBand: 0.5 }), passage(0, 0.30, 0.70, 0.35)).length, 3);
+});
+
+t('k. zone large : les lignes hors bande ne tirent pas, celle du centre oui', () => {
+  // Zone a 90 % -> lignes a 0.095 / 0.5 / 0.905, donc deux lignes sur trois
+  // sont HORS des 50 % centraux. La garantie doit tenir malgre un reglage
+  // /config qui, lui, ne la connait pas. C est tout l interet de la porter
+  // sur la position finale plutot que sur la geometrie des lignes.
+  const trg = createLineTrigger({ zone: 0.90, lineOffsets: [-0.90, 0, 0.90], framingBand: 0.5 });
+  const seq = passage(0, 0.02, 0.98, 0.30);
+  const fires = [];
+  for (const { ts, faces } of seq) {
+    for (const a of trg.ingest(frame(ts, faces))) fires.push({ ...a, xAuTir: faces[0].x });
+  }
+  const surLignes = fires.filter((f) => f.reason !== 'exit-zero');
+  assert.ok(surLignes.length >= 1, 'la ligne centrale doit tirer');
+  for (const f of surLignes) {
+    const x = xSurLaPhoto(f.xAuTir, 0.30, f.delayMs, LINE_TRIGGER_DEFAULTS.latencyMs);
+    assert.ok(Math.abs(x - 0.5) <= 0.25 + 1e-6, `tir a x=${x.toFixed(3)}, hors bande`);
+  }
+});
+
+t('l. F1 passe outre : mieux vaut une photo mal cadree que pas de photo', () => {
+  // Un sujet qui entre, s arrete avant la premiere ligne, puis ressort par ou
+  // il est venu. Aucune ligne franchie -> F1 doit tirer, meme si le cadrage
+  // n est pas ideal. La promesse « jamais zero photo » prime sur celle-ci.
+  const trg = createLineTrigger({ framingBand: 0.5 });
+  const seq = [];
+  let ts = 0;
+  for (const x of [0.38, 0.40, 0.41, 0.41, 0.41, 0.41, 0.40, 0.38, 0.36]) {
+    seq.push({ ts, faces: [{ x }] }); ts += STEP;
+  }
+  for (let i = 0; i < 6; i++) { seq.push({ ts, faces: [] }); ts += STEP; }
+  const fires = run(trg, seq);
+  assert.ok(fires.some((f) => f.reason === 'exit-zero'), 'F1 doit tirer malgre la garantie');
+});
+
+t('m. bande desactivable et bornee', () => {
+  const seq = passage(0, 0.30, 0.70, 0.35);
+  // 0 et 1 laissent tout passer : pas de garantie, ou bande = image entiere.
+  assert.equal(run(createLineTrigger({ framingBand: 0 }), seq).length, 3);
+  assert.equal(run(createLineTrigger({ framingBand: 1 }), seq).length, 3);
+  // Valeur par defaut = 0.5, la regle produit.
+  assert.equal(LINE_TRIGGER_DEFAULTS.framingBand, 0.5);
+});
+
+t('n. vitesse inconnue : on ne refuse jamais par ignorance', () => {
+  // Premiere observation d un track : vx = 0, la prediction se reduit a la
+  // position courante. Un visage deja dans la bande doit pouvoir declencher
+  // des sa premiere frame utile.
+  const trg = createLineTrigger({ framingBand: 0.5 });
+  const seq = passage(0, 0.42, 0.58, 0.30);
+  assert.ok(run(trg, seq).length >= 1);
+});
+
+console.log(`\n${pass} tests OK\n`);
 console.log('--- tirs obtenus selon la vitesse de traversee ---');
 for (const vx of [0.2, 0.3, 0.35, 0.45, 0.6, 0.9, 1.5, 2.5]) {
   const trg = createLineTrigger();

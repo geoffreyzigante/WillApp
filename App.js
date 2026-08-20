@@ -1476,6 +1476,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       lineStaticMs: 'staticMs',
       lineVelAlpha: 'velAlpha',
       lineMaxFaces: 'maxFaces',
+      // Garantie de cadrage : bande centrale, en fraction de la largeur, dans
+      // laquelle le visage doit se trouver quand l obturateur s ouvre.
+      // 0.5 = les 50 % centraux. 0 desactive.
+      lineFramingBand: 'framingBand',
     };
     const params = {};
     for (const k of Object.keys(MAP)) {
