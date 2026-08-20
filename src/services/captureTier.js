@@ -282,3 +282,45 @@ export function runnersRemaining(freeBytes, photoBytes, photosPerRunner, reserve
   const budget = Math.max(0, freeBytes - reserveBytes);
   return Math.floor(budget / (photoBytes * photosPerRunner));
 }
+
+// ─── Garde-fous adaptatifs ────────────────────────────────────────────────
+//
+// Les constantes d origine sont absolues : MAX_QUEUE_SIZE = 1000 photos et
+// STORAGE_WARN_BYTES = 5 Go, censes s equivaloir a "~5 Mo par photo". Le
+// poids reel mesure sur les HEIC en production est de 1,94 Mo : les deux
+// gardes sont decales d un facteur 2,6, et celui du disque ne mord jamais.
+//
+// Plutot que de corriger un chiffre en dur par un autre, on le derive de ce
+// qu on mesure : le poids reel des photos et la place reellement libre. La
+// meme fonction vaudra sur Android, ou ni l un ni l autre ne ressemblent a
+// l iPhone.
+
+// Poids de repli tant que la sonde n a pas assez d echantillons. Mediane
+// mesuree en production le 2026-08 sur 10 HEIC (min 1,90 / max 1,99).
+export const PHOTO_BYTES_FALLBACK = 1.94 * 1024 * 1024;
+
+// Seuil d alerte stockage : la moitie du budget utilisable, borne pour rester
+// utile sur les extremes (un telephone vide ne doit pas alerter a 40 Go, un
+// telephone plein doit alerter avant qu il soit trop tard).
+export function storageWarnBytesFor(freeBytes, opts = {}) {
+  const reserve = opts.reserveBytes ?? STORAGE_RESERVE_BYTES;
+  const min = opts.minWarnBytes ?? 512 * 1024 * 1024;
+  const max = opts.maxWarnBytes ?? 8 * 1024 * 1024 * 1024;
+  if (!Number.isFinite(freeBytes) || freeBytes <= 0) return max;
+  const budget = Math.max(0, freeBytes - reserve);
+  return Math.min(max, Math.max(min, budget * 0.5));
+}
+
+// Plafond de la file, exprime en PHOTOS et non en octets : c est la borne
+// memoire du suivi en RAM. On le derive du budget disque et du poids reel
+// pour que les deux gardes disent la meme chose, au lieu de se contredire.
+export function maxQueueSizeFor(freeBytes, photoBytes, opts = {}) {
+  const reserve = opts.reserveBytes ?? STORAGE_RESERVE_BYTES;
+  const min = opts.minQueue ?? 200;
+  const max = opts.maxQueue ?? 4000;   // au-dela, le suivi RAM devient lourd
+  const poids = Number.isFinite(photoBytes) && photoBytes > 0
+    ? photoBytes : PHOTO_BYTES_FALLBACK;
+  if (!Number.isFinite(freeBytes) || freeBytes <= 0) return min;
+  const budget = Math.max(0, freeBytes - reserve);
+  return Math.min(max, Math.max(min, Math.floor(budget / poids)));
+}

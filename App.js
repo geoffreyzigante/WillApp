@@ -106,7 +106,10 @@ import { reportFrameProcessor, describeCapabilities } from './src/services/capab
 // Declenchement par lignes (cf. CONCEPTION_LIGNES_NOTE.md).
 import { createLineTrigger } from './src/services/lineTrigger';
 // Niveaux de capture : adapte le nombre de lignes au materiel et a la course.
-import { tierFor, createLatencyProbe, createPhotoSizeProbe, photosPerRunnerFor } from './src/services/captureTier';
+import {
+  tierFor, createLatencyProbe, createPhotoSizeProbe, photosPerRunnerFor,
+  storageWarnBytesFor, maxQueueSizeFor, PHOTO_BYTES_FALLBACK,
+} from './src/services/captureTier';
 // Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
@@ -1015,6 +1018,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // photos que rendre le telephone inutilisable.
       const pipelineLoad = queueRef.current.length + inFlightSetRef.current.size;
       const diskBytes = pendingDirSizeBytesCached();
+      const poidsPhoto = photoSizeProbeRef.current?.median() || PHOTO_BYTES_FALLBACK;
+      // Gardes derives de la place reelle et du poids reel, au lieu des
+      // constantes absolues (1000 photos / 5 Go) qui supposaient ~5 Mo la
+      // photo — mesure a 1,94 Mo. Les deux se contredisaient d un facteur 2,6.
+      const capFile = maxQueueSizeFor(freeBytesRef.current, poidsPhoto);
+      const capDisque = storageWarnBytesFor(freeBytesRef.current);
       // Degradation PROGRESSIVE : 3 photos par passage, puis 2, puis 1 a
       // mesure que le telephone se remplit. Couper net ferait repartir des
       // coureurs sans aucune photo — exactement ce que le failsafe F1 existe
@@ -1028,7 +1037,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       const maxPhotos = photosPerRunnerFor(diskBytes, pipelineLoad, freeBytesRef.current, {
         expectedRunners: attendus,
         seenRunners: seenRunnersRef.current,
-        photoBytes: photoSizeProbeRef.current?.median(),
+        photoBytes: poidsPhoto,
+        pipelineSteps: [
+          { maxLoad: Math.floor(capFile * 0.5), photos: 3 },
+          { maxLoad: Math.floor(capFile * 0.75), photos: 2 },
+          { maxLoad: capFile, photos: 1 },
+        ],
+        absoluteSteps: [
+          { maxBytes: capDisque * 0.4, photos: 3 },
+          { maxBytes: capDisque * 0.8, photos: 2 },
+          { maxBytes: capDisque * 1.2, photos: 1 },
+        ],
       });
       if (maxPhotos !== lineTierRef.current) {
         lineTierRef.current = maxPhotos;
@@ -1358,6 +1377,21 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     const params = {};
     for (const k of Object.keys(MAP)) {
       if (cam[k] !== undefined && cam[k] !== null) params[MAP[k]] = cam[k];
+    }
+    // lineLatencyMs absent ou null dans /config = AUTO : on derive l avance
+    // de tir de l aller-retour takePhoto mesure sur l appareil. Une valeur
+    // explicite reste prioritaire, pour pouvoir forcer depuis /config.
+    //
+    // Facteur 1/3 : l aller-retour inclut l ecriture du fichier APRES
+    // l exposition. La cadence dos-a-dos mesuree en production (76 ms mini,
+    // 172 ms au 10e centile) montre que l exposition arrive tot dans l appel.
+    // Sans mesure fine du declenchement lui-meme, un tiers est le compromis
+    // prudent : sous-anticiper decale la photo, sur-anticiper la rate.
+    if (params.latencyMs === undefined) {
+      const rt = latencyProbeRef.current?.median();
+      if (Number.isFinite(rt) && rt > 0) {
+        params.latencyMs = Math.max(30, Math.min(250, Math.round(rt / 3)));
+      }
     }
     // Niveaux de capture : le niveau choisit lineOffsets et ECRASE la valeur
     // globale. Un niveau n est qu un tableau de longueur differente — le

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import {
   tierFor, normalizeDiscipline, createLatencyProbe, TIERS, TIER_MAX_LATENCY_MS,
   photosPerRunnerFor, photosPerRunnerForBudget, runnersRemaining, STORAGE_RESERVE_BYTES,
+  storageWarnBytesFor, maxQueueSizeFor, PHOTO_BYTES_FALLBACK,
 } from './captureTier.js';
 
 let pass = 0;
@@ -282,6 +283,45 @@ t('couverture : inconnue si la place libre ne peut pas etre lue', () => {
   assert.equal(runnersRemaining(null, 1e6, 1), null);
   assert.equal(runnersRemaining(10 * GB, 0, 1), null);
   assert.equal(runnersRemaining(10 * GB, 1e6, 0), 0);
+});
+
+// ─── Garde-fous adaptatifs ────────────────────────────────────────────────
+t('gardes : les deux disent la MEME chose, contrairement aux constantes fixes', () => {
+  // Le defaut d origine : 1000 photos et 5 Go, censes s equivaloir. A
+  // 1,94 Mo la photo, 1000 photos ne font que 1,94 Go — le garde disque ne
+  // mordait jamais.
+  const free = 20 * GB;
+  const warn = storageWarnBytesFor(free);
+  const queue = maxQueueSizeFor(free, PHOTO_BYTES_FALLBACK);
+  const ecart = Math.abs(queue * PHOTO_BYTES_FALLBACK - warn) / warn;
+  assert.ok(ecart <= 1.05, `les deux gardes divergent de ${(ecart * 100).toFixed(0)} %`);
+});
+
+t('gardes : suivent la place libre au lieu d un chiffre en dur', () => {
+  assert.ok(storageWarnBytesFor(60 * GB) > storageWarnBytesFor(6 * GB));
+  assert.ok(maxQueueSizeFor(60 * GB, PHOTO_BYTES_FALLBACK)
+          > maxQueueSizeFor(6 * GB, PHOTO_BYTES_FALLBACK));
+});
+
+t('gardes : suivent le poids REEL des photos', () => {
+  // Deux fois plus lourdes -> deux fois moins d items en file. Sous le
+  // plafond RAM de 4000, sinon les deux saturent et le rapport disparait.
+  const a = maxQueueSizeFor(6 * GB, 1 * 1024 * 1024);
+  const b = maxQueueSizeFor(6 * GB, 2 * 1024 * 1024);
+  assert.ok(a > b * 1.9 && a < b * 2.1, `${a} vs ${b}`);
+  assert.ok(a < 4000 && b < 4000, 'le test doit rester sous le plafond');
+});
+
+t('gardes : bornes hautes et basses respectees', () => {
+  assert.equal(maxQueueSizeFor(3 * GB, PHOTO_BYTES_FALLBACK), 200, 'plancher');
+  assert.equal(maxQueueSizeFor(500 * GB, PHOTO_BYTES_FALLBACK), 4000, 'plafond RAM');
+  assert.ok(storageWarnBytesFor(500 * GB) <= 8 * GB, 'alerte plafonnee');
+  assert.ok(storageWarnBytesFor(3.2 * GB) >= 512 * 1024 * 1024, 'alerte planchee');
+});
+
+t('gardes : place inconnue -> valeurs prudentes', () => {
+  assert.equal(maxQueueSizeFor(null, PHOTO_BYTES_FALLBACK), 200);
+  assert.equal(maxQueueSizeFor(20 * GB, null), maxQueueSizeFor(20 * GB, PHOTO_BYTES_FALLBACK));
 });
 
 console.log(`\n${pass} tests OK\n`);
