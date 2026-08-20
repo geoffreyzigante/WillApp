@@ -1926,15 +1926,40 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const capaciteCoureurs = (() => {
     const poids = photoSizeProbeRef.current?.median() || PHOTO_BYTES_FALLBACK;
     const parCoureur = lineTierRef.current > 0 ? lineTierRef.current : 2;
-    const n = runnersRemaining(freeDiskGB * 1024 * 1024 * 1024, poids, parCoureur);
+    const octets = freeDiskGB * 1024 * 1024 * 1024;
+    const n = runnersRemaining(octets, poids, parCoureur);
     if (n === null) return null;
+    // ─── Une fourchette, pas un chiffre unique ─────────────────────────
+    // La capacite n est pas une constante : quand le disque se remplit, le
+    // systeme retrograde tout seul de `parCoureur` photos a 1 (cf. les
+    // paliers de captureTier). Le nombre de coureurs reellement couverts se
+    // situe donc entre les deux bornes, et annoncer le seul chiffre bas etait
+    // pessimiste tandis qu annoncer « largement suffisante » ne disait rien
+    // du tout.
+    //
+    // Arrondi a 2 chiffres significatifs : « 52 000 » est honnete,
+    // « 51 983 » est une fausse precision — le poids median des photos bouge
+    // encore de quelques pour cent d une course a l autre.
+    const nMax = runnersRemaining(octets, poids, 1) ?? n;
+    const arrondi = (v) => {
+      if (!Number.isFinite(v) || v <= 0) return 0;
+      if (v < 100) return Math.round(v);
+      const ordre = Math.pow(10, Math.floor(Math.log10(v)) - 1);
+      return Math.round(v / ordre) * ordre;
+    };
+    const basse = arrondi(n);
+    const haute = arrondi(nMax);
     // Compare a l event : le benevole doit savoir si son telephone suffit,
     // et le savoir A TOUT MOMENT — avant, pendant, apres. Pas d alerte
     // ponctuelle qu on rate, une ligne toujours presente dans les infos.
     const attendus = Number(session?.event?.estimated_participants) || null;
     const restants = attendus ? Math.max(0, attendus - seenRunnersRef.current) : null;
+    // La suffisance se juge sur la borne BASSE : promettre « c est bon » sur
+    // l hypothese la plus optimiste (1 photo par coureur) reviendrait a dire
+    // au benevole que tout va bien alors qu il n a la place que s il degrade
+    // la qualite de service au minimum.
     const suffisant = restants === null ? null : n >= restants;
-    return { n, parCoureur, restants, suffisant };
+    return { n, nMax, basse, haute, parCoureur, restants, suffisant };
   })();
   // Menu flottant a gauche du viewer : ferme par defaut, ouvert via chevron.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -3643,11 +3668,16 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               {capaciteCoureurs && (
                 <>
                   <Text style={{ color: P.labelPanel, fontSize: 12, fontWeight: '500', fontFamily: 'Montserrat', marginTop: 6 }}>
-                    {capaciteCoureurs.n >= 100000
-                      ? 'Place largement suffisante'
-                      : `Place pour ~${capaciteCoureurs.n.toLocaleString('fr-FR')} coureurs (${capaciteCoureurs.parCoureur} photo${capaciteCoureurs.parCoureur > 1 ? 's' : ''} chacun)`}
+                    {capaciteCoureurs.haute > capaciteCoureurs.basse
+                      ? `Place pour ${capaciteCoureurs.basse.toLocaleString('fr-FR')} à ${capaciteCoureurs.haute.toLocaleString('fr-FR')} coureurs`
+                      : `Place pour ~${capaciteCoureurs.basse.toLocaleString('fr-FR')} coureurs`}
                   </Text>
-                  {capaciteCoureurs.n < 100000 && capaciteCoureurs.restants != null && (
+                  <Text style={{ color: P.labelMuted, fontSize: 11, fontWeight: '500', fontFamily: 'Montserrat', marginTop: 1 }}>
+                    {capaciteCoureurs.haute > capaciteCoureurs.basse
+                      ? `${capaciteCoureurs.parCoureur} photo${capaciteCoureurs.parCoureur > 1 ? 's' : ''} chacun aujourd'hui, 1 si le disque se remplit`
+                      : '1 photo chacun'}
+                  </Text>
+                  {capaciteCoureurs.restants != null && (
                     <Text
                       style={{
                         color: capaciteCoureurs.suffisant ? P.labelPanel : P.danger,
