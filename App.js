@@ -110,6 +110,10 @@ import {
   tierFor, createLatencyProbe, createPhotoSizeProbe, photosPerRunnerFor,
   storageWarnBytesFor, maxQueueSizeFor, PHOTO_BYTES_FALLBACK, runnersRemaining,
 } from './src/services/captureTier';
+// Upload en deux temps : copie legere pour la reconnaissance, original ensuite.
+import {
+  makeLightCopy, lightIsWorthIt, LIGHT_QUALITY_DEFAULT, LIGHT_MAX_WIDTH,
+} from './src/services/lightCopy';
 // Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
@@ -2271,6 +2275,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     if (!online) return;
 
     drainingRef.current = true;
+    // Vrai si ce passage a traite la voie legere : il faut alors relancer un
+    // drain tout de suite (soit d autres copies legeres viennent d arriver,
+    // soit c est au tour des originaux). Sans ca on attendrait le heartbeat
+    // 30 s entre chaque phase.
+    let phaseLegereFaite = false;
     try {
       const arr = [...queueRef.current];
       const now = Date.now();
@@ -2334,8 +2343,40 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       }
 
       // Mémorise le total initial pour la progress bar du header.
-      drainStartTotalRef.current = uploadable.length;
-      if (isMountedRef.current) setDrainStartTotal(uploadable.length);
+      // ─── Upload en deux temps (cf src/services/lightCopy.js) ─────────
+      // Deux besoins qui n ont aucune raison d aller a la meme vitesse :
+      //   ETRE RECONNU   -> une image analysable suffit  (~300 Ko)
+      //   AVOIR SA PHOTO -> il faut l original           (1.94 Mo)
+      // On passe donc deux fois sur la file : d abord toutes les copies
+      // legeres, ensuite seulement les originaux.
+      //
+      // La priorite du leger est STRICTE et voulue : tant qu il reste une
+      // copie legere a envoyer, aucun original ne part. Pendant la course,
+      // tout le monde est donc reconnu avant que quiconque ait sa pleine
+      // resolution ; les originaux prennent la bande passante restante et
+      // finissent de monter apres l event. C est l inverse d aujourd hui,
+      // ou le 400e coureur attend que les 399 premiers aient pousse leurs
+      // 1.94 Mo avant d exister dans la galerie.
+      //
+      // Defaut OFF : a mesurer sur de vraies photos d event (poids reel de
+      // la copie, taux de match inchange) avant d activer via /config.
+      const twoTier = eventConfig.upload?.two_tier === true;
+      const lightQuality = eventConfig.upload?.lightQuality ?? LIGHT_QUALITY_DEFAULT;
+      // Les RAW (.dng) ne sont ni analysables ni recompressables ici : ils
+      // sautent la voie legere. lightSkipped = voie legere abandonnee pour
+      // cet item (gain nul, ou echecs repetes) -> il part directement full.
+      const besoinLeger = twoTier
+        ? uploadable.filter(({ it }) => !it.isRaw && it.lightDone !== true)
+        : [];
+      const phase = besoinLeger.length > 0 ? 'light' : 'full';
+      phaseLegereFaite = phase === 'light';
+      const lot = phase === 'light' ? besoinLeger : uploadable;
+      if (twoTier && verbose) {
+        console.log(`[upload] phase=${phase} lot=${lot.length}/${uploadable.length}`);
+      }
+
+      drainStartTotalRef.current = lot.length;
+      if (isMountedRef.current) setDrainStartTotal(lot.length);
 
       // CONCURRENCY 3 par defaut, adapte dynamiquement selon ProcessInfo.thermalState :
       //   nominal/fair -> 3 (debit utile, 4G/5G correct)
@@ -2351,8 +2392,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // patche uniquement les items qu'on traite par id -- jamais d'ecrasement
       // d'items ajoutes entre la prise du snapshot et ce commit (race window
       // microsecondes mais bulletproofing).
-      for (const { i } of uploadable) arr[i] = { ...arr[i], status: 'uploading', nextAttemptAt: null };
-      const uploadingIds = new Set(uploadable.map(({ it }) => it.id));
+      for (const { i } of lot) arr[i] = { ...arr[i], status: 'uploading', nextAttemptAt: null };
+      const uploadingIds = new Set(lot.map(({ it }) => it.id));
       const initialCommit = queueRef.current.map(it =>
         uploadingIds.has(it.id) ? { ...it, status: 'uploading', nextAttemptAt: null } : it
       );
@@ -2367,8 +2408,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       const confirmedKeptBurstTs = new Set();
 
       async function worker() {
-        while (cursor < uploadable.length) {
-          const { i } = uploadable[cursor++];
+        while (cursor < lot.length) {
+          const { i } = lot[cursor++];
           const item = arr[i];
           if (!item) continue;
           // sanity: file still there ?
@@ -2401,11 +2442,62 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             arr[i] = null;
             continue;
           }
+          // Fichier temporaire a nettoyer quoi qu il arrive (copie legere).
+          // Declare HORS du try pour rester visible du finally.
+          let cleanupUri = null;
           try {
+            let srcUri = item.localUri;
+            let contentType = item.isRaw ? 'image/x-adobe-dng' : 'image/heic';
+            let tierHeader = null;
+
+            if (phase === 'light') {
+              // Fabrication A LA VOLEE, au moment d envoyer. Volontaire :
+              // hors ligne on ne draine pas, donc aucune copie legere
+              // n existe et le disque du telephone ne paie rien. Elle vit
+              // le temps d un PUT.
+              const light = await makeLightCopy(item.localUri, {
+                quality: lightQuality,
+                maxWidth: LIGHT_MAX_WIDTH,
+              });
+              if (light.ok) cleanupUri = light.uri;
+              let poidsOrig = 0;
+              let poidsLeger = 0;
+              if (light.ok) {
+                try { poidsOrig = new File(item.localUri).size || 0; } catch {}
+                try { poidsLeger = new File(light.uri).size || 0; } catch {}
+              }
+              if (!light.ok || !lightIsWorthIt(poidsOrig, poidsLeger)) {
+                // AUCUNE photo perdue : on abandonne juste la voie legere
+                // pour cet item. Il repart tel quel en phase full au
+                // prochain passage, exactement comme avant ce chantier.
+                const raison = light.ok
+                  ? `gain insuffisant (${poidsOrig} -> ${poidsLeger} o)`
+                  : `${light.reason}${light.error ? ' ' + light.error : ''}`;
+                addDebugLog(`[light] skip ${item.id}: ${raison}`);
+                arr[i] = { ...item, lightDone: true, lightSkipped: raison, status: 'pending', nextAttemptAt: null };
+                continue;
+              }
+              srcUri = light.uri;
+              contentType = 'image/jpeg';
+              tierHeader = 'light';
+              if (verbose) {
+                const m = `[light] ${item.id} ${poidsOrig}o -> ${poidsLeger}o `
+                  + `(x${(poidsOrig / poidsLeger).toFixed(1)}) ${light.width}x${light.height}`;
+                console.log(m); addDebugLog(m);
+              }
+            } else if (twoTier && item.lightDone === true && !item.lightSkipped) {
+              // L original arrive APRES la copie legere, sur la MEME cle R2.
+              // Ce header dit au worker : garde les customMetadata deja
+              // ecrits (matched_user_ids !) et ne relance pas l analyse.
+              // Sans lui, le PUT ecraserait les resultats de reconnaissance.
+              tierHeader = 'full';
+            }
+
             const headers = {
-              'Content-Type': item.isRaw ? 'image/x-adobe-dng' : 'image/heic',
+              'Content-Type': contentType,
               Authorization: `Bearer ${session.token}`,
             };
+            if (tierHeader) headers['X-Will-Tier'] = tierHeader;
             if (item.race) headers['X-Will-Race'] = String(item.race);
             if (item.km) headers['X-Will-Km'] = String(item.km);
             const uploadUrl = `${API_URL}/${item.key}`;
@@ -2420,16 +2512,28 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               result = await new Promise((resolve, reject) => {
                 pendingBgUploads.set(item.id, { resolve, reject });
                 BackgroundUploaderModule
-                  .enqueueUpload(uploadUrl, item.localUri, headers, item.id)
+                  .enqueueUpload(uploadUrl, srcUri, headers, item.id)
                   .catch((e) => {
                     pendingBgUploads.delete(item.id);
                     reject(e);
                   });
               });
             } else {
-              const blob = await (await fetch(item.localUri)).blob();
+              const blob = await (await fetch(srcUri)).blob();
               const res = await fetch(uploadUrl, { method: 'PUT', headers, body: blob });
               result = { ok: res.ok, status: res.status, error: null };
+            }
+
+            if (result.ok && phase === 'light') {
+              // La copie legere est sur R2 : la reconnaissance peut tourner,
+              // le coureur va apparaitre dans sa galerie. L ORIGINAL EST
+              // INTACT sur le telephone — on ne supprime que la copie (via
+              // le finally) et l item retourne en file d attente pour la
+              // phase full. On ne bump PAS "Uploadees" : ce compteur veut
+              // dire "original sur R2", et il doit continuer a le vouloir.
+              arr[i] = { ...item, lightDone: true, status: 'pending', retries: 0, nextAttemptAt: null };
+              if (verbose) addDebugLog(`[light] OK ${item.id}`);
+              continue;
             }
 
             if (result.ok) {
@@ -2455,20 +2559,48 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 console.log(m); addDebugLog(m);
               }
             } else {
-              const updated = nextRetryState(item, maxRetries);
-              const m = `[upload] HTTP ${result.status} ${item.id} -> retries=${updated.retries}, next=${updated.nextAttemptAt ?? 'never'}${result.error ? ` err=${result.error}` : ''}`;
+              const updated = echecUpload(item, maxRetries, phase);
+              const m = `[upload:${phase}] HTTP ${result.status} ${item.id} -> retries=${updated.retries}, next=${updated.nextAttemptAt ?? 'never'}${result.error ? ` err=${result.error}` : ''}`;
               if (verbose) console.warn(m);
               addDebugLog(m);
               arr[i] = updated;
             }
           } catch (e) {
-            const updated = nextRetryState(item, maxRetries);
-            const m = `[upload] err ${item.id} -> retries=${updated.retries}: ${e?.message || e?.code || e}`;
+            const updated = echecUpload(item, maxRetries, phase);
+            const m = `[upload:${phase}] err ${item.id} -> retries=${updated.retries}: ${e?.message || e?.code || e}`;
             if (verbose) console.warn(m);
             addDebugLog(m);
             arr[i] = updated;
+          } finally {
+            // La copie legere est un fichier jetable : elle disparait que le
+            // PUT ait reussi, echoue ou leve. Sans ce finally elle fuirait
+            // dans le cache a chaque retry reseau.
+            if (cleanupUri) { try { new File(cleanupUri).delete(); } catch {} }
           }
         }
+      }
+
+      // Echec d upload : meme backoff qu avant, SAUF sur la voie legere.
+      //
+      // Un echec de la copie legere ne doit JAMAIS condamner la photo. Avec
+      // nextRetryState seul, 5 echecs sur le leger passeraient l item en
+      // 'failed' — et l original, lui, n aurait jamais ete tente. On
+      // abandonne donc la voie legere apres maxRetries et on rend a l item
+      // son budget de retries complet pour la phase full.
+      function echecUpload(it, maxRetries, phase) {
+        const updated = nextRetryState(it, maxRetries);
+        if (phase === 'light' && updated.status === 'failed') {
+          addDebugLog(`[light] abandon ${it.id} apres ${updated.retries} echecs -> envoi direct de l original`);
+          return {
+            ...updated,
+            status: 'pending',
+            retries: 0,
+            nextAttemptAt: null,
+            lightDone: true,
+            lightSkipped: `${updated.retries} echecs upload`,
+          };
+        }
+        return updated;
       }
 
       await Promise.all(Array.from({ length: CONCURRENCY }).map(() => worker()));
@@ -2485,7 +2617,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // avoir grossi). Items ajoutes pendant le drain = preserves.
       const droppedIds = new Set();
       const updatedById = new Map();
-      for (const { it: origItem, i: arrIdx } of uploadable) {
+      for (const { it: origItem, i: arrIdx } of lot) {
         const cur = arr[arrIdx];
         if (cur === null) {
           // Worker a uploaded OK (PUT 200) ou marque LOST (file missing).
@@ -2539,6 +2671,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // Re-trigger drain au plus proche cooldown : les retries 2/4/8s
       // partent sans attendre le heartbeat 30s ni un evt NetInfo.
       scheduleRetryTick();
+      // Enchaine la phase suivante. setTimeout(0) et pas un appel direct :
+      // drainingRef n est remis a false que dans ce finally, un appel
+      // synchrone ressortirait immediatement.
+      if (phaseLegereFaite) setTimeout(() => { drainQueue(); }, 0);
     }
   }
 
