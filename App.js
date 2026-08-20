@@ -108,7 +108,7 @@ import { createLineTrigger } from './src/services/lineTrigger';
 // Niveaux de capture : adapte le nombre de lignes au materiel et a la course.
 import {
   tierFor, createLatencyProbe, createPhotoSizeProbe, photosPerRunnerFor,
-  storageWarnBytesFor, maxQueueSizeFor, PHOTO_BYTES_FALLBACK,
+  storageWarnBytesFor, maxQueueSizeFor, PHOTO_BYTES_FALLBACK, runnersRemaining,
 } from './src/services/captureTier';
 // Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
@@ -1812,6 +1812,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // pour ne pas polluer la vue benevole. Toujours gate IS_PREVIEW_OR_DEV
   // (jamais visible en prod, meme deplie).
   const [techExpanded, setTechExpanded] = useState(false);
+  // Capacite du telephone, en COUREURS et non en gigaoctets : un benevole ne
+  // sait pas ce que "4,2 Go libres" represente, il sait ce que "environ
+  // 900 coureurs" veut dire. Recalculee a l ouverture du panneau infos.
+  const capaciteCoureurs = (() => {
+    const poids = photoSizeProbeRef.current?.median() || PHOTO_BYTES_FALLBACK;
+    const parCoureur = lineTierRef.current > 0 ? lineTierRef.current : 2;
+    const n = runnersRemaining(freeDiskGB * 1024 * 1024 * 1024, poids, parCoureur);
+    return n === null ? null : { n, parCoureur };
+  })();
   // Menu flottant a gauche du viewer : ferme par defaut, ouvert via chevron.
   const [menuOpen, setMenuOpen] = useState(false);
   // Animated.Value pour open/close en spring (rotation chevron + fade/translate
@@ -3388,6 +3397,22 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 </>
               )}
             </View>
+            {/* Capacite restante du telephone, exprimee en coureurs. Le
+                benevole peut agir dessus (liberer de la place, trouver du
+                reseau) ; un nombre de gigaoctets ne lui dirait rien. */}
+            {capaciteCoureurs && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 6 }}>
+                <Text style={{
+                  color: capaciteCoureurs.n < 200 ? '#FB923C' : 'rgba(255,255,255,0.55)',
+                  fontSize: 11, fontWeight: '500',
+                }}>
+                  {capaciteCoureurs.n >= 100000
+                    ? 'Place largement suffisante'
+                    : `Place pour ~${capaciteCoureurs.n.toLocaleString('fr-FR')} coureurs `
+                      + `(${capaciteCoureurs.parCoureur} photo${capaciteCoureurs.parCoureur > 1 ? 's' : ''} chacun)`}
+                </Text>
+              </View>
+            )}
             {IS_PREVIEW_OR_DEV && liveExposureSamples.length > 0 && (() => {
               const last = liveExposureSamples[liveExposureSamples.length - 1];
               return (

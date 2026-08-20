@@ -156,19 +156,36 @@ export const createPhotoSizeProbe = createRollingMedian;
 // (echecs d ecriture, purge de caches) bien avant le disque plein reel.
 export const STORAGE_RESERVE_BYTES = 3 * 1024 * 1024 * 1024;
 
+// Marge de securite appliquee a TOUT budget calcule. On ne vise jamais la
+// limite theorique : le poids des photos varie (lumiere, format), le nombre
+// de coureurs annonce est une estimation, et un event deborde souvent son
+// horaire. 15 % couvre ces trois derives sans sacrifier de niveau dans les
+// cas normaux.
+export const BUDGET_SAFETY = 0.85;
+
+// Plancher produit : on ne descend a 1 photo QUE si 2 ne permettrait pas de
+// couvrir tout le monde. La promesse est 2 a 3 photos par passage ; une
+// seule photo est un mode de survie, pas un regime de croisiere.
+export const MIN_PHOTOS_NOMINAL = 2;
+
 // Part du budget utilisable deja consommee -> photos autorisees.
+// Regime nominal : 3 puis 2 photos. Le palier a 1 est un SECOURS, place tard
+// (95 % du budget) : sans lui on passerait de 2 a l arret complet d un coup,
+// et des coureurs repartiraient bredouilles alors qu il restait de la place
+// pour une photo. La promesse produit reste "2 a 3" ; 1 photo signale que le
+// telephone est en fin de course.
 export const STORAGE_USAGE_STEPS = [
-  { maxUsage: 0.40, photos: 3 },
-  { maxUsage: 0.70, photos: 2 },
-  { maxUsage: 0.92, photos: 1 },
+  { maxUsage: 0.45, photos: 3 },
+  { maxUsage: 0.85, photos: 2 },
+  { maxUsage: 0.95, photos: 1 },
 ];
 
 // Repli quand la place libre est inconnue (API indisponible) : on retombe sur
 // des seuils absolus prudents plutot que de supposer un disque infini.
 export const STORAGE_ABSOLUTE_STEPS = [
   { maxBytes: 2 * 1024 * 1024 * 1024, photos: 3 },
-  { maxBytes: 4 * 1024 * 1024 * 1024, photos: 2 },
-  { maxBytes: 6 * 1024 * 1024 * 1024, photos: 1 },
+  { maxBytes: 5 * 1024 * 1024 * 1024, photos: 2 },
+  { maxBytes: 7 * 1024 * 1024 * 1024, photos: 1 },
 ];
 
 // Plafond memoire du suivi en RAM, independant du disque. Une file de 900
@@ -176,8 +193,8 @@ export const STORAGE_ABSOLUTE_STEPS = [
 // le disque est vide.
 export const PIPELINE_STEPS = [
   { maxLoad: 500, photos: 3 },
-  { maxLoad: 750, photos: 2 },
-  { maxLoad: 1000, photos: 1 },
+  { maxLoad: 1000, photos: 2 },
+  { maxLoad: 1400, photos: 1 },
 ];
 
 function stepValue(steps, value, key) {
@@ -264,7 +281,8 @@ export function photosPerRunnerForBudget(freeBytes, remainingRunners, photoBytes
   if (!Number.isFinite(freeBytes) || freeBytes <= 0) return null;
   if (!Number.isFinite(remainingRunners) || remainingRunners <= 0) return null;
   if (!Number.isFinite(photoBytes) || photoBytes <= 0) return null;
-  const budget = Math.max(0, freeBytes - reserve);
+  const marge = opts.safety ?? BUDGET_SAFETY;
+  const budget = Math.max(0, freeBytes - reserve) * marge;
   const parCoureur = budget / (remainingRunners * photoBytes);
   if (parCoureur >= 3) return 3;
   if (parCoureur >= 2) return 2;
@@ -308,7 +326,7 @@ export function storageWarnBytesFor(freeBytes, opts = {}) {
   const max = opts.maxWarnBytes ?? 8 * 1024 * 1024 * 1024;
   if (!Number.isFinite(freeBytes) || freeBytes <= 0) return max;
   const budget = Math.max(0, freeBytes - reserve);
-  return Math.min(max, Math.max(min, budget * 0.5));
+  return Math.min(max, Math.max(min, budget * 0.5 * (opts.safety ?? BUDGET_SAFETY)));
 }
 
 // Plafond de la file, exprime en PHOTOS et non en octets : c est la borne
@@ -322,5 +340,6 @@ export function maxQueueSizeFor(freeBytes, photoBytes, opts = {}) {
     ? photoBytes : PHOTO_BYTES_FALLBACK;
   if (!Number.isFinite(freeBytes) || freeBytes <= 0) return min;
   const budget = Math.max(0, freeBytes - reserve);
-  return Math.min(max, Math.max(min, Math.floor(budget / poids)));
+  const marge = opts.safety ?? BUDGET_SAFETY;
+  return Math.min(max, Math.max(min, Math.floor((budget * marge) / poids)));
 }

@@ -138,12 +138,27 @@ t('pression : un telephone spacieux ne se degrade PAS pour 2 Go', () => {
   assert.equal(photosPerRunnerFor(2 * GB, 0, null), 2, 'repli absolu, plus severe');
 });
 
-t('pression : un telephone plein se degrade a mesure qu il se remplit', () => {
-  // 5 Go libres, reserve 3 -> budget utile 2 Go. La degradation est
-  // REACTIVE : elle suit le remplissage reel, elle n anticipe pas.
+t('pression : un telephone plein se degrade, mais JAMAIS sous 2 photos', () => {
+  // Les paliers reactifs vont de 3 a 2. Descendre a 1 est une decision du
+  // budget, qui sait que 2 ne couvrirait pas tout le monde — la pression
+  // seule ne doit pas faire tomber la promesse produit.
   assert.equal(photosPerRunnerFor(0.5 * GB, 0, 5 * GB), 3);   // usage 20 %
-  assert.equal(photosPerRunnerFor(1.5 * GB, 0, 5 * GB), 2);   // usage 43 %
-  assert.equal(photosPerRunnerFor(5.0 * GB, 0, 5 * GB), 1);   // usage 71 %
+  assert.equal(photosPerRunnerFor(2.5 * GB, 0, 5 * GB), 2);   // usage 56 %
+  assert.equal(photosPerRunnerFor(5.0 * GB, 0, 5 * GB), 2, 'plancher nominal');
+});
+
+t('promesse : 2 a 3 photos tant qu il reste de la place', () => {
+  // Couples COHERENTS : ce qu on ecrit sort de la place libre. Aucun palier
+  // reactif ne descend a 1 tant que le budget systeme n est pas entame.
+  const depart = 20 * GB;
+  for (const p of [0, 1, 2, 5, 10, 14]) {
+    const n = photosPerRunnerFor(p * GB, 0, depart - p * GB);
+    assert.ok(n >= 2, `${p} Go ecrits -> ${n} photo(s), attendu >= 2`);
+  }
+  // Fin de course : le palier de secours evite le saut brutal 2 -> arret.
+  assert.equal(photosPerRunnerFor(15 * GB, 0, depart - 15 * GB), 1, 'secours');
+  // Puis la reserve systeme est entamee, l arret est legitime.
+  assert.equal(photosPerRunnerFor(17 * GB, 0, depart - 17 * GB), 0);
 });
 
 // ─── LE test qui compte : personne n est laisse de cote ───────────────────
@@ -226,27 +241,30 @@ t('couverture : a 3 photos figees, le meme telephone couvrirait un tiers', () =>
 });
 
 t('pression : sous la reserve systeme, tout s arrete', () => {
-  // 2 Go libres < reserve 3 Go et rien en attente -> budget nul.
+  // 2 Go libres < reserve 3 Go -> budget nul, meme le plancher tombe.
   assert.equal(photosPerRunnerFor(0, 0, 2 * GB), 0);
 });
 
 t('pression : la file degrade aussi, disque libre ou non', () => {
   assert.equal(photosPerRunnerFor(0, 600, 100 * GB), 2, 'file 600 malgre 100 Go');
-  assert.equal(photosPerRunnerFor(0, 900, 100 * GB), 1);
-  assert.equal(photosPerRunnerFor(0, 1200, 100 * GB), 0);
+  assert.equal(photosPerRunnerFor(0, 1200, 100 * GB), 1, 'file pleine -> secours');
+  assert.equal(photosPerRunnerFor(0, 1500, 100 * GB), 0, 'file saturee -> arret');
 });
 
 t('pression : on retient toujours le palier le PLUS severe', () => {
-  assert.equal(photosPerRunnerFor(0.1 * GB, 900, 100 * GB), 1, 'file severe');
-  // 5 Go libres, 5 Go deja en attente -> budget 2+5=7, usage 71 % -> 1.
-  assert.equal(photosPerRunnerFor(5 * GB, 0, 5 * GB), 1, 'disque severe');
+  assert.equal(photosPerRunnerFor(0.1 * GB, 900, 100 * GB), 2, 'file severe');
+  assert.equal(photosPerRunnerFor(0.1 * GB, 1300, 100 * GB), 1, 'file en secours');
+  assert.equal(photosPerRunnerFor(5 * GB, 0, 5 * GB), 2, 'disque severe');
+  // Le budget, lui, peut imposer 1 : 2 photos ne couvriraient pas 1000.
+  assert.equal(photosPerRunnerFor(0, 0, 6 * GB,
+    { remainingRunners: 1000, photoBytes: PHOTO_BYTES_FALLBACK }), 1);
 });
 
 t('pression : place inconnue -> repli sur des seuils absolus prudents', () => {
   assert.equal(photosPerRunnerFor(1 * GB, 0, null), 3);
   assert.equal(photosPerRunnerFor(3 * GB, 0, 0), 2);
-  assert.equal(photosPerRunnerFor(5 * GB, 0, NaN), 1);
-  assert.equal(photosPerRunnerFor(7 * GB, 0, undefined), 0);
+  assert.equal(photosPerRunnerFor(6 * GB, 0, NaN), 1, 'secours');
+  assert.equal(photosPerRunnerFor(8 * GB, 0, undefined), 0);
 });
 
 t('pression : entrees invalides -> aucune degradation abusive', () => {
@@ -257,8 +275,6 @@ t('pression : entrees invalides -> aucune degradation abusive', () => {
 
 t('pression : paliers surchargeables par /config', () => {
   const usageSteps = [{ maxUsage: 0.9, photos: 3 }];
-  // free et pending sont lies : ce qu on ecrit sort de la place libre. Un
-  // couple incoherent (50 Go libres ET 48 Go ecrits) ne se produit jamais.
   assert.equal(photosPerRunnerFor(5 * GB, 0, 45 * GB, { usageSteps }), 3);
   assert.equal(photosPerRunnerFor(48 * GB, 0, 2 * GB, { usageSteps }), 0);
 });
@@ -322,6 +338,21 @@ t('gardes : bornes hautes et basses respectees', () => {
 t('gardes : place inconnue -> valeurs prudentes', () => {
   assert.equal(maxQueueSizeFor(null, PHOTO_BYTES_FALLBACK), 200);
   assert.equal(maxQueueSizeFor(20 * GB, null), maxQueueSizeFor(20 * GB, PHOTO_BYTES_FALLBACK));
+});
+
+// ─── Ce que le materiel exige vraiment ───────────────────────────────────
+t('capacite : place libre minimale pour couvrir 1000 coureurs', () => {
+  const besoin = (n, photos) => {
+    for (let gb = 3.1; gb <= 60; gb += 0.1) {
+      if (photosPerRunnerForBudget(gb * GB, n, PHOTO_BYTES_FALLBACK) >= photos) return +gb.toFixed(1);
+    }
+    return null;
+  };
+  const un = besoin(1000, 1), deux = besoin(1000, 2), trois = besoin(1000, 3);
+  console.log(`        -> 1000 coureurs : ${un} Go pour 1 photo, ${deux} Go pour 2, ${trois} Go pour 3`);
+  assert.ok(un < deux && deux < trois);
+  // Un telephone a 5 Go libres ne couvre PAS 1000 coureurs, meme a 1 photo.
+  assert.equal(photosPerRunnerForBudget(5 * GB, 1000, PHOTO_BYTES_FALLBACK), 0);
 });
 
 console.log(`\n${pass} tests OK\n`);
