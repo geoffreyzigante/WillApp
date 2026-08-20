@@ -114,6 +114,8 @@ import {
 import {
   makeLightCopy, lightIsWorthIt, LIGHT_QUALITY_DEFAULT, LIGHT_MAX_WIDTH,
 } from './src/services/lightCopy';
+// Auto-calibration de la latence de capture : remplace le `rt / 3` devine.
+import { creerCalibrateur } from './src/services/latencyCalibrator';
 // Suffixe d identifiant d upload marquant la voie legere. Doit rester un
 // motif impossible dans un id d item (les ids sont alphanumeriques).
 const LIGHT_ID_SUFFIX = '#light';
@@ -124,8 +126,6 @@ import { fovFromFormat, TARGET_DISTANCE_M, MOUNT_HEIGHT_M, DISTANCE_CHOICES_M } 
 import { reduceBursts, sanitizeQualityConfig } from './src/services/qualityReducer';
 import { recordScore, recordBurstReduction, getSummary as getQualitySummary } from './src/services/qualityTelemetry';
 import {
-  formatShutter,
-  formatEV,
   formatTimeAgo,
   MONTHS_FULL,
   MONTHS_SHORT,
@@ -923,7 +923,6 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   useEffect(() => { selectedRaceRef.current = selectedRace; }, [selectedRace]);
   useEffect(() => { selectedKmRef.current = selectedKm; }, [selectedKm]);
   const distances = Array.isArray(session?.event?.distances) ? session.event.distances : [];
-  const hasDistances = distances.length > 0;
   // Course "Toutes" : ceiling = plus longue distance de l'event (pas un floor
   // arbitraire). Course choisie : ceiling = sa distance. Fallback 50 km si
   // aucune distance valide (event mal configure).
@@ -1063,6 +1062,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // 10 s = large devant la duree d un passage, negligeable en CPU. Le tick
   // ne tourne pas si le flag est a false.
   const [tierTick, setTierTick] = useState(0);
+  // Auto-calibration de la latence d obturateur. `latencyMsRef` est la valeur
+  // EN VIGUEUR : elle part de /config (ou du repli AUTO) et se corrige toute
+  // seule au fil des passages. Cf. src/services/latencyCalibrator.js.
+  const latencyCalRef = useRef(creerCalibrateur());
+  const latencyMsRef = useRef(null);
 
   // Programme la capture decidee par le tracker. `delayMs` porte l'anticipation
   // (franchissement prevu moins la latence systeme) : on le respecte tel quel.
@@ -1163,7 +1167,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // burstTs = instant reel du tir, idx 0 : chaque capture est unitaire.
       // Le cron serveur regroupe par ecarts <= 30 s, donc trois captures
       // espacees de ~150 ms restent un seul passage.
-      captureOne({ burstTs: Date.now(), idx: 0, lineTriggered: true });
+      captureOne({
+        burstTs: Date.now(), idx: 0, lineTriggered: true,
+        // Prediction du tracker, transportee jusqu a la photo : elle sera
+        // comparee a la position reelle du visage pour calibrer la latence.
+        xPredicted: action.xPredicted,
+        vxAtFire: action.vx,
+      });
     };
     if (action.delayMs > 0) setTimeout(fire, action.delayMs);
     else fire();
@@ -1497,8 +1507,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     if (params.latencyMs === undefined) {
       const rt = latencyProbeRef.current?.median();
       if (Number.isFinite(rt) && rt > 0) {
+        // Amorce seulement. `rt / 3` reste une supposition — le tiers n a
+        // jamais ete mesure — mais il faut bien partir de quelque chose avant
+        // la premiere photo notee.
         params.latencyMs = Math.max(30, Math.min(250, Math.round(rt / 3)));
       }
+      // Des que la calibration a parle, elle prime sur l amorce : elle, elle
+      // est mesuree sur la position reelle des visages.
+      if (Number.isFinite(latencyMsRef.current)) {
+        params.latencyMs = latencyMsRef.current;
+      }
+      latencyMsRef.current = params.latencyMs;
     }
     // Niveaux de capture : le niveau choisit lineOffsets et ECRASE la valeur
     // globale. Un niveau n est qu un tableau de longueur differente — le
@@ -1985,11 +2004,6 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     }).start();
   }, [menuOpen]);
 
-  const toggleMenu = () => {
-    try { Haptics?.selectionAsync?.(); } catch {}
-    setMenuOpen(v => !v);
-  };
-
   const fetchMyPhotos = useCallback(async () => {
     if (!session?.event?.code || !session?.token) return;
     if (myPhotosFetchInFlightRef.current) return;
@@ -2135,9 +2149,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         // Declenchement par lignes : ce qui est capture est ce qui est envoye.
         // upload_kept pose des la creation -> le reducer, qui ne traite que les
         // items non decides, devient un no-op naturel (pas de debranchement).
-        // Le scorer est saute : le quality_score utilise par le serveur est
-        // calcule cote worker (processPhotoAsync), pas ici.
+        //
+        // Le scorer, lui, tourne desormais AUSSI sur ces items (il etait saute
+        // avant). Il ne sert pas a trier — upload_kept est deja pose — mais a
+        // lire la position reelle du visage dans la photo, seule facon de
+        // mesurer la latence d obturateur. Effet de bord bienvenu : une photo
+        // mal cadree devient visible dans les logs au lieu de partir en
+        // silence, ce qui etait le cas du coureur colle au bord du cadre.
         ...(r.lineTriggered ? { lineTriggered: true, upload_kept: true } : {}),
+        // Prediction du tracker au moment du tir (cf. latencyCalibrator).
+        ...(Number.isFinite(r.xPredicted) ? { xPredicted: r.xPredicted } : {}),
+        ...(Number.isFinite(r.vxAtFire) ? { vxAtFire: r.vxAtFire } : {}),
       });
     }
     const next = [...queueRef.current, ...newQueueItems];
@@ -2307,7 +2329,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         // ÉCHEC = pas un drop : score_failed=true signale au reducer
         // "score inconnu" et la photo reste candidate au top-N par defaut
         // (failsafe zero-perte).
-        if (!item.qualityScore && !item.qualityScoreFailed && !item.lineTriggered) {
+        // `!item.lineTriggered` a ete RETIRE de cette condition. Les photos
+        // declenchees par lignes n etaient jamais notees — c est pour ca
+        // qu une photo au visage colle au bord du cadre est partie en galerie
+        // sans que rien ne la regarde. Le score ne les fait pas jeter
+        // (upload_kept est deja pose) : il sert a mesurer.
+        if (!item.qualityScore && !item.qualityScoreFailed) {
           const scoreSrcPath = item.localUri.startsWith('file://')
             ? item.localUri.slice(7)
             : item.localUri;
@@ -2322,6 +2349,36 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           recordScore(item, res);
           if (res.ok) {
             console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)}`);
+
+            // ─── Auto-calibration de la latence ──────────────────────────
+            // On compare la position PREDITE par le tracker au moment du tir
+            // a la position REELLE du visage dans la photo. L ecart ne peut
+            // venir que d une erreur sur la latence d obturateur.
+            const cx = res.signals?.biggestFaceCenter?.[0];
+            if (Number.isFinite(item.xPredicted) && Number.isFinite(item.vxAtFire)
+                && Number.isFinite(cx)) {
+              const retenu = latencyCalRef.current.ajouter(item.xPredicted, cx, item.vxAtFire);
+              const hors = Math.abs(cx - 0.5) > 0.25;
+              console.log(`[latence] ${item.id} predit=${item.xPredicted.toFixed(3)} `
+                + `reel=${cx.toFixed(3)} vx=${item.vxAtFire.toFixed(2)} `
+                + `${retenu ? 'retenu' : 'ecarte'} n=${latencyCalRef.current.taille()}`
+                + (hors ? ' /!\\ HORS DES 50% CENTRAUX' : ''));
+              // On ne corrige QUE si /config est en AUTO. Une valeur explicite
+              // est un forçage volontaire — la calibration continue de mesurer
+              // et de logger, pour qu on voie si le forçage est bon, mais elle
+              // ne le contredit pas dans le dos de celui qui l a pose.
+              const suivante = Number.isFinite(latencyMsRef.current)
+                ? latencyCalRef.current.proposerLatence(latencyMsRef.current)
+                : null;
+              if (suivante !== null) {
+                const avant = latencyMsRef.current;
+                latencyMsRef.current = suivante;
+                console.log(`[latence] CORRIGEE ${avant} -> ${suivante} ms `
+                  + '(mesuree sur la position reelle des visages, plus devinee)');
+                // Force la recreation du tracker avec la nouvelle latence.
+                setTierTick((n) => n + 1);
+              }
+            }
           } else {
             console.warn(`[score] ${item.id} FAILED reason=${res.reason} ${res.error || ''}`);
           }
@@ -3161,6 +3218,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // lineTriggered : capture decidee par le tracker de lignes. L'item
     // sera pose upload_kept=true et sautera le scorer (cf. enqueue).
     const lineTriggered = burstCtx?.lineTriggered === true;
+    const xPredicted = Number.isFinite(burstCtx?.xPredicted) ? burstCtx.xPredicted : null;
+    const vxAtFire = Number.isFinite(burstCtx?.vxAtFire) ? burstCtx.vxAtFire : null;
     if (!cameraRef.current || !isMountedRef.current) return;
     if (!isDetectionEnabledRef.current) return;
 
@@ -3230,6 +3289,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         km: selectedKmRef.current !== null ? String(selectedKmRef.current) : null,
         exif,
         lineTriggered,
+        xPredicted,
+        vxAtFire,
       }]);
       capturedCountRef.current += 1;
       if (isMountedRef.current) setCapturedCount(capturedCountRef.current);
@@ -3278,32 +3339,6 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // Label statut affiché dans le header flottant.
   // État neutre / par défaut : PRÊT vert dès que la caméra est ouverte et online.
   // Capture rouge pendant rafale ; Hors ligne orange si offline.
-  const statusInfo = isShooting
-    ? { label: 'Capture', dot: C.error, bg: 'rgba(239,68,68,0.2)', text: C.error }
-    : !isOnline
-      ? {
-          label: queueStats.total > 0 ? `Hors ligne · ${queueStats.total}` : 'Hors ligne',
-          dot: C.warning, bg: 'rgba(245,158,11,0.2)', text: C.warning,
-        }
-      : { label: 'Prêt', dot: '#22C55E', bg: 'rgba(34,197,94,0.2)', text: '#22C55E' };
-
-  // Progression du drain courant : affichée sous le header pendant l'upload
-  // si le batch initial dépassait 5 photos.
-  const drainShowBar = drainStartTotal > 5 && queueStats.uploading > 0;
-  const drainProgress = drainStartTotal > 0
-    ? Math.max(0, Math.min(1, 1 - (queueStats.pending + queueStats.uploading) / drainStartTotal))
-    : 0;
-
-  // Date compacte pour le header refondu (refonte 2026-06-01) : just le jour
-  // de depart, "30 MAI 2026". Sur un event multi-jour on perd le range mais
-  // la date complete reste visible sur la home / event card / public page.
-  const compactDate = (() => {
-    if (!session?.event?.event_date) return null;
-    const d = new Date(session.event.event_date);
-    if (isNaN(d.getTime())) return null;
-    return `${d.getDate()} ${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`;
-  })();
-
   // Voyant luminosite : pilote la couleur via le SHUTTER live (pas l'ISO).
   // Justification terrain (test 2026-05-26) : l'ISO reste a son plancher (50)
   // en interieur clair comme en exterieur, ne bouge qu'en vraie penombre —
@@ -3347,8 +3382,6 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // les failed (qui apparaissent sur la ligne "X a renvoyer" si > 0 — c'est
   // une anomalie qui demande une action, pas un transit normal).
   const pendingCount = inFlight + queueStats.pending + queueStats.uploading;
-  const cloudActive = pendingCount > 0;
-  const cloudColor = cloudActive ? '#3B82F6' : 'rgba(255,255,255,0.85)';
 
   // ─── criticalKind pour CriticalAlert overlay (LOT 1.2) ───────────────
   // Priorite decroissante camera > storage > battery > thermal > network > queue.
@@ -3508,6 +3541,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
   // Ouvrir un panneau ferme les autres (regle d exclusivite du handoff).
   const ouvrirPanneau = (quoi) => {
+    // Haptique recuperee de l ancien toggleMenu, supprime avec le menu noir.
+    try { Haptics?.selectionAsync?.(); } catch {}
     setMenuOpen(quoi === 'infos');
     setRaceOpen(quoi === 'race');
     setKmOpen(quoi === 'km');

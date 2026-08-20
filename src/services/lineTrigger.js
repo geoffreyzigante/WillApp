@@ -227,6 +227,14 @@ export function createLineTrigger(userConfig = {}) {
       trackId: primary.id,
       creditedIds: credited,
       lines: linesToConsume.slice(),
+      // ─── Matiere premiere de l auto-calibration ────────────────────────
+      // Ou le tracker CROIT que le visage sera quand l obturateur s ouvrira,
+      // et a quelle vitesse il va. Le scorer local lira plus tard sa position
+      // REELLE dans la photo produite : l ecart entre les deux, divise par la
+      // vitesse, donne l erreur de latence en secondes.
+      // Cf. src/services/latencyCalibrator.js.
+      xPredicted: predictX(primary, tFire + cfg.latencyMs),
+      vx: primary.vx || 0,
     });
     return true;
   }
