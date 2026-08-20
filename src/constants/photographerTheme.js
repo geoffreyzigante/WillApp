@@ -100,8 +100,10 @@ export const handleShadow = {
   elevation: 6,
 };
 
-// Halo sombre des traits blancs poses sur la video. Sans lui, les reperes
-// disparaissent sur un ciel clair — et ce sont eux qui servent a viser.
+// Halo sombre pour un trait blanc pose sur la video. Plus utilise depuis le
+// retrait de tout marquage permanent sur le flux (2026-08-20), mais conserve :
+// c est la recette a reprendre si un repere doit un jour revenir sur l image.
+// Sans lui, un trait blanc disparait purement et simplement sur un ciel clair.
 export const guideShadow = {
   shadowColor: '#000',
   shadowOpacity: 0.35,

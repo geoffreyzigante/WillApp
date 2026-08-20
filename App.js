@@ -242,7 +242,7 @@ import { Haptics } from './src/services/haptics';
 import { PhotoCell, PhotoGrid, PhotoGridItem } from './src/components/PhotoGrid';
 import { OverlayWheel } from './src/components/OverlayWheel';
 // Vue photographe hifi (handoff design 2026-08-20).
-import { P, G, TITLE_BAR_H, panelShadow, handleShadow, guideShadow } from './src/constants/photographerTheme';
+import { P, G, TITLE_BAR_H, panelShadow, handleShadow } from './src/constants/photographerTheme';
 import { PanelWheel } from './src/components/PanelWheel';
 import { SearchModal } from './src/components/modals/SearchModal';
 import { PhaseDResetModal } from './src/components/modals/PhaseDResetModal';
@@ -3595,18 +3595,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               pointerEvents="none"
               style={{ position: 'absolute', left: `${insetPct}%`, right: `${insetPct}%`, top: '9%', bottom: '27%' }}
             >
-              {/* Coins UNIQUEMENT. Les deux montants verticaux et la ligne
-                  horizontale de passage ont ete retires (2026-08-20) : ils
-                  barraient l image en permanence, et la ligne horizontale se
-                  lisait comme « la ligne qui declenche » alors que le tir se
-                  fait sur des lignes VERTICALES franchies par un visage.
-                  Les quatre coins suffisent a situer la zone de detection
-                  sans rien traverser. Halo sombre conserve : sans lui ils
-                  disparaissent sur un ciel clair. */}
-              <View style={{ position: 'absolute', left: 0, top: 0, width: 16, height: 16, borderLeftWidth: 2, borderTopWidth: 2, borderColor: '#fff', borderTopLeftRadius: 5, ...guideShadow }} />
-              <View style={{ position: 'absolute', right: 0, top: 0, width: 16, height: 16, borderRightWidth: 2, borderTopWidth: 2, borderColor: '#fff', borderTopRightRadius: 5, ...guideShadow }} />
-              <View style={{ position: 'absolute', left: 0, bottom: 0, width: 16, height: 16, borderLeftWidth: 2, borderBottomWidth: 2, borderColor: '#fff', borderBottomLeftRadius: 5, ...guideShadow }} />
-              <View style={{ position: 'absolute', right: 0, bottom: 0, width: 16, height: 16, borderRightWidth: 2, borderBottomWidth: 2, borderColor: '#fff', borderBottomRightRadius: 5, ...guideShadow }} />
+              {/* Plus AUCUN marquage permanent sur l image (2026-08-20).
+                  Montants verticaux, ligne de passage puis coins ont ete
+                  retires l un apres l autre : la capture est automatique, le
+                  benevole n a rien a viser lui-meme, et tout trait pose sur
+                  le flux se retrouve dans son champ de vision pendant des
+                  heures pour une information qu il n utilise pas.
+                  Le cadre lui-meme (borde, 3:4) reste le repere.
+                  Il ne reste ici que les poignees du mode reglage. */}
               {/* Poignees de cadrage, en mode reglage uniquement. */}
               {framingMode && (
                 <>
