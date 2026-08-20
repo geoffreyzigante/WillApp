@@ -241,6 +241,9 @@ import { PinDisplay } from './src/components/PinDisplay';
 import { Haptics } from './src/services/haptics';
 import { PhotoCell, PhotoGrid, PhotoGridItem } from './src/components/PhotoGrid';
 import { OverlayWheel } from './src/components/OverlayWheel';
+// Vue photographe hifi (handoff design 2026-08-20).
+import { P, G, TITLE_BAR_H, panelShadow, handleShadow, guideShadow } from './src/constants/photographerTheme';
+import { PanelWheel } from './src/components/PanelWheel';
 import { SearchModal } from './src/components/modals/SearchModal';
 import { PhaseDResetModal } from './src/components/modals/PhaseDResetModal';
 import { SelfieViewerModal } from './src/components/modals/SelfieViewerModal';
@@ -381,6 +384,80 @@ Notifications.setNotificationHandler({
 // Roulette 3 items visibles, style "overlay" : pastille centrale rose, items
 // au-dessus/en-dessous attenues. Top-fade en degrade vers le panneau noir
 // pour fondre la roulette sous le titre.
+
+// ─── Briques de rendu de la vue photographe ──────────────────────────────
+// Definies au niveau MODULE, volontairement. Ecrites dans le corps de
+// PhotographerScreen, elles recevraient une identite neuve a chaque rendu et
+// React demonterait puis remonterait tout leur sous-arbre. Sans etat interne
+// ce serait invisible — mais Panneau enveloppe PanelWheel, qui garde sa
+// position de defilement dans un ref. La molette repartirait de zero a chaque
+// battement de compteur, c est-a-dire en permanence pendant une course.
+
+// Rangee de commande : meme gabarit pour Epreuve et Poste.
+function RangeeValeur({ libelle, valeur, onPress }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      style={{
+        height: G.rowH, borderRadius: G.rowRadius, backgroundColor: P.surface,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingHorizontal: G.rowPadH,
+      }}
+    >
+      <Text style={{ color: P.label, fontSize: 13, fontWeight: '500', fontFamily: 'Montserrat' }}>{libelle}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+        <Text
+          numberOfLines={1}
+          style={{ color: P.brand, fontSize: 17, fontWeight: '600', fontFamily: 'Montserrat', flexShrink: 1 }}
+        >
+          {valeur}
+        </Text>
+        <Text style={{ color: P.label, fontSize: 17, marginLeft: 6 }}>›</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// Rangee de panneau, 50 px, filet de separation en retrait de 20 px.
+function RangeePanneau({ libelle, droite, couleur, onPress, dernier }) {
+  return (
+    <>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.6}
+        style={{
+          minHeight: G.panelRowH, paddingHorizontal: G.rowPadH,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        }}
+      >
+        <Text style={{ color: couleur || P.ink, fontSize: 15, fontWeight: '600', fontFamily: 'Montserrat' }}>{libelle}</Text>
+        {droite}
+      </TouchableOpacity>
+      {!dernier && <View style={{ height: 1, marginLeft: G.rowPadH, backgroundColor: P.divider }} />}
+    </>
+  );
+}
+
+// Enveloppe commune aux panneaux : blanc opaque, pose dans le cadre, en bas.
+// Un appui hors du panneau le ferme — sans voile assombri, l ecran reste net
+// derriere (le benevole continue de surveiller la course).
+function Panneau({ onFermer, children }) {
+  return (
+    <View style={StyleSheet.absoluteFillObject}>
+      <TouchableOpacity activeOpacity={1} onPress={onFermer} style={StyleSheet.absoluteFillObject} />
+      <View
+        style={{
+          position: 'absolute', left: G.framePad, right: G.framePad, bottom: G.framePad,
+          borderRadius: G.panelRadius, overflow: 'hidden', backgroundColor: P.surface,
+          ...panelShadow,
+        }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
 
 function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch }) {
   // Ecran toujours allume pendant la session photographe : evite que la veille
@@ -806,18 +883,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   useEffect(() => { isAutoArmedSV.value = isAutoArmed; }, [isAutoArmed, isAutoArmedSV]);
   useEffect(() => { isDetectionEnabledSV.value = isDetectionEnabled; }, [isDetectionEnabled, isDetectionEnabledSV]);
 
-  // Caméra ancrée juste sous le header (au lieu de absoluteFill + letterbox 4:3
-  // qui laissait un grand vide noir entre le header et l'image visible sur les
-  // grands écrans). La preview est dimensionnée explicitement en 4:3.
+  // Geometrie de l ecran. Le cadre camera lui-meme est calcule dans le rendu
+  // (FRAME_TOP / FRAME_W / FRAME_H) a partir des tokens de
+  // src/constants/photographerTheme.js — les anciennes constantes
+  // CAMERA_TOP / PREVIEW_MARGIN_H / previewH sont mortes avec la refonte.
   const winW = Dimensions.get('window').width;
   const winH = Dimensions.get('window').height;
-  // Marge horizontale autour du viewer pour respirer (et garder le ratio
-  // 4:3 strict sur la nouvelle largeur reduite).
-  const PREVIEW_MARGIN_H = 20;
-  const previewW = winW - PREVIEW_MARGIN_H * 2;
-  const previewH = Math.min(winH, previewW * (4 / 3));
-  // Strip galerie supprime, viewer demarre juste sous le header (148).
-  const CAMERA_TOP = 148;
 
   // ── Guide de cadrage : etat, capteur, cible (§1.8) ───────────────────────
   // Mode reglage : affiche un point a l'endroit ideal de passage du coureur.
@@ -1867,6 +1938,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   })();
   // Menu flottant a gauche du viewer : ferme par defaut, ouvert via chevron.
   const [menuOpen, setMenuOpen] = useState(false);
+  // Selecteurs d Epreuve et de Poste. Ils remplacent la double roulette
+  // toujours visible : le handoff les met dans des panneaux, pour degager le
+  // bas de l ecran et laisser la zone centrale du cadre libre.
+  // Exclusivite garantie par ouvrirPanneau() : un seul ouvert a la fois.
+  const [raceOpen, setRaceOpen] = useState(false);
+  const [kmOpen, setKmOpen] = useState(false);
   // Animated.Value pour open/close en spring (rotation chevron + fade/translate
   // des boutons d action + opacite du backdrop).
   const menuAnim = useRef(new Animated.Value(0)).current;
@@ -3100,6 +3177,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // photoKey hoisted HORS du try : sinon le catch (qui doit logger la cle
     // pour le LOST) n'y aurait pas acces (block-scoped const).
     const photoKey = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${idx}.heic`;
+
+    // Voile blanc, 420 ms, courbe du handoff (0 -> .45 a 14% -> 0). Seul
+    // retour visuel de la capture automatique. useNativeDriver : l animation
+    // tourne sur le thread UI, sans rien prendre au pipeline de capture.
+    flashOpacity.stopAnimation();
+    Animated.sequence([
+      Animated.timing(flashOpacity, { toValue: 0.45, duration: 59, useNativeDriver: true }),
+      Animated.timing(flashOpacity, { toValue: 0, duration: 361, useNativeDriver: true }),
+    ]).start();
     try {
       await enqueueBurstItems([{
         key: photoKey,
@@ -3316,596 +3402,292 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     );
   }
 
+  // ─── GEOMETRIE DU CADRE ────────────────────────────────────────────────
+  // Calculee, pas laissee au layout en flux : FramingGuide attend un
+  // rectangle en coordonnees FENETRE. Les deux doivent decrire exactement le
+  // meme cadre, sinon le guide de cadrage ment au benevole.
+  // 54 px de barre d etat ne valent que pour les ecrans a encoche ; un SE en
+  // a 20. Mesure sur la hauteur de fenetre plutot que sur un modele.
+  const aEncoche = winH >= 812;
+  const TOP_SAFE = Platform.OS === 'ios' ? (aEncoche ? 54 : 20) : (StatusBar.currentHeight || 24);
+  const BOTTOM_SAFE = Platform.OS === 'ios' ? (aEncoche ? 23 : 6) : 24;
+  const FRAME_TOP = TOP_SAFE + TITLE_BAR_H;
+
+  // Le bloc de commandes est en position absolue : rien ne le pousse et rien
+  // ne le fait defiler. S il ne tient pas, il sort de l ecran, purement et
+  // simplement — sur un iPhone SE la rangee « Poste » se retrouvait entierement
+  // sous le bord bas, rendant le choix du poste impossible et envoyant toutes
+  // les photos sans en-tete X-Will-Km.
+  //
+  // On reserve donc sa hauteur AVANT de dimensionner le cadre, ligne de
+  // compteurs comprise meme quand elle est masquee : sinon l activer ferait
+  // deborder l ecran d un coup.
+  const CONTROLS_H = 3 * G.rowH + 2 * G.rowGap;   // 136
+  const COUNTER_H = 24;                            // ligne de compteurs, toujours reservee
+  const dispoH = winH - FRAME_TOP - G.rowGap - COUNTER_H - CONTROLS_H - BOTTOM_SAFE - G.rowGap;
+
+  // Le ratio 3:4 n est PAS negociable : le cadre est la photo livree. Quand la
+  // hauteur manque, on retrecit la LARGEUR pour garder le ratio, au lieu
+  // d aplatir le cadre et de mentir sur le cadrage final.
+  const FRAME_W = Math.max(120, Math.min(winW - G.frameMargin * 2, dispoH * (3 / 4)));
+  const FRAME_H = FRAME_W * (4 / 3);
+  const FRAME_LEFT = Math.round((winW - FRAME_W) / 2);
+  const CONTROLS_TOP = FRAME_TOP + FRAME_H + G.rowGap;
+
+  // Ligne de compteurs, partagee entre le bandeau sous le cadre et le
+  // panneau Infos.
+  const aRenvoyer = lostCount + (queueStats?.failed || 0);
+  const compteursTexte = `${uploadedCount} sauvegardée${uploadedCount > 1 ? 's' : ''} · ${pendingCount} en attente`
+    + (aRenvoyer > 0 ? ` · ${aRenvoyer} à renvoyer` : '');
+
+  // Voyant de luminosite : toujours visible (le handoff en fait une pastille
+  // permanente), contrairement a l ancienne pill qui n apparaissait qu en
+  // alerte. Le benevole doit pouvoir verifier son exposition d un coup d oeil
+  // sans attendre que ca aille mal.
+  // Tant que le capteur d exposition n a rien rapporte, l etat est INCONNU —
+  // surtout pas « moyen ». Le faire virer a l orange affichait une alerte
+  // permanente sur tout build ou le plugin ne repond pas, sans moyen de la
+  // faire taire. Gris neutre : le voyant existe, il n affirme rien.
+  const voyantConnu = lightDot === '#F43F5E' || lightDot === '#F97316' || lightDot === '#22C55E';
+  const voyantCouleur = lightDot === '#F43F5E' ? P.lightLow
+    : lightDot === '#F97316' ? P.lightMid
+    : lightDot === '#22C55E' ? P.lightGood
+    : P.labelMuted;
+
+  // Epreuves et postes : memes items que l ancienne double roulette, deplaces
+  // dans leurs panneaux respectifs.
+  const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: raceTitle(d), value: d }))];
+  const courseRaw = courseItems.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null));
+  const courseIdx = courseRaw >= 0 ? courseRaw : 0;
+  const setCourseIdx = (idx) => {
+    const v = courseItems[idx].value;
+    setSelectedRace(v);
+    if (v && selectedKm !== null && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(null);
+  };
+
+  // "-" = poste non renseigne : aucune en-tete X-Will-Km a l upload. Distinct
+  // de "Départ" (km 0), qui est une position reelle.
+  const kmItems = [
+    { label: '-', value: null },
+    { label: 'Départ', value: 0 },
+    { label: 'Arrivée', value: 'arrivee' },
+    ...Array.from({ length: kmCeiling }, (_, k) => ({ label: `km ${k + 1}`, value: k + 1 })),
+  ];
+  const kmRaw = kmItems.findIndex(it => it.value === selectedKm);
+  const kmIdx = kmRaw >= 0 ? kmRaw : 0;
+  const setKmIdx = (idx) => setSelectedKm(kmItems[idx].value);
+
+  // Ouvrir un panneau ferme les autres (regle d exclusivite du handoff).
+  const ouvrirPanneau = (quoi) => {
+    setMenuOpen(quoi === 'infos');
+    setRaceOpen(quoi === 'race');
+    setKmOpen(quoi === 'km');
+  };
+  const fermerPanneaux = () => { setMenuOpen(false); setRaceOpen(false); setKmOpen(false); };
+  const unPanneauOuvert = menuOpen || raceOpen || kmOpen;
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
-      {/* Caméra — resizeMode 'contain' (letterbox naturel), bandes noires explicites par-dessus.
-          La détection (frame processor) reste en coordonnées sensor : performance Rekognition inchangée. */}
-      <VisionCamera
-        ref={cameraRef}
+    <View style={{ flex: 1, backgroundColor: P.appBg }}>
+
+      {/* ─── 2. Barre de titre ─────────────────────────────────────────── */}
+      <View
         style={{
-          position: 'absolute',
-          top: CAMERA_TOP,
-          left: PREVIEW_MARGIN_H, right: PREVIEW_MARGIN_H,
-          height: previewH,
-          borderRadius: 16,
-          overflow: 'hidden',
-        }}
-        device={device}
-        format={format}
-        isActive={cameraActive}
-        // video=true pour le frame processor (detection humains Apple Vision).
-        // photo=true + photoQualityBalance="speed" : AVCapturePhotoOutput skip
-        // Deep Fusion + Night mode -> capture en 80-200 ms au lieu de 300-800 ms.
-        // Trade-off : qualite legerement degradee en faible lumiere, mais
-        // excellente en plein jour (capteur 12 MP + ISP basique). Choix global
-        // pour soutenir la cadence rafale pipelinee (5-7 photos/s).
-        // Les 2 outputs coexistent sur la meme AVCaptureSession.
-        video={true}
-        photo={true}
-        photoQualityBalance="speed"
-        // HDR active si le format wide actif le supporte. Restaure les
-        // contrastes ecrases dans la preview (contre-jour sportif) +
-        // ameliore la photo HEIC/HDR-10 a la capture.
-        photoHdr={!!format?.supportsPhotoHdr}
-        videoHdr={!!format?.supportsVideoHdr}
-        // Low-light boost iOS : gros gain en faible lumiere sans monter
-        // le bruit ISO.
-        lowLightBoost={!!device?.supportsLowLightBoost}
-        frameProcessor={frameProcessor}
-        pixelFormat="yuv"
-        zoom={device.minZoom}
-        resizeMode="contain"
-        videoStabilizationMode={videoStabilizationMode}
-        exposure={cameraExposure}
-        enableLocation={false}
-      />
-
-      {/* Guides zone de capture (lignes verticales discretes au centre).
-          Caches a 100% (toute la frame est active). */}
-      {(eventConfig.camera?.captureZoneWidthPercent ?? 30) < 100 && (() => {
-        const zoneW = (eventConfig.camera?.captureZoneWidthPercent ?? 30) / 100;
-        const leftPct = (1 - zoneW) / 2 * 100;
-        const rightPct = (1 + zoneW) / 2 * 100;
-        return (
-          <View
-            pointerEvents="none"
-            style={{ position: 'absolute', top: CAMERA_TOP, height: previewH, left: PREVIEW_MARGIN_H, right: PREVIEW_MARGIN_H, borderRadius: 16, overflow: 'hidden' }}
-          >
-            <View style={{ position: 'absolute', top: 0, bottom: 0, left: `${leftPct}%`, width: 1, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-            <View style={{ position: 'absolute', top: 0, bottom: 0, left: `${rightPct}%`, width: 1, backgroundColor: 'rgba(255,255,255,0.3)' }} />
-          </View>
-        );
-      })()}
-
-      {/* ─── GUIDE DE CADRAGE (§1.8) ─────────────────────────────────────
-          Un point a l'endroit ideal de passage. Le benevole le pose au milieu
-          du chemin. Meme geometrie de preview que l'overlay zone ci-dessus :
-          les deux doivent rester alignes, sinon le point ment. */}
-      {framingMode && tiltAvailable && (
-        <FramingGuide
-          targetDistance={framingDistance}
-          height={mountHeight}
-          pitch={framingPitch}
-          roll={framingRoll}
-          halfFovH={framingFov.halfFovH}
-          halfFovV={framingFov.halfFovV}
-          rect={{ top: CAMERA_TOP, height: previewH, marginH: PREVIEW_MARGIN_H }}
-        />
-      )}
-
-      {/* Reglages du guide : DANS la preview, en haut.
-          Sous la preview ils chevauchaient le bouton Stop et les selecteurs
-          course/poste (constate sur device 2026-07-29). En haut, la seule
-          collision possible est le bandeau de luminosite, qui est transitoire.
-          Deux reglages seulement : la hauteur (dont la distance depend
-          proportionnellement) et la distance visee — le terrain rapporte des
-          passages a 2 m, donc une cible figee a 3,5 m serait inutilisable. */}
-      {framingMode && tiltAvailable && (
-        <View
-          pointerEvents="box-none"
-          style={{
-            position: 'absolute',
-            top: CAMERA_TOP + 10,
-            left: PREVIEW_MARGIN_H + 8, right: PREVIEW_MARGIN_H + 8,
-            zIndex: 14, gap: 6,
-          }}
-        >
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            {[
-              ['Au sol', MOUNT_HEIGHT_M.sol],
-              ['Barrière', MOUNT_HEIGHT_M.barriere],
-              ['Trépied', MOUNT_HEIGHT_M.trepied],
-            ].map(([label, h]) => {
-              const active = Math.abs(mountHeight - h) < 1e-6;
-              return (
-                <TouchableOpacity
-                  key={label}
-                  onPress={() => setMountHeight(h)}
-                  activeOpacity={0.7}
-                  style={{
-                    flex: 1, paddingVertical: 7, borderRadius: 8,
-                    alignItems: 'center',
-                    backgroundColor: active ? '#3DDC84' : 'rgba(0,0,0,0.55)',
-                  }}
-                >
-                  <Text style={{
-                    color: active ? '#0b0b0b' : '#fff',
-                    fontSize: 12, fontWeight: active ? '700' : '400',
-                    fontFamily: 'Montserrat',
-                  }}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            {DISTANCE_CHOICES_M.map((d) => {
-              const active = Math.abs(framingDistance - d) < 1e-6;
-              return (
-                <TouchableOpacity
-                  key={d}
-                  onPress={() => setFramingDistance(d)}
-                  activeOpacity={0.7}
-                  style={{
-                    flex: 1, paddingVertical: 7, borderRadius: 8,
-                    alignItems: 'center',
-                    backgroundColor: active ? '#3DDC84' : 'rgba(0,0,0,0.55)',
-                  }}
-                >
-                  <Text style={{
-                    color: active ? '#0b0b0b' : '#fff',
-                    fontSize: 12, fontWeight: active ? '700' : '400',
-                    fontFamily: 'Montserrat',
-                  }}>
-                    {String(d).replace('.', ',')}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          {/* Tangage en clair : permet de verifier le capteur sans rebuild.
-              Telephone a plat, ecran vers le haut => doit afficher ~90. */}
-          <Text style={{
-            color: 'rgba(255,255,255,0.85)', fontSize: 11,
-            fontFamily: 'Montserrat',
-            textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3,
-          }}>
-            {`inclinaison ${Math.round(framingPitch * 180 / Math.PI)}°`}
-          </Text>
-        </View>
-      )}
-
-      {/* ─── FLASH RAFALE (full-screen, blanc, 120ms) ─── */}
-      <Animated.View
-        pointerEvents="none"
-        style={{
-          ...StyleSheet.absoluteFillObject,
-          backgroundColor: '#fff',
-          opacity: flashOpacity,
-        }}
-      />
-
-      {/* ─── TOP AREA — refonte 2026-06-02 ─────────────────────────────
-          Header pousse vers le bas du black band (paddingTop 80) pour
-          rapprocher le contenu de la preview camera. */}
-      <Animated.View
-        pointerEvents="box-none"
-        style={{
-          position: 'absolute', top: 0, left: 0, right: 0,
-          paddingTop: 80, paddingBottom: 12, paddingHorizontal: 16,
-          transform: [{ translateY: headerSlideY }],
-          zIndex: 10,
+          position: 'absolute', top: TOP_SAFE, left: 0, right: 0,
+          flexDirection: 'row', alignItems: 'center',
+          paddingTop: G.titlePadTop, paddingBottom: G.titlePadBottom,
+          paddingHorizontal: G.gutter,
         }}
       >
-        <LinearGradient
-          colors={['rgba(0,0,0,0.7)', 'rgba(0,0,0,0)']}
+        <TouchableOpacity
+          onPress={() => confirmLeaveWithPending(onExit || onLogout)}
+          activeOpacity={0.6}
+          accessibilityLabel="Retour"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{
+            width: G.backW, height: G.backH, borderRadius: G.backRadius,
+            backgroundColor: P.soft, alignItems: 'center', justifyContent: 'center',
+            marginRight: 16,
+          }}
+        >
+          <Text style={{ color: P.brand, fontSize: 19 }}>←</Text>
+        </TouchableOpacity>
+        <Text
+          numberOfLines={1}
+          style={{
+            flex: 1, color: P.brand, fontSize: 26, fontWeight: '600',
+            fontFamily: 'AVEstiana', letterSpacing: -0.26,
+          }}
+        >
+          {session?.event?.name || 'Événement'}
+        </Text>
+      </View>
+
+      {/* ─── 3. CADRE CAMERA = LA PHOTO LIVREE ─────────────────────────────
+          Point de conception central du handoff : ce que le benevole voit
+          dans ce cadre est exactement l image que le coureur recevra, ratio
+          compris. D ou resizeMode="contain" : on ne recadre pas apres coup. */}
+      <View
+        style={{
+          position: 'absolute', top: FRAME_TOP, left: FRAME_LEFT,
+          width: FRAME_W, height: FRAME_H,
+          borderRadius: G.frameRadius, overflow: 'hidden',
+          backgroundColor: P.framePlaceholder,
+        }}
+      >
+        <VisionCamera
+          ref={cameraRef}
           style={StyleSheet.absoluteFillObject}
-          pointerEvents="none"
+          device={device}
+          format={format}
+          isActive={cameraActive}
+          // video=true pour le frame processor (detection humains Apple Vision).
+          // photo=true + photoQualityBalance="speed" : AVCapturePhotoOutput skip
+          // Deep Fusion + Night mode -> capture en 80-200 ms au lieu de 300-800 ms.
+          video={true}
+          photo={true}
+          photoQualityBalance="speed"
+          photoHdr={!!format?.supportsPhotoHdr}
+          videoHdr={!!format?.supportsVideoHdr}
+          lowLightBoost={!!device?.supportsLowLightBoost}
+          frameProcessor={frameProcessor}
+          pixelFormat="yuv"
+          zoom={device.minZoom}
+          resizeMode="contain"
+          videoStabilizationMode={videoStabilizationMode}
+          exposure={cameraExposure}
+          enableLocation={false}
         />
-        {/* alignItems: 'flex-end' aligne back, titre, et cluster sur la
-            baseline du NOM ; la date "kicker" sit au-dessus dans le bloc
-            titre sans casser l'alignement vertical des icones. */}
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12 }}>
-          <TouchableOpacity
-            onPress={() => confirmLeaveWithPending(onExit || onLogout)}
-            hitSlop={10}
-            style={{
-              width: 36, height: 36, borderRadius: 18,
-              backgroundColor: '#1a1a1a',
-              alignItems: 'center', justifyContent: 'center',
-            }}
-            accessibilityLabel="Retour"
-          >
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-              <Path d="M19 12H5M12 19l-7-7 7-7" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
 
-          {/* Bloc titre : date kicker au-dessus, nom dessous (baseline = bottom). */}
-          <View style={{ flex: 1, minWidth: 0 }}>
-            {compactDate ? (
-              <Text
-                style={{
-                  color: 'rgba(255,255,255,0.65)', fontSize: 10, fontWeight: '700',
-                  letterSpacing: 0.8, marginBottom: 1,
-                  textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
-                }}
-                numberOfLines={1}
-              >
-                {compactDate}
-              </Text>
-            ) : null}
-            <Text
-              style={{
-                color: '#fff', fontSize: 19, fontWeight: '700',
-                fontFamily: 'AVEstiana', fontStyle: 'normal',
-                textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4,
-                lineHeight: 22,
-              }}
-              numberOfLines={1}
+        {/* Reperes de detection. La largeur vient de /config, PAS du handoff :
+            captureZoneWidthPercent est modifiable a chaud en cours d event, et
+            des reperes codes en dur mentiraient des le premier reglage.
+            Caches a 100% (toute la frame est active). */}
+        {(eventConfig.camera?.captureZoneWidthPercent ?? 30) < 100 && (() => {
+          const zoneW = (eventConfig.camera?.captureZoneWidthPercent ?? 30) / 100;
+          const insetPct = (1 - zoneW) / 2 * 100;
+          return (
+            <View
+              pointerEvents="none"
+              style={{ position: 'absolute', left: `${insetPct}%`, right: `${insetPct}%`, top: '9%', bottom: '27%' }}
             >
-              {session?.event?.name || 'Événement'}
-            </Text>
-          </View>
-
-          {/* Chevron + power deplaces dans le cluster flottant sur le viewer */}
-        </View>
-
-        {/* Panneau details replie : 2 LIGNES centrees sur aplat noir edge-
-            to-edge. Ligne 1 = compteurs + erreur (toujours visible si
-            techExpanded). Ligne 2 = ISO/shutter/EV (preview/dev only). */}
-        {techExpanded && (
-          <View style={{
-            marginTop: 8,
-            marginHorizontal: -16,
-            paddingHorizontal: 16, paddingVertical: 10,
-            backgroundColor: '#000',
-          }}>
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexWrap: 'wrap',
-              columnGap: 10,
-              rowGap: 4,
-            }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M17.5 19a4.5 4.5 0 00.5-8.97 6 6 0 00-11.62-1.5A4.5 4.5 0 006.5 19h11z"
-                    stroke={cloudColor}
-                    strokeWidth={1.8}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill={cloudActive ? 'rgba(59,130,246,0.18)' : 'none'}
-                  />
-                </Svg>
-                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' }}>
-                  {uploadedCount} sauvegardée{uploadedCount > 1 ? 's' : ''}
-                </Text>
-              </View>
-              <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>·</Text>
-              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' }}>
-                {pendingCount} en attente
-              </Text>
-              {(lostCount + queueStats.failed) > 0 && (
+              {/* Montants verticaux : les bords de la zone de detection. */}
+              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.75)', ...guideShadow }} />
+              <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.75)', ...guideShadow }} />
+              {/* Ligne de passage : repere de HAUTEUR DE TETE pour viser.
+                  Ce n est PAS une ligne de declenchement — le tir se fait sur
+                  les lignes verticales franchies par un visage. */}
+              <View style={{ position: 'absolute', left: 0, right: 0, top: '52%', height: 1, backgroundColor: 'rgba(255,255,255,0.6)' }} />
+              {/* Coins de cadrage. */}
+              <View style={{ position: 'absolute', left: 0, top: 0, width: 16, height: 16, borderLeftWidth: 2, borderTopWidth: 2, borderColor: '#fff', borderTopLeftRadius: 5 }} />
+              <View style={{ position: 'absolute', right: 0, top: 0, width: 16, height: 16, borderRightWidth: 2, borderTopWidth: 2, borderColor: '#fff', borderTopRightRadius: 5 }} />
+              <View style={{ position: 'absolute', left: 0, bottom: 0, width: 16, height: 16, borderLeftWidth: 2, borderBottomWidth: 2, borderColor: '#fff', borderBottomLeftRadius: 5 }} />
+              <View style={{ position: 'absolute', right: 0, bottom: 0, width: 16, height: 16, borderRightWidth: 2, borderBottomWidth: 2, borderColor: '#fff', borderBottomRightRadius: 5 }} />
+              {/* Poignees de cadrage, en mode reglage uniquement. */}
+              {framingMode && (
                 <>
-                  <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>·</Text>
-                  <Text style={{ color: '#FB923C', fontSize: 12, fontWeight: '600' }}>
-                    {lostCount + queueStats.failed} à renvoyer
-                  </Text>
+                  <View style={{ position: 'absolute', left: -11, top: '42%', width: 20, height: 44, borderRadius: 7, backgroundColor: '#fff', ...handleShadow }} />
+                  <View style={{ position: 'absolute', right: -11, top: '42%', width: 20, height: 44, borderRadius: 7, backgroundColor: '#fff', ...handleShadow }} />
                 </>
               )}
             </View>
-            {/* Capacite restante du telephone, exprimee en coureurs. Le
-                benevole peut agir dessus (liberer de la place, trouver du
-                reseau) ; un nombre de gigaoctets ne lui dirait rien. */}
-            {capaciteCoureurs && (
-              <View style={{ alignItems: 'center', marginTop: 6, gap: 2 }}>
-                <Text style={{
-                  color: capaciteCoureurs.suffisant === false ? '#FB923C' : 'rgba(255,255,255,0.55)',
-                  fontSize: 11, fontWeight: capaciteCoureurs.suffisant === false ? '700' : '500',
-                }}>
-                  {capaciteCoureurs.n >= 100000
-                    ? 'Place largement suffisante'
-                    : `Place pour ~${capaciteCoureurs.n.toLocaleString('fr-FR')} coureurs `
-                      + `(${capaciteCoureurs.parCoureur} photo${capaciteCoureurs.parCoureur > 1 ? 's' : ''} chacun)`}
-                </Text>
-                {capaciteCoureurs.restants !== null && capaciteCoureurs.n < 100000 && (
-                  <Text style={{
-                    color: capaciteCoureurs.suffisant ? 'rgba(255,255,255,0.35)' : '#FB923C',
-                    fontSize: 11, fontWeight: '500',
-                  }}>
-                    {capaciteCoureurs.suffisant
-                      ? `${capaciteCoureurs.restants.toLocaleString('fr-FR')} coureurs attendus — c'est suffisant`
-                      : `${capaciteCoureurs.restants.toLocaleString('fr-FR')} coureurs attendus — libère de la place ou trouve du réseau`}
-                  </Text>
-                )}
-              </View>
-            )}
-            {IS_PREVIEW_OR_DEV && liveExposureSamples.length > 0 && (() => {
-              const last = liveExposureSamples[liveExposureSamples.length - 1];
-              return (
-                <Text style={{
-                  marginTop: 4,
-                  textAlign: 'center',
-                  color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: '500',
-                  fontVariant: ['tabular-nums'],
-                }}>
-                  ISO {Math.round(last.iso)} · {formatShutter(last.shutter)} · {formatEV(last.brightness)}
-                </Text>
-              );
-            })()}
-          </View>
-        )}
-      </Animated.View>
+          );
+        })()}
 
-      {/* ─── ZONE Go! + ROULETTE ─── Go! chevauche le bas du viewer (moitie
-          dessus, moitie dessous : center au niveau du bord bas du viewer).
-          Course/Km en dessous, sur fond root (pas de bandeau noir). ─── */}
-      <Animated.View
-        pointerEvents="box-none"
-        style={{
-          position: 'absolute',
-          top: CAMERA_TOP + previewH - 30, // Go! top : half overlap viewer bottom
-          left: 0, right: 0,
-          transform: [{ translateY: footerSlideY }],
-          zIndex: 10,
-        }}
-      >
-        {/* Go!/Stop : cercle centre 84px. */}
-        <TouchableOpacity
-          onPress={onCapturePress}
-          activeOpacity={0.9}
-          style={{
-            width: 84,
-            height: 84,
-            borderRadius: 42,
-            alignSelf: 'center',
-            backgroundColor: isAutoArmed ? '#FF3B30' : C.pinkPillActive,
-            alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <Text style={{
-            color: '#fff',
-            fontSize: 28,
-            fontStyle: 'italic',
-            fontWeight: '800',
-            fontFamily: 'AVEstiana',
-            letterSpacing: 0.5,
-          }}>{isAutoArmed ? 'Stop' : 'Go!'}</Text>
-        </TouchableOpacity>
-
-        {/* Row Course/Km, juste sous Go! (8px gap). Plus de fond noir : la
-            roulette s appuie sur le fond root (#000) sans bandeau dedie. */}
-        <View style={{
-          flexDirection: 'row',
-          marginTop: 8,
-          alignItems: 'stretch',
-        }}>
-            {/* Section COURSE (gauche, 50%) — label + roulette 3-items toujours visible */}
-            {(() => {
-              const courseItems = [{ label: 'Toutes', value: null }, ...distances.map(d => ({ label: raceTitle(d), value: d }))];
-              const rawIdx = courseItems.findIndex(it => (it.value?.km ?? null) === (selectedRace?.km ?? null));
-              const courseIdx = rawIdx >= 0 ? rawIdx : 0;
-              const setCourseIdx = (idx) => {
-                const v = courseItems[idx].value;
-                setSelectedRace(v);
-                if (v && selectedKm !== null && selectedKm > Math.ceil(parseFloat(v.km) || 0)) setSelectedKm(null);
-              };
-              return (
-                <View style={{ flex: 1, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedRace(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 0 }}>
-                    <Text style={{
-                      color: 'rgba(255,255,255,0.45)',
-                      fontSize: 10, fontWeight: '600', letterSpacing: 1.5,
-                      fontFamily: 'Montserrat',
-                      textTransform: 'uppercase',
-                    }}>Course</Text>
-                  </TouchableOpacity>
-                  <OverlayWheel
-                    items={courseItems}
-                    selectedIndex={courseIdx}
-                    onChange={setCourseIdx}
-                  />
-                </View>
-              );
-            })()}
-
-            {/* Separator vertical entre les 2 sections */}
-            <View style={{ width: 0.5, backgroundColor: 'rgba(255,255,255,0.15)' }} />
-
-            {/* Section KM (droite, 50%) — label + roulette 3-items toujours visible.
-                Premier item = "-" (value=null), default cran vide non posté.
-                Disambigue le 0 km = "Départ" explicite : une photo prise en
-                cran "-" n écrit PAS de km sur customMetadata R2 (header
-                X-Will-Km absent a l upload).
-                Format items : "Départ" (value=0), "Arrivée" (value='arrivee'),
-                puis "km N" pour N>=1. La value 'arrivee' est traitee comme
-                chaine opaque cote worker (cf reassignPhotoMeta, list endpoints,
-                isPhotoVisibleToPublic n utilise que photo.race). */}
-            {(() => {
-              const kmItems = [
-                { label: '-', value: null },
-                { label: 'Départ', value: 0 },
-                { label: 'Arrivée', value: 'arrivee' },
-                ...Array.from({ length: kmCeiling }, (_, k) => ({
-                  label: `km ${k + 1}`,
-                  value: k + 1,
-                })),
-              ];
-              const rawIdx = kmItems.findIndex(it => it.value === selectedKm);
-              const kmIdx = rawIdx >= 0 ? rawIdx : 0;
-              const setKmIdx = (idx) => setSelectedKm(kmItems[idx].value);
-              return (
-                <View style={{ flex: 1, paddingTop: 4, paddingBottom: 4, paddingHorizontal: 10, alignItems: 'center' }}>
-                  <TouchableOpacity onPress={() => setSelectedKm(null)} hitSlop={6} activeOpacity={0.7} style={{ zIndex: 2, marginBottom: 0 }}>
-                    <Text style={{
-                      color: 'rgba(255,255,255,0.45)',
-                      fontSize: 10, fontWeight: '600', letterSpacing: 1.5,
-                      fontFamily: 'Montserrat',
-                      textTransform: 'uppercase',
-                    }}>Posté</Text>
-                  </TouchableOpacity>
-                  <OverlayWheel
-                    items={kmItems}
-                    selectedIndex={kmIdx}
-                    onChange={setKmIdx}
-                  />
-                </View>
-              );
-            })()}
-        </View>
-      </Animated.View>
-
-      {/* ─── Pill Luminosité ─── flottante en haut de la preview, centree.
-          Visible UNIQUEMENT si lumi != OK. Pill solide bright sans band
-          colore derriere. */}
-      {(lightDot === '#F97316' || lightDot === '#F43F5E') && (
+        {/* Voyant de luminosite — coin superieur gauche, hors de la zone
+            centrale qui doit rester degagee. */}
         <View
           pointerEvents="none"
           style={{
-            position: 'absolute',
-            // Pill DANS le viewer (16px sous le bord superieur) pour ne pas
-            // chevaucher le strip galerie au-dessus du viewer.
-            top: CAMERA_TOP + 16 + (techExpanded ? 36 : 0),
-            left: 0, right: 0,
-            alignItems: 'center',
-            zIndex: 5,
+            position: 'absolute', top: 14, left: 14, width: 44, height: 44,
+            borderRadius: 999, backgroundColor: voyantCouleur,
+            alignItems: 'center', justifyContent: 'center',
+            // Etat inconnu : pastille en retrait, plutot qu une affirmation
+            // coloree que rien ne justifie.
+            opacity: voyantConnu ? 1 : 0.55,
           }}
+          accessible
+          accessibilityRole="image"
+          accessibilityLabel={lightLabel}
         >
-          <View style={{
-            backgroundColor: lightDot,
-            paddingHorizontal: 22, paddingVertical: 7,
-            borderRadius: 999,
-          }}>
-            <Text style={{
-              color: '#fff', fontSize: 13, fontWeight: '700',
-              letterSpacing: 0.3,
-            }}>
-              {lightLabel}
-            </Text>
-          </View>
+          <Svg width={24} height={24} viewBox="0 0 28 28" fill="none">
+            <Circle cx={14} cy={14} r={5.2} fill="#fff" />
+            {['M14 2.6v3.1', 'M14 22.3v3.1', 'M2.6 14h3.1', 'M22.3 14h3.1',
+              'M5.9 5.9l2.2 2.2', 'M19.9 19.9l2.2 2.2', 'M22.1 5.9l-2.2 2.2', 'M8.1 19.9l-2.2 2.2',
+            ].map((d) => (
+              <Path key={d} d={d} stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+            ))}
+          </Svg>
         </View>
-      )}
 
-      {/* Strip galerie supprime : remplace par un bouton dans le cluster
-          flottant a gauche du viewer (ouvre directement la sheet grille). */}
-
-      {/* ─── Backdrop dismiss ─── couvre toute la zone capture quand le
-          menu est ouvert ; tap dessus = ferme. Transparent : aucun
-          assombrissement, juste un layer de hit-test. */}
-      {menuOpen && (
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => setMenuOpen(false)}
-          style={{
-            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            zIndex: 5,
-          }}
-        />
-      )}
-
-      {/* ─── Menu iOS UIMenu-style ─── BlurView dark frosted, rows
-          label+icon avec hairline separators. Scale+fade depuis le
-          trigger (anim origin bas-gauche). */}
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: 'absolute',
-          bottom: winH - (CAMERA_TOP + previewH - 16),
-          left: PREVIEW_MARGIN_H + 14,
-          alignItems: 'flex-start',
-          zIndex: 6,
-        }}
-      >
+        {/* Flash de capture — clippe au cadre (il l etait en plein ecran
+            avant). C est le seul retour visuel de la capture automatique. */}
         <Animated.View
-          pointerEvents={menuOpen ? 'auto' : 'none'}
-          style={{
-            width: 230,
-            borderRadius: 14,
-            overflow: 'hidden',
-            marginBottom: 10,
-            opacity: menuAnim,
-            transform: [
-              // Scale depuis origine bas-gauche : on translate la View vers
-              // l origine, on scale, on retranslate. Effet : le menu sort
-              // du trigger plutot que d apparaitre au centre.
-              { translateX: -115 }, // -width/2
-              { translateY: 90 },   // approx +height/2 (3 rows ~60 chacun = 180/2 = 90)
-              { scale: menuAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) },
-              { translateX: 115 },
-              { translateY: -90 },
-            ],
-            shadowColor: '#000',
-            shadowOpacity: 0.4,
-            shadowRadius: 14,
-            shadowOffset: { width: 0, height: 6 },
-          }}
-        >
-          <BlurView intensity={85} tint="dark" style={{ borderRadius: 14, overflow: 'hidden' }}>
-            {/* Galerie */}
-            <TouchableOpacity
-              onPress={() => { setMenuOpen(false); setGalleryOpen(true); }}
-              activeOpacity={0.5}
-              style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                paddingVertical: 13, paddingHorizontal: 16,
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '400', fontFamily: 'Montserrat' }}>Voir mes photos</Text>
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                <Path d="M4 7h3l2-2h6l2 2h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-                <Path d="M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke="#fff" strokeWidth={1.8} />
-              </Svg>
-            </TouchableOpacity>
-            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 16 }} />
+          pointerEvents="none"
+          style={{ ...StyleSheet.absoluteFillObject, backgroundColor: '#fff', opacity: flashOpacity }}
+        />
 
-            {/* Reglage du cadrage (§1.8) : affiche le point de passage ideal.
-                Place avant "Infos" car c'est une action de mise en place, a
-                faire une fois en arrivant au poste. */}
-            <TouchableOpacity
-              onPress={() => { setMenuOpen(false); setFramingMode(v => !v); }}
-              activeOpacity={0.5}
-              style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                paddingVertical: 13, paddingHorizontal: 16,
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '400', fontFamily: 'Montserrat' }}>
-                {framingMode ? 'Terminer le réglage' : 'Régler le cadrage'}
+        {/* ─── Panneau Infos ─── */}
+        {menuOpen && (
+          <Panneau onFermer={fermerPanneaux}>
+            <View style={{ paddingTop: 16, paddingHorizontal: G.rowPadH, paddingBottom: 10 }}>
+              <Text style={{ color: P.labelPanel, fontSize: 12, fontWeight: '600', fontFamily: 'Montserrat' }}>
+                {compteursTexte}
               </Text>
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 21s7-5.686 7-11a7 7 0 1 0-14 0c0 5.314 7 11 7 11z" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-                <Path d="M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" stroke="#fff" strokeWidth={1.8} />
-              </Svg>
-            </TouchableOpacity>
-            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 16 }} />
+              {(lostCount + (queueStats?.failed || 0)) > 0 && (
+                <Text style={{ color: P.danger, fontSize: 12, fontWeight: '600', fontFamily: 'Montserrat', marginTop: 3 }}>
+                  {lostCount + (queueStats?.failed || 0)} à renvoyer
+                </Text>
+              )}
+              {/* Capacite du telephone — visible en permanence, sans
+                  distinction de moment (avant / pendant / apres). */}
+              {capaciteCoureurs && (
+                <>
+                  <Text style={{ color: P.labelPanel, fontSize: 12, fontWeight: '500', fontFamily: 'Montserrat', marginTop: 6 }}>
+                    {capaciteCoureurs.n >= 100000
+                      ? 'Place largement suffisante'
+                      : `Place pour ~${capaciteCoureurs.n.toLocaleString('fr-FR')} coureurs (${capaciteCoureurs.parCoureur} photo${capaciteCoureurs.parCoureur > 1 ? 's' : ''} chacun)`}
+                  </Text>
+                  {capaciteCoureurs.n < 100000 && capaciteCoureurs.restants != null && (
+                    <Text
+                      style={{
+                        color: capaciteCoureurs.suffisant ? P.labelPanel : P.danger,
+                        fontSize: 12, fontWeight: '600', fontFamily: 'Montserrat', marginTop: 2,
+                      }}
+                    >
+                      {capaciteCoureurs.restants.toLocaleString('fr-FR')} coureurs attendus — {capaciteCoureurs.suffisant
+                        ? "c'est suffisant"
+                        : 'libère de la place ou trouve du réseau'}
+                    </Text>
+                  )}
+                </>
+              )}
+            </View>
 
-            {/* Infos (toggle techExpanded) */}
-            <TouchableOpacity
-              onPress={() => { setMenuOpen(false); setTechExpanded(v => !v); }}
-              activeOpacity={0.5}
-              style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                paddingVertical: 13, paddingHorizontal: 16,
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '400', fontFamily: 'Montserrat' }}>
-                {techExpanded ? 'Masquer les infos' : 'Afficher les infos'}
-              </Text>
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 8h.01M11 12h1v4h1" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-                <Path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke="#fff" strokeWidth={1.8} />
-              </Svg>
-            </TouchableOpacity>
-            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: 16 }} />
-
-            {/* Deconnexion (destructive iOS red) */}
-            <TouchableOpacity
+            <RangeePanneau
+              libelle="Voir mes photos"
+              droite={<Text style={{ color: P.label, fontSize: 17 }}>›</Text>}
+              onPress={() => { fermerPanneaux(); setGalleryOpen(true); }}
+            />
+            <RangeePanneau
+              libelle="Régler le cadrage"
+              droite={framingMode
+                ? <Text style={{ color: P.accent, fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat' }}>Actif</Text>
+                : null}
+              onPress={() => { fermerPanneaux(); setFramingMode(v => !v); }}
+            />
+            <RangeePanneau
+              libelle="Compteurs à l'écran"
+              droite={techExpanded
+                ? <Text style={{ color: P.accent, fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat' }}>Actif</Text>
+                : null}
+              onPress={() => { fermerPanneaux(); setTechExpanded(v => !v); }}
+            />
+            <RangeePanneau
+              dernier
+              libelle="Déconnexion"
+              couleur={P.danger}
               onPress={() => {
-                setMenuOpen(false);
+                fermerPanneaux();
                 if (pendingCount > 0) {
                   Alert.alert(
                     'Photos en cours d\'envoi',
@@ -3914,7 +3696,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                       { text: 'Rester', style: 'cancel' },
                       { text: 'Se déconnecter quand même', style: 'destructive', onPress: onLogout },
                     ],
-                    { cancelable: true }
+                    { cancelable: true },
                   );
                 } else {
                   Alert.alert(
@@ -3924,61 +3706,213 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                       { text: 'Annuler', style: 'cancel' },
                       { text: 'Déconnexion', style: 'destructive', onPress: onLogout },
                     ],
-                    { cancelable: true }
+                    { cancelable: true },
                   );
                 }
               }}
-              activeOpacity={0.5}
-              style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                paddingVertical: 13, paddingHorizontal: 16,
-              }}
-            >
-              <Text style={{ color: '#FF453A', fontSize: 15, fontWeight: '400', fontFamily: 'Montserrat' }}>Déconnexion</Text>
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                <Path d="M12 2v10" stroke="#FF453A" strokeWidth={2} strokeLinecap="round" />
-                <Path d="M5.64 7.05A9 9 0 1 0 18.36 7.05" stroke="#FF453A" strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            </TouchableOpacity>
-          </BlurView>
-        </Animated.View>
+            />
+          </Panneau>
+        )}
 
-        {/* Trigger : bouton rond avec ellipsis iOS (3 points horizontaux),
-            BlurView dark frosted. Pas de rotation : iOS UIButton avec menu
-            ne tourne pas non plus. */}
-        <TouchableOpacity
-          onPress={toggleMenu}
-          activeOpacity={0.7}
-          accessibilityLabel={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
-          style={{
-            width: 36, height: 36, borderRadius: 18,
-            overflow: 'hidden',
-            shadowColor: '#000',
-            shadowOpacity: 0.25, shadowRadius: 5,
-            shadowOffset: { width: 0, height: 2 },
-          }}
-        >
-          <BlurView intensity={70} tint="dark" style={{
-            width: '100%', height: '100%',
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Animated.View style={{
-              transform: [{
-                rotate: menuAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }),
-              }],
-            }}>
-              <Svg width={16} height={10} viewBox="0 0 16 10" fill="none">
-                <Path
-                  d="M2 8L8 2L14 8"
-                  stroke="#fff"
-                  strokeWidth={2.2}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </Animated.View>
-          </BlurView>
-        </TouchableOpacity>
+        {/* ─── GUIDE DE CADRAGE (§1.8) ─────────────────────────────────────
+            Composant inchange. Il est desormais rendu DANS le cadre plutot
+            qu a cote : frere du cadre, il etait dessine apres lui et sa
+            banniere « incline le telephone vers le sol » recouvrait les
+            boutons du panneau de reglages — exactement quand on en a besoin.
+            Ici il passe sous les panneaux, et le rectangle est exprime en
+            coordonnees LOCALES (top 0, marge 0) : c est le meme cadre. */}
+        {framingMode && tiltAvailable && (
+          <FramingGuide
+            targetDistance={framingDistance}
+            height={mountHeight}
+            pitch={framingPitch}
+            roll={framingRoll}
+            halfFovH={framingFov.halfFovH}
+            halfFovV={framingFov.halfFovV}
+            rect={{ top: 0, height: FRAME_H, marginH: 0 }}
+          />
+        )}
+
+        {/* ─── Reglages du guide de cadrage ───────────────────────────────
+            Restaures dans un panneau plutot qu en bandeau haut : en haut du
+            cadre ils recouvriraient le voyant de luminosite, et surtout la
+            zone centrale doit rester degagee (contrainte n°3 du handoff).
+            Deux reglages : la hauteur de pose — dont la distance depend
+            proportionnellement — et la distance visee. Le terrain rapporte
+            des passages a 2 m, une cible figee a 3,5 m serait inutilisable. */}
+        {/* Priorite basse : si un autre panneau est ouvert, il passe devant.
+            Sans ca, ouvrir Infos pendant un reglage empilerait deux panneaux
+            au meme endroit. */}
+        {framingMode && tiltAvailable && !menuOpen && !raceOpen && !kmOpen && (
+          // onFermer neutre : le fond du panneau couvre toute la preview, et
+          // sortir du mode reglage sur un frolement du pouce pendant qu on
+          // ajuste la hauteur serait exasperant. On sort par le bouton.
+          <Panneau onFermer={() => {}}>
+            <View style={{ padding: 14, gap: 8 }}>
+              <Text style={{ color: P.labelPanel, fontSize: 12, fontWeight: '600', fontFamily: 'Montserrat' }}>
+                Hauteur de pose
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {[
+                  ['Au sol', MOUNT_HEIGHT_M.sol],
+                  ['Barrière', MOUNT_HEIGHT_M.barriere],
+                  ['Trépied', MOUNT_HEIGHT_M.trepied],
+                ].map(([label, h]) => {
+                  const active = Math.abs(mountHeight - h) < 1e-6;
+                  return (
+                    <TouchableOpacity
+                      key={label}
+                      onPress={() => setMountHeight(h)}
+                      activeOpacity={0.7}
+                      style={{
+                        flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: 'center',
+                        backgroundColor: active ? P.brand : P.surfacePressed,
+                      }}
+                    >
+                      <Text style={{
+                        color: active ? '#fff' : P.ink,
+                        fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat',
+                      }}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={{ color: P.labelPanel, fontSize: 12, fontWeight: '600', fontFamily: 'Montserrat', marginTop: 2 }}>
+                Distance visée (m)
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {DISTANCE_CHOICES_M.map((d) => {
+                  const active = Math.abs(framingDistance - d) < 1e-6;
+                  return (
+                    <TouchableOpacity
+                      key={d}
+                      onPress={() => setFramingDistance(d)}
+                      activeOpacity={0.7}
+                      style={{
+                        flex: 1, paddingVertical: 9, borderRadius: 8, alignItems: 'center',
+                        backgroundColor: active ? P.brand : P.surfacePressed,
+                      }}
+                    >
+                      <Text style={{
+                        color: active ? '#fff' : P.ink,
+                        fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat',
+                      }}>{String(d).replace('.', ',')}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Tangage en clair : permet de verifier le capteur sans rebuild.
+                  Telephone a plat, ecran vers le haut => doit afficher ~90. */}
+              <Text style={{ color: P.labelMuted, fontSize: 11, fontFamily: 'Montserrat', marginTop: 2 }}>
+                {`inclinaison ${Math.round(framingPitch * 180 / Math.PI)}°`}
+              </Text>
+
+              <TouchableOpacity
+                onPress={() => setFramingMode(false)}
+                activeOpacity={0.7}
+                style={{
+                  height: G.rowH, borderRadius: G.rowRadius, backgroundColor: P.brand,
+                  alignItems: 'center', justifyContent: 'center', marginTop: 4,
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600', fontFamily: 'Montserrat' }}>
+                  Terminer le réglage
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Panneau>
+        )}
+
+        {/* ─── Selecteur d Epreuve ─── */}
+        {raceOpen && (
+          <Panneau onFermer={fermerPanneaux}>
+            <View style={{ marginVertical: 6 }}>
+              <PanelWheel items={courseItems} selectedIndex={courseIdx} onChange={setCourseIdx} />
+            </View>
+          </Panneau>
+        )}
+
+        {/* ─── Selecteur de Poste ─── */}
+        {kmOpen && (
+          <Panneau onFermer={fermerPanneaux}>
+            <View style={{ marginVertical: 6 }}>
+              <PanelWheel items={kmItems} selectedIndex={kmIdx} onChange={setKmIdx} />
+            </View>
+          </Panneau>
+        )}
+      </View>
+
+      {/* ─── 4. Bloc de commandes ──────────────────────────────────────── */}
+      <View
+        style={{
+          position: 'absolute', top: CONTROLS_TOP, left: 0, right: 0,
+          paddingHorizontal: G.gutter,
+        }}
+        pointerEvents={unPanneauOuvert ? 'none' : 'auto'}
+      >
+        {/* Compteurs sous le cadre, optionnels. */}
+        {techExpanded && (
+          <Text
+            style={{
+              textAlign: 'center', color: P.labelMuted, fontSize: 13,
+              fontWeight: '500', fontFamily: 'Montserrat', marginBottom: G.rowGap,
+            }}
+          >
+            {compteursTexte}
+          </Text>
+        )}
+
+        {/* Rangee 1 : Infos + Stop */}
+        <View style={{ flexDirection: 'row', marginBottom: G.rowGap }}>
+          <TouchableOpacity
+            onPress={() => ouvrirPanneau('infos')}
+            activeOpacity={0.7}
+            style={{
+              width: 158, height: G.rowH, borderRadius: G.rowRadius, backgroundColor: P.surface,
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+              paddingHorizontal: G.rowPadH, marginRight: 12,
+            }}
+          >
+            <Text style={{ color: P.brand, fontSize: 17, fontWeight: '600', fontFamily: 'Montserrat' }}>Infos</Text>
+            <Text style={{ color: P.label, fontSize: 17 }}>›</Text>
+          </TouchableOpacity>
+
+          {/* Le libelle suit l etat reel : la capture s arme toute seule au
+              bout de 900 ms, donc « Stop » est le cas nominal. « Go! »
+              n apparait qu apres un arret manuel ou une mise en pause
+              automatique (batterie, disque). */}
+          <TouchableOpacity
+            onPress={onCapturePress}
+            activeOpacity={0.8}
+            style={{
+              flex: 1, height: G.rowH, borderRadius: G.rowRadius,
+              backgroundColor: isAutoArmed ? P.stop : P.brand,
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 17, fontWeight: '600', fontFamily: 'Montserrat' }}>
+              {isAutoArmed ? 'Stop' : 'Go!'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Rangee 2 : Epreuve */}
+        <View style={{ marginBottom: G.rowGap }}>
+          <RangeeValeur
+            libelle="Épreuve"
+            valeur={courseItems[courseIdx]?.label || 'Toutes'}
+            onPress={() => ouvrirPanneau('race')}
+          />
+        </View>
+
+        {/* Rangee 3 : Poste */}
+        <RangeeValeur
+          libelle="Poste"
+          valeur={kmItems[kmIdx]?.label || '-'}
+          onPress={() => ouvrirPanneau('km')}
+        />
       </View>
 
       {/* ─── Mini-galerie sheet ─── ouverte au tap d'une vignette de la bande,
@@ -4152,16 +4086,19 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       />
 
       {/* Toast auto-armement : s affiche 3s au mount de l ecran photographe
-          quand la capture demarre automatiquement. Positionne au-dessus du
-          bouton Go/Stop pour rester dans le champ visuel du benevole. */}
+          quand la capture demarre automatiquement. Pose dans l espace
+          elastique SOUS les commandes : c est la seule zone qui n appartient
+          a personne. Cale sur CONTROLS_TOP, pas sur un bottom fixe — l ancien
+          `bottom: 190` datait de la geometrie precedente et recouvrait les
+          rangees de commande, voire le centre de la preview sur petit ecran. */}
       {autoArmToastAt > 0 ? (
         <View
           pointerEvents="none"
           style={{
             position: 'absolute',
-            left: 20,
-            right: 20,
-            bottom: 190,
+            left: G.gutter,
+            right: G.gutter,
+            top: CONTROLS_TOP + COUNTER_H + CONTROLS_H + 12,
             backgroundColor: 'rgba(16, 160, 92, 0.96)',
             borderRadius: 18,
             paddingVertical: 14,
@@ -7290,8 +7227,11 @@ export default function App() {
   // l accueil ; au logout/back le remount du SafeAreaView mesurait l inset
   // top iOS de facon asynchrone -> flash "trop haut" puis "redescend".
   const photographerOverlay = inPhotographerMode && (session?.role === 'photographer' || session?.role === 'organizer') ? (
-    <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000' }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#000" translucent />
+    <View style={[StyleSheet.absoluteFillObject, { backgroundColor: P.appBg }]}>
+      {/* Glyphes SOMBRES : le fond de la vue photographe est passe au lavande
+          clair avec la refonte. En light-content, l heure et la batterie
+          etaient blanches sur blanc — invisibles toute la session. */}
+      <StatusBar barStyle="dark-content" backgroundColor={P.appBg} translucent />
       <PhotographerScreen
         session={session}
         photographerApiFetch={photographerApiFetch}
