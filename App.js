@@ -3595,18 +3595,18 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               pointerEvents="none"
               style={{ position: 'absolute', left: `${insetPct}%`, right: `${insetPct}%`, top: '9%', bottom: '27%' }}
             >
-              {/* Montants verticaux : les bords de la zone de detection. */}
-              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.75)', ...guideShadow }} />
-              <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(255,255,255,0.75)', ...guideShadow }} />
-              {/* Ligne de passage : repere de HAUTEUR DE TETE pour viser.
-                  Ce n est PAS une ligne de declenchement — le tir se fait sur
-                  les lignes verticales franchies par un visage. */}
-              <View style={{ position: 'absolute', left: 0, right: 0, top: '52%', height: 1, backgroundColor: 'rgba(255,255,255,0.6)' }} />
-              {/* Coins de cadrage. */}
-              <View style={{ position: 'absolute', left: 0, top: 0, width: 16, height: 16, borderLeftWidth: 2, borderTopWidth: 2, borderColor: '#fff', borderTopLeftRadius: 5 }} />
-              <View style={{ position: 'absolute', right: 0, top: 0, width: 16, height: 16, borderRightWidth: 2, borderTopWidth: 2, borderColor: '#fff', borderTopRightRadius: 5 }} />
-              <View style={{ position: 'absolute', left: 0, bottom: 0, width: 16, height: 16, borderLeftWidth: 2, borderBottomWidth: 2, borderColor: '#fff', borderBottomLeftRadius: 5 }} />
-              <View style={{ position: 'absolute', right: 0, bottom: 0, width: 16, height: 16, borderRightWidth: 2, borderBottomWidth: 2, borderColor: '#fff', borderBottomRightRadius: 5 }} />
+              {/* Coins UNIQUEMENT. Les deux montants verticaux et la ligne
+                  horizontale de passage ont ete retires (2026-08-20) : ils
+                  barraient l image en permanence, et la ligne horizontale se
+                  lisait comme « la ligne qui declenche » alors que le tir se
+                  fait sur des lignes VERTICALES franchies par un visage.
+                  Les quatre coins suffisent a situer la zone de detection
+                  sans rien traverser. Halo sombre conserve : sans lui ils
+                  disparaissent sur un ciel clair. */}
+              <View style={{ position: 'absolute', left: 0, top: 0, width: 16, height: 16, borderLeftWidth: 2, borderTopWidth: 2, borderColor: '#fff', borderTopLeftRadius: 5, ...guideShadow }} />
+              <View style={{ position: 'absolute', right: 0, top: 0, width: 16, height: 16, borderRightWidth: 2, borderTopWidth: 2, borderColor: '#fff', borderTopRightRadius: 5, ...guideShadow }} />
+              <View style={{ position: 'absolute', left: 0, bottom: 0, width: 16, height: 16, borderLeftWidth: 2, borderBottomWidth: 2, borderColor: '#fff', borderBottomLeftRadius: 5, ...guideShadow }} />
+              <View style={{ position: 'absolute', right: 0, bottom: 0, width: 16, height: 16, borderRightWidth: 2, borderBottomWidth: 2, borderColor: '#fff', borderBottomRightRadius: 5, ...guideShadow }} />
               {/* Poignees de cadrage, en mode reglage uniquement. */}
               {framingMode && (
                 <>
