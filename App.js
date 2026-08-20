@@ -114,6 +114,9 @@ import {
 import {
   makeLightCopy, lightIsWorthIt, LIGHT_QUALITY_DEFAULT, LIGHT_MAX_WIDTH,
 } from './src/services/lightCopy';
+// Suffixe d identifiant d upload marquant la voie legere. Doit rester un
+// motif impossible dans un id d item (les ids sont alphanumeriques).
+const LIGHT_ID_SUFFIX = '#light';
 // Guide de cadrage benevole (cf. CONCEPTION_DECLENCHEMENT_LIGNES.md §1.8).
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
@@ -161,6 +164,7 @@ import {
   hasBackgroundUploader,
   bgUploaderEmitter,
   pendingBgUploads,
+  setOrphanUploadHandler,
 } from './src/services/backgroundUploader';
 import {
   hasThermalMonitor,
@@ -1239,24 +1243,48 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // Ce listener applique le resultat directement a queueRef pour ces cas-la.
   useEffect(() => {
     if (!bgUploaderEmitter) return;
-    const sub = bgUploaderEmitter.addListener('BackgroundUploaderComplete', (evt) => {
+    // On ne s abonne PLUS a l event directement. Le module backgroundUploader
+    // est le seul abonne et ne nous appelle que pour les uploads reellement
+    // orphelins (aucune promise en attente). Avant, ce listener parallele
+    // s executait pour CHAQUE upload : le garde pendingBgUploads.has() ne
+    // pouvait jamais etre vrai, l autre listener ayant deja vide la Map.
+    const desabonner = setOrphanUploadHandler((evt) => {
       const { itemId, success, statusCode } = evt || {};
       if (!itemId) return;
-      // Si une promise pending existe, le wrapper drainQueue gere -- skip.
-      if (pendingBgUploads.has(itemId)) return;
-      // Sinon : reconcile direct queueRef. Trouve l'item, applique le succes
-      // ou bumpe les retries.
+      // L identifiant encode la phase (cf drainQueue). Un orphelin de la voie
+      // legere ne doit SURTOUT PAS declencher la suppression de l original.
+      const estLeger = String(itemId).endsWith(LIGHT_ID_SUFFIX);
+      const vraiId = estLeger
+        ? String(itemId).slice(0, -LIGHT_ID_SUFFIX.length)
+        : itemId;
+      // Reconcile direct queueRef : trouve l'item, applique le succes ou
+      // bumpe les retries.
       const cur = queueRef.current;
-      const idx = cur.findIndex(it => it.id === itemId);
+      const idx = cur.findIndex(it => it.id === vraiId);
       if (idx === -1) return;
       const item = cur[idx];
       const ok = !!success && statusCode >= 200 && statusCode < 300;
-      if (ok) {
+      if (ok && estLeger) {
+        // Seule la copie legere est passee. L original est intact sur le
+        // telephone et l item reste en file pour la phase full.
+        const next = cur.map((it, i) => i === idx
+          ? { ...it, lightDone: true, status: 'pending', retries: 0, nextAttemptAt: null }
+          : it);
+        commitQueue(next);
+        scheduleRetryTick();
+      } else if (ok) {
         try { new File(item.localUri).delete(); } catch {}
         uploadedCountRef.current += 1;
         if (isMountedRef.current) setUploadedCount(uploadedCountRef.current);
         const next = cur.filter((_, i) => i !== idx);
         commitQueue(next);
+      } else if (estLeger) {
+        // Echec de la copie legere : on repose l item en file SANS entamer
+        // son budget de retries. L original n a pas encore ete tente ; c est
+        // drainQueue (echecUpload) qui arbitre l abandon de la voie legere.
+        const next = cur.map((it, i) => i === idx ? { ...it, status: 'pending', nextAttemptAt: null } : it);
+        commitQueue(next);
+        scheduleRetryTick();
       } else {
         const updated = nextRetryState(item, MAX_RETRIES_DEFAULT);
         const next = cur.map((it, i) => i === idx ? updated : it);
@@ -1264,7 +1292,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         scheduleRetryTick();
       }
     });
-    return () => sub.remove();
+    return desabonner;
   }, []);
 
   // Reagit au level/state : pause capture si <10% ET pas en charge.
@@ -1619,7 +1647,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       if (hasBackgroundUploader) {
         try {
           const { activeItemIds } = await BackgroundUploaderModule.getActiveUploads();
-          activeBgItemIds = new Set(Array.isArray(activeItemIds) ? activeItemIds : []);
+          activeBgItemIds = new Set(
+            (Array.isArray(activeItemIds) ? activeItemIds : []).map((id) => {
+              const s = String(id);
+              return s.endsWith(LIGHT_ID_SUFFIX) ? s.slice(0, -LIGHT_ID_SUFFIX.length) : s;
+            })
+          );
           if (activeBgItemIds.size > 0) {
             console.log(`[BackgroundUploader] reconcile: ${activeBgItemIds.size} uploads encore actifs cote iOS`);
           }
@@ -2268,13 +2301,21 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     if (drainingRef.current) return;
     if (!session?.token) return;
 
+    // Le verrou se pose AVANT le premier await, pas apres. Il etait pose
+    // apres NetInfo.fetch() : deux appels entrant pendant cet aller-retour
+    // passaient tous les deux le garde et draînaient en parallele. Avec
+    // l upload en deux temps la consequence devient grave — la copie legere
+    // et l original du meme item partent en concurrence sur la MEME cle R2,
+    // sans ordre garanti, et la copie legere peut atterrir en dernier. Le
+    // meme itemId serait aussi ecrase dans pendingBgUploads, laissant une
+    // promise jamais resolue et le drain bloque pour de bon.
+    drainingRef.current = true;
+
     // Gate réseau : on lit l'état NetInfo en synchrone via fetch sync (mais c'est async).
     // On utilise isOnline pour éviter un await coûteux. Si offline, on quitte direct.
     const state = await NetInfo.fetch().catch(() => null);
     const online = state ? (!!state.isConnected && state.isInternetReachable !== false) : isOnline;
-    if (!online) return;
-
-    drainingRef.current = true;
+    if (!online) { drainingRef.current = false; return; }
     // Vrai si ce passage a traite la voie legere : il faut alors relancer un
     // drain tout de suite (soit d autres copies legeres viennent d arriver,
     // soit c est au tour des originaux). Sans ca on attendrait le heartbeat
@@ -2474,7 +2515,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                   ? `gain insuffisant (${poidsOrig} -> ${poidsLeger} o)`
                   : `${light.reason}${light.error ? ' ' + light.error : ''}`;
                 addDebugLog(`[light] skip ${item.id}: ${raison}`);
-                arr[i] = { ...item, lightDone: true, lightSkipped: raison, status: 'pending', nextAttemptAt: null };
+                arr[i] = { ...item, lightDone: true, lightSkipped: raison, status: 'pending', retries: 0, nextAttemptAt: null };
                 continue;
               }
               srcUri = light.uri;
@@ -2485,11 +2526,21 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                   + `(x${(poidsOrig / poidsLeger).toFixed(1)}) ${light.width}x${light.height}`;
                 console.log(m); addDebugLog(m);
               }
-            } else if (twoTier && item.lightDone === true && !item.lightSkipped) {
-              // L original arrive APRES la copie legere, sur la MEME cle R2.
-              // Ce header dit au worker : garde les customMetadata deja
-              // ecrits (matched_user_ids !) et ne relance pas l analyse.
-              // Sans lui, le PUT ecraserait les resultats de reconnaissance.
+            } else if (item.lightDone === true) {
+              // L original arrive APRES un passage par la voie legere, sur la
+              // MEME cle R2. Ce header dit au worker : garde les
+              // customMetadata deja ecrits (matched_user_ids !) et purge les
+              // variantes _derived fabriquees depuis la copie. Sans lui, le
+              // PUT ecraserait les resultats de reconnaissance.
+              //
+              // Volontairement PAS conditionne a `twoTier` ni a l absence de
+              // `lightSkipped` :
+              //  - si l orga coupe le flag en cours d event, les items dont
+              //    la copie est deja sur R2 doivent quand meme se declarer ;
+              //  - un `lightSkipped` peut venir d un PUT qui a REUSSI cote
+              //    serveur mais expire cote client (4G saturee) — la copie
+              //    est bien la, il faut en heriter.
+              // Cote worker le cas "rien a heriter" est un no-op.
               tierHeader = 'full';
             }
 
@@ -2509,12 +2560,19 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             // Fallback fetch si module absent (dev sans build natif).
             let result;
             if (hasBackgroundUploader) {
+              // L identifiant porte la phase. C est le SEUL moyen pour le
+              // gestionnaire d uploads orphelins (cf setOrphanUploadHandler)
+              // de savoir, apres un cold start en plein transfert, s il vient
+              // de voir passer la copie legere ou l original. Sans ca il
+              // supprimerait l original du telephone en croyant l avoir
+              // envoye, alors que seule la copie a atterri.
+              const uploadId = phase === 'light' ? `${item.id}${LIGHT_ID_SUFFIX}` : item.id;
               result = await new Promise((resolve, reject) => {
-                pendingBgUploads.set(item.id, { resolve, reject });
+                pendingBgUploads.set(uploadId, { resolve, reject });
                 BackgroundUploaderModule
-                  .enqueueUpload(uploadUrl, srcUri, headers, item.id)
+                  .enqueueUpload(uploadUrl, srcUri, headers, uploadId)
                   .catch((e) => {
-                    pendingBgUploads.delete(item.id);
+                    pendingBgUploads.delete(uploadId);
                     reject(e);
                   });
               });
