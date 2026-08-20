@@ -61,7 +61,15 @@ class PhotoMetadataBurner: NSObject {
   }
 
   // Encode un UIImage en HEIC via ImageIO (iOS 14+ pour UTType.heic).
-  // Quality 0.88 ≈ JPEG q95 visuellement, ~2x plus petit en taille.
+  // Quality 0.80 (etait 0.88). 0.88 equivaut a du JPEG q95 — un niveau de
+  // tirage photo, pour un produit destine a etre regarde sur un telephone.
+  // 0.80 divise le poids par ~2 sur les trois postes a la fois : stockage
+  // du telephone hors ligne, bande passante, stockage R2.
+  //
+  // AUCUN effet sur la reconnaissance : la RESOLUTION ne bouge pas, et
+  // c est elle qui compte (cf. le plancher de 2400 px documente dans
+  // worker/index.js:compressForAnalysis). Rekognition tourne de toute
+  // facon sur un JPEG q85 recompresse cote serveur.
   private static func encodeHEIC(_ image: UIImage, quality: CGFloat) -> Data? {
     guard let cgImage = image.cgImage else { return nil }
     let data = NSMutableData()
@@ -311,7 +319,7 @@ class PhotoMetadataBurner: NSObject {
     // 3. Reencodage HEIC. Pas de fallback JPEG : avec un deploymentTarget
     // iOS 16, HEIC est garanti disponible — un echec ici est un signal a
     // remonter (fail-loud) plutot qu'a masquer avec un .jpg silencieux.
-    guard let heicData = Self.encodeHEIC(burned, quality: 0.88) else {
+    guard let heicData = Self.encodeHEIC(burned, quality: 0.80) else {
       rejecter("E_ENCODE", "Could not encode burned image as HEIC", nil)
       return
     }

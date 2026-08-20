@@ -1819,7 +1819,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     const poids = photoSizeProbeRef.current?.median() || PHOTO_BYTES_FALLBACK;
     const parCoureur = lineTierRef.current > 0 ? lineTierRef.current : 2;
     const n = runnersRemaining(freeDiskGB * 1024 * 1024 * 1024, poids, parCoureur);
-    return n === null ? null : { n, parCoureur };
+    if (n === null) return null;
+    // Compare a l event : le benevole doit savoir si son telephone suffit,
+    // et le savoir A TOUT MOMENT — avant, pendant, apres. Pas d alerte
+    // ponctuelle qu on rate, une ligne toujours presente dans les infos.
+    const attendus = Number(session?.event?.estimated_participants) || null;
+    const restants = attendus ? Math.max(0, attendus - seenRunnersRef.current) : null;
+    const suffisant = restants === null ? null : n >= restants;
+    return { n, parCoureur, restants, suffisant };
   })();
   // Menu flottant a gauche du viewer : ferme par defaut, ouvert via chevron.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -3401,16 +3408,26 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 benevole peut agir dessus (liberer de la place, trouver du
                 reseau) ; un nombre de gigaoctets ne lui dirait rien. */}
             {capaciteCoureurs && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 6 }}>
+              <View style={{ alignItems: 'center', marginTop: 6, gap: 2 }}>
                 <Text style={{
-                  color: capaciteCoureurs.n < 200 ? '#FB923C' : 'rgba(255,255,255,0.55)',
-                  fontSize: 11, fontWeight: '500',
+                  color: capaciteCoureurs.suffisant === false ? '#FB923C' : 'rgba(255,255,255,0.55)',
+                  fontSize: 11, fontWeight: capaciteCoureurs.suffisant === false ? '700' : '500',
                 }}>
                   {capaciteCoureurs.n >= 100000
                     ? 'Place largement suffisante'
                     : `Place pour ~${capaciteCoureurs.n.toLocaleString('fr-FR')} coureurs `
                       + `(${capaciteCoureurs.parCoureur} photo${capaciteCoureurs.parCoureur > 1 ? 's' : ''} chacun)`}
                 </Text>
+                {capaciteCoureurs.restants !== null && capaciteCoureurs.n < 100000 && (
+                  <Text style={{
+                    color: capaciteCoureurs.suffisant ? 'rgba(255,255,255,0.35)' : '#FB923C',
+                    fontSize: 11, fontWeight: '500',
+                  }}>
+                    {capaciteCoureurs.suffisant
+                      ? `${capaciteCoureurs.restants.toLocaleString('fr-FR')} coureurs attendus — c'est suffisant`
+                      : `${capaciteCoureurs.restants.toLocaleString('fr-FR')} coureurs attendus — libère de la place ou trouve du réseau`}
+                  </Text>
+                )}
               </View>
             )}
             {IS_PREVIEW_OR_DEV && liveExposureSamples.length > 0 && (() => {

@@ -5,9 +5,16 @@
 // disque dans Paths.document/{PENDING_DIR_NAME}/{RAW_SUBDIR|PROCESSED_SUBDIR}/
 // pour survivre au kill app / restart iPhone.
 //
-// MAX_QUEUE_SIZE et STORAGE_WARN_BYTES sont alignes : 1000 photos x ~5 Mo
-// HEIC = 5 Go, c'est aussi le seuil d'alerte stockage. Couvre un peloton
-// dense entier meme avec 4G saturee.
+// ATTENTION — ces deux constantes ne sont PLUS la reference. Elles etaient
+// censees s'equivaloir ("1000 photos x ~5 Mo HEIC = 5 Go"), mais le poids
+// reel mesure en production le 2026-08 est de 1,94 Mo (min 1,90 / max 1,99,
+// sur 10 HEIC). 1000 photos ne font donc que 1,94 Go : le garde disque ne
+// mordait jamais, c'etait toujours le plafond d'items qui agissait.
+//
+// Les vrais garde-fous sont desormais calcules a la volee dans
+// src/services/captureTier.js (storageWarnBytesFor / maxQueueSizeFor), a
+// partir de la place libre reelle et du poids median mesure sur les captures.
+// Ce qui suit ne sert plus que de valeur de repli quand rien n'est mesurable.
 //
 // QUEUE_WARN_THRESHOLD = moitie du cap : suffisamment haut pour ne pas
 // spammer en event 4G lente normale. La queue n'est plus jamais tronquee
