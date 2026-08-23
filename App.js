@@ -2278,6 +2278,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // force-retry via le sous-ecran admin -> reset retries -> picked up here).
   const processingRef = useRef(false);
   async function processQueue() {
+    const verboseProcess = !!eventConfig.debug?.verboseLogs;
     if (processingRef.current) return;
     processingRef.current = true;
     try {
@@ -2427,13 +2428,47 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             new File(item.localUri).copy(dstFile);
           }
 
+          // ─── HEIC -> JPEG, sur le telephone ──────────────────────────
+          // Le HEIC n est lisible par PERSONNE en aval : ni Rekognition, ni
+          // les navigateurs autres que Safari. Tout le pipeline serveur
+          // dependait donc du binding Images de Cloudflare pour le decoder —
+          // et quand ce binding est tombe (son output() plante dans
+          // serializeTextSource), tout est tombe avec lui : plein ecran,
+          // telechargement, vignettes neuves, analyse des visages.
+          //
+          // Convertir ici supprime la dependance a la racine. Cote serveur,
+          // une cle .jpg emprunte la voie rapide Cloudflare — celle qui etait
+          // sautee pour tous les .heic — donc vignettes et filigrane
+          // refonctionnent sans transcodage.
+          //
+          // Pleine resolution conservee : maxWidth tres haut = aucun
+          // redimensionnement, on ne change que le conteneur.
+          //
+          // Si la conversion echoue, on envoie le HEIC comme avant. Le mode
+          // degrade reste l ancien comportement, jamais une photo perdue.
+          let fichierFinal = dstFile.uri;
+          let cleFinale = item.key;
+          const jpeg = await makeLightCopy(dstFile.uri, { quality: 0.9, maxWidth: 100000 });
+          if (jpeg.ok) {
+            fichierFinal = jpeg.uri;
+            cleFinale = String(item.key).replace(/\.heic$/i, '.jpg');
+            try { new File(dstFile.uri).delete(); } catch {}
+            if (verboseProcess) {
+              console.log(`[jpeg] ${item.id} ${jpeg.width}x${jpeg.height} -> ${cleFinale.split('/').pop()}`);
+            }
+          } else {
+            console.warn(`[jpeg] conversion KO ${item.id} (${jpeg.reason}) — envoi du HEIC`);
+          }
+
           // Succes : delete brut + sidecar, flip processed=true, retries reset
-          // (le compteur d'upload repart de zero), localUri pointe sur processed/.
+          // (le compteur d'upload repart de zero), localUri pointe sur le
+          // fichier reellement envoye.
           try { new File(item.localUri).delete(); } catch {}
           deleteSidecar(item.id);
           const afterProcess = queueRef.current.map(it =>
             it.id === item.id
-              ? { ...it, processed: true, status: 'pending', retries: 0, nextAttemptAt: null, localUri: dstFile.uri }
+              ? { ...it, processed: true, status: 'pending', retries: 0, nextAttemptAt: null,
+                  localUri: fichierFinal, key: cleFinale, isJpeg: jpeg.ok }
               : it
           );
           await commitQueue(afterProcess);
@@ -2651,7 +2686,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           let cleanupUri = null;
           try {
             let srcUri = item.localUri;
-            let contentType = item.isRaw ? 'image/x-adobe-dng' : 'image/heic';
+            let contentType = item.isRaw
+              ? 'image/x-adobe-dng'
+              : (item.isJpeg || /\.jpe?g$/i.test(item.key || '') ? 'image/jpeg' : 'image/heic');
             let tierHeader = null;
 
             if (phase === 'light') {
