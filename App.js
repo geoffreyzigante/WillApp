@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
-  StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Easing, Keyboard, Linking,
+  StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Keyboard, Linking,
   AppState, Share, NativeModules, PanResponder, LayoutAnimation,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -935,8 +935,27 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const badgePulse = useRef(new Animated.Value(1)).current;
   const badgeOpacity = useRef(new Animated.Value(1)).current;
 
-  // Flash blanc full-screen au début d'une rafale + animations de l'UI.
-  const flashOpacity = useRef(new Animated.Value(0)).current;
+  // Retour visuel de la capture : la photo qui vient d etre prise s affiche
+  // par-dessus l apercu camera, et la suivante par-dessus elle. Aucun fondu,
+  // aucune surbrillance — le benevole voit exactement ce qui a ete pris.
+  //
+  // Remplace le voile blanc (0 -> 0.45 en 59 ms) : un pic lumineux qui
+  // n apprenait rien sur la photo elle-meme.
+  const [apercuCapture, setApercuCapture] = useState(null);
+  const apercuTimerRef = useRef(null);
+  // Duree d affichage APRES la derniere photo de la rafale. Pendant la
+  // rafale, chaque nouvelle photo remplace la precedente : l apercu reste
+  // donc visible en continu, puis rend la main a la camera.
+  const APERCU_MS = 700;
+  const montrerApercu = useCallback((uri) => {
+    if (!uri) return;
+    setApercuCapture(uri);
+    if (apercuTimerRef.current) clearTimeout(apercuTimerRef.current);
+    apercuTimerRef.current = setTimeout(() => {
+      apercuTimerRef.current = null;
+      if (isMountedRef.current) setApercuCapture(null);
+    }, APERCU_MS);
+  }, []);
   const captureScale = useRef(new Animated.Value(1)).current;
   const headerSlideY = useRef(new Animated.Value(-120)).current;
   const footerSlideY = useRef(new Animated.Value(300)).current;
@@ -2162,6 +2181,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         ...(Number.isFinite(r.vxAtFire) ? { vxAtFire: r.vxAtFire } : {}),
       });
     }
+    // Apercu : la derniere photo de ce lot passe par-dessus le flux camera.
+    // Place ICI, apres le move, donc sur un chemin stable — et avant le
+    // commitQueue (ecriture AsyncStorage) pour ne pas retarder l affichage.
+    const dernierItem = newQueueItems[newQueueItems.length - 1];
+    if (dernierItem) montrerApercu(dernierItem.localUri);
+
     const next = [...queueRef.current, ...newQueueItems];
 
     // Zero-perte : plus de FIFO drop silencieux. La back-pressure est
@@ -3303,27 +3328,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // pour le LOST) n'y aurait pas acces (block-scoped const).
     const photoKey = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${idx}.heic`;
 
-    // Fondu de capture, 480 ms. Seul retour visuel de la capture automatique.
-    //
-    // C etait un flash blanc : 0 -> 0.45 en 59 ms, donc une montee quasi
-    // instantanee, agressive de nuit et etrangere au reste de l interface.
-    // Ici l apercu se dissout dans la couleur du cadre (framePlaceholder) puis
-    // revient : montee et descente amorties, aucun pic. Meme lecture « photo
-    // prise », sans coup de blanc dans les yeux du benevole.
-    //
-    // useNativeDriver : l animation tourne sur le thread UI, elle ne prend
-    // rien au pipeline de capture.
-    flashOpacity.stopAnimation();
-    Animated.sequence([
-      Animated.timing(flashOpacity, {
-        toValue: 0.65, duration: 150,
-        easing: Easing.out(Easing.quad), useNativeDriver: true,
-      }),
-      Animated.timing(flashOpacity, {
-        toValue: 0, duration: 330,
-        easing: Easing.in(Easing.quad), useNativeDriver: true,
-      }),
-    ]).start();
+    // Le retour visuel n est plus declenche ici mais dans enqueueBurstItems,
+    // des que le fichier a sa place definitive : l apercu affiche le fichier
+    // reel, et le tmp VisionCamera est deplace dans la milliseconde qui suit
+    // la capture (le lire depuis ici donnerait une image introuvable).
     try {
       await enqueueBurstItems([{
         key: photoKey,
@@ -3729,13 +3737,22 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           </Svg>
         </View>
 
-        {/* Fondu de capture — clippe au cadre (il l etait en plein ecran
-            avant). Couleur du fond de cadre, pas du blanc : l apercu se
-            dissout dans le cadre au lieu d etre efface par un flash. */}
-        <Animated.View
-          pointerEvents="none"
-          style={{ ...StyleSheet.absoluteFillObject, backgroundColor: P.framePlaceholder, opacity: flashOpacity }}
-        />
+        {/* Apercu de la photo capturee, clippe au cadre. `recyclingKey` plutot
+            qu une `key` : la vue native est reutilisee d une photo a l autre
+            au lieu d etre remontee 15 fois pendant une rafale. `transition={0}`
+            = apparition franche, sans fondu. */}
+        {apercuCapture && (
+          <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+            <ExpoImage
+              source={{ uri: apercuCapture }}
+              recyclingKey={apercuCapture}
+              style={StyleSheet.absoluteFillObject}
+              contentFit="cover"
+              transition={0}
+              cachePolicy="none"
+            />
+          </View>
+        )}
 
         {/* ─── Panneau Infos ─── */}
         {menuOpen && (
