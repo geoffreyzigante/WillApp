@@ -3303,13 +3303,26 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // pour le LOST) n'y aurait pas acces (block-scoped const).
     const photoKey = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${idx}.heic`;
 
-    // Voile blanc, 420 ms, courbe du handoff (0 -> .45 a 14% -> 0). Seul
-    // retour visuel de la capture automatique. useNativeDriver : l animation
-    // tourne sur le thread UI, sans rien prendre au pipeline de capture.
+    // Fondu de capture, 480 ms. Seul retour visuel de la capture automatique.
+    //
+    // C etait un flash blanc : 0 -> 0.45 en 59 ms, donc une montee quasi
+    // instantanee, agressive de nuit et etrangere au reste de l interface.
+    // Ici l apercu se dissout dans la couleur du cadre (framePlaceholder) puis
+    // revient : montee et descente amorties, aucun pic. Meme lecture « photo
+    // prise », sans coup de blanc dans les yeux du benevole.
+    //
+    // useNativeDriver : l animation tourne sur le thread UI, elle ne prend
+    // rien au pipeline de capture.
     flashOpacity.stopAnimation();
     Animated.sequence([
-      Animated.timing(flashOpacity, { toValue: 0.45, duration: 59, useNativeDriver: true }),
-      Animated.timing(flashOpacity, { toValue: 0, duration: 361, useNativeDriver: true }),
+      Animated.timing(flashOpacity, {
+        toValue: 0.65, duration: 150,
+        easing: Easing.out(Easing.quad), useNativeDriver: true,
+      }),
+      Animated.timing(flashOpacity, {
+        toValue: 0, duration: 330,
+        easing: Easing.in(Easing.quad), useNativeDriver: true,
+      }),
     ]).start();
     try {
       await enqueueBurstItems([{
@@ -3716,11 +3729,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           </Svg>
         </View>
 
-        {/* Flash de capture — clippe au cadre (il l etait en plein ecran
-            avant). C est le seul retour visuel de la capture automatique. */}
+        {/* Fondu de capture — clippe au cadre (il l etait en plein ecran
+            avant). Couleur du fond de cadre, pas du blanc : l apercu se
+            dissout dans le cadre au lieu d etre efface par un flash. */}
         <Animated.View
           pointerEvents="none"
-          style={{ ...StyleSheet.absoluteFillObject, backgroundColor: '#fff', opacity: flashOpacity }}
+          style={{ ...StyleSheet.absoluteFillObject, backgroundColor: P.framePlaceholder, opacity: flashOpacity }}
         />
 
         {/* ─── Panneau Infos ─── */}
