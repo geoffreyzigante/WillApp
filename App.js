@@ -935,27 +935,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const badgePulse = useRef(new Animated.Value(1)).current;
   const badgeOpacity = useRef(new Animated.Value(1)).current;
 
-  // Retour visuel de la capture : la photo qui vient d etre prise s affiche
-  // par-dessus l apercu camera, et la suivante par-dessus elle. Aucun fondu,
-  // aucune surbrillance — le benevole voit exactement ce qui a ete pris.
-  //
-  // Remplace le voile blanc (0 -> 0.45 en 59 ms) : un pic lumineux qui
-  // n apprenait rien sur la photo elle-meme.
-  const [apercuCapture, setApercuCapture] = useState(null);
-  const apercuTimerRef = useRef(null);
-  // Duree d affichage APRES la derniere photo de la rafale. Pendant la
-  // rafale, chaque nouvelle photo remplace la precedente : l apercu reste
-  // donc visible en continu, puis rend la main a la camera.
-  const APERCU_MS = 700;
-  const montrerApercu = useCallback((uri) => {
-    if (!uri) return;
-    setApercuCapture(uri);
-    if (apercuTimerRef.current) clearTimeout(apercuTimerRef.current);
-    apercuTimerRef.current = setTimeout(() => {
-      apercuTimerRef.current = null;
-      if (isMountedRef.current) setApercuCapture(null);
-    }, APERCU_MS);
-  }, []);
+  // Retour visuel de la capture : un lisere lumineux sur le POURTOUR du
+  // cadre. Ni voile blanc sur toute l image (il eblouit de nuit et masque la
+  // scene au moment ou le benevole en a besoin), ni apercu de la photo prise
+  // (il coupe le flux camera en pleine rafale). Les bords suffisent a dire
+  // « c est parti » sans rien cacher.
+  const flashOpacity = useRef(new Animated.Value(0)).current;
   const captureScale = useRef(new Animated.Value(1)).current;
   const headerSlideY = useRef(new Animated.Value(-120)).current;
   const footerSlideY = useRef(new Animated.Value(300)).current;
@@ -2181,12 +2166,6 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         ...(Number.isFinite(r.vxAtFire) ? { vxAtFire: r.vxAtFire } : {}),
       });
     }
-    // Apercu : la derniere photo de ce lot passe par-dessus le flux camera.
-    // Place ICI, apres le move, donc sur un chemin stable — et avant le
-    // commitQueue (ecriture AsyncStorage) pour ne pas retarder l affichage.
-    const dernierItem = newQueueItems[newQueueItems.length - 1];
-    if (dernierItem) montrerApercu(dernierItem.localUri);
-
     const next = [...queueRef.current, ...newQueueItems];
 
     // Zero-perte : plus de FIFO drop silencieux. La back-pressure est
@@ -3328,10 +3307,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // pour le LOST) n'y aurait pas acces (block-scoped const).
     const photoKey = `${session.event.code}/${session.photographer_id}/${dateStr}/${timeStr}_${burstTs}_${idx}.heic`;
 
-    // Le retour visuel n est plus declenche ici mais dans enqueueBurstItems,
-    // des que le fichier a sa place definitive : l apercu affiche le fichier
-    // reel, et le tmp VisionCamera est deplace dans la milliseconde qui suit
-    // la capture (le lire depuis ici donnerait une image introuvable).
+    // Liseré de capture, 380 ms. Declenche ici et non apres l enqueue : le
+    // retour doit tomber au moment du declenchement, pas apres l ecriture
+    // disque. useNativeDriver : l animation tourne sur le thread UI, elle ne
+    // prend rien au pipeline de capture.
+    flashOpacity.stopAnimation();
+    Animated.sequence([
+      Animated.timing(flashOpacity, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.timing(flashOpacity, { toValue: 0, duration: 320, useNativeDriver: true }),
+    ]).start();
     try {
       await enqueueBurstItems([{
         key: photoKey,
@@ -3737,22 +3721,19 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           </Svg>
         </View>
 
-        {/* Apercu de la photo capturee, clippe au cadre. `recyclingKey` plutot
-            qu une `key` : la vue native est reutilisee d une photo a l autre
-            au lieu d etre remontee 15 fois pendant une rafale. `transition={0}`
-            = apparition franche, sans fondu. */}
-        {apercuCapture && (
-          <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-            <ExpoImage
-              source={{ uri: apercuCapture }}
-              recyclingKey={apercuCapture}
-              style={StyleSheet.absoluteFillObject}
-              contentFit="cover"
-              transition={0}
-              cachePolicy="none"
-            />
-          </View>
-        )}
+        {/* Liseré de capture : bordure seule, fond transparent — l image
+            reste entierement visible pendant le flash. Le rayon suit celui du
+            cadre, sinon le liseré deborderait dans les angles arrondis. */}
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            borderWidth: 6,
+            borderColor: '#fff',
+            borderRadius: G.frameRadius,
+            opacity: flashOpacity,
+          }}
+        />
 
         {/* ─── Panneau Infos ─── */}
         {menuOpen && (
