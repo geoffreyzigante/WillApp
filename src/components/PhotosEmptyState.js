@@ -18,6 +18,8 @@ export function PhotosEmptyState({ selfieUri, onFindEvent }) {
         alignItems: 'center', justifyContent: 'center',
         alignSelf: 'center', marginBottom: 18,
         shadowColor: '#7B2FFF', shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
+        // Android n applique pas les shadow* : elevation est son equivalent.
+        elevation: 18,
       }}>
         <Svg width={34} height={30} viewBox="-1 -1.5 22.78 20.61" fill="#fff">
           <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
@@ -49,6 +51,8 @@ export function PhotosEmptyState({ selfieUri, onFindEvent }) {
             gap: 8,
             alignSelf: 'center', marginBottom: 26,
             shadowColor: '#7B2FFF', shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
+            // Android n applique pas les shadow* : elevation est son equivalent.
+            elevation: 14,
           }}
         >
           <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

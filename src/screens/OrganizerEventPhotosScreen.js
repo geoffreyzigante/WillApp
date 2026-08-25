@@ -432,6 +432,8 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
                 shadowColor: '#000',
                 shadowOpacity: 0.3,
                 shadowRadius: 12,
+                // Android n applique pas les shadow* : elevation est son equivalent.
+                elevation: 12,
                 shadowOffset: { width: 0, height: 6 },
               }}
             >

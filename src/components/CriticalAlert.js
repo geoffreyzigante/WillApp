@@ -116,6 +116,8 @@ export default function CriticalAlert({ kind, onDismiss, onAction }) {
             shadowColor: '#000',
             shadowOpacity: 0.3,
             shadowRadius: 20,
+            // Android n applique pas les shadow* : elevation est son equivalent.
+            elevation: 20,
             shadowOffset: { width: 0, height: 8 },
           }}
         >

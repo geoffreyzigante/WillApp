@@ -209,6 +209,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowOffset: { width: -8, height: 0 },
     shadowRadius: 32,
+    // Android n applique pas les shadow* : elevation est son equivalent.
+    elevation: 32,
     overflow: 'hidden',
   },
   drawerInner: {

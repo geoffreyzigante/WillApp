@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, Platform, KeyboardAvoidingView, Animated, Keyboard, Linking,
-  AppState, Share, NativeModules, PanResponder, LayoutAnimation,
+  AppState, Share, NativeModules, PanResponder, LayoutAnimation, BackHandler,
 } from 'react-native';
 // SafeAreaView de react-native ne fait RIEN sur Android : c est un composant
 // iOS, la doc le dit, et sur Android il rend un View nu. Avec
@@ -6247,6 +6247,26 @@ export default function App() {
     }).then(() => setFontsLoaded(true)).catch(() => setFontsLoaded(true));
   }, []);
 
+  // Bouton retour materiel d Android.
+  //
+  // Les modales le gerent deja seules (onRequestClose). Restait la navigation
+  // hors modale : sans ca, un appui sur retour depuis le detail d un event ou
+  // depuis l onglet Photos quittait l app. C est le geste le plus ancre chez
+  // un utilisateur Android, et le seul moyen de revenir en arriere sur les
+  // telephones sans barre de navigation.
+  //
+  // On rend `false` quand il n y a plus rien a fermer : Android reprend la
+  // main et quitte, ce qui est le comportement attendu depuis l accueil.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (openedEvent) { setOpenedEvent(null); return true; }
+      if (bottomTab !== 'home') { setBottomTab('home'); return true; }
+      return false;
+    });
+    return () => sub.remove();
+  }, [openedEvent, bottomTab]);
+
   // Splash overlay JS : ecran blanc avec icone fleur Will centree
   // (LoadingIcon, meme que pull-to-refresh) qui prend le relais du
   // splash iOS natif. Reste visible 1 seconde minimum puis fade out
@@ -7497,7 +7517,11 @@ export default function App() {
             d anim), permettant a EventDetailScreen de glisser vers la
             gauche au lieu de disparaitre instantanement. */}
         <View style={{ width: SCREEN_W, height: '100%', backgroundColor: '#F5F3FF' }}>
-          <SafeAreaView style={{ flex: 1 }}>
+          {/* edges lateraux seulement : l encart vertical est deja pose par le
+              SafeAreaView de la racine. Imbriquer deux SafeAreaView le compte
+              DEUX FOIS — c est le grand vide observe entre le header et le
+              carrousel sur Android. */}
+          <SafeAreaView style={{ flex: 1 }} edges={['left', 'right']}>
             {eventInPanel && (
               <GestureDetector gesture={navPan}>
                 <View style={{ flex: 1 }}>
@@ -7538,7 +7562,11 @@ export default function App() {
 
         {/* PANNEAU DROIT : ACCUEIL (HomeScreen + tabs internes) */}
         <View style={{ width: SCREEN_W, height: '100%' }}>
-          <SafeAreaView style={{ flex: 1 }}>
+          {/* edges lateraux seulement : l encart vertical est deja pose par le
+              SafeAreaView de la racine. Imbriquer deux SafeAreaView le compte
+              DEUX FOIS — c est le grand vide observe entre le header et le
+              carrousel sur Android. */}
+          <SafeAreaView style={{ flex: 1 }} edges={['left', 'right']}>
         {/* Header partage : floating en absolute par-dessus le contenu pour
             que le scroll passe dessous -> effet glass/blur iOS classique. */}
         <View
