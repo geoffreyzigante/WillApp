@@ -639,7 +639,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       {upcoming && photos.length === 0 && !loading ? (
         <EtatVidePhotos
           texte={"Photos disponibles le jour J"}
-          sousTexte={"Reviens le jour de l'événement pour les voir"}
+          sousTexte={"Reviens le jour de l'event"}
         />
       ) : (
         <>

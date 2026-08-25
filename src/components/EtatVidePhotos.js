@@ -14,7 +14,7 @@ import { C } from '../constants/colors';
 
 export function EtatVidePhotos({
   texte = 'Pas encore de photos capturées',
-  sousTexte = null,
+  sousTexte = "Reviens le jour de l'event",
   illuHeight = 72,
   nbCases = 3,
   style = null,
@@ -47,13 +47,13 @@ export function EtatVidePhotos({
         <IlluPasDePhotos height={illuHeight} />
         <View style={{ alignItems: 'flex-start', gap: 3, flexShrink: 1 }}>
           <Text style={{
-            color: C.text, fontSize: 17, lineHeight: 19,
+            color: '#C9B6FF', fontSize: 17, lineHeight: 19,
             fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2,
           }}>
             {texte}
           </Text>
           {sousTexte ? (
-            <Text style={{ color: C.primary, fontSize: 12, fontFamily: 'Montserrat-Medium' }}>
+            <Text style={{ color: C.text, fontSize: 12, fontFamily: 'Montserrat-Medium' }}>
               {sousTexte}
             </Text>
           ) : null}
