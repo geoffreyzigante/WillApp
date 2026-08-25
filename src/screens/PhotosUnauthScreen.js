@@ -4,7 +4,9 @@
 // login selon le bouton.
 
 import React from 'react';
-import { SafeAreaView, View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
+// Voir App.js : SafeAreaView de react-native est inerte sur Android.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { SelfieIllustration } from '../components/SelfieIllustration';
 import { C } from '../constants/colors';
 

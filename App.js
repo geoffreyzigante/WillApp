@@ -2,9 +2,16 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
-  StatusBar, SafeAreaView, Platform, KeyboardAvoidingView, Animated, Keyboard, Linking,
+  StatusBar, Platform, KeyboardAvoidingView, Animated, Keyboard, Linking,
   AppState, Share, NativeModules, PanResponder, LayoutAnimation,
 } from 'react-native';
+// SafeAreaView de react-native ne fait RIEN sur Android : c est un composant
+// iOS, la doc le dit, et sur Android il rend un View nu. Avec
+// edgeToEdgeEnabled, l app dessine donc SOUS la barre d etat et sous la
+// barre de gestes — vu a l ecran sur l emulateur : le logo Will passait
+// derriere l horloge et « Accueil » derriere le trait de navigation.
+// react-native-safe-area-context mesure les vrais encarts des deux cotes.
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Image as ExpoImage } from 'expo-image';
@@ -7455,6 +7462,7 @@ export default function App() {
   ) : null;
 
   return (
+    <SafeAreaProvider>
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
@@ -8115,6 +8123,7 @@ export default function App() {
       </ReAnimated.View>
     )}
     </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
 
