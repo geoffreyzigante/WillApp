@@ -9,6 +9,8 @@ import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { Icon } from '../components/Icon';
 import { SelfieIllustration } from '../components/SelfieIllustration';
+import { IlluPasDeFavoris } from '../components/IlluPasDeFavoris';
+import { IlluPasDePhotos } from '../components/IlluPasDePhotos';
 import { EventCard } from '../components/EventCard';
 import { HotOnesCarousel } from '../components/HotOnesCarousel';
 import { RefreshableScrollView } from '../components/loaders';
@@ -417,13 +419,26 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
             </TouchableOpacity>
           </View>
         ) : filtered.length === 0 ? (
-          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-            <View style={{ marginBottom: 12, opacity: 0.4 }}>
-              <Icon.Calendar size={36} color={C.textSoft} />
+          <View style={{
+            paddingVertical: 40,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14,
+          }}>
+            {/* Mirror site : mascotte a gauche, titre AV Estiana + sous-titre
+                Montserrat 500 empiles a droite. */}
+            {tab === 'follows' ? <IlluPasDeFavoris height={72} /> : <IlluPasDePhotos height={72} />}
+            <View style={{ alignItems: 'flex-start', gap: 3, flexShrink: 1 }}>
+              <Text style={{
+                color: '#C9B6FF', fontSize: 18,
+                fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2,
+              }}>
+                {tab === 'follows' ? 'Pas encore de favoris' : tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
+              </Text>
+              {tab === 'follows' ? (
+                <Text style={{ color: C.primary, fontSize: 12, fontFamily: 'Montserrat-Medium' }}>
+                  Ajoute tes événements à suivre
+                </Text>
+              ) : null}
             </View>
-            <Text style={{ color: C.textSoft, fontSize: 14 }}>
-              {tab === 'follows' ? 'Aucun event en favoris' : tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
-            </Text>
           </View>
         ) : (
           <>

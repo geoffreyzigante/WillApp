@@ -15,6 +15,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { GridErrorBoundary } from '../components/GridErrorBoundary';
+import { IlluPasDePhotos } from '../components/IlluPasDePhotos';
 import { Icon } from '../components/Icon';
 import { SkeletonCell } from '../components/SkeletonCell';
 import { FavStar } from '../components/FavStar';
@@ -637,17 +638,21 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
 
       {upcoming && photos.length === 0 && !loading ? (
         <View style={{
-          paddingVertical: 16, paddingHorizontal: 16,
+          paddingVertical: 18, paddingHorizontal: 16,
           backgroundColor: `${tint}1A`, borderRadius: 16,
         }}>
-          <View style={{ alignItems: 'center' }}>
-            <Icon.PhotoCam size={28} color={tint} />
-            <Text style={{ color: tint, fontSize: 14, fontWeight: '700', marginTop: 8, textAlign: 'center' }}>
-              Photos disponibles le jour J
-            </Text>
-            <Text style={{ color: tint, fontSize: 11, marginTop: 2, opacity: 0.75, textAlign: 'center' }}>
-              Reviens le jour de l'événement pour les voir
-            </Text>
+          {/* Meme composition que le site : mascotte a gauche, titre AV
+              Estiana + sous-titre Montserrat empiles a droite. */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+            <IlluPasDePhotos height={64} />
+            <View style={{ alignItems: 'flex-start', gap: 3, flexShrink: 1 }}>
+              <Text style={{ color: tint, fontSize: 16, fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2 }}>
+                Photos disponibles le jour J
+              </Text>
+              <Text style={{ color: tint, fontSize: 12, opacity: 0.75, fontFamily: 'Montserrat-Medium' }}>
+                Reviens le jour de l'événement pour les voir
+              </Text>
+            </View>
           </View>
           {/* Note 2026-06-25 : retire le rendu dupliqué des distances ici.
               Le bloc Infos pratiques principal (au-dessus) les affiche
@@ -756,8 +761,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       );
     }
     return (
-      <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-        <Text style={{ color: C.textSoft }}>Aucune photo pour le moment</Text>
+      <View style={{
+        paddingVertical: 32,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14,
+      }}>
+        <IlluPasDePhotos height={64} />
+        <Text style={{ color: tint, fontSize: 16, fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2, flexShrink: 1 }}>
+          Pas encore de photos{'\n'}capturées
+        </Text>
       </View>
     );
   };
