@@ -30,7 +30,7 @@ import { SelfieBlock } from '../components/SelfieBlock';
 import { ConsentRenewBanner } from '../components/ConsentRenewBanner';
 import { PhotosEmptyState } from '../components/PhotosEmptyState';
 import { PhotoGrid } from '../components/PhotoGrid';
-import { IlluPasDePhotos } from '../components/IlluPasDePhotos';
+import { EtatVidePhotos } from '../components/EtatVidePhotos';
 import { SpinningLoader, RefreshableScrollView } from '../components/loaders';
 import { C, TYPE_COLORS, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
@@ -541,20 +541,11 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           </Text>
         </View>
       ) : photos.length === 0 ? (
-        <View style={{
-          paddingVertical: 40, paddingHorizontal: 24,
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14,
-        }}>
-          <IlluPasDePhotos height={72} />
-          <View style={{ alignItems: 'flex-start', gap: 3, flexShrink: 1 }}>
-            <Text style={{ color: '#C9B6FF', fontSize: 18, fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2 }}>
-              Pas encore de photos
-            </Text>
-            <Text style={{ color: C.primary, fontSize: 12, fontFamily: 'Montserrat-Medium' }}>
-              Reviens après la course
-            </Text>
-          </View>
-        </View>
+        <EtatVidePhotos
+          texte={"Pas encore de photos"}
+          sousTexte={"Reviens après la course"}
+          style={{ paddingVertical: 24 }}
+        />
       ) : (
         <>
           {!selectionMode && (
@@ -639,19 +630,14 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
             </View>
           )}
           {visiblePhotos.length === 0 ? (
-            <View style={{
-              paddingVertical: 40, paddingHorizontal: 24,
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14,
-            }}>
-              <IlluPasDePhotos height={72} />
-              <Text style={{ color: '#C9B6FF', fontSize: 18, fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2, flexShrink: 1 }}>
-                {viewFilter === 'favs'
-                  ? 'Pas encore de favoris'
-                  : viewFilter === 'me'
-                    ? 'Pas encore de photos de toi'
-                    : 'Pas encore de photos'}
-              </Text>
-            </View>
+            <EtatVidePhotos
+              texte={viewFilter === 'favs'
+                ? 'Pas encore de favoris'
+                : viewFilter === 'me'
+                  ? 'Pas encore de photos de toi'
+                  : 'Pas encore de photos'}
+              style={{ paddingVertical: 24 }}
+            />
           ) : (
             <PhotoGrid
               photos={visiblePhotos.slice(0, visibleCount)}
