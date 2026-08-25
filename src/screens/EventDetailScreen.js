@@ -98,7 +98,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       // dans le bloc -> marge >= 1/2 tile de chaque cote.
       const x0 = Math.floor(xExact - 0.5);
       const y0 = Math.floor(yExact - 0.5);
-      return {
+      const bloc = {
         tiles: [
           [`${API_URL}/map-tile/${zoom}/${x0}/${y0}`, `${API_URL}/map-tile/${zoom}/${x0 + 1}/${y0}`],
           [`${API_URL}/map-tile/${zoom}/${x0}/${y0 + 1}`, `${API_URL}/map-tile/${zoom}/${x0 + 1}/${y0 + 1}`],
@@ -107,6 +107,11 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         pointX: xExact - x0,
         pointY: yExact - y0,
       };
+      // Telechargement lance des que les coords sont connues, sans attendre
+      // le layout : les 4 tuiles sont deja en cache disque quand le bloc
+      // se monte, et le restent pour les prochaines ouvertures.
+      ExpoImage.prefetch(bloc.tiles.flat(), { cachePolicy: 'memory-disk' }).catch(() => {});
+      return bloc;
     };
 
     (async () => {
@@ -527,11 +532,13 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                         {mapInfo.tiles.map((row, ri) => (
                           <View key={ri} style={{ flexDirection: 'row' }}>
                             {row.map((uri, ci) => (
-                              <Image
+                              <ExpoImage
                                 key={ci}
                                 source={{ uri }}
                                 style={{ width: mapW, height: mapW }}
-                                resizeMode="cover"
+                                contentFit="cover"
+                                cachePolicy="memory-disk"
+                                transition={120}
                               />
                             ))}
                           </View>
