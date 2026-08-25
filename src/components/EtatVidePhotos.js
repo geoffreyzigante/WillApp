@@ -41,13 +41,13 @@ export function EtatVidePhotos({
         pointerEvents="none"
         style={{
           position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14,
         }}
       >
         <IlluPasDePhotos height={illuHeight} />
         <View style={{ alignItems: 'flex-start', gap: 3, flexShrink: 1 }}>
           <Text style={{
-            color: '#C9B6FF', fontSize: 17, lineHeight: 19,
+            color: '#C9B6FF', fontSize: 18, lineHeight: 20,
             fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2,
           }}>
             {texte}
