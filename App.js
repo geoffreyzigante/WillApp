@@ -2220,6 +2220,48 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     processQueue();
   }
 
+  // Fabrique et depose les deux vignettes d une photo deja uploadee.
+  //
+  // 400 px pour les grilles, 800 px pour la grande tuile et le premier
+  // affichage du viewer — exactement les deux tailles que le serveur
+  // produisait. Elles partent sur la meme cle, avec un en-tete qui dit au
+  // worker ou les ranger.
+  //
+  // Sequentiel et non parallele : deux redimensionnements simultanes sur un
+  // telephone en pleine rafale, c est de la memoire prise a la capture.
+  async function televerserVignettes(srcUri, key, token) {
+    if (!srcUri || !key || !token) return;
+    const variantes = [
+      { entete: 'thumb', largeur: 400, qualite: 0.7 },
+      { entete: 'thumb_md', largeur: 800, qualite: 0.78 },
+    ];
+    for (const v of variantes) {
+      let uri = null;
+      try {
+        const copie = await makeLightCopy(srcUri, { maxWidth: v.largeur, quality: v.qualite });
+        if (!copie.ok) throw new Error(copie.reason || 'copie impossible');
+        uri = copie.uri;
+        const blob = await (await fetch(uri)).blob();
+        const rep = await fetch(`${API_URL}/${key}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'image/jpeg',
+            Authorization: `Bearer ${token}`,
+            'X-Will-Derivative': v.entete,
+          },
+          body: blob,
+        });
+        if (!rep.ok) throw new Error(`HTTP ${rep.status}`);
+      } catch (e) {
+        // Sans vignette, le serveur sert les octets d origine : plus lourd,
+        // mais visible. On ne bloque donc rien, on trace.
+        addDebugLog(`[vignette:${v.entete}] echec ${key}: ${e?.message || e}`);
+      } finally {
+        if (uri) { try { new File(uri).delete(); } catch {} }
+      }
+    }
+  }
+
   // setTimeout id pour le re-trigger de drain apres un cooldown de backoff.
   // Reset/replace dans scheduleRetryTick pour ne pas accumuler les callbacks.
   const retryTickTimeoutRef = useRef(null);
@@ -2799,6 +2841,22 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             }
 
             if (result.ok) {
+              // Vignettes fabriquees ICI, sur le telephone, et deposees a
+              // cote de l original.
+              //
+              // Le serveur ne sait plus fabriquer d image : le binding
+              // Images de Cloudflare est en panne et l acces public au
+              // bucket, seule autre porte vers le transcodeur, est ferme.
+              // Resultat : toute photo recente etait invisible partout.
+              //
+              // Le telephone, lui, a l image sous la main et sait la
+              // redimensionner. Il fournit donc les deux derives que les
+              // galeries consomment. Plus aucun transcodage cote serveur,
+              // donc plus rien a tomber en panne.
+              //
+              // Best effort : un echec ici ne remet pas l original en
+              // question, il est deja sur R2.
+              await televerserVignettes(srcUri, item.key, session.token);
               // succès → delete fichier local + drop item + bump "Uploadees"
               // (verite R2 cote app : on n'incremente QUE sur PUT 200 OK).
               try { new File(item.localUri).delete(); } catch {}
