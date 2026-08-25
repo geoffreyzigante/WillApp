@@ -111,7 +111,7 @@ import {
 } from './src/constants/queue';
 import { scorePhotoSafely } from './src/services/qualityScorer';
 // Capacites natives : cf src/services/capabilities.js + plugins/CONTRAT_NATIF.md.
-import { reportFrameProcessor, describeCapabilities } from './src/services/capabilities';
+import { caps, reportFrameProcessor, describeCapabilities } from './src/services/capabilities';
 // Declenchement par lignes (cf. CONCEPTION_LIGNES_NOTE.md).
 import { createLineTrigger } from './src/services/lineTrigger';
 // Niveaux de capture : adapte le nombre de lignes au materiel et a la course.
@@ -7201,6 +7201,19 @@ export default function App() {
     }
     if (role === 'create') {
       setCreateEventModal(true);
+      return;
+    }
+    // Garde de derniere ligne : la carte est deja masquee quand la
+    // plateforme ne sait pas capturer (cf. caps.photographerMode), mais on
+    // peut arriver ici par une autre porte — reprise de session apres crash,
+    // lien profond, bouton cache ailleurs. Entrer en mode photographe sans
+    // les mesures de capture donnerait un ecran qui a l air de marcher et
+    // qui shoote a l aveugle.
+    if (!caps.photographerMode) {
+      Alert.alert(
+        'Pas encore disponible ici',
+        "Le mode photographe demande des mesures que cet appareil ne fournit pas encore. Il arrive sur Android ; en attendant, utilise un iPhone pour capturer.",
+      );
       return;
     }
     // photographer : si une session existe déjà (déjà loggué + sorti via

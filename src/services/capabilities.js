@@ -88,6 +88,22 @@ export const caps = {
 
   // Scoring local. Deprecie, cf. ci-dessus.
   qualityScore: hasQualityScorer,
+
+  // ─── Capacite PRODUIT, et non technique ────────────────────────────────
+  //
+  // Le mode photographe n est propose que si la plateforme sait faire les
+  // deux mesures dont la capture depend : reconnaitre les visages dans le
+  // flux, et lire l exposition. La premiere declenche, la seconde regle le
+  // cap d obturateur et le voyant lumiere — sans elle un benevole shoote
+  // sans savoir que la scene est trop sombre.
+  //
+  // Sur Android aujourd hui : detectHumans existe (ML Kit), readExposure
+  // non. Le mode reste donc masque, et il s activera de lui-meme le jour ou
+  // le portage sera fait. Aucune ligne a changer ce jour-la, et surtout
+  // aucun `Platform.OS === 'ios'` dispersé dans l interface.
+  get photographerMode() {
+    return frameProcessors.detectHumans && frameProcessors.readExposure;
+  },
 };
 
 // Utile au diagnostic terrain : une seule ligne de log dit exactement ce

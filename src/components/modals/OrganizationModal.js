@@ -8,6 +8,7 @@ import Svg, { Path } from 'react-native-svg';
 import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
 import { s } from '../../constants/styles';
+import { caps } from '../../services/capabilities';
 
 export function OrganizationModal({ visible, onClose, onPickRole }) {
   return (
@@ -55,7 +56,12 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
             </Svg>
           </TouchableOpacity>
 
-          {/* Carte Espace photographe */}
+          {/* Carte Espace photographe — masquee tant que la plateforme ne
+              sait pas faire les deux mesures de la capture (cf.
+              caps.photographerMode). Sur Android, readExposure n a pas encore
+              de portage : proposer le mode reviendrait a envoyer un benevole
+              shooter sans voyant lumiere ni cap d obturateur. */}
+          {caps.photographerMode && (
           <TouchableOpacity
             onPress={() => onPickRole('photographer')}
             activeOpacity={0.85}
@@ -84,6 +90,7 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
               <Path d="m9 6 6 6-6 6" stroke={C.textSoft} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
           </TouchableOpacity>
+          )}
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
