@@ -637,10 +637,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       )}
 
       {upcoming && photos.length === 0 && !loading ? (
-        <EtatVidePhotos
-          texte={"Photos disponibles le jour J"}
-          sousTexte={"Reviens le jour de l'event"}
-        />
+        <EtatVidePhotos />
       ) : (
         <>
           {photos.length > 0 && (
