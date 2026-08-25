@@ -54,6 +54,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetector
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import com.mrousavy.camera.core.types.Orientation
 import com.mrousavy.camera.frameprocessors.Frame
 import com.mrousavy.camera.frameprocessors.FrameProcessorPlugin
 import com.mrousavy.camera.frameprocessors.VisionCameraProxy
@@ -99,7 +100,27 @@ class HumanDetectorPlugin(
       return empty
     }
 
-    val rotation = frame.orientation.toDegrees()
+    // Rotation attendue par ML Kit : celle qu il faut APPLIQUER a l image
+    // pour la redresser. VisionCamera, lui, expose l orientation REELLE de
+    // la frame — c est l inverse, et Frame.getOrientation() le dit
+    // explicitement (il appelle `.reversed()` sur la valeur du capteur).
+    // On refait donc le chemin en sens inverse avant de convertir en degres.
+    //
+    // Sans ce `reversed()`, les deux orientations paysage seraient
+    // interverties : les visages seraient detectes a 180 degres de leur
+    // position reelle et le tracker suivrait des trajectoires inversees,
+    // SANS qu aucune erreur ne soit levee. Exactement le mode de panne que
+    // l en-tete de ce fichier decrit.
+    //
+    // `toDegrees()` n existe pas sur l enum Orientation de VisionCamera 4.x
+    // — c est ce qui faisait echouer la compilation. La table ci-dessous
+    // reprend les bornes de Orientation.fromRotationDegrees().
+    val rotation = when (frame.orientation.reversed()) {
+      Orientation.PORTRAIT -> 0
+      Orientation.LANDSCAPE_LEFT -> 90
+      Orientation.PORTRAIT_UPSIDE_DOWN -> 180
+      Orientation.LANDSCAPE_RIGHT -> 270
+    }
     val inputImage = InputImage.fromMediaImage(image, rotation)
 
     // Dimensions APRES rotation — sinon la normalisation est transposee sur
