@@ -75,13 +75,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     if (!mapQuery) { setMapInfo(null); return; }
     let cancelled = false;
     const q = mapQuery.replace(/\s*\((\d{5})\)\s*/, ' $1').trim();
-    fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=1`)
-      .then(r => r.ok ? r.json() : null)
+    // Geocodage via notre worker et pas api-adresse.data.gouv.fr en direct :
+    // Android echoue sur ce domaine ("Network request failed") alors que le
+    // worker repond sans probleme. Idem pour la tuile (route /map-tile).
+    fetch(`${API_URL}/geocode?q=${encodeURIComponent(q)}`)
+      .then(r => (r.ok ? r.json() : null))
       .then(d => {
-        if (cancelled) return;
-        const coords = d?.features?.[0]?.geometry?.coordinates;
-        if (!coords || coords.length < 2) return;
-        const [lng, lat] = coords;
+        if (cancelled || !d || !d.found) return;
+        const { lat, lng } = d;
         const zoom = mapPrecise ? 15 : 12;
         const n = Math.pow(2, zoom);
         const xExact = (lng + 180) / 360 * n;
@@ -89,10 +90,8 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         const yExact = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
         const x = Math.floor(xExact);
         const y = Math.floor(yExact);
-        // Subdomain a..d aleatoire pour repartir la charge.
-        const sub = ['a', 'b', 'c', 'd'][Math.floor(Math.random() * 4)];
         setMapInfo({
-          tileUrl: `https://${sub}.basemaps.cartocdn.com/light_all/${zoom}/${x}/${y}@2x.png`,
+          tileUrl: `${API_URL}/map-tile/${zoom}/${x}/${y}`,
           // Position du marker en % dans la tile (0-1).
           markerXPct: xExact - x,
           markerYPct: yExact - y,
