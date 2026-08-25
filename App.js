@@ -50,9 +50,18 @@ reportFrameProcessor('readExposure', exposureReaderPlugin != null);
 console.log(describeCapabilities());
 function readExposure(frame, options) {
   'worklet';
-  if (exposureReaderPlugin == null) {
-    throw new Error('readExposure plugin not loaded — rebuild required');
-  }
+  // Plugin absent : on rend null, on ne leve pas.
+  //
+  // Sur iOS, son absence signalait un build rate et l erreur etait le bon
+  // reflexe. Sur Android il n existe pas encore de portage : lever ici
+  // ferait planter le frame processor UNE FOIS PAR SECONDE, donc la vue
+  // photographe entiere, pour une capacite que capabilities.js declare
+  // explicitement degradable — sans elle, le voyant lumiere et le cap
+  // shutter sont inertes, la capture fonctionne.
+  //
+  // detectHumans, lui, garde son throw : sans detection il n y a pas de
+  // produit, et le portage Android existe (ML Kit).
+  if (exposureReaderPlugin == null) return null;
   // options optionnel : { setCapSeconds, brightnessLabel } -> le plugin
   // applique device.activeMaxExposureDuration via WillShutterController.
   return options
