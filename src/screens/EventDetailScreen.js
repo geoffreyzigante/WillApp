@@ -362,7 +362,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                   stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"
                 />
               </Svg>
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat' }}>Infos pratiques</Text>
+              <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Infos pratiques</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -507,7 +507,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                 }}>
                   <Text
                     numberOfLines={1}
-                    style={{ color: tint, fontSize: 13, fontWeight: '500', flex: 1, fontFamily: 'Montserrat' }}
+                    style={{ color: tint, fontSize: 13, flex: 1, fontFamily: 'Montserrat-Medium' }}
                   >
                     {event.address}
                   </Text>
@@ -519,7 +519,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     activeOpacity={0.7}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                   >
-                    <Text style={{ color: tint, fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>
+                    <Text style={{ color: tint, fontSize: 13, fontFamily: 'Montserrat-Bold' }}>
                       Itinéraire
                     </Text>
                     <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
@@ -549,7 +549,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                   elevation: 3,
                 }}
               >
-                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', fontFamily: 'Montserrat' }}>
+                <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-Bold' }}>
                   Site organisateur
                 </Text>
                 <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">

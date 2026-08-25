@@ -421,11 +421,11 @@ function RangeeValeur({ libelle, valeur, onPress }) {
         paddingHorizontal: G.rowPadH,
       }}
     >
-      <Text style={{ color: P.label, fontSize: 13, fontWeight: '500', fontFamily: 'Montserrat' }}>{libelle}</Text>
+      <Text style={{ color: P.label, fontSize: 13, fontFamily: 'Montserrat-Medium' }}>{libelle}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
         <Text
           numberOfLines={1}
-          style={{ color: P.brand, fontSize: 17, fontWeight: '600', fontFamily: 'Montserrat', flexShrink: 1 }}
+          style={{ color: P.brand, fontSize: 17, fontFamily: 'Montserrat-SemiBold', flexShrink: 1 }}
         >
           {valeur}
         </Text>
@@ -447,7 +447,7 @@ function RangeePanneau({ libelle, droite, couleur, onPress, dernier }) {
           flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         }}
       >
-        <Text style={{ color: couleur || P.ink, fontSize: 15, fontWeight: '600', fontFamily: 'Montserrat' }}>{libelle}</Text>
+        <Text style={{ color: couleur || P.ink, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>{libelle}</Text>
         {droite}
       </TouchableOpacity>
       {!dernier && <View style={{ height: 1, marginLeft: G.rowPadH, backgroundColor: P.divider }} />}
@@ -3813,11 +3813,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         {menuOpen && (
           <Panneau onFermer={fermerPanneaux}>
             <View style={{ paddingTop: 16, paddingHorizontal: G.rowPadH, paddingBottom: 10 }}>
-              <Text style={{ color: P.labelPanel, fontSize: 12, fontWeight: '600', fontFamily: 'Montserrat' }}>
+              <Text style={{ color: P.labelPanel, fontSize: 12, fontFamily: 'Montserrat-SemiBold' }}>
                 {compteursTexte}
               </Text>
               {(lostCount + (queueStats?.failed || 0)) > 0 && (
-                <Text style={{ color: P.danger, fontSize: 12, fontWeight: '600', fontFamily: 'Montserrat', marginTop: 3 }}>
+                <Text style={{ color: P.danger, fontSize: 12, fontFamily: 'Montserrat-SemiBold', marginTop: 3 }}>
                   {lostCount + (queueStats?.failed || 0)} à renvoyer
                 </Text>
               )}
@@ -3825,12 +3825,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                   distinction de moment (avant / pendant / apres). */}
               {capaciteCoureurs && (
                 <>
-                  <Text style={{ color: P.labelPanel, fontSize: 12, fontWeight: '500', fontFamily: 'Montserrat', marginTop: 6 }}>
+                  <Text style={{ color: P.labelPanel, fontSize: 12, fontFamily: 'Montserrat-Medium', marginTop: 6 }}>
                     {capaciteCoureurs.haute > capaciteCoureurs.basse
                       ? `Place pour ${capaciteCoureurs.basse.toLocaleString('fr-FR')} à ${capaciteCoureurs.haute.toLocaleString('fr-FR')} coureurs`
                       : `Place pour ~${capaciteCoureurs.basse.toLocaleString('fr-FR')} coureurs`}
                   </Text>
-                  <Text style={{ color: P.labelMuted, fontSize: 11, fontWeight: '500', fontFamily: 'Montserrat', marginTop: 1 }}>
+                  <Text style={{ color: P.labelMuted, fontSize: 11, fontFamily: 'Montserrat-Medium', marginTop: 1 }}>
                     {capaciteCoureurs.haute > capaciteCoureurs.basse
                       ? `${capaciteCoureurs.parCoureur} photo${capaciteCoureurs.parCoureur > 1 ? 's' : ''} chacun aujourd'hui, 1 si le disque se remplit`
                       : '1 photo chacun'}
@@ -3839,7 +3839,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                     <Text
                       style={{
                         color: capaciteCoureurs.suffisant ? P.labelPanel : P.danger,
-                        fontSize: 12, fontWeight: '600', fontFamily: 'Montserrat', marginTop: 2,
+                        fontSize: 12, fontFamily: 'Montserrat-SemiBold', marginTop: 2,
                       }}
                     >
                       {capaciteCoureurs.restants.toLocaleString('fr-FR')} coureurs attendus — {capaciteCoureurs.suffisant
@@ -3859,14 +3859,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             <RangeePanneau
               libelle="Régler le cadrage"
               droite={framingMode
-                ? <Text style={{ color: P.accent, fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat' }}>Actif</Text>
+                ? <Text style={{ color: P.accent, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Actif</Text>
                 : null}
               onPress={() => { fermerPanneaux(); setFramingMode(v => !v); }}
             />
             <RangeePanneau
               libelle="Compteurs à l'écran"
               droite={techExpanded
-                ? <Text style={{ color: P.accent, fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat' }}>Actif</Text>
+                ? <Text style={{ color: P.accent, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Actif</Text>
                 : null}
               onPress={() => { fermerPanneaux(); setTechExpanded(v => !v); }}
             />
@@ -3937,7 +3937,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // ajuste la hauteur serait exasperant. On sort par le bouton.
           <Panneau onFermer={() => {}}>
             <View style={{ padding: 14, gap: 8 }}>
-              <Text style={{ color: P.labelPanel, fontSize: 12, fontWeight: '600', fontFamily: 'Montserrat' }}>
+              <Text style={{ color: P.labelPanel, fontSize: 12, fontFamily: 'Montserrat-SemiBold' }}>
                 Hauteur de pose
               </Text>
               <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -3959,14 +3959,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                     >
                       <Text style={{
                         color: active ? '#fff' : P.ink,
-                        fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat',
+                        fontSize: 13, fontFamily: 'Montserrat-SemiBold',
                       }}>{label}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
-              <Text style={{ color: P.labelPanel, fontSize: 12, fontWeight: '600', fontFamily: 'Montserrat', marginTop: 2 }}>
+              <Text style={{ color: P.labelPanel, fontSize: 12, fontFamily: 'Montserrat-SemiBold', marginTop: 2 }}>
                 Distance visée (m)
               </Text>
               <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -3984,7 +3984,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                     >
                       <Text style={{
                         color: active ? '#fff' : P.ink,
-                        fontSize: 13, fontWeight: '600', fontFamily: 'Montserrat',
+                        fontSize: 13, fontFamily: 'Montserrat-SemiBold',
                       }}>{String(d).replace('.', ',')}</Text>
                     </TouchableOpacity>
                   );
@@ -4005,7 +4005,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                   alignItems: 'center', justifyContent: 'center', marginTop: 4,
                 }}
               >
-                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600', fontFamily: 'Montserrat' }}>
+                <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>
                   Terminer le réglage
                 </Text>
               </TouchableOpacity>
@@ -4045,7 +4045,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           <Text
             style={{
               textAlign: 'center', color: P.labelMuted, fontSize: 13,
-              fontWeight: '500', fontFamily: 'Montserrat', marginBottom: G.rowGap,
+              fontFamily: 'Montserrat-Medium', marginBottom: G.rowGap,
             }}
           >
             {compteursTexte}
@@ -4063,7 +4063,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               paddingHorizontal: G.rowPadH, marginRight: 12,
             }}
           >
-            <Text style={{ color: P.brand, fontSize: 17, fontWeight: '600', fontFamily: 'Montserrat' }}>Infos</Text>
+            <Text style={{ color: P.brand, fontSize: 17, fontFamily: 'Montserrat-SemiBold' }}>Infos</Text>
             <Text style={{ color: P.label, fontSize: 17 }}>›</Text>
           </TouchableOpacity>
 
@@ -4080,7 +4080,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <Text style={{ color: '#fff', fontSize: 17, fontWeight: '600', fontFamily: 'Montserrat' }}>
+            <Text style={{ color: '#fff', fontSize: 17, fontFamily: 'Montserrat-SemiBold' }}>
               {isAutoArmed ? 'Stop' : 'Go!'}
             </Text>
           </TouchableOpacity>
@@ -6216,14 +6216,34 @@ export default function App() {
   }, [events]);
 
   useEffect(() => {
-    // Le .ttf a un PostScript = 'AVEstiana-Bold' (Subfamily Bold unique). On
-    // registre sous DEUX cles : nom PostScript natif (que iOS reconnait sans
-    // ambiguite) + alias 'AVEstiana' historique pour compat avec les styles
-    // existants qui referencent ce nom-la.
+    // UNE FAMILLE PAR GRAISSE, et non une variable + fontWeight.
+    //
+    // Sur iOS, CoreText sait piloter l axe de graisse d une police variable :
+    // `fontFamily: 'Montserrat'` + `fontWeight: '600'` rendait bien du
+    // semi-gras. Android, lui, ne pilote pas cet axe depuis React Native. Il
+    // affiche l instance PAR DEFAUT du fichier — et celle de Montserrat-VF
+    // est... Thin (100). D ou une interface entierement trop fine sur
+    // Android, alors qu elle etait juste sur iPhone.
+    //
+    // Les quatre fichiers ci-dessous sont des instances statiques extraites
+    // de la variable (fontTools, axe wght fige). Les styles referencent
+    // desormais la famille exacte et ne posent plus de fontWeight : plus
+    // aucune interpretation laissee au systeme, le rendu est identique sur
+    // les deux plateformes.
+    //
+    // AV Estiana n a qu une graisse (Bold) et pas d axe variable : un seul
+    // fichier, deux cles — le nom PostScript et l alias historique. Les
+    // styles qui l utilisent ne posent plus de fontWeight non plus, sans
+    // quoi Android cherche une variante « AVEstiana Bold 700 » qui n existe
+    // pas et retombe sur la police systeme.
     Font.loadAsync({
       'AVEstiana-Bold': require('./assets/fonts/AV_Estiana-VF.ttf'),
       AVEstiana: require('./assets/fonts/AV_Estiana-VF.ttf'),
-      Montserrat: require('./assets/fonts/Montserrat-VF.ttf'),
+      Montserrat: require('./assets/fonts/Montserrat-Regular.ttf'),
+      'Montserrat-Medium': require('./assets/fonts/Montserrat-Medium.ttf'),
+      'Montserrat-SemiBold': require('./assets/fonts/Montserrat-SemiBold.ttf'),
+      'Montserrat-Bold': require('./assets/fonts/Montserrat-Bold.ttf'),
+      'Montserrat-ExtraBold': require('./assets/fonts/Montserrat-ExtraBold.ttf'),
     }).then(() => setFontsLoaded(true)).catch(() => setFontsLoaded(true));
   }, []);
 
@@ -7833,7 +7853,7 @@ export default function App() {
                 elevation: 6,
               }}
             >
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700', fontFamily: 'Montserrat' }}>Go</Text>
+              <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-Bold' }}>Go</Text>
             </TouchableOpacity>
           )}
         </View>

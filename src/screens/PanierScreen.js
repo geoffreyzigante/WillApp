@@ -74,7 +74,7 @@ export function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onC
                 <Path d="M17.25,5.29h-6.43s.01-.04.01-.06V1.35C10.83.6,10.23,0,9.48,0s-1.36.6-1.36,1.35v3.88s.01.04.01.06H1.7C.59,5.29-.22,6.33.05,7.39l2.14,8.95c.19.74.87,1.26,1.64,1.26h11.29c.77,0,1.45-.52,1.64-1.26l2.14-8.95c.28-1.06-.53-2.1-1.64-2.1ZM15.44,9.36l-1.02,4.67c-.11.44-.51.74-.97.74h-7.93c-.46,0-.85-.31-.97-.74l-1.02-4.67c-.16-.63.32-1.24.97-1.24h9.98c.65,0,1.13.61.97,1.24Z" />
               </Svg>
             </View>
-            <Text style={{ fontFamily: 'Montserrat', fontSize: 17, fontWeight: '800', color: C.text, textAlign: 'center', marginBottom: 8 }}>
+            <Text style={{ fontFamily: 'Montserrat-ExtraBold', fontSize: 17, color: C.text, textAlign: 'center', marginBottom: 8 }}>
               Aucune photo dans ton panier
             </Text>
             <Text style={{ color: C.textSoft, fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
@@ -90,7 +90,7 @@ export function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onC
               <View key={code} style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
                   <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Text style={{ fontFamily: 'Montserrat', fontSize: 16, fontWeight: '800', color: C.text, letterSpacing: -0.2 }} numberOfLines={2}>
+                    <Text style={{ fontFamily: 'Montserrat-ExtraBold', fontSize: 16, color: C.text, letterSpacing: -0.2 }} numberOfLines={2}>
                       {meta.name || code}
                     </Text>
                     <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>
@@ -149,7 +149,7 @@ export function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onC
         }}>
           <View>
             <Text style={{ color: C.textSoft, fontSize: 12, fontFamily: 'Montserrat' }}>Total</Text>
-            <Text style={{ fontFamily: 'Montserrat', fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.3 }}>
+            <Text style={{ fontFamily: 'Montserrat-ExtraBold', fontSize: 22, color: C.text, letterSpacing: -0.3 }}>
               {`${total * PRICE_PER_PHOTO_EUR} €`}
             </Text>
           </View>
@@ -157,7 +157,7 @@ export function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onC
             disabled
             style={{ backgroundColor: '#C9BEEF', paddingVertical: 12, paddingHorizontal: 22, borderRadius: 999 }}
           >
-            <Text style={{ color: '#fff', fontFamily: 'Montserrat', fontSize: 14, fontWeight: '700' }}>Commander · bientôt</Text>
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 14 }}>Commander · bientôt</Text>
           </TouchableOpacity>
         </View>
       ) : null}
