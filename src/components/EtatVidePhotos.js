@@ -2,13 +2,10 @@
 // .photos-empty-stack) : une rangee de cases fantomes en fond, mascotte +
 // phrase posees dessus, centrees sur les deux axes.
 //
-// Le fondu du site est un mask-image (cases pleines aux bords, effacees au
-// centre). react-native ne connait pas les masks : on pose a la place un
-// degrade de la couleur du fond par-dessus, opaque au centre, transparent
-// aux extremites. Meme rendu tant que le fond reste C.bg.
+// Contrairement au site, pas de fondu au centre (mask-image la-bas) : sur
+// l app les cases restent en aplat plein.
 import React from 'react';
 import { View, Text } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { IlluPasDePhotos } from './IlluPasDePhotos';
 import { C } from '../constants/colors';
 
@@ -29,14 +26,6 @@ export function EtatVidePhotos({
           />
         ))}
       </View>
-      <LinearGradient
-        colors={[`${C.bg}00`, C.bg, `${C.bg}00`]}
-        locations={[0, 0.5, 1]}
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 1, y: 0.5 }}
-        pointerEvents="none"
-        style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
-      />
       <View
         pointerEvents="none"
         style={{
