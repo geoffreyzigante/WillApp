@@ -53,7 +53,12 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // n y a pas de photos (event upcoming ou tout simplement vide).
   // Si l user clique sur le toggle ensuite, son choix est respecte
   // (userToggledRef = true bloque tout auto-update ulterieur).
-  const [infoSheetOpen, setInfoSheetOpen] = useState(false);
+  // Ouverture immediate (pas apres le fetch photos) quand on sait deja qu il
+  // n y aura rien a montrer : event a venir, ou has_photos=false renvoye par
+  // /public-events. Evite le flip ferme -> ouvert au montage.
+  const [infoSheetOpen, setInfoSheetOpen] = useState(
+    () => isUpcoming(event?.event_date, event?.event_date_end) || event?.has_photos === false
+  );
   const userToggledRef = useRef(false);
   useEffect(() => {
     if (userToggledRef.current) return;
