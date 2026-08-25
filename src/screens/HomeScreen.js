@@ -428,7 +428,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
             {tab === 'follows' ? <IlluPasDeFavoris height={72} /> : <IlluPasDePhotos height={72} />}
             <View style={{ alignItems: 'flex-start', gap: 3, flexShrink: 1 }}>
               <Text style={{
-                color: C.text, fontSize: 18,
+                color: '#C9B6FF', fontSize: 18,
                 fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2,
               }}>
                 {tab === 'follows' ? 'Pas encore de favoris' : tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
