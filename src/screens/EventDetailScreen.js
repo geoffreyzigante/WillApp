@@ -10,6 +10,7 @@ import {
   View, Text, TouchableOpacity, Image, ScrollView, RefreshControl, Modal,
   LayoutAnimation, ActivityIndicator, StyleSheet, Linking, Animated, Dimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
@@ -76,33 +77,56 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   const mapQuery = (event?.address || event?.location || '').trim();
   const mapPrecise = !!event?.address;
   const [mapInfo, setMapInfo] = useState(null);
+  const [mapW, setMapW] = useState(0);
   useEffect(() => {
     if (!mapQuery) { setMapInfo(null); return; }
     let cancelled = false;
     const q = mapQuery.replace(/\s*\((\d{5})\)\s*/, ' $1').trim();
-    // Geocodage via notre worker et pas api-adresse.data.gouv.fr en direct :
-    // Android echoue sur ce domaine ("Network request failed") alors que le
-    // worker repond sans probleme. Idem pour la tuile (route /map-tile).
-    fetch(`${API_URL}/geocode?q=${encodeURIComponent(q)}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => {
-        if (cancelled || !d || !d.found) return;
-        const { lat, lng } = d;
-        const zoom = mapPrecise ? 15 : 12;
-        const n = Math.pow(2, zoom);
-        const xExact = (lng + 180) / 360 * n;
-        const latRad = lat * Math.PI / 180;
-        const yExact = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
-        const x = Math.floor(xExact);
-        const y = Math.floor(yExact);
-        setMapInfo({
-          tileUrl: `${API_URL}/map-tile/${zoom}/${x}/${y}`,
-          // Position du marker en % dans la tile (0-1).
-          markerXPct: xExact - x,
-          markerYPct: yExact - y,
-        });
-      })
-      .catch(() => {});
+    const zoom = mapPrecise ? 15 : 12;
+    const cacheKey = `will:geo:${zoom}:${q}`;
+
+    // Mosaique 2x2 centree sur le point : une seule tile "cover" recadre le
+    // carre dans un bandeau 2.4:1 et decale le marker (le % s appliquait au
+    // container, pas a l image). Avec 4 tiles on positionne le bloc pour que
+    // le point tombe pile au centre, sans jamais laisser de vide.
+    const composer = ({ lat, lng }) => {
+      const n = Math.pow(2, zoom);
+      const xExact = (lng + 180) / 360 * n;
+      const latRad = lat * Math.PI / 180;
+      const yExact = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+      // Coin haut-gauche du bloc 2x2 : le point reste entre 0.5 et 1.5 tile
+      // dans le bloc -> marge >= 1/2 tile de chaque cote.
+      const x0 = Math.floor(xExact - 0.5);
+      const y0 = Math.floor(yExact - 0.5);
+      return {
+        tiles: [
+          [`${API_URL}/map-tile/${zoom}/${x0}/${y0}`, `${API_URL}/map-tile/${zoom}/${x0 + 1}/${y0}`],
+          [`${API_URL}/map-tile/${zoom}/${x0}/${y0 + 1}`, `${API_URL}/map-tile/${zoom}/${x0 + 1}/${y0 + 1}`],
+        ],
+        // Position du point dans le bloc, en tiles (0-2).
+        pointX: xExact - x0,
+        pointY: yExact - y0,
+      };
+    };
+
+    (async () => {
+      // Cache local : le geocodage d une adresse ne bouge pas, inutile de
+      // repayer un aller-retour reseau a chaque ouverture de l event.
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached && !cancelled) setMapInfo(composer(JSON.parse(cached)));
+        if (cached) return;
+      } catch {}
+      try {
+        const r = await fetch(`${API_URL}/geocode?q=${encodeURIComponent(q)}`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!d || !d.found) return;
+        const coords = { lat: d.lat, lng: d.lng };
+        AsyncStorage.setItem(cacheKey, JSON.stringify(coords)).catch(() => {});
+        if (!cancelled) setMapInfo(composer(coords));
+      } catch {}
+    })();
     return () => { cancelled = true; };
   }, [mapQuery, mapPrecise]);
 
@@ -480,36 +504,59 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                 backgroundColor: `${tint}14`,
                 alignSelf: 'stretch',
               }}>
-                {mapInfo ? (
-                  <View style={{ width: '100%', aspectRatio: 2.4, position: 'relative' }}>
-                    <Image
-                      source={{ uri: mapInfo.tileUrl }}
-                      style={{ width: '100%', height: '100%' }}
-                      resizeMode="cover"
-                    />
-                    {/* Marker positionne au pixel exact dans la tile (les
-                        markerXPct/markerYPct viennent du calcul tile +
-                        coordonnees fractionnaires). */}
-                    <View
-                      pointerEvents="none"
-                      style={{
-                        position: 'absolute',
-                        left: `${mapInfo.markerXPct * 100}%`,
-                        top: `${mapInfo.markerYPct * 100}%`,
-                        width: 28, height: 28,
-                        marginLeft: -14, marginTop: -14,
-                        backgroundColor: '#7B2FFF',
-                        borderRadius: 14,
-                        borderWidth: 3, borderColor: '#fff',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.3,
-                        shadowRadius: 4,
-                        elevation: 4,
-                      }}
-                    />
-                  </View>
-                ) : null}
+                <View
+                  style={{ width: '100%', aspectRatio: 2.4, position: 'relative', overflow: 'hidden' }}
+                  onLayout={e => setMapW(Math.round(e.nativeEvent.layout.width))}
+                >
+                  {mapInfo && mapW > 0 ? (
+                    <>
+                      {/* Bloc 2x2 de tiles, decale pour que le point tombe au
+                          centre du bandeau. S = largeur du container : la
+                          marge d 1/2 tile autour du point garantit qu il n y a
+                          jamais de vide sur les bords. */}
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: 'absolute',
+                          width: mapW * 2,
+                          height: mapW * 2,
+                          left: mapW / 2 - mapInfo.pointX * mapW,
+                          top: mapW / 2 / 2.4 - mapInfo.pointY * mapW,
+                        }}
+                      >
+                        {mapInfo.tiles.map((row, ri) => (
+                          <View key={ri} style={{ flexDirection: 'row' }}>
+                            {row.map((uri, ci) => (
+                              <Image
+                                key={ci}
+                                source={{ uri }}
+                                style={{ width: mapW, height: mapW }}
+                                resizeMode="cover"
+                              />
+                            ))}
+                          </View>
+                        ))}
+                      </View>
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: 'absolute',
+                          left: '50%', top: '50%',
+                          width: 28, height: 28,
+                          marginLeft: -14, marginTop: -14,
+                          backgroundColor: '#7B2FFF',
+                          borderRadius: 14,
+                          borderWidth: 3, borderColor: '#fff',
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.3,
+                          shadowRadius: 4,
+                          elevation: 4,
+                        }}
+                      />
+                    </>
+                  ) : null}
+                </View>
                 <View style={{
                   flexDirection: 'row', alignItems: 'center',
                   justifyContent: 'space-between',
