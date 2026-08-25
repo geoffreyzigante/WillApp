@@ -64,18 +64,25 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // Mini-carte : 1 tile CartoDB Positron (sans cle, sans install RN) centree
   // sur lat/lng (issu de BAN). Marker brand violet pose en overlay au pixel
   // exact, calcule depuis la position fractionnaire dans la tile.
+  // Adresse precise si l organisateur l a saisie, sinon la ville
+  // (ex "Les Andelys (27700)") : mieux vaut une carte au niveau commune
+  // que pas de carte du tout. Le code postal sort des parentheses, la BAN
+  // ne les digere pas.
+  const mapQuery = (event?.address || event?.location || '').trim();
+  const mapPrecise = !!event?.address;
   const [mapInfo, setMapInfo] = useState(null);
   useEffect(() => {
-    if (!event?.address) { setMapInfo(null); return; }
+    if (!mapQuery) { setMapInfo(null); return; }
     let cancelled = false;
-    fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(event.address)}&limit=1`)
+    const q = mapQuery.replace(/\s*\((\d{5})\)\s*/, ' $1').trim();
+    fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=1`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (cancelled) return;
         const coords = d?.features?.[0]?.geometry?.coordinates;
         if (!coords || coords.length < 2) return;
         const [lng, lat] = coords;
-        const zoom = 15;
+        const zoom = mapPrecise ? 15 : 12;
         const n = Math.pow(2, zoom);
         const xExact = (lng + 180) / 360 * n;
         const latRad = lat * Math.PI / 180;
@@ -93,7 +100,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [event?.address]);
+  }, [mapQuery, mapPrecise]);
 
   const raceTabLayoutsRef = useRef({});
   const kmTabLayoutsRef = useRef({});
@@ -461,7 +468,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
               </View>
             )}
 
-            {event.address ? (
+            {mapQuery ? (
               <View style={{
                 marginTop: distances.length > 0 ? 14 : 4,
                 borderRadius: 12,
@@ -509,11 +516,11 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     numberOfLines={1}
                     style={{ color: tint, fontSize: 13, flex: 1, fontFamily: 'Montserrat-Medium' }}
                   >
-                    {event.address}
+                    {mapQuery}
                   </Text>
                   <TouchableOpacity
                     onPress={() => {
-                      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`;
+                      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
                       Linking.openURL(url).catch(() => {});
                     }}
                     activeOpacity={0.7}
@@ -540,7 +547,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                   borderRadius: 999,
                   flexDirection: 'row', alignItems: 'center',
                   gap: 8,
-                  marginTop: (distances.length > 0 || event.address) ? 14 : 4,
+                  marginTop: (distances.length > 0 || mapQuery) ? 14 : 4,
                   alignSelf: 'flex-start',
                   shadowColor: tint,
                   shadowOffset: { width: 0, height: 4 },
