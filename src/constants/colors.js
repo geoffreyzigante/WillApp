@@ -55,6 +55,7 @@ export const TYPE_COLORS = {
   cross: '#A855F7',
   triathlon: '#6366F1',
   velo: '#F97316',
+  vtt: '#EC4899',
   marche: '#EAB308',
   // Palette decorative TYPE_COLORS, distincte du C.error semantique
   // (UI-09). "autre" garde son rouge dedie #EF4444 ; n est pas une
