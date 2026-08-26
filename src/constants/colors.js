@@ -47,6 +47,10 @@ export const C = {
 // colorForType() au lieu d'indexer directement TYPE_COLORS.
 export const TYPE_COLORS = {
   trail: '#22C55E',
+  course: '#14B8A6',
+  'course a pied': '#14B8A6',
+  'course à pied': '#14B8A6',
+  route: '#3B82F6',
   'course sur route': '#3B82F6',
   cross: '#A855F7',
   triathlon: '#6366F1',
