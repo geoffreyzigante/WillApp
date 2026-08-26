@@ -149,6 +149,7 @@ import {
   formatDateForForm,
   isUpcoming,
   displayEventType,
+  EVENT_TYPES,
   cityLabel,
 } from './src/utils/format';
 import {
@@ -4739,7 +4740,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     }
   };
 
-  const types = ['Trail', 'Course sur route', 'Cross', 'Triathlon', 'Velo', 'Marche', 'Autre'];
+  // Liste centralisee dans utils/format (EVENT_TYPES) : elle manquait
+  // "Course a pied" et "VTT".
+  const types = EVENT_TYPES;
 
   // ───────────────── PICKERS COMMUNS (heure/denivele/km/crop/date) ─────────────────
   // Extraits en helper pour etre reutilises par le wizard (creation) et le

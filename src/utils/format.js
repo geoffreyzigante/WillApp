@@ -86,7 +86,32 @@ export const isUpcoming = (iso, isoEnd) => {
 };
 
 // Label affiche pour event_type ; la valeur stockee reste sans accent ("Velo").
-export const displayEventType = (t) => (t === 'Velo' ? 'Vélo' : t);
+// Types d event proposes a la saisie (espace orga mobile). Slugs stockes,
+// libelles resolus par displayEventType — meme table que le site et le
+// dashboard, ou il manquait "course a pied" et "vtt".
+export const EVENT_TYPES = [
+  'trail', 'course', 'route', 'cross', 'triathlon', 'velo', 'vtt', 'marche', 'autre',
+];
+
+const LIBELLES_TYPE = {
+  trail: 'Trail',
+  course: 'Course à pied',
+  'course a pied': 'Course à pied',
+  'course à pied': 'Course à pied',
+  route: 'Course sur route',
+  'course sur route': 'Course sur route',
+  cross: 'Cross-country',
+  triathlon: 'Triathlon',
+  velo: 'Vélo de route',
+  vtt: 'VTT',
+  marche: 'Marche',
+  autre: 'Autre',
+};
+
+export const displayEventType = (t) => {
+  const k = String(t || '').toLowerCase().trim();
+  return LIBELLES_TYPE[k] || (t === 'Velo' ? 'Vélo' : t);
+};
 
 // "Louviers (27400)" -> "Louviers (27)". Code postal raccourci pour
 // l affichage compact dans EventCard.
