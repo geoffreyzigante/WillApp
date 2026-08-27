@@ -25,9 +25,13 @@ const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
 // Ligne de menu : icone dans une pastille violet pale, libelle, puis
 // compteur ou chevron. Meme gabarit partout, c est ce qui manquait — le
 // tiroir n etait qu une suite de textes alignes a gauche.
-function MenuRow({ icon, label, badge, onPress }) {
+function MenuRow({ icon, label, badge, onPress, dernier }) {
   return (
-    <TouchableOpacity style={styles.menuRow} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={[styles.menuRow, !dernier && styles.menuRowSepare]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
       <View style={styles.menuIcon}>{icon}</View>
       <Text style={styles.menuLabel}>{label}</Text>
       {badge ? (
@@ -185,6 +189,7 @@ export function BurgerMenuModal({
                   icon={<Icon.User size={19} color={C.primary} />}
                   label="Mon compte"
                   onPress={fire(onOpenAccount)}
+                  dernier
                 />
 
                 <Text style={styles.secLabel}>Autres espaces</Text>
@@ -197,6 +202,7 @@ export function BurgerMenuModal({
                   icon={<Icon.CamOrg size={19} color={C.primary} />}
                   label="Espace photographe"
                   onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}
+                  dernier
                 />
 
                 <View style={styles.spacer} />
@@ -242,6 +248,7 @@ export function BurgerMenuModal({
                   icon={<Icon.CamOrg size={19} color={C.primary} />}
                   label="Espace photographe"
                   onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}
+                  dernier
                 />
               </>
             )}
@@ -327,7 +334,12 @@ const styles = StyleSheet.create({
 
   menuRow: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
+  },
+  // Filet entre deux lignes d un meme groupe, comme sur les maquettes.
+  menuRowSepare: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(26,10,62,0.07)',
   },
   // Icones nues : la pastille violette ajoutait un aplat par ligne, donc
   // cinq blocs de couleur pour cinq mots. La largeur fixe suffit a aligner.
