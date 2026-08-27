@@ -28,20 +28,24 @@ const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
 function MenuRow({ icon, label, badge, onPress, dernier, inactif }) {
   return (
     <TouchableOpacity
-      style={[styles.menuRow, !dernier && styles.menuRowSepare, inactif && styles.menuRowInactif]}
+      style={[styles.menuRow, !dernier && styles.menuRowSepare]}
       onPress={inactif ? undefined : onPress}
       disabled={!!inactif}
       activeOpacity={0.7}
     >
-      <View style={styles.menuIcon}>{icon}</View>
-      <Text style={styles.menuLabel}>{label}</Text>
-      {inactif ? (
-        <Text style={styles.menuSoon}>Bientôt</Text>
-      ) : badge ? (
-        <View style={styles.menuBadge}><Text style={styles.menuBadgeText}>{badge}</Text></View>
-      ) : (
-        <Text style={styles.menuChevron}>›</Text>
-      )}
+      {/* L opacite est portee par le contenu, pas par la ligne : sinon le
+          filet du bas palit lui aussi et le rythme des separateurs casse. */}
+      <View style={[styles.menuRowInner, inactif && styles.menuRowInnerInactif]}>
+        <View style={styles.menuIcon}>{icon}</View>
+        <Text style={styles.menuLabel}>{label}</Text>
+        {inactif ? (
+          <Text style={styles.menuSoon}>Bientôt</Text>
+        ) : badge ? (
+          <View style={styles.menuBadge}><Text style={styles.menuBadgeText}>{badge}</Text></View>
+        ) : (
+          <Text style={styles.menuChevron}>›</Text>
+        )}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -335,9 +339,12 @@ const styles = StyleSheet.create({
   },
 
   menuRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingVertical: 13,
   },
+  menuRowInner: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+  },
+  menuRowInnerInactif: { opacity: 0.42 },
   // Filet entre deux lignes d un meme groupe, comme sur les maquettes.
   menuRowSepare: {
     borderBottomWidth: 1,
@@ -356,9 +363,6 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center',
   },
   menuBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  // Entree pas encore ouverte : on la laisse visible pour annoncer ce qui
-  // arrive, mais grisee et non cliquable.
-  menuRowInactif: { opacity: 0.42 },
   menuSoon: {
     fontSize: 11, fontWeight: '700', letterSpacing: 0.6,
     textTransform: 'uppercase', color: 'rgba(26,10,62,0.4)',
