@@ -14,12 +14,30 @@ import React, { useRef, useEffect } from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
 
 const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
+
+// Ligne de menu : icone dans une pastille violet pale, libelle, puis
+// compteur ou chevron. Meme gabarit partout, c est ce qui manquait — le
+// tiroir n etait qu une suite de textes alignes a gauche.
+function MenuRow({ icon, label, badge, onPress }) {
+  return (
+    <TouchableOpacity style={styles.menuRow} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.menuIcon}>{icon}</View>
+      <Text style={styles.menuLabel}>{label}</Text>
+      {badge ? (
+        <View style={styles.menuBadge}><Text style={styles.menuBadgeText}>{badge}</Text></View>
+      ) : (
+        <Text style={styles.menuChevron}>›</Text>
+      )}
+    </TouchableOpacity>
+  );
+}
 
 export function BurgerMenuModal({
   visible,
@@ -94,102 +112,121 @@ export function BurgerMenuModal({
         <View style={styles.drawerInner}>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose} hitSlop={10}>
             <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-              <Path d="M6 6l12 12M18 6L6 18" stroke="#1a0a3e" strokeWidth={2.4} strokeLinecap="round" />
+              <Path d="M6 6l12 12M18 6L6 18" stroke={isAuthed ? "#FFFFFF" : "#1a0a3e"} strokeWidth={2.4} strokeLinecap="round" />
             </Svg>
           </TouchableOpacity>
 
           <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            <View style={styles.header}>
-              {isAuthed && runnerFirstName ? (
-                <Text style={styles.greeting} numberOfLines={1}>
-                  Salut {runnerFirstName}
-                </Text>
-              ) : (
-                <Icon.Logo width={62} color={C.primary} />
-              )}
-            </View>
-
             {isAuthed ? (
-              <View style={styles.profileRow}>
-                <View style={{ flex: 1 }}>
-                  <TouchableOpacity style={styles.profileAction} onPress={fire(onOpenAccount)}>
-                    <Text style={styles.profileActionText}>Mon compte</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.profileAction} onPress={fire(onOpenMyPhotos)}>
-                    <Text style={styles.profileActionText}>Mes photos</Text>
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity
-                  style={styles.profileThumbWrap}
-                  onPress={selfieUri ? fire(onViewSelfie) : fire(onOpenAccount)}
-                  activeOpacity={0.85}
+              <>
+                {/* Bandeau de marque : il porte l identite et remplit le haut
+                    du tiroir, qui etait vide aux deux tiers. L avatar y vit
+                    desormais — avant il flottait a droite de deux lignes de
+                    texte sans appartenir a l une ni a l autre. */}
+                <LinearGradient
+                  colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.hero}
                 >
-                  <View style={styles.profileThumb}>
-                    {selfieUri ? (
-                      <ExpoImage
-                        source={{ uri: selfieUri }}
-                        style={styles.profileSelfie}
-                        contentFit="cover"
-                        transition={0}
-                        cachePolicy="memory-disk"
-                        priority="high"
-                      />
-                    ) : (
-                      <Svg width={22} height={20} viewBox="0 0 18.96 17.61" fill="#1a0a3e">
-                        <Path d="M10.16,0h-1.35C3.94,0,0,3.94,0,8.8s3.94,8.8,8.8,8.8h1.35c4.86,0,8.8-3.94,8.8-8.8S15.02,0,10.16,0ZM9.48,2.77c1.28,0,2.32,1.14,2.32,2.55s-1.04,2.55-2.32,2.55-2.32-1.14-2.32-2.55,1.04-2.55,2.32-2.55ZM9.48,14.33c-2.58,0-4.67-1.23-4.67-2.75s2.09-2.75,4.67-2.75,4.67,1.23,4.67,2.75-2.09,2.75-4.67,2.75Z" />
-                      </Svg>
-                    )}
-                  </View>
-                  <View style={[styles.profileDot, { backgroundColor: selfieOk ? '#10B981' : '#ef4444' }]} />
-                </TouchableOpacity>
-              </View>
-            ) : null}
+                  <TouchableOpacity
+                    onPress={selfieUri ? fire(onViewSelfie) : fire(onOpenAccount)}
+                    activeOpacity={0.85}
+                    style={styles.heroAvatarWrap}
+                  >
+                    <View style={styles.heroAvatar}>
+                      {selfieUri ? (
+                        <ExpoImage
+                          source={{ uri: selfieUri }}
+                          style={styles.heroSelfie}
+                          contentFit="cover"
+                          transition={0}
+                          cachePolicy="memory-disk"
+                          priority="high"
+                        />
+                      ) : (
+                        <Icon.User size={26} color="#FFFFFF" />
+                      )}
+                    </View>
+                    <View style={[styles.heroDot, { backgroundColor: selfieOk ? '#34D399' : '#ef4444' }]} />
+                  </TouchableOpacity>
+                  <Text style={styles.heroName} numberOfLines={1}>
+                    Salut {runnerFirstName || 'toi'}
+                  </Text>
+                  <Text style={styles.heroStatus} numberOfLines={2}>
+                    {selfieOk
+                      ? 'Selfie enregistré — on te reconnaît sur les photos'
+                      : 'Ajoute ton selfie pour recevoir tes photos'}
+                  </Text>
+                </LinearGradient>
 
-            {isAuthed && cartTotal > 0 ? (
-              <TouchableOpacity style={styles.cartRow} onPress={fire(onOpenPanier)}>
-                <Text style={styles.cartLabel}>Mon panier</Text>
-                <Text style={styles.cartCount}>{cartTotal > 99 ? '99+' : cartTotal}</Text>
-                <Svg width={18} height={17} viewBox="0 0 18.96 17.61" fill="#1a0a3e">
-                  <Path d="M17.25,5.29h-6.43s.01-.04.01-.06V1.35C10.83.6,10.23,0,9.48,0s-1.36.6-1.36,1.35v3.88s.01.04.01.06H1.7C.59,5.29-.22,6.33.05,7.39l2.14,8.95c.19.74.87,1.26,1.64,1.26h11.29c.77,0,1.45-.52,1.64-1.26l2.14-8.95c.28-1.06-.53-2.1-1.64-2.1ZM15.44,9.36l-1.02,4.67c-.11.44-.51.74-.97.74h-7.93c-.46,0-.85-.31-.97-.74l-1.02-4.67c-.16-.63.32-1.24.97-1.24h9.98c.65,0,1.13.61.97,1.24Z" />
-                </Svg>
-              </TouchableOpacity>
-            ) : null}
+                <MenuRow
+                  icon={<Icon.Photos size={19} color={C.primary} />}
+                  label="Mes photos"
+                  onPress={fire(onOpenMyPhotos)}
+                />
+                <MenuRow
+                  icon={
+                    <Svg width={19} height={18} viewBox="0 0 18.96 17.61" fill={C.primary}>
+                      <Path d="M17.25,5.29h-6.43s.01-.04.01-.06V1.35C10.83.6,10.23,0,9.48,0s-1.36.6-1.36,1.35v3.88s.01.04.01.06H1.7C.59,5.29-.22,6.33.05,7.39l2.14,8.95c.19.74.87,1.26,1.64,1.26h11.29c.77,0,1.45-.52,1.64-1.26l2.14-8.95c.28-1.06-.53-2.1-1.64-2.1ZM15.44,9.36l-1.02,4.67c-.11.44-.51.74-.97.74h-7.93c-.46,0-.85-.31-.97-.74l-1.02-4.67c-.16-.63.32-1.24.97-1.24h9.98c.65,0,1.13.61.97,1.24Z" />
+                    </Svg>
+                  }
+                  label="Mon panier"
+                  badge={cartTotal > 0 ? (cartTotal > 99 ? '99+' : String(cartTotal)) : null}
+                  onPress={fire(onOpenPanier)}
+                />
+                <MenuRow
+                  icon={<Icon.User size={19} color={C.primary} />}
+                  label="Mon compte"
+                  onPress={fire(onOpenAccount)}
+                />
 
-            {/* Deconnecte : les deux actions principales d abord. Les espaces
-                organisateur et photographe concernent une poignee d usagers,
-                ils passaient pourtant en tete. */}
-            {!isAuthed && (
-              <View style={styles.authSection}>
-                <TouchableOpacity style={styles.ctaPrimary} onPress={fire(onOpenAuthLogin)}>
-                  <Text style={styles.ctaPrimaryText}>Se connecter</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.ctaSecondary} onPress={fire(onOpenAuthSignup)}>
-                  <Text style={styles.ctaSecondaryText}>S'inscrire</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+                <Text style={styles.secLabel}>Autres espaces</Text>
+                <MenuRow
+                  icon={<Icon.GearOrg size={19} color={C.primary} />}
+                  label="Espace organisateur"
+                  onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))}
+                />
+                <MenuRow
+                  icon={<Icon.CamOrg size={19} color={C.primary} />}
+                  label="Espace photographe"
+                  onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}
+                />
 
-            <View style={[styles.nav, !isAuthed && styles.navApresCta]}>
-              <TouchableOpacity style={styles.link} onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))}>
-                <Text style={styles.linkRoseText}>Espace organisateur</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.link} onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}>
-                <Text style={styles.linkRoseText}>Espace photographe</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* "Supprimer mes donnees faciales" et "Supprimer mon compte" ne
-                sont plus ici : deux actions irreversibles a un doigt d un
-                tiroir qu on ouvre dix fois par jour, dans la meme teinte que
-                les liens de navigation. Elles vivent dans "Mon compte", ou
-                elles existaient deja. */}
-            {isAuthed ? (
-              <View style={styles.actionsSection}>
+                <View style={styles.spacer} />
+                <View style={styles.rule} />
                 <TouchableOpacity style={styles.link} onPress={fire(onLogout)}>
                   <Text style={styles.linkMutedText}>Se déconnecter</Text>
                 </TouchableOpacity>
-              </View>
-            ) : null}
+              </>
+            ) : (
+              <>
+                <View style={styles.header}>
+                  <Icon.Logo width={62} color={C.primary} />
+                </View>
+
+                <View style={styles.authSection}>
+                  <TouchableOpacity style={styles.ctaPrimary} onPress={fire(onOpenAuthLogin)}>
+                    <Text style={styles.ctaPrimaryText}>Se connecter</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.ctaSecondary} onPress={fire(onOpenAuthSignup)}>
+                    <Text style={styles.ctaSecondaryText}>S'inscrire</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.secLabel, styles.secLabelApresCta]}>Autres espaces</Text>
+                <MenuRow
+                  icon={<Icon.GearOrg size={19} color={C.primary} />}
+                  label="Espace organisateur"
+                  onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))}
+                />
+                <MenuRow
+                  icon={<Icon.CamOrg size={19} color={C.primary} />}
+                  label="Espace photographe"
+                  onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}
+                />
+              </>
+            )}
           </ScrollView>
         </View>
       </Animated.View>
@@ -236,100 +273,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingBottom: 8,
   },
-  greeting: {
-    fontFamily: 'AVEstiana',
-    // #c9beed sur blanc donnait un contraste de 1,9:1, sous le minimum
-    // lisible. Le violet de marque passe a 5,6:1.
-    fontSize: 26,
-    color: C.primary,
-    letterSpacing: -0.2,
-    lineHeight: 28,
-  },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderTopColor: 'rgba(123,47,255,0.12)',
-    borderBottomColor: 'rgba(123,47,255,0.12)',
-    marginVertical: 4,
-  },
-  profileAction: {
-    paddingVertical: 6,
-  },
-  profileActionText: {
-    color: '#1a0a3e',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  profileThumbWrap: {
-    width: 48, height: 48,
-    position: 'relative',
-  },
-  profileThumb: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: 'rgba(123,47,255,0.08)',
-    alignItems: 'center', justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  profileSelfie: {
-    width: '100%',
-    height: '100%',
-  },
-  profileDot: {
-    position: 'absolute',
-    top: -2, right: -2,
-    width: 14, height: 14, borderRadius: 7,
-    borderWidth: 2, borderColor: '#fff',
-    zIndex: 2,
-  },
-  cartRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(123,47,255,0.12)',
-  },
-  cartLabel: {
-    flex: 1,
-    color: '#1a0a3e',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  cartCount: {
-    minWidth: 22,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 11,
-    backgroundColor: C.primary,
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '800',
-    textAlign: 'center',
-    overflow: 'hidden',
-  },
-  nav: {
-    paddingVertical: 8,
-    gap: 2,
-  },
   link: {
     paddingVertical: 8,
     paddingHorizontal: 8,
     borderRadius: 10,
-  },
-  linkRoseText: {
-    color: '#D67CF8',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  actionsSection: {
-    gap: 2,
-    paddingTop: 4,
   },
   linkMutedText: {
     color: '#6c5b8c',
@@ -337,12 +284,65 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   authSection: { gap: 10, paddingTop: 6 },
-  navApresCta: {
-    marginTop: 22,
-    paddingTop: 18,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(26,10,62,0.08)',
+
+  // ── Direction C : bandeau de marque ──────────────────────────────
+  // Deborde le padding du tiroir (20 lateral, 44 haut) pour toucher les
+  // bords, d ou les marges negatives.
+  hero: {
+    marginHorizontal: -20,
+    marginTop: -48,
+    paddingTop: 54,
+    paddingHorizontal: 20,
+    paddingBottom: 22,
+    marginBottom: 6,
   },
+  heroAvatarWrap: { width: 58, height: 58, marginBottom: 12 },
+  heroAvatar: {
+    width: 58, height: 58, borderRadius: 29,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.75)',
+    alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  heroSelfie: { width: '100%', height: '100%' },
+  heroDot: {
+    position: 'absolute', right: 0, bottom: 0,
+    width: 15, height: 15, borderRadius: 8,
+    borderWidth: 2.5, borderColor: '#8B5CF6',
+  },
+  heroName: {
+    fontFamily: 'AVEstiana',
+    fontSize: 24, color: '#FFFFFF', lineHeight: 27,
+  },
+  heroStatus: {
+    fontSize: 12.5, color: 'rgba(255,255,255,0.88)', marginTop: 4, lineHeight: 17,
+  },
+
+  menuRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 11,
+  },
+  menuIcon: {
+    width: 34, height: 34, borderRadius: 11,
+    backgroundColor: '#EDE7FF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  menuLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
+  menuChevron: { fontSize: 18, color: 'rgba(26,10,62,0.35)' },
+  menuBadge: {
+    minWidth: 22, height: 22, paddingHorizontal: 7, borderRadius: 11,
+    backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  menuBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  secLabel: {
+    fontSize: 11, fontWeight: '700', letterSpacing: 1.1,
+    textTransform: 'uppercase', color: 'rgba(26,10,62,0.4)',
+    marginTop: 20, marginBottom: 2,
+  },
+  secLabelApresCta: { marginTop: 26 },
+  spacer: { flex: 1, minHeight: 24 },
+  rule: { height: 1, backgroundColor: 'rgba(26,10,62,0.08)', marginBottom: 4 },
   ctaPrimary: {
     paddingVertical: 14,
     borderRadius: 14,
