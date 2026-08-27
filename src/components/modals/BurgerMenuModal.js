@@ -265,11 +265,9 @@ const styles = StyleSheet.create({
   },
   drawerInner: {
     flex: 1,
-    paddingTop: 44,
-    paddingHorizontal: 20,
     paddingBottom: 28,
   },
-  scroll: { paddingTop: 4, gap: 12, paddingBottom: 28 },
+  scroll: { paddingTop: 48, paddingHorizontal: 20, paddingBottom: 28, flexGrow: 1 },
   closeBtn: {
     position: 'absolute',
     top: 14, right: 14,
@@ -295,7 +293,7 @@ const styles = StyleSheet.create({
   hero: {
     marginHorizontal: -20,
     marginTop: -48,
-    paddingTop: 54,
+    paddingTop: 58,
     paddingHorizontal: 20,
     paddingBottom: 22,
     marginBottom: 6,
