@@ -44,14 +44,20 @@ const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
 
 export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload }) {
-  const slideX = useRef(new Animated.Value(DRAWER_W)).current;
+  // On arrive depuis le menu, qui occupait deja exactement cette place. Un
+  // glissement pleine largeur donnerait l impression que le tiroir sort une
+  // seconde fois : on remplace donc le contenu par un fondu + 24 px, comme
+  // une page qui succede a une autre dans le meme tiroir.
+  const slideX = useRef(new Animated.Value(24)).current;
+  const panelOpacity = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(slideX, { toValue: visible ? 0 : DRAWER_W, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(slideX, { toValue: visible ? 0 : 24, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(panelOpacity, { toValue: visible ? 1 : 0, duration: 170, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: 130, easing: Easing.out(Easing.quad), useNativeDriver: true }),
     ]).start();
-  }, [visible, slideX, backdropOpacity]);
+  }, [visible, slideX, panelOpacity, backdropOpacity]);
 
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -127,7 +133,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
 
       <Animated.View
         pointerEvents={visible ? 'auto' : 'none'}
-        style={[drawer.panel, { transform: [{ translateX: slideX }] }]}
+        style={[drawer.panel, { opacity: panelOpacity, transform: [{ translateX: slideX }] }]}
       >
         {Platform.OS === 'ios' ? (
           <BlurView intensity={48} tint="light" style={StyleSheet.absoluteFillObject} />
@@ -136,16 +142,16 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
-          <View style={drawer.head}>
+          <View style={drawer.head} pointerEvents="box-none">
             <TouchableOpacity onPress={onBack || onClose} hitSlop={12} style={drawer.back}>
               <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                <Path d="M15 18l-6-6 6-6" stroke={C.primary} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+                <Path d="M15 18l-6-6 6-6" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
               </Svg>
               <Text style={drawer.backText}>Menu</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={onClose} hitSlop={12} style={drawer.close} accessibilityLabel="Fermer">
-              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                <Path d="M6 6l12 12M18 6L6 18" stroke="#7B2FFF" strokeWidth={2.6} strokeLinecap="round" />
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 6l12 12M18 6L6 18" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" />
               </Svg>
             </TouchableOpacity>
           </View>
@@ -376,26 +382,31 @@ const drawer = StyleSheet.create({
     elevation: 32,
     overflow: 'hidden',
   },
+  // Entete posee PAR-DESSUS le bandeau : celui-ci monte jusqu au bord haut
+  // du tiroir, comme dans le menu. Avant, la barre retour/fermer poussait le
+  // violet 100 px plus bas et laissait une bande blanche en haut.
   head: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    zIndex: 3,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 54,
-    paddingHorizontal: 16,
+    paddingTop: 46,
+    paddingHorizontal: 14,
     paddingBottom: 8,
   },
-  back: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingRight: 8 },
-  backText: { color: C.primary, fontSize: 15, fontWeight: '600' },
+  back: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 6 },
+  backText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   close: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: '#F4EFFF',
+    width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
   },
 
   // Bandeau identique a celui du menu : les deux ecrans se lisent comme un
   // seul endroit. Il deborde les marges du contenu.
   hero: {
-    paddingTop: 22,
+    paddingTop: 92,
     paddingHorizontal: 20,
     paddingBottom: 22,
     marginBottom: 4,

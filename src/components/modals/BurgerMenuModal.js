@@ -98,13 +98,14 @@ export function BurgerMenuModal({
   }, [selfieUri]);
 
   // iOS interdit d ouvrir un <Modal transparent> pendant qu un autre se
-  // ferme : il faut donc attendre. Le relais est cale juste apres la fin de
-  // l animation (220 ms), pas avant — sinon la destination arrive au milieu
-  // du glissement et saute.
+  // ferme : il faut donc attendre un tour. Mais le tiroir disparait d un
+  // coup (Modal demonte des visible=false), donc rien ne sert d attendre la
+  // fin d une animation qui n est pas jouee : 240 ms creusaient un trou noir
+  // entre le menu et sa destination. 120 ms suffisent au demontage.
   const fire = (cb) => () => {
     onClose && onClose();
     if (typeof cb !== 'function') return;
-    setTimeout(cb, 240);
+    setTimeout(cb, 120);
   };
 
   return (
@@ -288,10 +289,12 @@ const styles = StyleSheet.create({
   scroll: { paddingTop: 48, paddingHorizontal: 20, paddingBottom: 28, flexGrow: 1 },
   closeBtn: {
     position: 'absolute',
-    top: 14, right: 14,
+    // Alignee sur l entete de "Mon compte" (paddingTop 46) : plus haut, la
+    // croix tombait dans la barre d etat / l encoche.
+    top: 46, right: 12,
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
-    zIndex: 2,
+    zIndex: 3,
   },
   link: {
     paddingVertical: 8,

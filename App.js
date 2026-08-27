@@ -8071,7 +8071,7 @@ export default function App() {
 
       <ProfileMenuModal
         visible={profileMenu}
-        onBack={() => { setProfileMenu(false); setTimeout(() => setBurgerMenu(true), 240); }}
+        onBack={() => { setProfileMenu(false); setTimeout(() => setBurgerMenu(true), 120); }}
         onClose={() => setProfileMenu(false)}
         selfieUri={selfieUri}
         // Audit UI-04 : iOS modal stacking interdit d ouvrir un <Modal transparent>

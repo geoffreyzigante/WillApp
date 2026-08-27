@@ -25,14 +25,16 @@ const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
 
 export function OrganizerProfileMenuModal({ visible, onClose, organizerSession, organizerApiFetch, onLogout, onUpdate, onDeleteAccount }) {
-  const slideX = useRef(new Animated.Value(DRAWER_W)).current;
+  const slideX = useRef(new Animated.Value(24)).current;
+  const panelOpacity = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(slideX, { toValue: visible ? 0 : DRAWER_W, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(slideX, { toValue: visible ? 0 : 24, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(panelOpacity, { toValue: visible ? 1 : 0, duration: 170, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: 130, easing: Easing.out(Easing.quad), useNativeDriver: true }),
     ]).start();
-  }, [visible, slideX, backdropOpacity]);
+  }, [visible, slideX, panelOpacity, backdropOpacity]);
 
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -100,7 +102,7 @@ export function OrganizerProfileMenuModal({ visible, onClose, organizerSession, 
 
       <Animated.View
         pointerEvents={visible ? 'auto' : 'none'}
-        style={[drawer.panel, { transform: [{ translateX: slideX }] }]}
+        style={[drawer.panel, { opacity: panelOpacity, transform: [{ translateX: slideX }] }]}
       >
         {Platform.OS === 'ios' ? (
           <BlurView intensity={48} tint="light" style={StyleSheet.absoluteFillObject} />
@@ -109,11 +111,11 @@ export function OrganizerProfileMenuModal({ visible, onClose, organizerSession, 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
-          <View style={drawer.head}>
+          <View style={drawer.head} pointerEvents="box-none">
             <View style={{ flex: 1 }} />
             <TouchableOpacity onPress={onClose} hitSlop={12} style={drawer.close} accessibilityLabel="Fermer">
-              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                <Path d="M6 6l12 12M18 6L6 18" stroke="#7B2FFF" strokeWidth={2.6} strokeLinecap="round" />
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 6l12 12M18 6L6 18" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" />
               </Svg>
             </TouchableOpacity>
           </View>
@@ -259,20 +261,22 @@ const drawer = StyleSheet.create({
     overflow: 'hidden',
   },
   head: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    zIndex: 3,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 54,
-    paddingHorizontal: 16,
+    paddingTop: 46,
+    paddingHorizontal: 14,
     paddingBottom: 8,
   },
   close: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: '#F4EFFF',
+    width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
   },
   hero: {
-    paddingTop: 22,
+    paddingTop: 92,
     paddingHorizontal: 20,
     paddingBottom: 22,
     marginBottom: 4,
