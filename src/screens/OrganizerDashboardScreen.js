@@ -17,7 +17,7 @@ import { RefreshableScrollView } from '../components/loaders';
 import { C } from '../constants/colors';
 import { s } from '../constants/styles';
 
-export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos, onOpenEventDetail, onOpenOrgRole, refreshKey = 0 }) {
+export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos, onOpenEventDetail, onOpenOrgRole, refreshKey = 0, headerH = 0 }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(null);
@@ -91,7 +91,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
   };
 
   return (
-    <RefreshableScrollView onRefresh={reload} style={s.scroll} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+    <RefreshableScrollView onRefresh={reload} style={s.scroll} contentContainerStyle={{ paddingTop: headerH, paddingBottom: 100 }} showsVerticalScrollIndicator={false} topOffset={headerH}>
       {/* Un seul menu par ecran : l entete Will (logo, prenom, burger) est
           deja pose au-dessus par App.js. La barre avatar + bascule
           orga/photo faisait doublon — l avatar ouvrait le compte que le

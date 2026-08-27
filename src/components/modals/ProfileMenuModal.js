@@ -387,7 +387,9 @@ const drawer = StyleSheet.create({
     position: 'absolute',
     top: 0, right: 0, bottom: 0,
     width: DRAWER_W,
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(255,255,255,0.9)' : '#fff',
+    // Meme fond que le menu, au centieme pres : les deux vues se succedent
+    // dans le meme tiroir, une nuance de blanc differente se voit.
+    backgroundColor: Platform.OS === 'ios' ? 'rgba(255,255,255,0.82)' : '#fff',
     shadowColor: 'rgba(15,7,35,0.6)',
     shadowOpacity: 0.45,
     shadowOffset: { width: -8, height: 0 },

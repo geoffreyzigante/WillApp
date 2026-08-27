@@ -7720,6 +7720,7 @@ export default function App() {
               {organizerSession && (
                 <View style={{ width: SCREEN_W }}>
                   <OrganizerDashboardScreen
+                    headerH={headerH}
                     session={organizerSession}
                     organizerApiFetch={organizerApiFetch}
                     onLogout={logoutOrganizer}
