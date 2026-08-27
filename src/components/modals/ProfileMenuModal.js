@@ -9,9 +9,11 @@ import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
   KeyboardAvoidingView, ActivityIndicator, Alert, Platform, StyleSheet,
   Animated, Dimensions,
+  Easing,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Icon } from '../Icon';
@@ -19,7 +21,7 @@ import { InfoRow } from '../InfoRow';
 import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
 import { s } from '../../constants/styles';
-import { authStyles, profileCardStyles } from '../../constants/formStyles';
+import { authStyles } from '../../constants/formStyles';
 
 // Helpers date naissance : ISO yyyy-mm-dd <-> JJ/MM/AAAA pour l'affichage FR.
 const formatDobFr = (iso) => {
@@ -46,8 +48,8 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(slideX, { toValue: visible ? 0 : DRAWER_W, duration: 280, useNativeDriver: true }),
-      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: 280, useNativeDriver: true }),
+      Animated.timing(slideX, { toValue: visible ? 0 : DRAWER_W, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
   }, [visible, slideX, backdropOpacity]);
 
@@ -151,41 +153,37 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
+              contentContainerStyle={{ paddingBottom: 40 }}
             >
               {profile ? (
-                <Text style={[s.welcome, { color: C.primary, marginBottom: 20, marginTop: 4, fontSize: 26 }]}>
-                  Salut {profile.firstName}
-                </Text>
+                <LinearGradient
+                  colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={drawer.hero}
+                >
+                  <TouchableOpacity onPress={selfieUri ? onView : onRetake} activeOpacity={0.85} style={drawer.heroAvatarWrap}>
+                    <View style={drawer.heroAvatar}>
+                      {selfieUri ? (
+                        <ExpoImage source={{ uri: selfieUri }} style={drawer.heroSelfie} contentFit="cover" cachePolicy="memory-disk" />
+                      ) : (
+                        <Icon.User size={26} color="#FFFFFF" />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                  <Text style={drawer.heroName} numberOfLines={1}>Salut {profile.firstName}</Text>
+                  <Text style={drawer.heroStatus}>{profile.email}</Text>
+                </LinearGradient>
               ) : null}
 
               {/* Bloc Selfie */}
               {profile && (
-                <View style={profileCardStyles.card}>
+                <View style={drawer.section}>
+                  <Text style={drawer.secLabel}>Selfie</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      onPress={onRetake}
-                      style={{ width: 56, height: 56 }}
-                      hitSlop={6}
-                    >
-                      {selfieUri ? (
-                        <ExpoImage
-                          source={{ uri: selfieUri }}
-                          style={{ width: 56, height: 56, borderRadius: 999 }}
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <View style={{
-                          width: 56, height: 56, borderRadius: 999,
-                          backgroundColor: C.primaryLight,
-                          alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          <Icon.User size={28} color={C.primary} />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                    <Text style={profileCardStyles.label}>Selfie</Text>
+                    <Text style={drawer.rowLabel}>
+                      {selfieUri ? 'Enregistré' : 'Pas encore de selfie'}
+                    </Text>
                     <View style={{ flex: 1 }} />
                     {!selfieUri ? (
                       <TouchableOpacity onPress={onRetake}>
@@ -219,7 +217,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
 
               {/* Bloc Infos */}
               {profile && !editing && (
-                <View style={profileCardStyles.card}>
+                <View style={drawer.section}>
                   <InfoRow label="Prénom" value={profile.firstName} />
                   <InfoRow label="Nom" value={profile.lastName} />
                   <InfoRow label="Email" value={profile.email} />
@@ -235,7 +233,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
 
               {/* Bloc Edition */}
               {profile && editing && (
-                <View style={profileCardStyles.card}>
+                <View style={drawer.section}>
                   <TextInput
                     placeholder="Prénom" placeholderTextColor={C.textSoft}
                     value={firstName} onChangeText={setFirstName}
@@ -300,7 +298,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
               )}
 
               {profile && changingPwd && (
-                <View style={profileCardStyles.card}>
+                <View style={drawer.section}>
                   <Text style={{ color: C.text, fontSize: 14, fontWeight: '700', marginBottom: 10 }}>
                     Changer mon mot de passe
                   </Text>
@@ -393,4 +391,40 @@ const drawer = StyleSheet.create({
     backgroundColor: '#F4EFFF',
     alignItems: 'center', justifyContent: 'center',
   },
+
+  // Bandeau identique a celui du menu : les deux ecrans se lisent comme un
+  // seul endroit. Il deborde les marges du contenu.
+  hero: {
+    paddingTop: 22,
+    paddingHorizontal: 20,
+    paddingBottom: 22,
+    marginBottom: 4,
+  },
+  heroAvatarWrap: { width: 58, height: 58, marginBottom: 12 },
+  heroAvatar: {
+    width: 58, height: 58, borderRadius: 29,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.75)',
+    alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  heroSelfie: { width: '100%', height: '100%' },
+  heroName: { fontFamily: 'AVEstiana', fontSize: 24, color: '#FFFFFF', lineHeight: 27 },
+  heroStatus: { fontSize: 12.5, color: 'rgba(255,255,255,0.88)', marginTop: 4 },
+
+  // Sections a plat : les cartes #faf9ff empilaient un aplat par groupe sur
+  // un fond deja clair, sans rien separer de plus qu un filet.
+  section: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(26,10,62,0.07)',
+  },
+  secLabel: {
+    fontSize: 11, fontWeight: '700', letterSpacing: 1.1,
+    textTransform: 'uppercase', color: 'rgba(26,10,62,0.4)',
+    marginBottom: 10,
+  },
+  rowLabel: { fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
 });

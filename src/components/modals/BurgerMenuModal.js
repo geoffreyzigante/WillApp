@@ -11,7 +11,7 @@
 // suivante (modal stacking iOS, cf feedback_rn_modal_stacking).
 
 import React, { useRef, useEffect } from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Easing } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -64,12 +64,14 @@ export function BurgerMenuModal({
     Animated.parallel([
       Animated.timing(slideX, {
         toValue: visible ? 0 : DRAWER_W,
-        duration: 280,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(backdropOpacity, {
         toValue: visible ? 1 : 0,
-        duration: 280,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
@@ -84,10 +86,14 @@ export function BurgerMenuModal({
     }
   }, [selfieUri]);
 
+  // iOS interdit d ouvrir un <Modal transparent> pendant qu un autre se
+  // ferme : il faut donc attendre. Le relais est cale juste apres la fin de
+  // l animation (220 ms), pas avant — sinon la destination arrive au milieu
+  // du glissement et saute.
   const fire = (cb) => () => {
     onClose && onClose();
     if (typeof cb !== 'function') return;
-    setTimeout(cb, 220);
+    setTimeout(cb, 240);
   };
 
   return (
