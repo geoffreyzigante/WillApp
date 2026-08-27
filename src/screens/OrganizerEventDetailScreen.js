@@ -1,6 +1,10 @@
-// Ecran detail event organisateur : bandeau cover + actions (voir photos,
-// modifier, share lien public) + code PIN photographe (avec masque/reveal/
-// copy/modify) + facturation + suppression.
+// Ecran detail event organisateur — aligne sur la carte event du dashboard
+// web (/orga) : bandeau cover avec statut + facturation en pastilles, bloc de
+// completion (jauge, champs manquants, "Compléter" / "Soumettre mon event"),
+// puis photos, code PIN en clair, visibilite publique et suppression.
+//
+// Les champs requis et le calcul du pourcentage vivent dans
+// utils/eventCompletion.js, miroir de EventCompletionPanel.js cote web.
 //
 // Countdown : "J-3" avant l event, "GO !" pendant (event_date -> event_date_end),
 // "J+5" apres. End absent -> single-day.
@@ -8,7 +12,7 @@
 import React, { useState } from 'react';
 import {
   Modal, SafeAreaView, View, Text, TouchableOpacity, ScrollView,
-  Alert, Share,
+  Alert, Share, Switch,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,15 +20,23 @@ import { C, colorForType } from '../constants/colors';
 import { displayEventType } from '../utils/format';
 import { isValidPin } from '../utils/pin';
 import { PinDisplay } from '../components/PinDisplay';
+import { completionOf, billingLabel } from '../utils/eventCompletion';
 
-export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, onClose, onEdit, onOpenPhotos, onDeleted }) {
+export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, onClose, onEdit, onOpenPhotos, onDeleted, onRefresh }) {
   const tint = colorForType(event.event_type);
-  const [revealPwd, setRevealPwd] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [listed, setListed] = useState(event?.listed !== false);
+  const [savingListed, setSavingListed] = useState(false);
+  const [copied, setCopied] = useState(false);
   const photographerPwd = event?.photographer_password || '';
   const isReady = !!event?.active;
   const dotColor = isReady ? '#34D399' : '#FBBF24';
   const statusLabel = isReady ? 'Prêt à démarrer' : 'En attente';
+  const isDraft = event?.is_draft === true;
+
+  const { missing, percent, isComplete } = completionOf(event, session?.profile);
+  const facturation = billingLabel(event);
 
   const dateStr = event.event_date
     ? new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }).replace(/\./g, '').toUpperCase()
@@ -44,13 +56,70 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
     return `J+${Math.round((t - end) / 86400000)}`;
   })();
 
-  const copyPwd = async () => {
-    if (!photographerPwd) return;
-    try { await Share.share({ message: photographerPwd }); } catch {}
+  // Pas de expo-clipboard dans le projet : l ajouter serait un module natif
+  // de plus a rebuilder sur les deux plateformes. La feuille de partage fait
+  // le travail et propose "Copier" nativement.
+  const copyPin = async () => {
+    if (!isValidPin(photographerPwd)) return;
+    try {
+      await Share.share({ message: photographerPwd });
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {}
   };
 
   const sharePublicLink = async () => {
     try { await Share.share({ message: `https://will-app.com/event/${event.code}` }); } catch {}
+  };
+
+  const toggleListed = async (value) => {
+    setSavingListed(true);
+    const previous = listed;
+    setListed(value);
+    try {
+      const r = await organizerApiFetch(`/organizer/event/${event.code}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listed: value }),
+      });
+      if (!r.ok) throw new Error('Modification impossible');
+      onRefresh?.();
+    } catch (e) {
+      setListed(previous);
+      Alert.alert('Erreur', e.message || 'Modification impossible');
+    } finally {
+      setSavingListed(false);
+    }
+  };
+
+  const submitEvent = () => {
+    Alert.alert(
+      'Tu es sûr ?',
+      'Une fois soumis, ton event sera revu par notre équipe et publié rapidement.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Confirmer',
+          onPress: async () => {
+            setSubmitting(true);
+            try {
+              const r = await organizerApiFetch(`/organizer/event/${event.code}/submit`, { method: 'POST' });
+              if (!r.ok) {
+                const data = await r.json().catch(() => ({}));
+                throw new Error(data.error || 'Soumission impossible');
+              }
+              Alert.alert('Envoyé', 'Ton event est en cours de validation, on revient vers toi sous 24h');
+              onRefresh?.();
+              onClose?.();
+            } catch (e) {
+              Alert.alert('Erreur', e.message || 'Soumission impossible');
+            } finally {
+              setSubmitting(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const confirmDelete = () => {
@@ -118,11 +187,17 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
                   {sub}
                 </Text>
               ) : null}
-              <View style={{ marginTop: 10, flexDirection: 'row' }}>
+              {/* Statut + facturation : deux pastilles, comme le bandeau web. */}
+              <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.92)' }}>
                   <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: dotColor }} />
                   <Text style={{ color: '#1A1A1A', fontSize: 12, fontWeight: '500' }}>{statusLabel}</Text>
                 </View>
+                {facturation ? (
+                  <View style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: '500' }}>{facturation}</Text>
+                  </View>
+                ) : null}
               </View>
             </View>
             {countdown ? (
@@ -132,55 +207,120 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
             ) : null}
           </View>
 
+          {/* Completion — brouillons uniquement, comme sur le web */}
+          {isDraft ? (
+            <View style={{ marginHorizontal: 16, marginTop: 16, backgroundColor: '#fff', borderRadius: 18, padding: 18 }}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: C.text }}>
+                Ton event est complet à {percent}%
+              </Text>
+              <View style={{ height: 8, borderRadius: 999, backgroundColor: '#EDE7FF', marginTop: 10, overflow: 'hidden' }}>
+                <View style={{ height: '100%', width: `${percent}%`, borderRadius: 999, backgroundColor: C.primary }} />
+              </View>
+
+              {missing.length > 0 ? (
+                <>
+                  <Text style={{ fontSize: 13, color: 'rgba(10,10,10,0.6)', marginTop: 14, marginBottom: 8 }}>
+                    Il te manque encore :
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {missing.map(f => (
+                      <TouchableOpacity
+                        key={f.id}
+                        onPress={onEdit}
+                        style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, backgroundColor: '#EDE7FF' }}
+                      >
+                        <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>+ {f.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              ) : (
+                <Text style={{ fontSize: 13, color: C.success, marginTop: 14, fontWeight: '600' }}>
+                  Tout est prêt — tu peux soumettre ton event.
+                </Text>
+              )}
+
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 18 }}>
+                {isComplete ? (
+                  <>
+                    <TouchableOpacity onPress={onEdit} style={{ flex: 1, backgroundColor: '#F3EBFF', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+                      <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Modifier les infos</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={submitEvent}
+                      disabled={submitting}
+                      style={{ flex: 1, backgroundColor: C.pinkPill, paddingVertical: 14, borderRadius: 12, alignItems: 'center', opacity: submitting ? 0.6 : 1 }}
+                    >
+                      <Text style={{ color: C.pinkPillText, fontSize: 14, fontWeight: '700' }}>
+                        {submitting ? 'Envoi…' : 'Soumettre mon event'}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity onPress={onEdit} style={{ flex: 1, backgroundColor: C.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Compléter mon event</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          ) : null}
+
           {/* Actions */}
           <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 16 }}>
             <TouchableOpacity onPress={onOpenPhotos} style={{ flex: 2, backgroundColor: C.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
               <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Voir les photos</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={onEdit} style={{ flex: 2, backgroundColor: '#F3EBFF', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
-              <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Modifier</Text>
-            </TouchableOpacity>
+            {!isDraft ? (
+              <TouchableOpacity onPress={onEdit} style={{ flex: 2, backgroundColor: '#F3EBFF', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Modifier les infos</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity onPress={sharePublicLink} style={{ flex: 1, backgroundColor: '#F3EBFF', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
               <Text style={{ color: C.primary, fontSize: 18, fontWeight: '600' }}>↗</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Code PIN photographe */}
+          {/* Code PIN photographe — en clair, comme sur le web */}
           <View style={{ marginHorizontal: 16, marginTop: 28 }}>
             <Text style={{ fontSize: 16, fontWeight: '600', color: C.text }}>Code PIN photographe</Text>
             <Text style={{ fontSize: 13, color: C.textSoft, marginTop: 2 }}>À transmettre à tes photographes le jour J</Text>
             <View style={{ marginTop: 14, alignItems: 'center' }}>
               {isValidPin(photographerPwd) ? (
-                <PinDisplay pin={photographerPwd} masked={!revealPwd} />
+                <TouchableOpacity onPress={onEdit} activeOpacity={0.6}>
+                  <PinDisplay pin={photographerPwd} masked={false} />
+                </TouchableOpacity>
               ) : (
-                <Text style={{ color: C.textSoft, fontSize: 14 }}>Non défini</Text>
+                <TouchableOpacity onPress={onEdit} hitSlop={8}>
+                  <Text style={{ color: C.primary, fontSize: 15, fontWeight: '600' }}>Définir</Text>
+                </TouchableOpacity>
               )}
-              <View style={{ flexDirection: 'row', gap: 18, marginTop: 14 }}>
-                {isValidPin(photographerPwd) ? (
-                  <>
-                    <TouchableOpacity onPress={() => setRevealPwd(v => !v)} hitSlop={8}>
-                      <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>{revealPwd ? 'Masquer' : 'Afficher'}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={copyPwd} hitSlop={8}>
-                      <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>Copier</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={onEdit} hitSlop={8}>
-                      <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>Modifier</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <TouchableOpacity onPress={onEdit} hitSlop={8}>
-                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>Définir</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              {isValidPin(photographerPwd) ? (
+                <TouchableOpacity onPress={copyPin} hitSlop={8} style={{ marginTop: 12 }}>
+                  <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>
+                    {copied ? 'Partagé' : 'Partager le code'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
 
-          {/* Facturation */}
+          {/* Visibilite publique */}
           <View style={{ marginHorizontal: 16, marginTop: 28 }}>
-            <Text style={{ fontSize: 16, fontWeight: '600', color: C.text }}>Facturation</Text>
-            <Text style={{ fontSize: 14, color: C.text, marginTop: 8 }}>Offre partenaire gratuite</Text>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: C.text }}>Visibilité</Text>
+            <Text style={{ fontSize: 13, color: 'rgba(10,10,10,0.5)', marginTop: 2 }}>
+              {listed
+                ? 'Visible dans la liste publique Will.'
+                : 'Masqué de la liste publique, accessible par lien direct.'}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+              <Switch
+                value={listed}
+                onValueChange={toggleListed}
+                disabled={savingListed}
+                trackColor={{ false: '#D4D4D8', true: C.primary }}
+                thumbColor="#fff"
+              />
+            </View>
           </View>
 
           {/* Lien Supprimer */}

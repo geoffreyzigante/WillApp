@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { C } from '../../constants/colors';
 
-export function SubModalInputText({ visible, title, value, onChangeText, placeholder, keyboardType, autoCapitalize, secureTextEntry, onClose, onSave, busy }) {
+export function SubModalInputText({ visible, title, value, onChangeText, placeholder, keyboardType, autoCapitalize, secureTextEntry, multiline, maxLength, onClose, onSave, busy }) {
   const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
     if (!visible) { setKbHeight(0); return; }
@@ -46,11 +46,15 @@ export function SubModalInputText({ visible, title, value, onChangeText, placeho
             keyboardType={keyboardType}
             autoCapitalize={autoCapitalize}
             secureTextEntry={!!secureTextEntry}
+            multiline={!!multiline}
+            maxLength={maxLength}
+            textAlignVertical={multiline ? 'top' : 'auto'}
             style={{
               fontSize: 17, color: C.text,
               paddingVertical: 14, paddingHorizontal: 16,
               backgroundColor: '#fff', borderRadius: 14,
               marginHorizontal: 16,
+              minHeight: multiline ? 140 : undefined,
             }}
             autoFocus
           />

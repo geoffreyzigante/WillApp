@@ -4361,6 +4361,9 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   // l email de login orga (pattern existant) mais editable independamment.
   const [contactAdmin, setContactAdmin] = useState('');
   const [phone, setPhone] = useState('');
+  // Requis pour atteindre 100 % de completion, comme sur le web.
+  const [estimatedParticipants, setEstimatedParticipants] = useState('');
+  const [message, setMessage] = useState('');
   // distances : [{ label, label_only, km, time, elevation }].
   // Mode Type (label_only=false) : label = event_type, affichage final
   // `${label} ${km} km`. Mode Nom (label_only=true) : label libre,
@@ -4438,6 +4441,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         setContact(editEvent.contact || organizerSession?.profile?.email || '');
         setContactAdmin(editEvent.contact_admin || editEvent.organizer_email || organizerSession?.profile?.email || '');
         setPhone(editEvent.phone || '');
+        setEstimatedParticipants(editEvent.estimated_participants != null ? String(editEvent.estimated_participants) : '');
+        setMessage(editEvent.message || '');
         setDistances(Array.isArray(editEvent.distances) ? editEvent.distances.map(d => ({
           label: d.label || '',
           label_only: d.label_only === true,
@@ -4456,7 +4461,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         // la session arrive de manière asynchrone après l'ouverture du modal, un
         // second useEffect ci-dessous (deps [visible, isEdit, organizerSession])
         // re-tire l'email tant que l'utilisateur n'a rien saisi.
-        setWebsite(''); setContact(organizerSession?.profile?.email || ''); setContactAdmin(organizerSession?.profile?.email || ''); setPhone(''); setDistances([]);
+        setWebsite(''); setContact(organizerSession?.profile?.email || ''); setContactAdmin(organizerSession?.profile?.email || ''); setPhone(''); setEstimatedParticipants(''); setMessage(''); setDistances([]);
         setCoverImage(null); setPendingCoverLocal(null);
       }
     }
@@ -4652,11 +4657,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         phone: phone.trim(),
         event_date: eventDate ? eventDate.toISOString().slice(0, 10) : '',
         event_date_end: eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : '',
+        start_time: startTime || '',
         location: city ? `${city} (${postalCode})` : '',
         address: address.trim(),
         listed,
         event_type: eventType,
         website,
+        estimated_participants: estimatedParticipants ? Number(estimatedParticipants) : null,
+        message: message.trim(),
         distances: distances
           .filter(d => d.km)
           .map(d => ({
@@ -5049,6 +5057,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                 <SettingsRow label="Site web" value={website} onPress={() => setEditingField('website')} />
                 <View style={rowSeparatorStyle} />
                 <SettingsRow label="Visibilité" value={listed ? 'Listé' : 'Non listé'} onPress={() => setEditingField('listed')} />
+                <View style={rowSeparatorStyle} />
+                <SettingsRow label="Participants estimés" value={estimatedParticipants || 'Non renseigné'} onPress={() => setEditingField('estimated_participants')} />
+                <View style={rowSeparatorStyle} />
+                <SettingsRow label="Description" value={message ? `${message.slice(0, 30)}${message.length > 30 ? '…' : ''}` : 'Non renseignée'} onPress={() => setEditingField('message')} />
               </View>
 
               {/* ───── DISTANCES ───── */}
@@ -5461,6 +5473,39 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               </View>
             </View>
           </Modal>
+
+          {/* ─── Sub-modal: Participants estimés ─── */}
+          <SubModalInputText
+            visible={editingField === 'estimated_participants'}
+            title="Participants estimés"
+            value={estimatedParticipants}
+            onChangeText={(v) => setEstimatedParticipants(String(v).replace(/[^\d]/g, ''))}
+            keyboardType="number-pad"
+            placeholder="500"
+            onClose={() => setEditingField(null)}
+            onSave={async () => {
+              const ok = await savePartial({ estimated_participants: estimatedParticipants ? Number(estimatedParticipants) : null });
+              if (ok) setEditingField(null);
+            }}
+            busy={partialBusy}
+          />
+
+          {/* ─── Sub-modal: Description ─── */}
+          <SubModalInputText
+            visible={editingField === 'message'}
+            title="Description"
+            value={message}
+            onChangeText={setMessage}
+            multiline
+            maxLength={500}
+            placeholder="Parcours, ambiance, ravitaillements, ce qu'il faut savoir avant de venir…"
+            onClose={() => setEditingField(null)}
+            onSave={async () => {
+              const ok = await savePartial({ message: message.trim() });
+              if (ok) setEditingField(null);
+            }}
+            busy={partialBusy}
+          />
 
           {/* ─── Sub-modal: Site web ─── */}
           <SubModalInputText
@@ -7706,6 +7751,7 @@ export default function App() {
             setOrganizerEventDetailTarget(null);
             setOrganizerEventPhotosTarget(e);
           }}
+          onRefresh={() => setOrgRefreshKey(k => k + 1)}
           onDeleted={() => {
             setOrganizerEventDetailTarget(null);
             setOrgRefreshKey(k => k + 1);
