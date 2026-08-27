@@ -71,7 +71,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
   const submitPwd = async () => {
     setPwdError('');
     if (newPwd !== pwdConfirm) { setPwdError('Les deux mots de passe ne correspondent pas.'); return; }
-    if (newPwd.length < 10) { setPwdError('Mot de passe : 10 caractères minimum.'); return; }
+    if (newPwd.length < 8) { setPwdError('Mot de passe : 8 caractères minimum.'); return; }
     setPwdBusy(true);
     try {
       const r = await runnerApiFetch(`/runner/change-password`, {
@@ -308,7 +308,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                     style={authStyles.input}
                   />
                   <PasswordInput
-                    placeholder="Nouveau mot de passe (10 car. min)" placeholderTextColor={C.textSoft}
+                    placeholder="Nouveau mot de passe (8 car. min)" placeholderTextColor={C.textSoft}
                     value={newPwd} onChangeText={setNewPwd}
                     style={authStyles.input}
                   />

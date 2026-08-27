@@ -7693,7 +7693,7 @@ export default function App() {
                     onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
-                    onOpenProfile={() => setProfileMenu(true)}
+                    onOpenProfile={() => setBurgerMenu(true)}
                     follows={follows}
                     runnerApiFetch={runnerApiFetch}
                     runnerUserId={runnerSession?.profile?.userId}

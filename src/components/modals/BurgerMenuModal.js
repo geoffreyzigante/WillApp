@@ -25,16 +25,19 @@ const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
 // Ligne de menu : icone dans une pastille violet pale, libelle, puis
 // compteur ou chevron. Meme gabarit partout, c est ce qui manquait — le
 // tiroir n etait qu une suite de textes alignes a gauche.
-function MenuRow({ icon, label, badge, onPress, dernier }) {
+function MenuRow({ icon, label, badge, onPress, dernier, inactif }) {
   return (
     <TouchableOpacity
-      style={[styles.menuRow, !dernier && styles.menuRowSepare]}
-      onPress={onPress}
+      style={[styles.menuRow, !dernier && styles.menuRowSepare, inactif && styles.menuRowInactif]}
+      onPress={inactif ? undefined : onPress}
+      disabled={!!inactif}
       activeOpacity={0.7}
     >
       <View style={styles.menuIcon}>{icon}</View>
       <Text style={styles.menuLabel}>{label}</Text>
-      {badge ? (
+      {inactif ? (
+        <Text style={styles.menuSoon}>Bientôt</Text>
+      ) : badge ? (
         <View style={styles.menuBadge}><Text style={styles.menuBadgeText}>{badge}</Text></View>
       ) : (
         <Text style={styles.menuChevron}>›</Text>
@@ -182,8 +185,7 @@ export function BurgerMenuModal({
                     </Svg>
                   }
                   label="Mon panier"
-                  badge={cartTotal > 0 ? (cartTotal > 99 ? '99+' : String(cartTotal)) : null}
-                  onPress={fire(onOpenPanier)}
+                  inactif
                 />
                 <MenuRow
                   icon={<Icon.User size={19} color={C.primary} />}
@@ -354,6 +356,13 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center',
   },
   menuBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  // Entree pas encore ouverte : on la laisse visible pour annoncer ce qui
+  // arrive, mais grisee et non cliquable.
+  menuRowInactif: { opacity: 0.42 },
+  menuSoon: {
+    fontSize: 11, fontWeight: '700', letterSpacing: 0.6,
+    textTransform: 'uppercase', color: 'rgba(26,10,62,0.4)',
+  },
 
   secLabel: {
     fontSize: 11, fontWeight: '700', letterSpacing: 1.1,
