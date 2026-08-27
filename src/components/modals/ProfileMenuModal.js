@@ -44,20 +44,21 @@ const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
 
 export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload }) {
-  // On arrive depuis le menu, qui occupait deja exactement cette place. Un
-  // glissement pleine largeur donnerait l impression que le tiroir sort une
-  // seconde fois : on remplace donc le contenu par un fondu + 24 px, comme
-  // une page qui succede a une autre dans le meme tiroir.
-  const slideX = useRef(new Animated.Value(24)).current;
-  const panelOpacity = useRef(new Animated.Value(0)).current;
+  // Superposition : le menu reste ouvert dessous, cette carte se pose
+  // par-dessus en venant de la droite et repart du meme cote pour le
+  // redecouvrir. D ou le montage retarde — sans lui, <Modal visible={false}>
+  // demonte avant que l animation de sortie ait joue, et la carte
+  // disparaitrait d un coup.
+  const [monte, setMonte] = useState(visible);
+  const slideX = useRef(new Animated.Value(DRAWER_W)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
+    if (visible) setMonte(true);
     Animated.parallel([
-      Animated.timing(slideX, { toValue: visible ? 0 : 24, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(panelOpacity, { toValue: visible ? 1 : 0, duration: 170, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: 130, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-    ]).start();
-  }, [visible, slideX, panelOpacity, backdropOpacity]);
+      Animated.timing(slideX, { toValue: visible ? 0 : DRAWER_W, duration: visible ? 260 : 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: visible ? 200 : 180, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+    ]).start(() => { if (!visible) setMonte(false); });
+  }, [visible, slideX, backdropOpacity]);
 
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -120,20 +121,18 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
   };
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <Modal visible={monte} transparent animationType="none" onRequestClose={onBack || onClose}>
+      {/* Voile leger seulement : le menu en dessous assombrit deja l ecran,
+          deux voiles empiles viraient au noir. */}
       <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backdropOpacity }]}>
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose}>
-          {Platform.OS === 'ios' ? (
-            <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFillObject} />
-          ) : (
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,7,35,0.45)' }]} />
-          )}
+          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,7,35,0.18)' }]} />
         </TouchableOpacity>
       </Animated.View>
 
       <Animated.View
         pointerEvents={visible ? 'auto' : 'none'}
-        style={[drawer.panel, { opacity: panelOpacity, transform: [{ translateX: slideX }] }]}
+        style={[drawer.panel, { transform: [{ translateX: slideX }] }]}
       >
         {Platform.OS === 'ios' ? (
           <BlurView intensity={48} tint="light" style={StyleSheet.absoluteFillObject} />

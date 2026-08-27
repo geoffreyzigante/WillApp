@@ -110,6 +110,11 @@ export function BurgerMenuModal({
     setTimeout(cb, 120);
   };
 
+  // Destinations qui se posent PAR-DESSUS le menu (les tiroirs "Mon compte")
+  // : le menu doit rester ouvert dessous, sinon il n y a plus rien a
+  // redecouvrir au retour.
+  const empiler = (cb) => () => { if (typeof cb === 'function') cb(); };
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backdropOpacity }]}>
@@ -150,7 +155,7 @@ export function BurgerMenuModal({
                   style={styles.hero}
                 >
                   <TouchableOpacity
-                    onPress={selfieUri ? fire(onViewSelfie) : fire(onOpenAccount)}
+                    onPress={selfieUri ? fire(onViewSelfie) : empiler(onOpenAccount)}
                     activeOpacity={0.85}
                     style={styles.heroAvatarWrap}
                   >
@@ -188,7 +193,7 @@ export function BurgerMenuModal({
                 <MenuRow
                   icon={<Icon.User size={19} color={C.primary} />}
                   label="Mon compte"
-                  onPress={fire(onOpenAccount)}
+                  onPress={empiler(onOpenAccount)}
                 />
                 <MenuRow
                   icon={
@@ -217,7 +222,7 @@ export function BurgerMenuModal({
                   <MenuRow
                     icon={<Icon.User size={19} color={C.primary} />}
                     label="Mon compte organisateur"
-                    onPress={fire(onOpenOrganizerAccount)}
+                    onPress={empiler(onOpenOrganizerAccount)}
                     dernier
                   />
                 )}

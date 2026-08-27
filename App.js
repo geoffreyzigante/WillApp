@@ -8073,8 +8073,8 @@ export default function App() {
 
       <ProfileMenuModal
         visible={profileMenu}
-        onBack={() => { setProfileMenu(false); setTimeout(() => setBurgerMenu(true), 120); }}
-        onClose={() => setProfileMenu(false)}
+        onBack={() => setProfileMenu(false)}
+        onClose={() => { setProfileMenu(false); setBurgerMenu(false); }}
         selfieUri={selfieUri}
         // Audit UI-04 : iOS modal stacking interdit d ouvrir un <Modal transparent>
         // au-dessus de ProfileMenuModal en train de se fermer (second invisible,
@@ -8082,18 +8082,18 @@ export default function App() {
         // le pattern L12756 (toggleFollow defere apres SelfieModal close).
         onView={() => {
           setProfileMenu(false);
-          setTimeout(() => setSelfieViewer(true), 200);
+          setTimeout(() => setSelfieViewer(true), 300);
         }}
         onRetake={() => {
           setProfileMenu(false);
-          setTimeout(() => requireAuth(() => setSelfieModal(true)), 200);
+          setTimeout(() => requireAuth(() => setSelfieModal(true)), 300);
         }}
         onDelete={() => {
           // Audit modal-stacking iOS : Alert.alert (dans deleteSelfie) ne saffiche
           // pas si ProfileMenuModal est encore en train de se fermer. Pattern
           // identique a onView et onRetake L13123-L13130.
           setProfileMenu(false);
-          setTimeout(() => deleteSelfie(), 200);
+          setTimeout(() => deleteSelfie(), 300);
         }}
         runnerSession={runnerSession}
         runnerApiFetch={runnerApiFetch}
@@ -8160,7 +8160,8 @@ export default function App() {
 
       <OrganizerProfileMenuModal
         visible={organizerProfileMenu}
-        onClose={() => setOrganizerProfileMenu(false)}
+        onBack={() => setOrganizerProfileMenu(false)}
+        onClose={() => { setOrganizerProfileMenu(false); setBurgerMenu(false); }}
         organizerSession={organizerSession}
         organizerApiFetch={organizerApiFetch}
         onLogout={logoutOrganizer}
