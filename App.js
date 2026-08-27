@@ -6185,6 +6185,9 @@ export default function App() {
   const [profileMenu, setProfileMenu] = useState(false);
   const [burgerMenu, setBurgerMenu] = useState(false);
   const [selfieViewer, setSelfieViewer] = useState(false);
+  // D ou l on vient quand on regarde son selfie : le retour doit rendre
+  // l ecran qu on a quitte (le menu seul, ou le menu + la carte compte).
+  const [selfieViewerFrom, setSelfieViewerFrom] = useState('account');
   const [openedPhoto, setOpenedPhoto] = useState(null); // { photo, photos, allowDelete, onDelete }
   const [follows, setFollows] = useState([]);  // Events suivis (consentement biometrique RGPD)
   const pendingFollowRef = useRef(null);  // Stocke eventCode si selfie requis → relance follow apres selfie
@@ -8068,47 +8071,74 @@ export default function App() {
         onLogout={logoutRunner}
         onOpenAuthLogin={() => { setAuthInitialMode('login'); setAuthModalVisible(true); }}
         onOpenAuthSignup={() => { setAuthInitialMode('register'); setAuthModalVisible(true); }}
-        onViewSelfie={() => setSelfieViewer(true)}
-      />
+        onViewSelfie={() => { setSelfieViewerFrom('menu'); setSelfieViewer(true); }}
+      >
+        {/* iOS refuse d afficher un <Modal> presente au-dessus d un autre
+            quand il est monte a cote dans l arbre : les tiroirs "Mon compte"
+            sont donc des ENFANTS du menu. C est ce qui permet a la carte de
+            se poser par-dessus sans que le menu se ferme. */}
+        <ProfileMenuModal
+          visible={profileMenu}
+          onBack={() => setProfileMenu(false)}
+          onClose={() => { setProfileMenu(false); setBurgerMenu(false); }}
+          selfieUri={selfieUri}
+          // Audit UI-04 : iOS modal stacking interdit d ouvrir un <Modal transparent>
+          // au-dessus de ProfileMenuModal en train de se fermer (second invisible,
+          // cf memory feedback_rn_modal_stacking.md). setTimeout 200ms aligne sur
+          // le pattern L12756 (toggleFollow defere apres SelfieModal close).
+          onView={() => {
+            // Le visionneuse et le selfie vivent HORS de la <Modal> du menu :
+            // il faut donc refermer le menu, sinon iOS ne les presente pas.
+            setProfileMenu(false); setBurgerMenu(false);
+            setTimeout(() => { setSelfieViewerFrom('account'); setSelfieViewer(true); }, 300);
+          }}
+          onRetake={() => {
+            setProfileMenu(false); setBurgerMenu(false);
+            setTimeout(() => requireAuth(() => setSelfieModal(true)), 300);
+          }}
+          onDelete={() => {
+            // Audit modal-stacking iOS : Alert.alert (dans deleteSelfie) ne saffiche
+            // pas si ProfileMenuModal est encore en train de se fermer. Pattern
+            // identique a onView et onRetake L13123-L13130.
+            setProfileMenu(false); setBurgerMenu(false);
+            setTimeout(() => deleteSelfie(), 300);
+          }}
+          runnerSession={runnerSession}
+          runnerApiFetch={runnerApiFetch}
+          onLogout={logoutRunner}
+          onUpdateProfile={updateRunnerProfile}
+          onDeleteAccount={() => { setProfileMenu(false); setBurgerMenu(false); deleteRunnerAccount(); }}
+          onDeleteFaceData={() => { setProfileMenu(false); setBurgerMenu(false); deleteFaceData(); }}
+          uploadState={selfieUploadState}
+          onRetryUpload={retrySelfieUpload}
+        />
 
-      <ProfileMenuModal
-        visible={profileMenu}
-        onBack={() => setProfileMenu(false)}
-        onClose={() => { setProfileMenu(false); setBurgerMenu(false); }}
-        selfieUri={selfieUri}
-        // Audit UI-04 : iOS modal stacking interdit d ouvrir un <Modal transparent>
-        // au-dessus de ProfileMenuModal en train de se fermer (second invisible,
-        // cf memory feedback_rn_modal_stacking.md). setTimeout 200ms aligne sur
-        // le pattern L12756 (toggleFollow defere apres SelfieModal close).
-        onView={() => {
-          setProfileMenu(false);
-          setTimeout(() => setSelfieViewer(true), 300);
-        }}
-        onRetake={() => {
-          setProfileMenu(false);
-          setTimeout(() => requireAuth(() => setSelfieModal(true)), 300);
-        }}
-        onDelete={() => {
-          // Audit modal-stacking iOS : Alert.alert (dans deleteSelfie) ne saffiche
-          // pas si ProfileMenuModal est encore en train de se fermer. Pattern
-          // identique a onView et onRetake L13123-L13130.
-          setProfileMenu(false);
-          setTimeout(() => deleteSelfie(), 300);
-        }}
-        runnerSession={runnerSession}
-        runnerApiFetch={runnerApiFetch}
-        onLogout={logoutRunner}
-        onUpdateProfile={updateRunnerProfile}
-        onDeleteAccount={() => { setProfileMenu(false); deleteRunnerAccount(); }}
-        onDeleteFaceData={() => { setProfileMenu(false); deleteFaceData(); }}
-        uploadState={selfieUploadState}
-        onRetryUpload={retrySelfieUpload}
-      />
+        <OrganizerProfileMenuModal
+          visible={organizerProfileMenu}
+          onBack={() => setOrganizerProfileMenu(false)}
+          onClose={() => { setOrganizerProfileMenu(false); setBurgerMenu(false); }}
+          organizerSession={organizerSession}
+          organizerApiFetch={organizerApiFetch}
+          onLogout={logoutOrganizer}
+          onUpdate={updateOrganizerProfile}
+          onDeleteAccount={() => { setOrganizerProfileMenu(false); setBurgerMenu(false); deleteOrganizerAccount(); }}
+        />
+      </BurgerMenuModal>
+
 
       <SelfieViewerModal
         visible={selfieViewer}
         uri={selfieUri}
-        onClose={() => { setSelfieViewer(false); setProfileMenu(true); }}
+        onClose={() => {
+          setSelfieViewer(false);
+          // On revient la ou on etait : le menu, plus la carte compte si
+          // c est d elle qu on venait. 250 ms = le temps que cette modale
+          // soit demontee, iOS refusant d en presenter une pendant.
+          setTimeout(() => {
+            setBurgerMenu(true);
+            if (selfieViewerFrom === 'account') setProfileMenu(true);
+          }, 250);
+        }}
       />
 
       <PhotoViewerModal
@@ -8158,16 +8188,6 @@ export default function App() {
         onSuccess={handleOrganizerAuthSuccess}
       />
 
-      <OrganizerProfileMenuModal
-        visible={organizerProfileMenu}
-        onBack={() => setOrganizerProfileMenu(false)}
-        onClose={() => { setOrganizerProfileMenu(false); setBurgerMenu(false); }}
-        organizerSession={organizerSession}
-        organizerApiFetch={organizerApiFetch}
-        onLogout={logoutOrganizer}
-        onUpdate={updateOrganizerProfile}
-        onDeleteAccount={() => { setOrganizerProfileMenu(false); deleteOrganizerAccount(); }}
-      />
 
     </SafeAreaView>
 

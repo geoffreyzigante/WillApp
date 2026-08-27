@@ -68,6 +68,9 @@ export function BurgerMenuModal({
   onOpenAuthLogin,
   onOpenAuthSignup,
   onViewSelfie,
+  // Tiroirs qui se posent par-dessus le menu (voir App.js) : ils sont montes
+  // ICI, dans la meme <Modal>, sinon iOS ne les affiche pas.
+  children,
 }) {
   const selfieOk = !!selfieUri && selfieUploadState !== 'failed' && selfieUploadState !== 'uploading';
 
@@ -277,6 +280,8 @@ export function BurgerMenuModal({
           </ScrollView>
         </View>
       </Animated.View>
+
+      {children}
     </Modal>
   );
 }
