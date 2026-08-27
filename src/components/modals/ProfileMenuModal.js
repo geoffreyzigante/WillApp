@@ -4,10 +4,11 @@
 //
 // Audit B12b : geo.api KO/timeout/sans match -> fallback saisie manuelle.
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, TextInput, ScrollView, SafeAreaView,
+  Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
   KeyboardAvoidingView, ActivityIndicator, Alert, Platform, StyleSheet,
+  Animated, Dimensions,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
@@ -34,7 +35,22 @@ const dateToIso = (d) => {
   return `${y}-${m}-${day}`;
 };
 
-export function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload }) {
+// Presentation en tiroir de droite : "Mon compte" s ouvre a la place du
+// menu dont il vient, avec un retour vers lui. La feuille qui montait du bas
+// donnait l impression d une autre application.
+const SCREEN_W = Dimensions.get('window').width;
+const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
+
+export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload }) {
+  const slideX = useRef(new Animated.Value(DRAWER_W)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(slideX, { toValue: visible ? 0 : DRAWER_W, duration: 280, useNativeDriver: true }),
+      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: 280, useNativeDriver: true }),
+    ]).start();
+  }, [visible, slideX, backdropOpacity]);
+
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -96,46 +112,50 @@ export function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      {/* Backdrop frosted glass (alignement UX modaux auth photographe/orga). */}
-      <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
-      <SafeAreaView style={{ flex: 1 }}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backdropOpacity }]}>
+        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFillObject} />
+          ) : (
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,7,35,0.45)' }]} />
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents={visible ? 'auto' : 'none'}
+        style={[drawer.panel, { transform: [{ translateX: slideX }] }]}
       >
-        <TouchableOpacity activeOpacity={1} style={[s.modalBackdrop, { backgroundColor: 'transparent' }]} onPress={onClose}>
-          <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
-            <TouchableOpacity onPress={onClose} hitSlop={20}>
-              <View style={s.modalHandle} />
+        {Platform.OS === 'ios' ? (
+          <BlurView intensity={48} tint="light" style={StyleSheet.absoluteFillObject} />
+        ) : null}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={drawer.head}>
+            <TouchableOpacity onPress={onBack || onClose} hitSlop={12} style={drawer.back}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                <Path d="M15 18l-6-6 6-6" stroke={C.primary} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+              <Text style={drawer.backText}>Menu</Text>
             </TouchableOpacity>
-            {/* Croix de fermeture haut-droite : cercle violet pale + X primary. */}
-            <TouchableOpacity
-              onPress={onClose}
-              hitSlop={12}
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                width: 34,
-                height: 34,
-                borderRadius: 17,
-                backgroundColor: '#F4EFFF',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 999,
-              }}
-              accessibilityLabel="Fermer"
-            >
+            <TouchableOpacity onPress={onClose} hitSlop={12} style={drawer.close} accessibilityLabel="Fermer">
               <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
                 <Path d="M6 6l12 12M18 6L6 18" stroke="#7B2FFF" strokeWidth={2.6} strokeLinecap="round" />
               </Svg>
             </TouchableOpacity>
+          </View>
 
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
+            >
               {profile ? (
-                <Text style={[s.welcome, { color: '#c9beed', marginBottom: 20, marginTop: 4, fontSize: 26 }]}>
-                  Hello {profile.firstName}
+                <Text style={[s.welcome, { color: C.primary, marginBottom: 20, marginTop: 4, fontSize: 26 }]}>
+                  Salut {profile.firstName}
                 </Text>
               ) : null}
 
@@ -339,10 +359,38 @@ export function ProfileMenuModal({ visible, onClose, selfieUri, onView, onRetake
                 </TouchableOpacity>
               )}
             </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </KeyboardAvoidingView>
-      </SafeAreaView>
+        </KeyboardAvoidingView>
+      </Animated.View>
     </Modal>
   );
 }
+
+const drawer = StyleSheet.create({
+  panel: {
+    position: 'absolute',
+    top: 0, right: 0, bottom: 0,
+    width: DRAWER_W,
+    backgroundColor: Platform.OS === 'ios' ? 'rgba(255,255,255,0.9)' : '#fff',
+    shadowColor: 'rgba(15,7,35,0.6)',
+    shadowOpacity: 0.45,
+    shadowOffset: { width: -8, height: 0 },
+    shadowRadius: 32,
+    elevation: 32,
+    overflow: 'hidden',
+  },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 54,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  back: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingRight: 8 },
+  backText: { color: C.primary, fontSize: 15, fontWeight: '600' },
+  close: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: '#F4EFFF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+});
