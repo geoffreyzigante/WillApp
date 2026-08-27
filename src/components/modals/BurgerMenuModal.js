@@ -112,7 +112,7 @@ export function BurgerMenuModal({
         <View style={styles.drawerInner}>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose} hitSlop={10}>
             <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-              <Path d="M6 6l12 12M18 6L6 18" stroke={isAuthed ? "#FFFFFF" : "#1a0a3e"} strokeWidth={2.4} strokeLinecap="round" />
+              <Path d="M6 6l12 12M18 6L6 18" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" />
             </Svg>
           </TouchableOpacity>
 
@@ -201,9 +201,20 @@ export function BurgerMenuModal({
               </>
             ) : (
               <>
-                <View style={styles.header}>
-                  <Icon.Logo width={62} color={C.primary} />
-                </View>
+                {/* Meme bandeau qu en connecte : il porte la promesse au lieu
+                    d un logo pose sur du vide. */}
+                <LinearGradient
+                  colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.hero}
+                >
+                  <View style={{ marginBottom: 12 }}>
+                    <Icon.Logo width={62} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.heroName}>Retrouve tes photos{'\n'}de course</Text>
+                  <Text style={styles.heroStatus}>Un selfie suffit.</Text>
+                </LinearGradient>
 
                 <View style={styles.authSection}>
                   <TouchableOpacity style={styles.ctaPrimary} onPress={fire(onOpenAuthLogin)}>
@@ -266,13 +277,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     zIndex: 2,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingVertical: 4,
-    paddingBottom: 8,
-  },
   link: {
     paddingVertical: 8,
     paddingHorizontal: 8,
@@ -283,7 +287,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  authSection: { gap: 10, paddingTop: 6 },
+  authSection: { gap: 10, paddingTop: 16 },
 
   // ── Direction C : bandeau de marque ──────────────────────────────
   // Deborde le padding du tiroir (20 lateral, 44 haut) pour toucher les
@@ -319,12 +323,13 @@ const styles = StyleSheet.create({
   },
 
   menuRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 11,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 12,
   },
+  // Icones nues : la pastille violette ajoutait un aplat par ligne, donc
+  // cinq blocs de couleur pour cinq mots. La largeur fixe suffit a aligner.
   menuIcon: {
-    width: 34, height: 34, borderRadius: 11,
-    backgroundColor: '#EDE7FF',
+    width: 26,
     alignItems: 'center', justifyContent: 'center',
   },
   menuLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
