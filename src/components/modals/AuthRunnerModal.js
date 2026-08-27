@@ -22,17 +22,20 @@ import { API_URL } from '../../constants/api';
 import { passwordStrength } from '../../utils/passwordStrength';
 
 const T = {
-  bg: '#f6f5fa',
-  surface: '#ffffff',
-  borderField: '#eae5f5',
+  bg: '#ffffff',
+  surface: '#F5F3FA',
+  surfaceFocus: '#EDE7FF',
+  borderField: 'transparent',
   borderCheckbox: '#d9cef4',
-  primary: '#7c3aed',
+  primary: '#7B2FFF',
   primaryDark: '#6d28d9',
   textStrong: '#221c30',
   textBody: '#5a5468',
   textMuted: '#8b83a0',
-  textLabel: '#a89fbd',
-  placeholder: '#a29bb2',
+  textLabel: '#3F3F46',
+  textTab: '#9A93A8',
+  rule: '#E7E4EE',
+  placeholder: '#A89CB8',
   closeBg: '#ece9f4',
   progressEmpty: '#e2ddef',
   hintOptional: '#a49cb6',
@@ -117,7 +120,6 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [dobInput, setDobInput] = useState('');
   const [cguAccepted, setCguAccepted] = useState(false);
-  const [biometricsConsent, setBiometricsConsent] = useState(false);
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -133,7 +135,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
 
   const reset = () => {
     setEmail(''); setPassword(''); setFirstName(''); setLastName('');
-    setDateOfBirth(''); setDobInput(''); setCguAccepted(false); setBiometricsConsent(false);
+    setDateOfBirth(''); setDobInput(''); setCguAccepted(false);
     setPasswordConfirm('');
     setError(''); setBusy(false); setForgotEmailSent(false); setShowPassword(false);
   };
@@ -176,7 +178,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
       const url = mode === 'login' ? '/runner/login' : '/runner/register';
       const body = mode === 'login'
         ? { email, password }
-        : { email, password, firstName, lastName, dateOfBirth, biometricsConsent };
+        : { email, password, firstName, lastName, dateOfBirth };
       const r = await fetch(`${API_URL}${url}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -196,21 +198,9 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
     }
   };
 
-  const title = mode === 'login' ? 'Me reconnecter'
-    : mode === 'forgot' ? 'Mot de passe oublié'
-    : 'Crée ton compte';
-  const subtitle = mode === 'login' ? 'Content de te revoir.'
-    : mode === 'forgot' ? "On t'envoie un lien par email pour le réinitialiser."
-    : "On commence par l'essentiel.";
   const submitLabel = mode === 'login' ? 'Se connecter'
     : mode === 'forgot' ? (forgotEmailSent ? 'Email envoyé' : 'Recevoir le lien')
-    : 'Continuer';
-  const switchLabel = mode === 'forgot' ? '← Retour à la connexion'
-    : mode === 'login' ? 'S\'inscrire'
-    : 'Se connecter';
-  const switchLead = mode === 'forgot' ? ''
-    : mode === 'login' ? "Pas encore de compte ? "
-    : 'Déjà un compte ? ';
+    : 'Créer mon compte';
 
   return (
     <Modal visible={visible} onRequestClose={onClose} animationType="slide" presentationStyle="fullScreen">
@@ -221,35 +211,51 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 28, paddingTop: 20, paddingBottom: 44 }}
           >
-            {/* Header : close X + step label */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+            {/* Header : croix seule. Le decompte d etapes et la barre de
+                progression disparaissent — le web n en a pas, et l etape 2
+                (le selfie) s annonce d elle-meme. */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
               <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: T.closeBg, alignItems: 'center', justifyContent: 'center' }}>
                 <Text style={{ color: '#4a4458', fontSize: 22, lineHeight: 24 }}>✕</Text>
               </TouchableOpacity>
-              {mode === 'register' && (
-                <Text style={{ fontSize: 13, fontWeight: '600', color: T.textMuted }}>Étape 1 sur 2</Text>
-              )}
             </View>
 
-            {/* Progress bar (register uniquement) */}
-            {mode === 'register' && (
-              <View style={{ flexDirection: 'row', gap: 6, marginBottom: 22 }}>
-                <View style={{ flex: 1, height: 5, borderRadius: 999, backgroundColor: T.primary }} />
-                <View style={{ flex: 1, height: 5, borderRadius: 999, backgroundColor: T.progressEmpty }} />
+            {/* Titre centre, AVEstiana violet, comme le modal du site. */}
+            <Text style={{
+              fontFamily: 'AVEstiana', fontStyle: 'normal',
+              fontSize: 30, color: T.primary, textAlign: 'center', marginBottom: 20,
+            }}>
+              {mode === 'forgot' ? 'Mot de passe oublié' : 'Connexion'}
+            </Text>
+
+            {/* Connexion / Inscription : onglets textuels soulignes. */}
+            {mode !== 'forgot' && (
+              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 30, borderBottomWidth: 1, borderBottomColor: T.rule, marginBottom: 22 }}>
+                {[['login', 'Connexion'], ['register', 'Inscription']].map(([cle, libelle]) => {
+                  const actif = mode === cle;
+                  return (
+                    <TouchableOpacity
+                      key={cle}
+                      onPress={() => { setMode(cle); setError(''); }}
+                      style={{
+                        paddingTop: 4, paddingBottom: 12,
+                        borderBottomWidth: 3,
+                        borderBottomColor: actif ? T.primary : 'transparent',
+                        marginBottom: -1,
+                      }}
+                    >
+                      <Text style={{ fontSize: 17, fontWeight: actif ? '700' : '500', color: actif ? '#1A1426' : T.textTab }}>
+                        {libelle}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
 
-            {/* Titre + sous-titre */}
-            <View style={{ marginBottom: 22 }}>
-              <Text style={{ fontSize: 27, fontWeight: '700', color: T.textStrong, letterSpacing: -0.5 }}>{title}</Text>
-              <Text style={{ fontSize: 14, color: T.textMuted, marginTop: 4 }}>{subtitle}</Text>
-            </View>
-
             {mode === 'register' && (
               <>
-                {/* Section : Ton identité */}
-                <Text style={sectionLabelStyle}>Ton identité</Text>
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
                   <FloatingField label="Prénom" style={{ flex: 1 }}>
                     <TextInput
                       placeholder="Léa" placeholderTextColor={T.placeholder}
@@ -268,7 +274,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
                   </FloatingField>
                 </View>
                 {/* Date de naissance : saisie clavier JJ/MM/AAAA avec masque progressif. */}
-                <FloatingField label="Date de naissance" style={{ marginBottom: 22 }}>
+                <FloatingField label="Date de naissance" style={{ marginBottom: 14 }}>
                   <TextInput
                     placeholder="JJ/MM/AAAA" placeholderTextColor={T.placeholder}
                     value={dobInput}
@@ -282,16 +288,13 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
                     style={fieldStyles.input}
                   />
                 </FloatingField>
-
-                {/* Section : Tes accès */}
-                <Text style={sectionLabelStyle}>Tes accès</Text>
               </>
             )}
 
             {/* Email — commun à tous les modes */}
-            <FloatingField label="Email" style={{ marginBottom: 12 }}>
+            <FloatingField label="Email" style={{ marginBottom: 14 }}>
               <TextInput
-                placeholder="lea.martin@email.com" placeholderTextColor={T.placeholder}
+                placeholder="willy@exemple.fr" placeholderTextColor={T.placeholder}
                 value={email} onChangeText={setEmail}
                 keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
                 textContentType="emailAddress" autoComplete="email"
@@ -301,21 +304,28 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
 
             {/* Mot de passe (pas en mode forgot) : container floating + input flex + eye toggle */}
             {mode !== 'forgot' && (
-              <View style={[fieldStyles.container, { marginBottom: 12, flexDirection: 'row', alignItems: 'flex-end', gap: 8 }]}>
-                <View style={{ flex: 1 }}>
+              <View style={{ marginBottom: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
                   <Text style={fieldStyles.label}>Mot de passe</Text>
+                  {mode === 'login' && (
+                    <TouchableOpacity onPress={() => { setMode('forgot'); setError(''); setForgotEmailSent(false); }} hitSlop={8}>
+                      <Text style={{ color: T.primary, fontSize: 14, fontWeight: '500', marginBottom: 7 }}>Mot de passe oublié ?</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <View style={{ position: 'relative', justifyContent: 'center' }}>
                   <TextInput
                     placeholder="••••••••" placeholderTextColor={T.placeholder}
                     value={password} onChangeText={setPassword}
                     secureTextEntry={!showPassword}
                     textContentType={mode === 'register' ? 'newPassword' : 'password'}
                     autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-                    style={fieldStyles.input}
+                    style={[fieldStyles.input, { paddingRight: 46 }]}
                   />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={8} style={{ position: 'absolute', right: 12, width: 30, height: 30, alignItems: 'center', justifyContent: 'center' }}>
+                    <EyeIcon open={showPassword} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={8} style={{ width: 30, height: 30, alignItems: 'center', justifyContent: 'center' }}>
-                  <EyeIcon open={showPassword} />
-                </TouchableOpacity>
               </View>
             )}
 
@@ -334,21 +344,21 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
             {/* Confirmation : n apparait qu une fois le mot de passe commence.
                 La demander d entree fait deux champs vides pour rien. */}
             {mode === 'register' && password ? (
-              <View style={[fieldStyles.container, { marginBottom: 12, flexDirection: 'row', alignItems: 'flex-end', gap: 8 }]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={fieldStyles.label}>Confirme ton mot de passe</Text>
+              <View style={{ marginBottom: 14 }}>
+                <Text style={fieldStyles.label}>Confirme ton mot de passe</Text>
+                <View style={{ position: 'relative', justifyContent: 'center' }}>
                   <TextInput
                     placeholder="••••••••" placeholderTextColor={T.placeholder}
                     value={passwordConfirm} onChangeText={setPasswordConfirm}
                     secureTextEntry={!showPassword}
                     textContentType="newPassword"
                     autoComplete="new-password"
-                    style={fieldStyles.input}
+                    style={[fieldStyles.input, { paddingRight: 46 }]}
                   />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={8} style={{ position: 'absolute', right: 12, width: 30, height: 30, alignItems: 'center', justifyContent: 'center' }}>
+                    <EyeIcon open={showPassword} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={8} style={{ width: 30, height: 30, alignItems: 'center', justifyContent: 'center' }}>
-                  <EyeIcon open={showPassword} />
-                </TouchableOpacity>
               </View>
             ) : null}
             {mode === 'register' && password && passwordConfirm ? (
@@ -359,16 +369,6 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
                 {passwordConfirm === password ? 'Les mots de passe correspondent' : 'Les mots de passe ne correspondent pas'}
               </Text>
             ) : null}
-
-            {/* Mot de passe oublié ? (login) */}
-            {mode === 'login' && (
-              <TouchableOpacity
-                onPress={() => { setMode('forgot'); setError(''); setForgotEmailSent(false); }}
-                style={{ alignSelf: 'flex-end', paddingVertical: 6, marginTop: 4, marginBottom: 8 }}
-              >
-                <Text style={{ color: T.primary, fontSize: 13, fontWeight: '600' }}>Mot de passe oublié ?</Text>
-              </TouchableOpacity>
-            )}
 
             {/* Cases à cocher (register uniquement) */}
             {mode === 'register' && (
@@ -386,19 +386,6 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
                     <Text onPress={() => Linking.openURL('https://will-app.com/cgu')} style={{ color: T.primary, fontWeight: '600' }}>CGU</Text>
                     {' '}et la{' '}
                     <Text onPress={() => Linking.openURL('https://will-app.com/confidentialite')} style={{ color: T.primary, fontWeight: '600' }}>politique de confidentialité</Text>.
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setBiometricsConsent(!biometricsConsent)}
-                  activeOpacity={0.7}
-                  style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}
-                >
-                  <View style={[checkboxStyles.box, biometricsConsent && checkboxStyles.boxOn]}>
-                    {biometricsConsent && <CheckIcon />}
-                  </View>
-                  <Text style={checkboxStyles.text}>
-                    J'autorise Will à utiliser mon selfie pour retrouver mes photos.{' '}
-                    <Text style={{ color: T.hintOptional }}>Optionnel.</Text>
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -423,15 +410,11 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
                 style={{
                   width: '100%',
                   backgroundColor: T.primary,
-                  paddingVertical: 17,
-                  borderRadius: 14,
+                  height: 50,
+                  borderRadius: 12,
                   alignItems: 'center',
+                  justifyContent: 'center',
                   opacity: (busy || (mode === 'forgot' && forgotEmailSent)) ? 0.6 : 1,
-                  shadowColor: T.primary,
-                  shadowOffset: { width: 0, height: 14 },
-                  shadowOpacity: 0.35,
-                  shadowRadius: 30,
-                  elevation: 6,
                 }}
               >
                 {busy
@@ -439,23 +422,16 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
                   : <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{submitLabel}</Text>}
               </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={() => {
-                  if (mode === 'forgot') { setMode('login'); }
-                  else { setMode(mode === 'login' ? 'register' : 'login'); }
-                  setError('');
-                  setForgotEmailSent(false);
-                }}
-                style={{ paddingVertical: 4 }}
-              >
-                {mode === 'forgot' ? (
-                  <Text style={{ fontSize: 14, color: T.textMuted }}>{switchLabel}</Text>
-                ) : (
-                  <Text style={{ fontSize: 14, color: T.textMuted }}>
-                    {switchLead}<Text style={{ color: T.primary, fontWeight: '600' }}>{switchLabel}</Text>
-                  </Text>
-                )}
-              </TouchableOpacity>
+              {/* Seul le mode "oubli" garde un lien de retour : la bascule
+                  connexion / inscription passe par les onglets. */}
+              {mode === 'forgot' && (
+                <TouchableOpacity
+                  onPress={() => { setMode('login'); setError(''); setForgotEmailSent(false); }}
+                  style={{ paddingVertical: 4 }}
+                >
+                  <Text style={{ fontSize: 14, color: T.textMuted }}>← Retour à la connexion</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -473,30 +449,27 @@ const sectionLabelStyle = {
   marginBottom: 10,
 };
 
+// Champ aligne sur le web : le libelle vit au-dessus, en gris fonce, et
+// l input est un aplat plat sans bordure. Plus de carte blanche cerclee.
 const fieldStyles = {
   container: {
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.borderField,
-    borderRadius: 14,
-    paddingTop: 9,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
+    backgroundColor: 'transparent',
   },
   label: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '500',
     color: T.textLabel,
+    marginBottom: 7,
   },
   input: {
-    fontSize: 15,
-    color: T.textStrong,
-    paddingTop: 2,
-    paddingBottom: 0,
-    paddingHorizontal: 0,
+    backgroundColor: T.surface,
+    borderRadius: 14,
+    height: 50,
+    paddingHorizontal: 16,
+    paddingVertical: 0,
     margin: 0,
-    // Height mini pour éviter clip du curseur iOS.
-    minHeight: 20,
+    fontSize: 16,
+    color: T.textStrong,
   },
 };
 
