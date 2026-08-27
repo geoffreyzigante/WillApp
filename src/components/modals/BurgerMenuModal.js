@@ -68,10 +68,23 @@ export function BurgerMenuModal({
   onOpenAuthLogin,
   onOpenAuthSignup,
   onViewSelfie,
+  // Vrai quand un tiroir "compte" est pose par-dessus : les lignes du menu
+  // s effacent alors doucement dessous au lieu d etre coupees net.
+  contenuMasque = false,
   // Tiroirs qui se posent par-dessus le menu (voir App.js) : ils sont montes
   // ICI, dans la meme <Modal>, sinon iOS ne les affiche pas.
   children,
 }) {
+  const contenuOpacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.timing(contenuOpacity, {
+      toValue: contenuMasque ? 0.18 : 1,
+      duration: contenuMasque ? 200 : 260,
+      delay: contenuMasque ? 0 : 60,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [contenuMasque, contenuOpacity]);
   const selfieOk = !!selfieUri && selfieUploadState !== 'failed' && selfieUploadState !== 'uploading';
 
   const slideX = useRef(new Animated.Value(DRAWER_W)).current;
@@ -188,6 +201,7 @@ export function BurgerMenuModal({
                   </Text>
                 </LinearGradient>
 
+                <Animated.View style={{ flex: 1, opacity: contenuOpacity }}>
                 <MenuRow
                   icon={<Icon.Photos size={19} color={C.primary} />}
                   label="Mes photos"
@@ -235,6 +249,7 @@ export function BurgerMenuModal({
                 <TouchableOpacity style={styles.link} onPress={fire(onLogout)}>
                   <Text style={styles.linkMutedText}>Se déconnecter</Text>
                 </TouchableOpacity>
+                </Animated.View>
               </>
             ) : (
               <>

@@ -8072,6 +8072,7 @@ export default function App() {
         onOpenAuthLogin={() => { setAuthInitialMode('login'); setAuthModalVisible(true); }}
         onOpenAuthSignup={() => { setAuthInitialMode('register'); setAuthModalVisible(true); }}
         onViewSelfie={() => { setSelfieViewerFrom('menu'); setSelfieViewer(true); }}
+        contenuMasque={profileMenu || organizerProfileMenu}
       >
         {/* iOS refuse d afficher un <Modal> presente au-dessus d un autre
             quand il est monte a cote dans l arbre : les tiroirs "Mon compte"

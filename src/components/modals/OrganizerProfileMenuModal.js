@@ -25,21 +25,25 @@ const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
 
 export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerSession, organizerApiFetch, onLogout, onUpdate, onDeleteAccount }) {
-  // Superposition : le menu reste ouvert dessous, cette carte se pose
-  // par-dessus en venant de la droite et repart du meme cote pour le
-  // redecouvrir. D ou le montage retarde — sans lui, <Modal visible={false}>
-  // demonte avant que l animation de sortie ait joue, et la carte
-  // disparaitrait d un coup.
+  // Superposition adoucie : l entete (bandeau violet + barre retour) ne
+  // bouge pas — il est deja violet dans le menu, donc il se fond d une vue a
+  // l autre. Seul le contenu glisse, et le panneau se substitue en fondu :
+  // pendant ces 220 ms on voit les lignes du menu perdre leur opacite
+  // dessous, ce qui rend la substitution lisible sans a-coup.
   const [monte, setMonte] = useState(visible);
-  const slideX = useRef(new Animated.Value(DRAWER_W)).current;
+  const panelOpacity = useRef(new Animated.Value(0)).current;
+  const contentX = useRef(new Animated.Value(36)).current;
+  const contentOpacity = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (visible) setMonte(true);
     Animated.parallel([
-      Animated.timing(slideX, { toValue: visible ? 0 : DRAWER_W, duration: visible ? 260 : 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: visible ? 200 : 180, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(panelOpacity, { toValue: visible ? 1 : 0, duration: visible ? 220 : 200, delay: visible ? 0 : 60, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(contentX, { toValue: visible ? 0 : 36, duration: visible ? 320 : 220, delay: visible ? 60 : 0, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: visible ? 1 : 0, duration: visible ? 240 : 160, delay: visible ? 60 : 0, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: 200, easing: Easing.out(Easing.quad), useNativeDriver: true }),
     ]).start(() => { if (!visible) setMonte(false); });
-  }, [visible, slideX, backdropOpacity]);
+  }, [visible, panelOpacity, contentX, contentOpacity, backdropOpacity]);
 
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -105,7 +109,7 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
 
       <Animated.View
         pointerEvents={visible ? 'auto' : 'none'}
-        style={[drawer.panel, { transform: [{ translateX: slideX }] }]}
+        style={[drawer.panel, { opacity: panelOpacity }]}
       >
         {Platform.OS === 'ios' ? (
           <BlurView intensity={48} tint="light" style={StyleSheet.absoluteFillObject} />
@@ -150,6 +154,7 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
                 <Text style={drawer.heroStatus} numberOfLines={1}>{profile.email}</Text>
               </LinearGradient>
             ) : null}
+            <Animated.View style={{ flex: 1, opacity: contentOpacity, transform: [{ translateX: contentX }] }}>
 
             {profile && !editing && (
               <View style={drawer.section}>
@@ -251,6 +256,7 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
                 </Text>
               </TouchableOpacity>
             )}
+            </Animated.View>
           </ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
