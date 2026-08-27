@@ -100,7 +100,7 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
             {mode === 'register' && password ? (
               <View style={{ marginTop: -4, marginBottom: 8, paddingHorizontal: 4 }}>
                 <View style={{ flexDirection: 'row', gap: 4, marginBottom: 6 }}>
-                  {[1, 2, 3, 4].map((i) => (
+                  {[1, 2, 3].map((i) => (
                     <View key={i} style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: i <= pwdStrength.score ? pwdStrength.color : '#e9e4f9' }} />
                   ))}
                 </View>

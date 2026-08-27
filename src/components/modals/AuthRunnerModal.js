@@ -118,6 +118,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
   const [dobInput, setDobInput] = useState('');
   const [cguAccepted, setCguAccepted] = useState(false);
   const [biometricsConsent, setBiometricsConsent] = useState(false);
+  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -133,6 +134,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
   const reset = () => {
     setEmail(''); setPassword(''); setFirstName(''); setLastName('');
     setDateOfBirth(''); setDobInput(''); setCguAccepted(false); setBiometricsConsent(false);
+    setPasswordConfirm('');
     setError(''); setBusy(false); setForgotEmailSent(false); setShowPassword(false);
   };
 
@@ -163,6 +165,8 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
     }
     if (mode === 'register') {
       if (!firstName.trim() || !lastName.trim()) { setError('Prénom et nom requis.'); return; }
+      if (password.length < 8) { setError('Mot de passe : 8 caractères minimum.'); return; }
+      if (password !== passwordConfirm) { setError('Les deux mots de passe ne correspondent pas.'); return; }
       if (!dateOfBirth) { setError('Date de naissance requise.'); return; }
       if (ageFromIso(dateOfBirth) < 13) { setError('Tu dois avoir au moins 13 ans.'); return; }
       if (!cguAccepted) { setError("Tu dois accepter les CGU et la politique de confidentialité."); return; }
@@ -319,12 +323,41 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, initialMode = 'lo
             {mode === 'register' && password ? (
               <View style={{ marginTop: 4, marginBottom: 10, paddingHorizontal: 4 }}>
                 <View style={{ flexDirection: 'row', gap: 4, marginBottom: 6 }}>
-                  {[1, 2, 3, 4].map((i) => (
+                  {[1, 2, 3].map((i) => (
                     <View key={i} style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: i <= pwdStrength.score ? pwdStrength.color : '#e9e4f9' }} />
                   ))}
                 </View>
                 <Text style={{ color: pwdStrength.color, fontSize: 11, fontWeight: '600' }}>{pwdStrength.label}</Text>
               </View>
+            ) : null}
+
+            {/* Confirmation : n apparait qu une fois le mot de passe commence.
+                La demander d entree fait deux champs vides pour rien. */}
+            {mode === 'register' && password ? (
+              <View style={[fieldStyles.container, { marginBottom: 12, flexDirection: 'row', alignItems: 'flex-end', gap: 8 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={fieldStyles.label}>Confirme ton mot de passe</Text>
+                  <TextInput
+                    placeholder="••••••••" placeholderTextColor={T.placeholder}
+                    value={passwordConfirm} onChangeText={setPasswordConfirm}
+                    secureTextEntry={!showPassword}
+                    textContentType="newPassword"
+                    autoComplete="new-password"
+                    style={fieldStyles.input}
+                  />
+                </View>
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={8} style={{ width: 30, height: 30, alignItems: 'center', justifyContent: 'center' }}>
+                  <EyeIcon open={showPassword} />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {mode === 'register' && password && passwordConfirm ? (
+              <Text style={{
+                fontSize: 11, fontWeight: '600', marginTop: -6, marginBottom: 10, paddingHorizontal: 4,
+                color: passwordConfirm === password ? '#3BA55D' : '#C5475E',
+              }}>
+                {passwordConfirm === password ? 'Les mots de passe correspondent' : 'Les mots de passe ne correspondent pas'}
+              </Text>
             ) : null}
 
             {/* Mot de passe oublié ? (login) */}
