@@ -8060,6 +8060,8 @@ export default function App() {
         selfieUploadState={selfieUploadState}
         cartTotal={cartGlobalTotal}
         onOpenAccount={() => setProfileMenu(true)}
+        hasOrganizer={!!organizerSession}
+        onOpenOrganizerAccount={() => setOrganizerProfileMenu(true)}
         onOpenMyPhotos={() => setBottomTab('photos')}
         onOpenPanier={() => setPanierModalVisible(true)}
         onOpenOrgRole={handlePickRole}

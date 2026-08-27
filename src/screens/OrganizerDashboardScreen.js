@@ -12,7 +12,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { Icon } from '../components/Icon';
 import { EventCard } from '../components/EventCard';
 import { RefreshableScrollView } from '../components/loaders';
 import { C } from '../constants/colors';
@@ -93,51 +92,13 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
 
   return (
     <RefreshableScrollView onRefresh={reload} style={s.scroll} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-      {/* Header (avatar gauche | bloc orga/photo droit) avec titre centre
-          en absolute pour ne pas etre decale par la difference de largeur
-          entre l avatar (40x40) et le bloc orga/photo (~92). Structure et
-          dimensions strictement identiques au header de PhotosScreen pour
-          que l avatar reste aligne Y/X au pixel pres entre les 2 onglets. */}
-      <View style={[s.headerRow, { position: 'relative' }]}>
-        <View style={s.headerLeft}>
-          <TouchableOpacity
-            hitSlop={10}
-            onPress={onOpenProfile}
-            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-          >
-            <Icon.User size={30} color={C.pinkPill} />
-          </TouchableOpacity>
-        </View>
-        <View style={s.orgToggle}>
-          <TouchableOpacity
-            style={s.orgToggleBtn}
-            onPress={() => onOpenOrgRole?.('organizer')}
-            activeOpacity={0.7}
-            hitSlop={6}
-          >
-            <Icon.GearOrg size={22} color={C.pinkPillFg} />
-          </TouchableOpacity>
-          <View style={s.orgToggleDivider} />
-          <TouchableOpacity
-            style={s.orgToggleBtn}
-            onPress={() => onOpenOrgRole?.('photographer')}
-            activeOpacity={0.7}
-            hitSlop={6}
-          >
-            <Icon.CamOrg size={24} color={C.pinkPillFg} />
-          </TouchableOpacity>
-        </View>
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0, right: 0,
-            top: 12, bottom: 4,
-            alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <Text style={[s.welcome, { color: C.primary, fontSize: 17 }]}>Mes events</Text>
-        </View>
+      {/* Un seul menu par ecran : l entete Will (logo, prenom, burger) est
+          deja pose au-dessus par App.js. La barre avatar + bascule
+          orga/photo faisait doublon — l avatar ouvrait le compte que le
+          burger ouvre deja, et le changement d espace vit maintenant dans
+          "Autres espaces" du menu. Il ne reste que le titre. */}
+      <View style={{ paddingTop: 4, paddingBottom: 6, alignItems: 'center' }}>
+        <Text style={[s.welcome, { color: C.primary, fontSize: 17 }]}>Mes events</Text>
       </View>
 
       <View style={{ height: 14 }} />

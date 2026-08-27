@@ -59,6 +59,8 @@ export function BurgerMenuModal({
   selfieUploadState = 'idle',
   cartTotal = 0,
   onOpenAccount,
+  onOpenOrganizerAccount,
+  hasOrganizer = false,
   onOpenMyPhotos,
   onOpenPanier,
   onOpenOrgRole,
@@ -209,8 +211,16 @@ export function BurgerMenuModal({
                   icon={<Icon.CamOrg size={19} color={C.primary} />}
                   label="Espace photographe"
                   onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}
-                  dernier
+                  dernier={!hasOrganizer}
                 />
+                {hasOrganizer && (
+                  <MenuRow
+                    icon={<Icon.User size={19} color={C.primary} />}
+                    label="Mon compte organisateur"
+                    onPress={fire(onOpenOrganizerAccount)}
+                    dernier
+                  />
+                )}
 
                 <View style={styles.spacer} />
                 <View style={styles.rule} />
