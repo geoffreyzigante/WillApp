@@ -4444,6 +4444,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         setEstimatedParticipants(editEvent.estimated_participants != null ? String(editEvent.estimated_participants) : '');
         setMessage(editEvent.message || '');
         setDistances(Array.isArray(editEvent.distances) ? editEvent.distances.map(d => ({
+          // id (UUID course) preserve : sans lui sanitizeDistances en regenere
+          // un a chaque edition, et le race_distance_id des photos deja
+          // uploadees ne pointe plus sur rien.
+          id: typeof d.id === 'string' ? d.id : undefined,
           label: d.label || '',
           label_only: d.label_only === true,
           km: String(d.km || ''), time: d.time || '', elevation: d.elevation || '',
@@ -4667,13 +4671,17 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         message: message.trim(),
         distances: distances
           .filter(d => d.km)
-          .map(d => ({
-            label: (d.label || '').trim().slice(0, 40),
-            label_only: !!d.label_only,
-            km: parseFloat(d.km) || 0,
-            time: d.time || '',
-            elevation: d.elevation || '',
-          })),
+          .map(d => {
+            const out = {
+              label: (d.label || '').trim().slice(0, 40),
+              label_only: !!d.label_only,
+              km: parseFloat(d.km) || 0,
+              time: d.time || '',
+              elevation: d.elevation || '',
+            };
+            if (typeof d.id === 'string' && d.id.trim()) out.id = d.id.trim();
+            return out;
+          }),
       };
       if (!isEdit) {
         payload.code = code;
@@ -5593,13 +5601,18 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               <View style={{ paddingBottom: editKbHeight }}>
                 <TouchableOpacity
                   onPress={async () => {
-                    const cleaned = distances.filter(d => d.km).map(d => ({
-                      label: (d.label || '').trim().slice(0, 40),
-                      label_only: !!d.label_only,
-                      km: parseFloat(d.km) || 0,
-                      time: d.time || '',
-                      elevation: d.elevation || '',
-                    }));
+                    const cleaned = distances.filter(d => d.km).map(d => {
+                      const out = {
+                        label: (d.label || '').trim().slice(0, 40),
+                        label_only: !!d.label_only,
+                        km: parseFloat(d.km) || 0,
+                        time: d.time || '',
+                        elevation: d.elevation || '',
+                      };
+                      // Meme regle que le payload complet : l id survit a l edition.
+                      if (typeof d.id === 'string' && d.id.trim()) out.id = d.id.trim();
+                      return out;
+                    });
                     if (cleaned.length === 0) { Alert.alert('Au moins une distance requise'); return; }
                     if (!cleaned.every(d => d.km > 0)) { Alert.alert('Distance > 0 requise pour chaque course'); return; }
                     const ok = await savePartial({ distances: cleaned });
