@@ -44,25 +44,33 @@ const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
 
 export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload }) {
-  // Superposition adoucie : l entete (bandeau violet + barre retour) ne
-  // bouge pas — il est deja violet dans le menu, donc il se fond d une vue a
-  // l autre. Seul le contenu glisse, et le panneau se substitue en fondu :
-  // pendant ces 220 ms on voit les lignes du menu perdre leur opacite
-  // dessous, ce qui rend la substitution lisible sans a-coup.
+  // Transition "axe partage" : ce qui part recule vers la gauche en
+  // s effacant, ce qui arrive vient de la droite — la meme grammaire que les
+  // grandes apps iOS. Trois choses jouent ensemble et se recouvrent :
+  //   le panneau se substitue en fondu (260 ms),
+  //   le contenu entre de 28 px avec une echelle a 0,985 (300 ms, decale de
+  //   80 ms pour qu on percoive la profondeur),
+  //   les lignes du menu s effacent dessous pendant ce temps.
+  // Courbes : sortie douce et longue a l aller (0.22,1,0.36,1), plus seche
+  // au retour — un aller-retour symetrique fait mou.
+  const ENTREE = Easing.bezier(0.22, 1, 0.36, 1);
+  const SORTIE = Easing.bezier(0.4, 0, 0.6, 1);
   const [monte, setMonte] = useState(visible);
   const panelOpacity = useRef(new Animated.Value(0)).current;
-  const contentX = useRef(new Animated.Value(36)).current;
+  const contentX = useRef(new Animated.Value(28)).current;
+  const contentScale = useRef(new Animated.Value(0.985)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (visible) setMonte(true);
     Animated.parallel([
-      Animated.timing(panelOpacity, { toValue: visible ? 1 : 0, duration: visible ? 220 : 200, delay: visible ? 0 : 60, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(contentX, { toValue: visible ? 0 : 36, duration: visible ? 320 : 220, delay: visible ? 60 : 0, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(contentOpacity, { toValue: visible ? 1 : 0, duration: visible ? 240 : 160, delay: visible ? 60 : 0, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: 200, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(panelOpacity, { toValue: visible ? 1 : 0, duration: visible ? 260 : 220, delay: visible ? 0 : 80, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
+      Animated.timing(contentX, { toValue: visible ? 0 : 28, duration: visible ? 300 : 200, delay: visible ? 80 : 0, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
+      Animated.timing(contentScale, { toValue: visible ? 1 : 0.985, duration: visible ? 300 : 200, delay: visible ? 80 : 0, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: visible ? 1 : 0, duration: visible ? 220 : 150, delay: visible ? 80 : 0, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
+      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: visible ? 240 : 200, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
     ]).start(() => { if (!visible) setMonte(false); });
-  }, [visible, panelOpacity, contentX, contentOpacity, backdropOpacity]);
+  }, [visible, panelOpacity, contentX, contentScale, contentOpacity, backdropOpacity]);
 
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -184,7 +192,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                   <Text style={drawer.heroStatus}>{profile.email}</Text>
                 </LinearGradient>
               ) : null}
-              <Animated.View style={{ flex: 1, opacity: contentOpacity, transform: [{ translateX: contentX }] }}>
+              <Animated.View style={{ flex: 1, opacity: contentOpacity, transform: [{ translateX: contentX }, { scale: contentScale }] }}>
 
               {/* Bloc Selfie */}
               {profile && (

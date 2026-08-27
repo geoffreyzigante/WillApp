@@ -75,16 +75,31 @@ export function BurgerMenuModal({
   // ICI, dans la meme <Modal>, sinon iOS ne les affiche pas.
   children,
 }) {
+  // Moitie sortante de la transition : les lignes reculent de 16 px et
+  // s effacent completement pendant que la carte compte arrive. Au retour
+  // elles reviennent, decalees de 80 ms — le temps que la carte ait libere
+  // la place.
   const contenuOpacity = useRef(new Animated.Value(1)).current;
+  const contenuX = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(contenuOpacity, {
-      toValue: contenuMasque ? 0.18 : 1,
-      duration: contenuMasque ? 200 : 260,
-      delay: contenuMasque ? 0 : 60,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
-  }, [contenuMasque, contenuOpacity]);
+    const courbe = contenuMasque ? Easing.bezier(0.4, 0, 0.6, 1) : Easing.bezier(0.22, 1, 0.36, 1);
+    Animated.parallel([
+      Animated.timing(contenuOpacity, {
+        toValue: contenuMasque ? 0 : 1,
+        duration: contenuMasque ? 200 : 280,
+        delay: contenuMasque ? 0 : 80,
+        easing: courbe,
+        useNativeDriver: true,
+      }),
+      Animated.timing(contenuX, {
+        toValue: contenuMasque ? -16 : 0,
+        duration: contenuMasque ? 240 : 300,
+        delay: contenuMasque ? 0 : 80,
+        easing: courbe,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [contenuMasque, contenuOpacity, contenuX]);
   const selfieOk = !!selfieUri && selfieUploadState !== 'failed' && selfieUploadState !== 'uploading';
 
   const slideX = useRef(new Animated.Value(DRAWER_W)).current;
@@ -201,7 +216,7 @@ export function BurgerMenuModal({
                   </Text>
                 </LinearGradient>
 
-                <Animated.View style={{ flex: 1, opacity: contenuOpacity }}>
+                <Animated.View style={{ flex: 1, opacity: contenuOpacity, transform: [{ translateX: contenuX }] }}>
                 <MenuRow
                   icon={<Icon.Photos size={19} color={C.primary} />}
                   label="Mes photos"
