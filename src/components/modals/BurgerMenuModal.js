@@ -209,11 +209,10 @@ export function BurgerMenuModal({
                   end={{ x: 1, y: 1 }}
                   style={styles.hero}
                 >
-                  <View style={{ marginBottom: 12 }}>
+                  <View style={{ marginBottom: 14 }}>
                     <Icon.Logo width={62} color="#FFFFFF" />
                   </View>
-                  <Text style={styles.heroName}>Retrouve tes photos{'\n'}de course</Text>
-                  <Text style={styles.heroStatus}>Un selfie suffit.</Text>
+                  <Text style={styles.heroName}>Un selfie suffit !</Text>
                 </LinearGradient>
 
                 <View style={styles.authSection}>
@@ -253,8 +252,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: DRAWER_W,
     backgroundColor: Platform.OS === 'ios' ? 'rgba(255,255,255,0.82)' : '#fff',
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(255,255,255,0.4)',
     shadowColor: 'rgba(15,7,35,0.6)',
     shadowOpacity: 0.45,
     shadowOffset: { width: -8, height: 0 },
@@ -293,7 +290,7 @@ const styles = StyleSheet.create({
   hero: {
     marginHorizontal: -20,
     marginTop: -48,
-    paddingTop: 58,
+    paddingTop: 74,
     paddingHorizontal: 20,
     paddingBottom: 22,
     marginBottom: 6,
