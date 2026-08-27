@@ -8064,8 +8064,6 @@ export default function App() {
         onOpenPanier={() => setPanierModalVisible(true)}
         onOpenOrgRole={handlePickRole}
         onLogout={logoutRunner}
-        onDeleteFaceData={deleteFaceData}
-        onDeleteAccount={deleteRunnerAccount}
         onOpenAuthLogin={() => { setAuthInitialMode('login'); setAuthModalVisible(true); }}
         onOpenAuthSignup={() => { setAuthInitialMode('register'); setAuthModalVisible(true); }}
         onViewSelfie={() => setSelfieViewer(true)}

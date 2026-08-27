@@ -34,8 +34,6 @@ export function BurgerMenuModal({
   onOpenPanier,
   onOpenOrgRole,
   onLogout,
-  onDeleteFaceData,
-  onDeleteAccount,
   onOpenAuthLogin,
   onOpenAuthSignup,
   onViewSelfie,
@@ -104,7 +102,7 @@ export function BurgerMenuModal({
             <View style={styles.header}>
               {isAuthed && runnerFirstName ? (
                 <Text style={styles.greeting} numberOfLines={1}>
-                  Hello {runnerFirstName}
+                  Salut {runnerFirstName}
                 </Text>
               ) : (
                 <Icon.Logo width={62} color={C.primary} />
@@ -157,28 +155,10 @@ export function BurgerMenuModal({
               </TouchableOpacity>
             ) : null}
 
-            <View style={styles.nav}>
-              <TouchableOpacity style={styles.link} onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))}>
-                <Text style={styles.linkRoseText}>Espace organisateur</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.link} onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}>
-                <Text style={styles.linkRoseText}>Espace photographe</Text>
-              </TouchableOpacity>
-            </View>
-
-            {isAuthed ? (
-              <View style={styles.actionsSection}>
-                <TouchableOpacity style={styles.link} onPress={fire(onLogout)}>
-                  <Text style={styles.linkMutedText}>Se déconnecter</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.link} onPress={fire(onDeleteFaceData)}>
-                  <Text style={styles.linkDangerText}>Supprimer mes données faciales</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.link} onPress={fire(onDeleteAccount)}>
-                  <Text style={styles.linkDangerText}>Supprimer mon compte</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
+            {/* Deconnecte : les deux actions principales d abord. Les espaces
+                organisateur et photographe concernent une poignee d usagers,
+                ils passaient pourtant en tete. */}
+            {!isAuthed && (
               <View style={styles.authSection}>
                 <TouchableOpacity style={styles.ctaPrimary} onPress={fire(onOpenAuthLogin)}>
                   <Text style={styles.ctaPrimaryText}>Se connecter</Text>
@@ -188,6 +168,28 @@ export function BurgerMenuModal({
                 </TouchableOpacity>
               </View>
             )}
+
+            <View style={[styles.nav, !isAuthed && styles.navApresCta]}>
+              <TouchableOpacity style={styles.link} onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))}>
+                <Text style={styles.linkRoseText}>Espace organisateur</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.link} onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}>
+                <Text style={styles.linkRoseText}>Espace photographe</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* "Supprimer mes donnees faciales" et "Supprimer mon compte" ne
+                sont plus ici : deux actions irreversibles a un doigt d un
+                tiroir qu on ouvre dix fois par jour, dans la meme teinte que
+                les liens de navigation. Elles vivent dans "Mon compte", ou
+                elles existaient deja. */}
+            {isAuthed ? (
+              <View style={styles.actionsSection}>
+                <TouchableOpacity style={styles.link} onPress={fire(onLogout)}>
+                  <Text style={styles.linkMutedText}>Se déconnecter</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </ScrollView>
         </View>
       </Animated.View>
@@ -236,8 +238,10 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontFamily: 'AVEstiana',
+    // #c9beed sur blanc donnait un contraste de 1,9:1, sous le minimum
+    // lisible. Le violet de marque passe a 5,6:1.
     fontSize: 26,
-    color: '#c9beed',
+    color: C.primary,
     letterSpacing: -0.2,
     lineHeight: 28,
   },
@@ -332,12 +336,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  linkDangerText: {
-    color: '#6c5b8c',
-    fontSize: 13,
-    fontWeight: '400',
-  },
   authSection: { gap: 10, paddingTop: 6 },
+  navApresCta: {
+    marginTop: 22,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(26,10,62,0.08)',
+  },
   ctaPrimary: {
     paddingVertical: 14,
     borderRadius: 14,
