@@ -41,7 +41,7 @@ import { API_URL } from '../constants/api';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
 
-export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerApiFetch, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, onRefreshFavorites, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload, headerH = 0 }) {
+export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerApiFetch, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, onRefreshFavorites, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload, headerH = 0, onNonVuesChange }) {
   const scrollRef = useRef(null);
   const [showBackTop, setShowBackTop] = useState(false);
   const backTopOpacity = useRef(new Animated.Value(0)).current;
@@ -376,20 +376,39 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
   // leurs URLs, sans filtre de visibilite — c est exactement ce qu il
   // fallait, et c est un seul appel pour tous les events.
 
+  // Photos de moi arrivees depuis la derniere visite de cet onglet. C est
+  // cette valeur qui alimente la pastille de l onglet et celle de l icone
+  // de l app.
+  //
+  // Avant, un effet remontait "derniere photo vue" au maximum des le
+  // chargement : tout etait donc marque comme vu avant meme que l ecran
+  // soit regarde, et le compteur valait toujours zero. On ne marque plus
+  // comme vu qu au moment ou l onglet est REELLEMENT affiche.
+  const [nonVues, setNonVues] = useState(0);
   useEffect(() => {
-    if (baselineSetRef.current || !lastSeenLoadedRef.current || loading) return;
-    if (photos.length === 0) return;
-    baselineSetRef.current = true;
-    let maxTs = 0;
+    if (!lastSeenLoadedRef.current || loading) return;
+    if (isActive) {
+      let maxTs = 0;
+      for (const p of photos) {
+        const ts = extractBurstTs(p.id);
+        if (ts > maxTs) maxTs = ts;
+      }
+      if (maxTs > lastSeenRef.current) {
+        lastSeenRef.current = maxTs;
+        AsyncStorage.setItem('@will_last_seen_burst_ts', String(maxTs)).catch(() => {});
+      }
+      setNonVues(0);
+      return;
+    }
+    let n = 0;
     for (const p of photos) {
-      const ts = extractBurstTs(p.id);
-      if (ts > maxTs) maxTs = ts;
+      if (!p._isPersonalMatch) continue;
+      if (extractBurstTs(p.id) > lastSeenRef.current) n++;
     }
-    if (maxTs > lastSeenRef.current) {
-      lastSeenRef.current = maxTs;
-      AsyncStorage.setItem('@will_last_seen_burst_ts', String(maxTs)).catch(() => {});
-    }
-  }, [loading, photos]);
+    setNonVues(n);
+  }, [loading, photos, isActive]);
+
+  useEffect(() => { onNonVuesChange?.(nonVues); }, [nonVues, onNonVuesChange]);
 
   useEffect(() => { refreshAll(); }, [refreshAll]);
 

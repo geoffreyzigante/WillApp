@@ -6191,6 +6191,14 @@ export default function App() {
   // dans le HomeScreen (utile quand on est deja sur l onglet).
   const [homeScrollSignal, setHomeScrollSignal] = useState(0);
   const [photosUnread, setPhotosUnread] = useState(0); // E3 — pastille rouge onglet Photos
+  // Pastille sur l icone de l app (springboard iOS / launcher Android). Elle
+  // suit exactement le compteur de l onglet Photos : ce que le coureur voit
+  // sur son ecran d accueil est ce qu il trouvera en ouvrant l app.
+  // Silencieux si les notifications ne sont pas autorisees — la pastille
+  // fait partie de cette autorisation.
+  useEffect(() => {
+    Notifications.setBadgeCountAsync(photosUnread).catch(() => {});
+  }, [photosUnread]);
   const [events, setEvents] = useState([]);
   const [openedEvent, setOpenedEvent] = useState(null);
   const [orgModal, setOrgModal] = useState(false);
@@ -7725,6 +7733,7 @@ export default function App() {
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
                     onOpenProfile={() => setBurgerMenu(true)}
+                    onNonVuesChange={setPhotosUnread}
                     follows={follows}
                     runnerApiFetch={runnerApiFetch}
                     runnerUserId={runnerSession?.profile?.userId}
