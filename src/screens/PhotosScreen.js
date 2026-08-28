@@ -34,7 +34,6 @@ import { EtatVidePhotos } from '../components/EtatVidePhotos';
 import { SpinningLoader, RefreshableScrollView } from '../components/loaders';
 import { C, TYPE_COLORS, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
-import { API_URL } from '../constants/api';
 import { extractBurstTs, extractIdx, detectPhotoExtension } from '../utils/photo';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
@@ -50,9 +49,12 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       useNativeDriver: true,
     }).start();
   }, [showBackTop, backTopOpacity]);
+  const chargerPlusRef = useRef(null);
   const onScrollWatch = useCallback((e) => {
-    const y = e.nativeEvent.contentOffset.y;
-    setShowBackTop(y > 400);
+    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+    setShowBackTop(contentOffset.y > 400);
+    const reste = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    if (reste < 900) chargerPlusRef.current?.();
   }, []);
   const photosCacheKey = runnerUserId ? `@will_photos_cache_${runnerUserId}` : '@will_photos_cache';
   const knownEventsCacheKey = runnerUserId ? `@will_known_events_${runnerUserId}` : null;
@@ -184,14 +186,24 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
 
   useEffect(() => { refreshKnownEvents(); }, [refreshKnownEvents]);
 
+  // photoFavoritesSet et eventTintMap changent d identite a chaque
+  // rafraichissement des favoris ou des events. En dependance de refreshAll,
+  // ils relancaient TOUTES les requetes de galerie a chaque fois. On les lit
+  // par reference : la valeur reste a jour, l identite de refreshAll non.
+  const favorisRef = useRef(photoFavoritesSet);
+  useEffect(() => { favorisRef.current = photoFavoritesSet; }, [photoFavoritesSet]);
+  const tintRef = useRef(eventTintMap);
+  useEffect(() => { tintRef.current = eventTintMap; }, [eventTintMap]);
+
   const refreshAll = useCallback(async () => {
     const queryList = eventsToQuery;
     if (queryList.length === 0 || !runnerApiFetch) {
       // Si pas d events suivis mais des favs : aller chercher les events
       // depuis les favs pour ne pas afficher empty alors qu il y a des favs.
       const favEventCodes = new Set();
-      if (photoFavoritesSet && photoFavoritesSet.size > 0) {
-        photoFavoritesSet.forEach((key) => {
+      const favoris = favorisRef.current;
+      if (favoris && favoris.size > 0) {
+        favoris.forEach((key) => {
           const m = String(key || '').match(/^([^\/]+)\//);
           if (m) favEventCodes.add(m[1]);
         });
@@ -203,10 +215,18 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         return [];
       }
     }
+    // Une seule lecture pour tous les events : la boucle await faisait un
+    // aller-retour AsyncStorage par event suivi, en serie, avant meme la
+    // premiere requete reseau.
     const started = {};
-    for (const code of queryList) {
-      const v = await AsyncStorage.getItem(`@will_follow_started_${code}`);
-      started[code] = v ? parseInt(v, 10) : 0;
+    if (queryList.length > 0) {
+      const paires = await AsyncStorage.multiGet(
+        queryList.map((code) => `@will_follow_started_${code}`),
+      ).catch(() => []);
+      for (const [cle, valeur] of paires || []) {
+        const code = String(cle).replace('@will_follow_started_', '');
+        started[code] = valeur ? parseInt(valeur, 10) : 0;
+      }
     }
     // Fetch en parallele :
     //  - /personal-gallery/{code} pour tous les events suivis (photos
@@ -238,7 +258,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     const seenIds = new Set();
     let searching = false;
     for (const { code, photos: list, paid } of results) {
-      const tint = eventTintMap[code] || TYPE_COLORS.autre;
+      const tint = tintRef.current[code] || TYPE_COLORS.autre;
       if (list.length === 0) {
         const startedTs = started[code];
         const elapsed = startedTs ? (now - startedTs) : Infinity;
@@ -266,7 +286,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       seenIds.add(p.key);
       const m = String(p.key).match(/^([^\/]+)\//);
       const eventCode = m ? m[1] : '';
-      const tint = eventTintMap[eventCode] || TYPE_COLORS.autre;
+      const tint = tintRef.current[eventCode] || TYPE_COLORS.autre;
       merged.push({
         uri: p.url || '',
         thumbUri: p.thumb_url || p.url || '',
@@ -300,62 +320,13 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       ExpoImage.prefetch(aPrechauffer, 'memory-disk').catch(() => {});
     }
     return merged;
-  }, [eventsToQuery, runnerApiFetch, eventTintMap, photosCacheKey, photoFavoritesSet]);
+  }, [eventsToQuery, runnerApiFetch, photosCacheKey]);
 
-  const favExtraFetchedRef = useRef(new Set());
-  useEffect(() => {
-    if (!photoFavoritesSet || photoFavoritesSet.size === 0) return;
-    const favEventCodes = new Set();
-    photoFavoritesSet.forEach((key) => {
-      const m = String(key || '').match(/^([^\/]+)\//);
-      if (m) favEventCodes.add(m[1]);
-    });
-    // On fetch /list-public pour TOUS les events qui ont au moins un fav,
-    // pas seulement les events non-suivis. /personal-gallery ne retourne que
-    // les photos identifiees au selfie, donc un fav sur une photo "non-moi"
-    // (ami, paysage) ne sera jamais dans personal-gallery -> il faut le
-    // chopper via list-public.
-    const missing = [...favEventCodes].filter((c) => !favExtraFetchedRef.current.has(c));
-    if (missing.length === 0) return;
-    missing.forEach((c) => favExtraFetchedRef.current.add(c));
-    Promise.all(missing.map(async (code) => {
-      try {
-        const r = await fetch(`${API_URL}/list-public/${encodeURIComponent(code)}`);
-        if (!r.ok) return { code, photos: [] };
-        const d = await r.json();
-        return { code, photos: Array.isArray(d.photos) ? d.photos : [] };
-      } catch { return { code, photos: [] }; }
-    })).then((results) => {
-      setPhotos((current) => {
-        const existingIds = new Set(current.map((p) => p.id));
-        const extras = [];
-        for (const { code, photos: list } of results) {
-          const tint = eventTintMap[code] || TYPE_COLORS.autre;
-          for (const p of list) {
-            if (!photoFavoritesSet.has(p.key)) continue;
-            if (existingIds.has(p.key)) continue;
-            extras.push({
-              uri: p.url || '',
-              thumbUri: p.thumb_url || p.url || '',
-              id: p.key,
-              tint,
-              paid: false,
-              eventCode: code,
-              _isPersonalMatch: false,
-            });
-          }
-        }
-        if (extras.length === 0) return current;
-        const merged = [...current, ...extras];
-        merged.sort((a, b) => {
-          const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
-          if (dt !== 0) return dt;
-          return extractIdx(b.id) - extractIdx(a.id);
-        });
-        return merged;
-      });
-    });
-  }, [photoFavoritesSet, eventsToQuery, eventTintMap]);
+  // Supprime : on telechargeait la galerie publique COMPLETE de chaque event
+  // ayant au moins un favori, pour n en garder que les quelques photos
+  // favorites. /runner/photo-favorites-full les renvoie deja toutes, avec
+  // leurs URLs, sans filtre de visibilite — c est exactement ce qu il
+  // fallait, et c est un seul appel pour tous les events.
 
   useEffect(() => {
     if (baselineSetRef.current || !lastSeenLoadedRef.current || loading) return;
@@ -374,17 +345,39 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
 
   useEffect(() => { refreshAll(); }, [refreshAll]);
 
+  // Indexation en cours : on reinterroge, mais de moins en moins souvent
+  // (12 s, 18 s, 24 s...) et pas au-dela de ~3 minutes. Toutes les 7 s sans
+  // fin, c etait un refetch complet de tous les events suivis.
   useEffect(() => {
     if (!isActive || !anySearching) return;
-    const timer = setInterval(refreshAll, 7000);
-    return () => clearInterval(timer);
+    let annule = false;
+    let essais = 0;
+    let minuteur;
+    const planifier = () => {
+      if (annule || essais >= 12) return;
+      const delai = Math.min(12000 + essais * 6000, 40000);
+      minuteur = setTimeout(async () => {
+        essais += 1;
+        await refreshAll();
+        planifier();
+      }, delai);
+    };
+    planifier();
+    return () => { annule = true; clearTimeout(minuteur); };
   }, [isActive, anySearching, refreshAll]);
 
-  useEffect(() => {
-    if (visibleCount >= photos.length) return;
-    const t = setTimeout(() => setVisibleCount(v => Math.min(v + 30, photos.length)), 250);
-    return () => clearTimeout(t);
-  }, [visibleCount, photos.length]);
+  // Avant : +30 cases toutes les 250 ms jusqu a la derniere photo, que
+  // l utilisateur descende ou non — 400 photos = 400 images montees en tache
+  // de fond des l ouverture de l onglet. Desormais on n ajoute que lorsqu il
+  // approche du bas.
+  const chargerPlus = useCallback(() => {
+    setVisibleCount((v) => (v >= visiblePhotos.length ? v : Math.min(v + 30, visiblePhotos.length)));
+  }, [visiblePhotos.length]);
+
+  // Retour a 30 cases quand on change d onglet : sinon on repart avec le
+  // compteur du filtre precedent.
+  useEffect(() => { setVisibleCount(30); }, [viewFilter]);
+  useEffect(() => { chargerPlusRef.current = chargerPlus; }, [chargerPlus]);
 
   const onPullRefresh = useCallback(async () => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
