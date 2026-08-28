@@ -31,7 +31,7 @@ import {
   Gesture, GestureDetector, GestureHandlerRootView,
 } from 'react-native-gesture-handler';
 import ReAnimated, {
-  useSharedValue, useAnimatedStyle, withTiming, runOnJS,
+  useSharedValue, useAnimatedStyle, withTiming, withDelay, runOnJS,
 } from 'react-native-reanimated';
 import { FavStar } from '../FavStar';
 import { C } from '../../constants/colors';
@@ -119,8 +119,13 @@ export function PhotoViewerModal({
   const pradius = useSharedValue(18);
   const bgOpacity = useSharedValue(0);
   const uiOpacity = useSharedValue(0);
+  // La photo est en 3/4, la mignature est carree : en fin de fermeture la
+  // carte animee est donc plus haute que la vignette qu elle rejoint, et le
+  // remplacement se voyait comme un a-coup. On la fait disparaitre en fondu
+  // sur les derniers 150 ms : la vignette apparait dessous, sans saut.
+  const cardOpacity = useSharedValue(1);
 
-  const HERO_DURATION = 420;
+  const HERO_DURATION = 340;
   const HERO_EASING = (t) => {
     'worklet';
     return 1 - Math.pow(1 - t, 4);
@@ -154,6 +159,11 @@ export function PhotoViewerModal({
 
   const animateIn = () => {
     if (origin && Number.isFinite(origin.x) && Number.isFinite(origin.y) && origin.w > 0 && origin.h > 0) {
+      // Symetrique de la fermeture : la carte nait en fondu court pendant
+      // qu elle grandit, au lieu d apparaitre d un coup au format portrait
+      // sur une vignette carree.
+      cardOpacity.value = 0;
+      cardOpacity.value = withTiming(1, { duration: 130 });
       const originCx = origin.x + origin.w / 2;
       const originCy = origin.y + origin.h / 2;
       entryTx.value = originCx - targetCardCx;
@@ -165,6 +175,7 @@ export function PhotoViewerModal({
       entryScale.value = withTiming(1, { duration: HERO_DURATION, easing: HERO_EASING });
       pradius.value = withTiming(18, { duration: HERO_DURATION, easing: HERO_EASING });
     } else {
+      cardOpacity.value = 1;
       entryTx.value = 0; entryTy.value = 0; entryScale.value = 1;
       pradius.value = 18;
     }
@@ -173,19 +184,21 @@ export function PhotoViewerModal({
   };
 
   const animateOutAndClose = () => {
-    uiOpacity.value = withTiming(0, { duration: 220, easing: HERO_EASING });
-    bgOpacity.value = withTiming(0, { duration: 340, easing: HERO_EASING });
+    uiOpacity.value = withTiming(0, { duration: 160, easing: HERO_EASING });
+    bgOpacity.value = withTiming(0, { duration: 280, easing: HERO_EASING });
     if (origin && Number.isFinite(origin.x)) {
       const originCx = origin.x + origin.w / 2;
       const originCy = origin.y + origin.h / 2;
-      entryTx.value = withTiming(originCx - targetCardCx, { duration: 380, easing: HERO_EASING });
-      entryTy.value = withTiming(originCy - targetCardCy, { duration: 380, easing: HERO_EASING });
-      pradius.value = withTiming(10, { duration: 380, easing: HERO_EASING });
-      entryScale.value = withTiming(origin.w / cardW, { duration: 380, easing: HERO_EASING }, (finished) => {
+      entryTx.value = withTiming(originCx - targetCardCx, { duration: 320, easing: HERO_EASING });
+      entryTy.value = withTiming(originCy - targetCardCy, { duration: 320, easing: HERO_EASING });
+      pradius.value = withTiming(10, { duration: 320, easing: HERO_EASING });
+      cardOpacity.value = withDelay(190, withTiming(0, { duration: 140 }));
+      entryScale.value = withTiming(origin.w / cardW, { duration: 320, easing: HERO_EASING }, (finished) => {
         if (finished) runOnJS(onClose)();
       });
     } else {
-      setTimeout(onClose, 340);
+      cardOpacity.value = withTiming(0, { duration: 200 });
+      setTimeout(onClose, 240);
     }
   };
 
@@ -438,6 +451,7 @@ export function PhotoViewerModal({
   }, [currentIndex, photos]);
 
   const entryStyle = useAnimatedStyle(() => ({
+    opacity: cardOpacity.value,
     transform: [
       { translateX: entryTx.value },
       { translateY: entryTy.value },
