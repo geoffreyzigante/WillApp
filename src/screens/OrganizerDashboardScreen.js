@@ -12,6 +12,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { EventCard } from '../components/EventCard';
 import { RefreshableScrollView } from '../components/loaders';
 import { C } from '../constants/colors';
@@ -106,16 +107,19 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
       {loading ? (
         <ActivityIndicator color={C.primary} style={{ marginVertical: 24 }} />
       ) : events.length === 0 ? (
-        <View style={{ paddingVertical: 30, alignItems: 'center' }}>
-          <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center' }}>
-            Tu n'as pas encore créé d'événement.{'\n'}Clique sur le bouton ci-dessous pour démarrer.
+        <View style={{ paddingVertical: 36, paddingHorizontal: 24, alignItems: 'center' }}>
+          <Text style={{ color: '#1a0a3e', fontSize: 16, fontWeight: '600', marginBottom: 6 }}>
+            Aucun event pour l'instant
+          </Text>
+          <Text style={{ color: 'rgba(26,10,62,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+            Crée ton premier event pour que Will envoie leurs photos à tes participants.
           </Text>
         </View>
       ) : (
         events.map((e, i) => {
           const info = statusInfo(e.status);
           return (
-            <View key={i} style={{ marginBottom: 14 }}>
+            <View key={i} style={{ marginBottom: 16 }}>
               <View style={{ position: 'relative' }}>
                 <EventCard event={e} onPress={() => (onOpenEventDetail || onOpenEventPhotos)?.(e)} />
                 <View style={{
@@ -130,39 +134,52 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                 </View>
               </View>
 
-              <View style={{ backgroundColor: '#faf9ff', borderBottomLeftRadius: 16, borderBottomRightRadius: 16, marginTop: -10, paddingTop: 16, paddingHorizontal: 14, paddingBottom: 12 }}>
+              <View style={{ backgroundColor: '#FFFFFF', borderBottomLeftRadius: 18, borderBottomRightRadius: 18, marginTop: -12, paddingTop: 18, paddingHorizontal: 12, paddingBottom: 12 }}>
                 {e.status === 'pending_payment' && (
                   <TouchableOpacity
                     onPress={() => pay(e.code)}
                     disabled={paying === e.code}
-                    style={{ backgroundColor: C.primary, paddingVertical: 11, borderRadius: 10, alignItems: 'center', marginBottom: 8, opacity: paying === e.code ? 0.6 : 1 }}
+                    style={{ backgroundColor: C.pinkPill, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 8, opacity: paying === e.code ? 0.6 : 1 }}
                   >
                     {paying === e.code ? (
                       <ActivityIndicator color="#fff" />
                     ) : (
-                      <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Mettre en ligne</Text>
+                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Mettre en ligne</Text>
                     )}
                   </TouchableOpacity>
                 )}
 
-                <View style={{ flexDirection: 'row', gap: 8 }}>
+                {/* Deux actions de meme rang, a plat : trois boutons cernes
+                    d un filet dont un rouge donnaient autant de poids a
+                    "Supprimer" qu au reste. La suppression passe en icone
+                    discrete a droite — elle est deja protegee par une
+                    confirmation. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <TouchableOpacity
                     onPress={() => onEditEvent?.(e)}
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: C.primary, borderWidth: 1, borderColor: C.primary }}
+                    style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1EBFF' }}
+                    activeOpacity={0.8}
                   >
-                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Modifier</Text>
+                    <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Modifier</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => onOpenEventPhotos?.(e)}
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: C.primary }}
+                    style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1EBFF' }}
+                    activeOpacity={0.8}
                   >
-                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600' }}>Photos</Text>
+                    <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Photos</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => deleteEvent(e)}
-                    style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: C.error }}
+                    style={{ width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}
+                    hitSlop={6}
+                    activeOpacity={0.7}
+                    accessibilityLabel="Supprimer l'événement"
                   >
-                    <Text style={{ color: C.error, fontSize: 13, fontWeight: '600' }}>Supprimer</Text>
+                    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                      <Path d="M4 7h16M10 4h4M6 7l1 13h10l1-13M10 11v6M14 11v6"
+                        stroke="rgba(26,10,62,0.4)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                    </Svg>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -173,7 +190,8 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
 
       <TouchableOpacity
         onPress={onCreateEvent}
-        style={{ backgroundColor: C.pinkPill, paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 4 }}
+        style={{ backgroundColor: C.primary, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 6 }}
+        activeOpacity={0.85}
       >
         <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>+ Créer un événement</Text>
       </TouchableOpacity>
