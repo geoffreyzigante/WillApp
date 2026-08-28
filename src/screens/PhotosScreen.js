@@ -96,6 +96,12 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     }
     return photos;
   }, [photos, viewFilter, photoFavoritesSet]);
+  const vignettes = useMemo(
+    () => visiblePhotos.slice(0, visibleCount).map(p => (
+      p.thumbUri && p.thumbUri !== p.uri ? { ...p, uri: p.thumbUri } : p
+    )),
+    [visiblePhotos, visibleCount],
+  );
   const meCount = useMemo(() => photos.filter(p => p._isPersonalMatch).length, [photos]);
   const favCount = useMemo(() => (
     photoFavoritesSet ? photos.filter(p => photoFavoritesSet.has(p.id)).length : 0
@@ -285,12 +291,13 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     // (Moi / Favoris / Tous) sont 100% cached avant le 1er scroll. Memory-disk
     // policy : si la photo est deja cached, c est instant. Sinon download en
     // arriere-plan, non bloquant.
+    // Prechauffage limite au premier ecran : lancer 250 telechargements d un
+    // coup saturait le reseau au moment precis ou l utilisateur attend ses
+    // premieres vignettes. Le reste se charge naturellement au defilement,
+    // avec le cache disque d ExpoImage.
     if (typeof ExpoImage?.prefetch === 'function') {
-      merged.slice(0, 250).forEach((p) => {
-        if (p?.thumbUri) {
-          ExpoImage.prefetch(p.thumbUri, 'memory-disk').catch(() => {});
-        }
-      });
+      const aPrechauffer = merged.slice(0, 36).map(p => p?.thumbUri).filter(Boolean);
+      ExpoImage.prefetch(aPrechauffer, 'memory-disk').catch(() => {});
     }
     return merged;
   }, [eventsToQuery, runnerApiFetch, eventTintMap, photosCacheKey, photoFavoritesSet]);
@@ -639,14 +646,21 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
               style={{ paddingVertical: 24 }}
             />
           ) : (
+            /* vignettes : voir le useMemo — la grille affiche p.uri, donc
+               on lui passe la miniature et non l originale. */
             <PhotoGrid
-              photos={visiblePhotos.slice(0, visibleCount)}
+              photos={vignettes}
               numColumns={Math.max(1, Math.min(visiblePhotos.length, 4))}
-              onPress={(p, _i, _photos, origin) => onOpenPhoto?.(p, visiblePhotos, {
-                origin,
-                photosForSale: !!p?.paid,
-                eventCode: p?.eventCode || null,
-              })}
+              onPress={(pv, _i, _photos, origin) => {
+                // pv porte l URL de la vignette : on rouvre la visionneuse
+                // sur la photo d origine, pleine resolution.
+                const p = visiblePhotos.find((x) => x.id === pv?.id) || pv;
+                onOpenPhoto?.(p, visiblePhotos, {
+                  origin,
+                  photosForSale: !!p?.paid,
+                  eventCode: p?.eventCode || null,
+                });
+              }}
               photoFavoritesSet={photoFavoritesSet}
               onToggleFavorite={onTogglePhotoFavorite}
               selectionMode={selectionMode}
