@@ -12,6 +12,7 @@ import {
   Easing,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { Image as ExpoImage } from 'expo-image';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
@@ -93,6 +94,11 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
       Animated.timing(contentOpacity, { toValue: visible ? 1 : 0, duration: visible ? 220 : 150, delay: visible ? 80 : 0, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
     ]).start(() => { if (!visible) setMonte(false); });
   }, [visible, panelOpacity, contentX, contentScale, contentOpacity]);
+
+  // Apercu du selfie : il s ouvre DANS le tiroir, en surimpression. Avant,
+  // "Voir" fermait le menu et le compte pour ouvrir un ecran violet plein
+  // cadre — on changeait d endroit pour regarder une photo.
+  const [apercuSelfie, setApercuSelfie] = useState(false);
 
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -203,7 +209,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                       </TouchableOpacity>
                     ) : (
                       <View style={{ flexDirection: 'row', gap: 18 }}>
-                        <TouchableOpacity onPress={onView}>
+                        <TouchableOpacity onPress={() => setApercuSelfie(true)}>
                           <Text style={compte.lien}>Voir</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={onRetake}>
@@ -383,6 +389,22 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
           </TouchableOpacity>
         </View>
       </Animated.View>
+
+      {apercuSelfie && selfieUri ? (
+        <TouchableOpacity
+          style={compte.apercu}
+          activeOpacity={1}
+          onPress={() => setApercuSelfie(false)}
+        >
+          <ExpoImage
+            source={{ uri: selfieUri }}
+            style={compte.apercuImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+          <Text style={compte.apercuAide}>Touche pour fermer</Text>
+        </TouchableOpacity>
+      ) : null}
     </>
   );
 }
@@ -483,4 +505,22 @@ const compte = StyleSheet.create({
   },
   actionLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
   chevron: { fontSize: 18, color: 'rgba(26,10,62,0.35)' },
+
+  apercu: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(15,7,35,0.92)',
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 12, elevation: 42,
+  },
+  apercuImage: {
+    width: '78%',
+    aspectRatio: 1,
+    borderRadius: 24,
+  },
+  apercuAide: {
+    marginTop: 18,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+  },
 });
