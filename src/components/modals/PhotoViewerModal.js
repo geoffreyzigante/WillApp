@@ -34,6 +34,7 @@ import ReAnimated, {
   useSharedValue, useAnimatedStyle, withTiming, withDelay, runOnJS,
 } from 'react-native-reanimated';
 import { FavStar } from '../FavStar';
+import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
 import { detectPhotoExtension } from '../../utils/photo';
 import { useCart } from '../../hooks/useCart';
@@ -125,10 +126,17 @@ export function PhotoViewerModal({
   // sur les derniers 150 ms : la vignette apparait dessous, sans saut.
   const cardOpacity = useSharedValue(1);
 
-  const HERO_DURATION = 280;
+  // Courbe douce plutot que sechement freinee : la quartique partait tres
+  // vite puis s arretait net, ce qui se lit comme un a-coup. Celle-ci est la
+  // courbe des transitions iOS (ease-out-quint amorti) — depart franc,
+  // arrivee longue, sans rebond.
+  const HERO_DURATION = 360;
   const HERO_EASING = (t) => {
     'worklet';
-    return 1 - Math.pow(1 - t, 4);
+    // bezier(0.32, 0.72, 0, 1) approxime en polynome : moins couteux qu un
+    // solveur, et identique a l oeil.
+    const u = 1 - t;
+    return 1 - u * u * u * (1 - 0.28 * t);
   };
 
   const translateX = useSharedValue(0);
@@ -163,7 +171,7 @@ export function PhotoViewerModal({
       // qu elle grandit, au lieu d apparaitre d un coup au format portrait
       // sur une vignette carree.
       cardOpacity.value = 0;
-      cardOpacity.value = withTiming(1, { duration: 130 });
+      cardOpacity.value = withTiming(1, { duration: 160 });
       const originCx = origin.x + origin.w / 2;
       const originCy = origin.y + origin.h / 2;
       entryTx.value = originCx - targetCardCx;
@@ -179,7 +187,7 @@ export function PhotoViewerModal({
       entryTx.value = 0; entryTy.value = 0; entryScale.value = 1;
       pradius.value = 18;
     }
-    bgOpacity.value = withTiming(1, { duration: 220, easing: HERO_EASING });
+    bgOpacity.value = withTiming(1, { duration: 260, easing: HERO_EASING });
     uiOpacity.value = withTiming(1, { duration: HERO_DURATION + 40, easing: HERO_EASING });
   };
 
@@ -194,11 +202,11 @@ export function PhotoViewerModal({
     if (origin && Number.isFinite(origin.x) && memePhoto) {
       const originCx = origin.x + origin.w / 2;
       const originCy = origin.y + origin.h / 2;
-      entryTx.value = withTiming(originCx - targetCardCx, { duration: 320, easing: HERO_EASING });
-      entryTy.value = withTiming(originCy - targetCardCy, { duration: 320, easing: HERO_EASING });
-      pradius.value = withTiming(10, { duration: 320, easing: HERO_EASING });
-      cardOpacity.value = withDelay(190, withTiming(0, { duration: 140 }));
-      entryScale.value = withTiming(origin.w / cardW, { duration: 320, easing: HERO_EASING }, (finished) => {
+      entryTx.value = withTiming(originCx - targetCardCx, { duration: 300, easing: HERO_EASING });
+      entryTy.value = withTiming(originCy - targetCardCy, { duration: 300, easing: HERO_EASING });
+      pradius.value = withTiming(10, { duration: 300, easing: HERO_EASING });
+      cardOpacity.value = withDelay(170, withTiming(0, { duration: 150 }));
+      entryScale.value = withTiming(origin.w / cardW, { duration: 300, easing: HERO_EASING }, (finished) => {
         if (finished) runOnJS(onClose)();
       });
     } else {
@@ -362,7 +370,11 @@ export function PhotoViewerModal({
         Alert.alert('Hors ligne', 'Pas de connexion internet — impossible de télécharger la photo.');
         return;
       }
-      const url = currentPhoto.uri;
+      // A l ecran la photo est servie propre (nowm=1) et la mention est un
+      // calque de l interface. Dans le FICHIER, elle doit faire partie des
+      // pixels : on retire nowm=1 et le worker grave « Photo capturée par
+      // Will » en bas a gauche, comme le fait le site au telechargement.
+      const url = String(currentPhoto.uri).replace(/[&?]nowm=1/, '');
       const ext = await detectPhotoExtension(url);
       const filename = `will_${Date.now()}.${ext}`;
       staged = new File(Paths.cache, filename);
@@ -623,6 +635,19 @@ export function PhotoViewerModal({
                               }}
                             />
                           ) : null}
+                          {/* Mention "Photo capturee par Will", identique au
+                              viewer du site (event/index.html, .vcredit) :
+                              blanc, en bas a gauche, sans pastille — deux
+                              ombres portees suffisent a la tenir lisible sur
+                              une photo claire. */}
+                          {item?.uri ? (
+                            <View style={mention.bloc} pointerEvents="none">
+                              <Text style={mention.texte}>Photo capturée par</Text>
+                              <View style={mention.logo}>
+                                <Icon.Logo width={29} color="#FFFFFF" />
+                              </View>
+                            </View>
+                          ) : null}
                           {/* Watermark events payants : overlay client only. */}
                           {photosForSale && item?.uri ? (
                             <ExpoImage
@@ -838,3 +863,31 @@ export function PhotoViewerModal({
     </Modal>
   );
 }
+
+const mention = StyleSheet.create({
+  bloc: {
+    position: 'absolute',
+    left: 14, bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    zIndex: 2,
+  },
+  texte: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.44,
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  // Le logo est un SVG : l ombre du texte ne s y applique pas, on lui met
+  // la sienne (shadow* sur le conteneur, ombre native).
+  logo: {
+    shadowColor: '#000',
+    shadowOpacity: 0.75,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+});

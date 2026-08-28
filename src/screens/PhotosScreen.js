@@ -455,10 +455,13 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         if (!photo?.uri) { failed++; continue; }
         let staged = null;
         try {
-          const ext = await detectPhotoExtension(photo.uri);
+          // Comme dans la visionneuse : on retire nowm=1 pour que le fichier
+          // enregistre porte la mention « Photo capturée par Will ».
+          const urlFichier = String(photo.uri).replace(/[&?]nowm=1/, '');
+          const ext = await detectPhotoExtension(urlFichier);
           const filename = `will_${Date.now()}_${i}.${ext}`;
           staged = new File(Paths.cache, filename);
-          const downloaded = await File.downloadFileAsync(photo.uri, staged, { idempotent: true });
+          const downloaded = await File.downloadFileAsync(urlFichier, staged, { idempotent: true });
           const localUri = downloaded?.uri || staged.uri;
           await MediaLibrary.saveToLibraryAsync(localUri);
           saved++;
