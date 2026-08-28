@@ -242,8 +242,21 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           const r = await runnerApiFetch(`/personal-gallery/${encodeURIComponent(code)}`);
           if (!r.ok) return { code, photos: [], paid: false };
           const data = await r.json();
-          return { code, photos: Array.isArray(data.photos) ? data.photos : [], paid: !!data.photos_for_sale };
-        } catch { return { code, photos: [], paid: false }; }
+          return {
+            code,
+            photos: Array.isArray(data.photos) ? data.photos : [],
+            paid: !!data.photos_for_sale,
+            // Titre / date / type renvoyes par le worker : "Mes photos"
+            // agrege des events qui ne sont pas forcement dans la liste
+            // publique chargee par l app.
+            ev: {
+              name: data.event_name || null,
+              date: data.event_date || null,
+              dateEnd: data.event_date_end || null,
+              type: data.event_type || null,
+            },
+          };
+        } catch { return { code, photos: [], paid: false, ev: null }; }
       })),
       (async () => {
         try {
@@ -258,8 +271,8 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     const merged = [];
     const seenIds = new Set();
     let searching = false;
-    for (const { code, photos: list, paid } of results) {
-      const tint = tintRef.current[code] || TYPE_COLORS.autre;
+    for (const { code, photos: list, paid, ev } of results) {
+      const tint = ev?.type ? colorForType(ev.type) : (tintRef.current[code] || TYPE_COLORS.autre);
       if (list.length === 0) {
         const startedTs = started[code];
         const elapsed = startedTs ? (now - startedTs) : Infinity;
@@ -283,6 +296,10 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           tint,
           paid,
           eventCode: code,
+          eventName: ev?.name || null,
+          eventDate: ev?.date || null,
+          eventDateEnd: ev?.dateEnd || null,
+          eventType: ev?.type || null,
           _isPersonalMatch: true,
         });
       }
@@ -666,14 +683,20 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
                 // L entete de la visionneuse a besoin de l event : ici les
                 // photos viennent de plusieurs events a la fois, on le
                 // retrouve par son code.
+                // L event vient d abord de la reponse /personal-gallery
+                // (toujours juste), sinon de la liste publique en memoire.
                 const ev = events.find((e) => e.code === p?.eventCode) || null;
+                const nom = p?.eventName || ev?.name || null;
+                const dateBrute = p?.eventDate || ev?.event_date || null;
+                const dateFin = p?.eventDateEnd || ev?.event_date_end || null;
+                const type = p?.eventType || ev?.event_type || null;
                 onOpenPhoto?.(p, visiblePhotos, {
                   origin,
                   photosForSale: !!p?.paid,
                   eventCode: p?.eventCode || null,
-                  eventTitle: ev?.name || null,
-                  eventDate: ev?.event_date ? formatDateLong(ev.event_date, ev.event_date_end) : null,
-                  eventType: ev?.event_type || null,
+                  eventTitle: nom,
+                  eventDate: dateBrute ? formatDateLong(dateBrute, dateFin) : null,
+                  eventType: type,
                 });
               }}
               photoFavoritesSet={photoFavoritesSet}
