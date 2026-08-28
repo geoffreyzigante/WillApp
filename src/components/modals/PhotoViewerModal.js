@@ -36,13 +36,16 @@ import ReAnimated, {
 import { FavStar } from '../FavStar';
 import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
-import { detectPhotoExtension } from '../../utils/photo';
+import { detectPhotoExtension, extractBurstTs } from '../../utils/photo';
 import { useCart } from '../../hooks/useCart';
 
 // Flag fonctionnalite Supprimer dans la visionneuse. Refonte 2026-05 : la
 // suppression est en stand-by, on cable plus tard avec une confirmation
 // adaptee. Garde le code mort pour activer en un flip.
 const ENABLE_VIEWER_DELETE = false;
+
+const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 export function PhotoViewerModal({
   visible, photo, photos, onClose,
@@ -102,9 +105,11 @@ export function PhotoViewerModal({
 
   const { cart, toggle: toggleCartFor } = useCart(photosForSale ? eventCode : null);
 
-  const HEADER_H = 56;
+  // Entete sur deux lignes (event + prise de vue), et de la place sous la
+  // photo pour le bouton : il chevauchait le bord bas de l image.
+  const HEADER_H = 68;
   const BUTTON_AREA_H = 78;
-  const RUNNER_BOTTOM_RESERVE = 32;
+  const RUNNER_BOTTOM_RESERVE = 96;
   const photoMargin = 8;
   const targetW = winWidth - photoMargin * 2;
   const effectiveBottomReserve = isOrga ? BUTTON_AREA_H : RUNNER_BOTTOM_RESERVE;
@@ -141,6 +146,11 @@ export function PhotoViewerModal({
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
+  // Glisser vers le bas pour fermer : porte par la CARTE, pas par l image.
+  // Depuis que le zoom s applique a l image (elle-meme dans un cadre qui
+  // rogne), reutiliser translateY faisait glisser la photo sous son propre
+  // masque au lieu de deplacer la vue.
+  const dragY = useSharedValue(0);
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const zoomTranslateX = useSharedValue(0);
@@ -153,6 +163,7 @@ export function PhotoViewerModal({
   const resetTransforms = () => {
     translateX.value = 0;
     translateY.value = 0;
+    dragY.value = 0;
     scale.value = 1;
     savedScale.value = 1;
     savedTranslateY.value = 0;
@@ -270,8 +281,11 @@ export function PhotoViewerModal({
   const SNAP_THRESHOLD = 1.15; // en dessous : snap-back a 1x
   const clampTranslations = (s) => {
     'worklet';
-    const halfW = winWidth / 2;
-    const halfH = winHeight / 2;
+    // Bornes calees sur la CARTE (le zoom s applique a l image dans son
+    // cadre), pas sur l ecran : sinon on pouvait tirer l image bien au-dela
+    // de ce que le cadre laisse voir.
+    const halfW = cardW / 2;
+    const halfH = cardH / 2;
     const maxTx = Math.max(0, (s - 1) * halfW);
     const maxTy = Math.max(0, (s - 1) * halfH);
     if (zoomTranslateX.value > maxTx) zoomTranslateX.value = maxTx;
@@ -289,7 +303,7 @@ export function PhotoViewerModal({
         translateY.value = savedTranslateY.value + e.translationY;
         clampTranslations(scale.value);
       } else {
-        translateY.value = e.translationY;
+        dragY.value = e.translationY;
       }
     })
     .onEnd((e) => {
@@ -298,11 +312,11 @@ export function PhotoViewerModal({
         savedTranslateY.value = translateY.value;
         return;
       }
-      if (translateY.value > 100 || e.velocityY > 800) {
+      if (dragY.value > 100 || e.velocityY > 800) {
         runOnJS(animateOutAndClose)();
         return;
       }
-      translateY.value = withTiming(0, { duration: 220 });
+      dragY.value = withTiming(0, { duration: 220 });
     });
 
   const pinchGesture = Gesture.Pinch()
@@ -354,6 +368,22 @@ export function PhotoViewerModal({
   const composed = Gesture.Simultaneous(pinchGesture, panGesture, doubleTapGesture);
 
   const currentPhoto = photos?.[currentIndex] || photo;
+
+  // Sous-titre de l entete : quand la photo a ete prise, et par qui. La date
+  // vient de l horodatage present dans la cle de la rafale (fiable et deja
+  // utilise pour le tri) ; a defaut de l upload, puis de la date de l event.
+  const sousTitre = useMemo(() => {
+    const bouts = [];
+    const ts = currentPhoto?.id ? extractBurstTs(currentPhoto.id) : 0;
+    const quand = ts > 0 ? new Date(ts) : (currentPhoto?.takenAt ? new Date(currentPhoto.takenAt) : null);
+    if (quand && !isNaN(quand.getTime())) {
+      bouts.push(`${quand.getDate()} ${MOIS_FR[quand.getMonth()]} ${quand.getFullYear()} · ${String(quand.getHours()).padStart(2, '0')}:${String(quand.getMinutes()).padStart(2, '0')}`);
+    } else if (eventDate) {
+      bouts.push(eventDate);
+    }
+    bouts.push(`par ${currentPhoto?.photographer || 'Will'}`);
+    return bouts.join(' · ');
+  }, [currentPhoto, eventDate]);
 
   const download = async () => {
     if (!currentPhoto?.uri || busy) return;
@@ -478,7 +508,7 @@ export function PhotoViewerModal({
     opacity: cardOpacity.value,
     transform: [
       { translateX: entryTx.value },
-      { translateY: entryTy.value },
+      { translateY: entryTy.value + dragY.value },
       { scale: entryScale.value },
     ],
   }));
@@ -542,15 +572,15 @@ export function PhotoViewerModal({
                 {eventTitle}
               </Text>
             ) : null}
-            {eventDate ? (
-              <Text style={{
-                color: '#000',
+            {sousTitre ? (
+              <Text numberOfLines={1} style={{
+                color: 'rgba(26,10,62,0.6)',
                 fontFamily: 'Montserrat',
                 fontSize: 12,
                 fontWeight: '500',
                 marginTop: 4,
                 textTransform: 'none',
-              }}>{eventDate}</Text>
+              }}>{sousTitre}</Text>
             ) : null}
           </ReAnimated.View>
 
@@ -564,7 +594,7 @@ export function PhotoViewerModal({
             }, entryStyle]}
           >
             <GestureDetector gesture={composed}>
-              <ReAnimated.View style={[{ flex: 1 }, vertStyle]}>
+              <ReAnimated.View style={{ flex: 1 }}>
                 <FlatList
                   key={`viewer-list-${sessionKeyRef.current}`}
                   ref={photoListRef}
@@ -615,6 +645,7 @@ export function PhotoViewerModal({
                             // la MEME image pleine resolution auparavant,
                             // autant dire rien — d ou l ouverture sur du vide
                             // puis l apparition seche.
+                            <ReAnimated.View style={[{ width: '100%', height: '100%' }, vertStyle]}>
                             <ExpoImage
                               source={{ uri: item.uri }}
                               placeholder={{ uri: item.thumbMdUri || item.thumbUri || item.uri }}
@@ -634,6 +665,7 @@ export function PhotoViewerModal({
                                 if (w && h) setPhotoAspect(item.id, w, h);
                               }}
                             />
+                            </ReAnimated.View>
                           ) : null}
                           {/* Mention "Photo capturee par Will", identique au
                               viewer du site (event/index.html, .vcredit) :
@@ -786,7 +818,7 @@ export function PhotoViewerModal({
                 <ReAnimated.View
                   style={[{
                     position: 'absolute', left: 0, right: 0,
-                    top: targetY + cardH - 23,
+                    top: targetY + cardH + 18,
                     alignItems: 'center', justifyContent: 'center',
                     zIndex: 30,
                   }, uiStyle]}
@@ -823,7 +855,7 @@ export function PhotoViewerModal({
             <ReAnimated.View
               style={[{
                 position: 'absolute', left: 0, right: 0,
-                top: targetY + cardH - 23,
+                top: targetY + cardH + 18,
                 alignItems: 'center', justifyContent: 'center',
                 zIndex: 30,
               }, uiStyle]}
