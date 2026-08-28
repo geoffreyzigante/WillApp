@@ -498,6 +498,21 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     setHasRequestedCameraPermission(true);
     await requestPermission();
   };
+  // La camera n est PAS montee dans la foulee de l autorisation. Quand iOS
+  // referme sa feuille, le composant se re-rendait aussitot et configurait
+  // AVCaptureSession — avec le frame processor et les modules natifs qui
+  // demarrent en meme temps — pendant que le systeme finissait sa bascule.
+  // Resultat : l app tombait a la premiere autorisation, et seulement a
+  // celle-la (au relancement tout marche, la permission etant deja acquise).
+  // Un demi-battement suffit a laisser iOS terminer.
+  const [cameraPrete, setCameraPrete] = useState(false);
+  useEffect(() => {
+    if (!hasPermission) { setCameraPrete(false); return; }
+    // Permission deja accordee au lancement : aucun delai, rien ne bascule.
+    if (!hasRequestedCameraPermission) { setCameraPrete(true); return; }
+    const t = setTimeout(() => setCameraPrete(true), 600);
+    return () => clearTimeout(t);
+  }, [hasPermission, hasRequestedCameraPermission]);
   // Capteur principal = .builtInWideAngleCamera singleton physique. On
   // utilise useCameraDevices() (liste exhaustive) + filtre strict pour
   // garantir le singleton et exclure les virtuels multi-cam
@@ -3441,6 +3456,16 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             {cameraPermissionDenied ? 'Ouvrir les réglages' : 'Autoriser'}
           </Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Fenetre d attente juste apres l autorisation (cf cameraPrete).
+  if (!cameraPrete) {
+    return (
+      <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+        <ActivityIndicator color={C.primary} />
+        <Text style={{ color: C.textSoft, marginTop: 12, fontSize: 13 }}>Préparation de la caméra…</Text>
       </View>
     );
   }

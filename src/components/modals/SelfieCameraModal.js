@@ -30,6 +30,17 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     setHasRequestedCameraPermission(true);
     await requestPermission();
   };
+  // Meme precaution que l espace photographe : on ne monte pas la camera
+  // dans la milliseconde ou iOS referme sa feuille d autorisation, sinon la
+  // session se configure pendant la bascule du systeme et l app tombe. Le
+  // delai ne s applique qu a la toute premiere autorisation.
+  const [cameraPrete, setCameraPrete] = useState(false);
+  useEffect(() => {
+    if (!hasPermission) { setCameraPrete(false); return; }
+    if (!hasRequestedCameraPermission) { setCameraPrete(true); return; }
+    const t = setTimeout(() => setCameraPrete(true), 600);
+    return () => clearTimeout(t);
+  }, [hasPermission, hasRequestedCameraPermission]);
 
   useEffect(() => {
     if (visible && !hasPermission) {
@@ -77,7 +88,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
-        {hasPermission && device ? (
+        {hasPermission && cameraPrete && device ? (
           <VisionCamera
             ref={cameraRef}
             style={StyleSheet.absoluteFill}
