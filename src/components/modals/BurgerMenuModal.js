@@ -86,6 +86,15 @@ export function BurgerMenuModal({
   const contenuOpacity = useRef(new Animated.Value(1)).current;
   const contenuX = useRef(new Animated.Value(0)).current;
   useEffect(() => {
+    // Tiroir ferme : on repose les valeurs SANS animation. Sinon l animation
+    // de retour est lancee au moment ou la vue est demontee, ne recoit plus
+    // de frame, et l opacite reste bloquee a 0 — d ou le menu blanc a la
+    // reouverture.
+    if (!visible) {
+      contenuOpacity.setValue(contenuMasque ? 0 : 1);
+      contenuX.setValue(contenuMasque ? -16 : 0);
+      return;
+    }
     const courbe = contenuMasque ? Easing.bezier(0.4, 0, 0.6, 1) : Easing.bezier(0.22, 1, 0.36, 1);
     Animated.parallel([
       Animated.timing(contenuOpacity, {
@@ -103,7 +112,7 @@ export function BurgerMenuModal({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [contenuMasque, contenuOpacity, contenuX]);
+  }, [visible, contenuMasque, contenuOpacity, contenuX]);
   const selfieOk = !!selfieUri && selfieUploadState !== 'failed' && selfieUploadState !== 'uploading';
 
   const slideX = useRef(new Animated.Value(DRAWER_W)).current;

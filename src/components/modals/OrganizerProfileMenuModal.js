@@ -63,7 +63,15 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
   const contentScale = useRef(new Animated.Value(0.985)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (visible) setMonte(true);
+    if (visible) {
+      setMonte(true);
+      // Etat de depart force : si une animation precedente a ete coupee par
+      // le demontage du menu, ces valeurs seraient restees en route.
+      panelOpacity.setValue(0);
+      contentX.setValue(28);
+      contentScale.setValue(0.985);
+      contentOpacity.setValue(0);
+    }
     Animated.parallel([
       Animated.timing(panelOpacity, { toValue: visible ? 1 : 0, duration: visible ? 260 : 220, delay: visible ? 0 : 80, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
       Animated.timing(contentX, { toValue: visible ? 0 : 28, duration: visible ? 300 : 200, delay: visible ? 80 : 0, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
