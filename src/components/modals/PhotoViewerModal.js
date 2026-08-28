@@ -125,7 +125,7 @@ export function PhotoViewerModal({
   // sur les derniers 150 ms : la vignette apparait dessous, sans saut.
   const cardOpacity = useSharedValue(1);
 
-  const HERO_DURATION = 340;
+  const HERO_DURATION = 280;
   const HERO_EASING = (t) => {
     'worklet';
     return 1 - Math.pow(1 - t, 4);
@@ -186,7 +186,12 @@ export function PhotoViewerModal({
   const animateOutAndClose = () => {
     uiOpacity.value = withTiming(0, { duration: 160, easing: HERO_EASING });
     bgOpacity.value = withTiming(0, { duration: 280, easing: HERO_EASING });
-    if (origin && Number.isFinite(origin.x)) {
+    // origin decrit la vignette sur laquelle on a TAPE. Des qu on a fait
+    // defiler, la photo affichee n est plus celle-la : revenir s y poser
+    // ferait voler l image vers une vignette qui n est pas la sienne. Dans
+    // ce cas on se contente d un retrait sur place.
+    const memePhoto = currentIndexRef.current === targetIndex;
+    if (origin && Number.isFinite(origin.x) && memePhoto) {
       const originCx = origin.x + origin.w / 2;
       const originCy = origin.y + origin.h / 2;
       entryTx.value = withTiming(originCx - targetCardCx, { duration: 320, easing: HERO_EASING });
@@ -197,8 +202,9 @@ export function PhotoViewerModal({
         if (finished) runOnJS(onClose)();
       });
     } else {
-      cardOpacity.value = withTiming(0, { duration: 200 });
-      setTimeout(onClose, 240);
+      entryScale.value = withTiming(0.92, { duration: 200, easing: HERO_EASING });
+      cardOpacity.value = withTiming(0, { duration: 180 });
+      setTimeout(onClose, 200);
     }
   };
 
