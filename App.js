@@ -3440,6 +3440,73 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // est retire du set. isCapturingRef supprime (mode burst pipeline).
   }
 
+  // "En attente" = photos pas encore confirmees R2 PUT 200 mais qui vont
+  // partir : captures en vol + items pending/uploading en queue. EXCLUT
+  // les failed (qui apparaissent sur la ligne "X a renvoyer" si > 0 — c'est
+  // une anomalie qui demande une action, pas un transit normal).
+  const pendingCount = inFlight + queueStats.pending + queueStats.uploading;
+
+  // ─── criticalKind pour CriticalAlert overlay (LOT 1.2) ───────────────
+  // Priorite decroissante camera > storage > battery > thermal > network > queue.
+  // Depend de pendingCount → declare ici, apres son calcul.
+  const rawCriticalKind = useMemo(() => {
+    if (!hasPermission) return 'camera';
+    if (freeDiskGB < 2) return 'storage';
+    const charging = batteryState === Battery.BatteryState.CHARGING || batteryState === Battery.BatteryState.FULL;
+    if (batteryLevel <= 0.15 && !charging) return 'battery';
+    if (thermalStateStr === 'serious' || thermalStateStr === 'critical') return 'thermal';
+    if (offlineSince && (Date.now() - offlineSince > 60000)) return 'network';
+    if (pendingCount > 700) return 'queue';
+    return null;
+    // offlineTick dans les deps pour que Date.now() - offlineSince soit
+    // re-evalue toutes les 15s tant qu on est offline (cf correctif audit).
+  }, [hasPermission, freeDiskGB, batteryLevel, batteryState, thermalStateStr, offlineSince, offlineTick, pendingCount]);
+  const effectiveCriticalKind = rawCriticalKind && rawCriticalKind !== dismissedKind ? rawCriticalKind : null;
+  // Reset dismissedKind quand la condition disparait ou change de nature :
+  // la prochaine occurrence du meme kind reaffichera l overlay.
+  useEffect(() => {
+    if (!dismissedKind) return;
+    if (!rawCriticalKind) { setDismissedKind(null); return; }
+    if (rawCriticalKind !== dismissedKind) setDismissedKind(null);
+  }, [rawCriticalKind, dismissedKind]);
+
+  // ─── Heartbeat + queue alertes offline (LOT 1.6) ─────────────────────
+  // Ref des infos live lues a chaque heartbeat / drain. Mise a jour a
+  // chaque render pour rester fraiche sans re-abonner startHeartbeat.
+  const heartbeatCtxRef = useRef({});
+  heartbeatCtxRef.current = {
+    eventCode: session?.event?.code || null,
+    pendingCount,
+    armed: isAutoArmed,
+    lastUploadAt: lastCaptureTsRef?.current || null,
+  };
+  // Start/stop du service : 1 seule instance globale, cleanup au unmount.
+  useEffect(() => {
+    let cleanup = null;
+    let cancelled = false;
+    startHeartbeat(photographerApiFetch, () => heartbeatCtxRef.current)
+      .then(fn => {
+        if (cancelled) { try { fn?.(); } catch {} return; }
+        cleanup = fn;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      try { cleanup?.(); } catch {}
+    };
+  }, [photographerApiFetch]);
+  // Detecte les changements de rawCriticalKind pour enfiler une alerte a
+  // chaque nouveau kind. Ne renvoie pas si le meme kind se reproduit sans
+  // avoir disparu entre-temps (dedupe cote enqueueAlert).
+  const lastAlertKindRef = useRef(null);
+  useEffect(() => {
+    if (rawCriticalKind && rawCriticalKind !== lastAlertKindRef.current) {
+      lastAlertKindRef.current = rawCriticalKind;
+      enqueueAlert(rawCriticalKind).catch(() => {});
+    }
+    if (!rawCriticalKind) lastAlertKindRef.current = null;
+  }, [rawCriticalKind]);
+
   if (!hasPermission) {
     return (
       <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
@@ -3519,72 +3586,6 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     else { lightDot = '#F43F5E'; lightLabel = 'Luminosité faible'; }
   }
 
-  // "En attente" = photos pas encore confirmees R2 PUT 200 mais qui vont
-  // partir : captures en vol + items pending/uploading en queue. EXCLUT
-  // les failed (qui apparaissent sur la ligne "X a renvoyer" si > 0 — c'est
-  // une anomalie qui demande une action, pas un transit normal).
-  const pendingCount = inFlight + queueStats.pending + queueStats.uploading;
-
-  // ─── criticalKind pour CriticalAlert overlay (LOT 1.2) ───────────────
-  // Priorite decroissante camera > storage > battery > thermal > network > queue.
-  // Depend de pendingCount → declare ici, apres son calcul.
-  const rawCriticalKind = useMemo(() => {
-    if (!hasPermission) return 'camera';
-    if (freeDiskGB < 2) return 'storage';
-    const charging = batteryState === Battery.BatteryState.CHARGING || batteryState === Battery.BatteryState.FULL;
-    if (batteryLevel <= 0.15 && !charging) return 'battery';
-    if (thermalStateStr === 'serious' || thermalStateStr === 'critical') return 'thermal';
-    if (offlineSince && (Date.now() - offlineSince > 60000)) return 'network';
-    if (pendingCount > 700) return 'queue';
-    return null;
-    // offlineTick dans les deps pour que Date.now() - offlineSince soit
-    // re-evalue toutes les 15s tant qu on est offline (cf correctif audit).
-  }, [hasPermission, freeDiskGB, batteryLevel, batteryState, thermalStateStr, offlineSince, offlineTick, pendingCount]);
-  const effectiveCriticalKind = rawCriticalKind && rawCriticalKind !== dismissedKind ? rawCriticalKind : null;
-  // Reset dismissedKind quand la condition disparait ou change de nature :
-  // la prochaine occurrence du meme kind reaffichera l overlay.
-  useEffect(() => {
-    if (!dismissedKind) return;
-    if (!rawCriticalKind) { setDismissedKind(null); return; }
-    if (rawCriticalKind !== dismissedKind) setDismissedKind(null);
-  }, [rawCriticalKind, dismissedKind]);
-
-  // ─── Heartbeat + queue alertes offline (LOT 1.6) ─────────────────────
-  // Ref des infos live lues a chaque heartbeat / drain. Mise a jour a
-  // chaque render pour rester fraiche sans re-abonner startHeartbeat.
-  const heartbeatCtxRef = useRef({});
-  heartbeatCtxRef.current = {
-    eventCode: session?.event?.code || null,
-    pendingCount,
-    armed: isAutoArmed,
-    lastUploadAt: lastCaptureTsRef?.current || null,
-  };
-  // Start/stop du service : 1 seule instance globale, cleanup au unmount.
-  useEffect(() => {
-    let cleanup = null;
-    let cancelled = false;
-    startHeartbeat(photographerApiFetch, () => heartbeatCtxRef.current)
-      .then(fn => {
-        if (cancelled) { try { fn?.(); } catch {} return; }
-        cleanup = fn;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      try { cleanup?.(); } catch {}
-    };
-  }, [photographerApiFetch]);
-  // Detecte les changements de rawCriticalKind pour enfiler une alerte a
-  // chaque nouveau kind. Ne renvoie pas si le meme kind se reproduit sans
-  // avoir disparu entre-temps (dedupe cote enqueueAlert).
-  const lastAlertKindRef = useRef(null);
-  useEffect(() => {
-    if (rawCriticalKind && rawCriticalKind !== lastAlertKindRef.current) {
-      lastAlertKindRef.current = rawCriticalKind;
-      enqueueAlert(rawCriticalKind).catch(() => {});
-    }
-    if (!rawCriticalKind) lastAlertKindRef.current = null;
-  }, [rawCriticalKind]);
 
   // Garde-fou UX avant sortie d'ecran : si des photos sont encore en transit
   // (in-flight ou en queue pending/uploading), on previent le benevole pour
