@@ -4912,7 +4912,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   // via PUT /organizer/event/:slug (whitelist worker existante).
   if (isEdit) {
     const sectionHeaderStyle = {
-      color: 'rgba(123,47,255,0.3)', fontSize: 13, fontWeight: '700',
+      color: 'rgba(26,10,62,0.45)', fontSize: 12, fontWeight: '700',
       letterSpacing: 0.6, textTransform: 'uppercase',
       marginBottom: 8, marginLeft: 32, marginTop: 24,
     };
@@ -4925,12 +4925,12 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       paddingHorizontal: 16, paddingVertical: 14, minHeight: 48,
     };
     const rowSeparatorStyle = {
-      height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(123,47,255,0.3)', marginLeft: 16,
+      height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(26,10,62,0.08)', marginLeft: 16,
     };
     const subModalHeader = {
       paddingTop: 16, paddingHorizontal: 16, paddingBottom: 12,
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(123,47,255,0.3)',
+      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(26,10,62,0.08)',
       backgroundColor: '#fff',
     };
     const saveBtnStyle = {
@@ -4980,11 +4980,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     const SettingsRow = ({ label, value, onPress }) => {
       return (
         <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={rowStyle}>
-          <Text style={{ color: C.text, fontSize: 16, fontWeight: '600', flex: 1 }}>{label}</Text>
-          <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 14, marginRight: 8, maxWidth: 140 }} numberOfLines={1}>
+          <Text style={{ color: '#1a0a3e', fontSize: 15, fontWeight: '600' }}>{label}</Text>
+          <Text
+            style={{ flex: 1, textAlign: 'right', color: 'rgba(26,10,62,0.55)', fontSize: 15, marginRight: 8, marginLeft: 12 }}
+            numberOfLines={1}
+          >
             {value || '—'}
           </Text>
-          <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 18, fontWeight: '300' }}>›</Text>
+          <Text style={{ color: 'rgba(26,10,62,0.3)', fontSize: 18, fontWeight: '300' }}>›</Text>
         </TouchableOpacity>
       );
     };
@@ -5559,33 +5562,33 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                       </TouchableOpacity>
                     </View>
                     <View style={{ marginBottom: 8 }}>
-                      <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>{d.label_only ? 'NOM' : 'TYPE'}</Text>
+                      <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>{d.label_only ? 'NOM' : 'TYPE'}</Text>
                       <TextInput
                         value={d.label}
                         onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
                         placeholder={d.label_only ? 'Nom de la course' : (eventType || 'Type')}
-                        placeholderTextColor="rgba(123,47,255,0.3)"
+                        placeholderTextColor="rgba(26,10,62,0.35)"
                         maxLength={40}
                         style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', paddingHorizontal: 12, color: C.text, fontSize: 14 }}
                       />
                     </View>
                     <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-end' }}>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DISTANCE</Text>
+                        <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DISTANCE</Text>
                         <TouchableOpacity onPress={() => setKmPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: d.km ? C.text : 'rgba(123,47,255,0.3)', fontSize: 14 }}>{d.km ? `${d.km} km` : '—'}</Text>
+                          <Text style={{ color: d.km ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.km ? `${d.km} km` : '—'}</Text>
                         </TouchableOpacity>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉPART</Text>
+                        <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉPART</Text>
                         <TouchableOpacity onPress={() => setTimePickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: d.time ? C.text : 'rgba(123,47,255,0.3)', fontSize: 14 }}>{d.time || '—'}</Text>
+                          <Text style={{ color: d.time ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.time || '—'}</Text>
                         </TouchableOpacity>
                       </View>
                       <View style={{ flex: 1.2 }}>
-                        <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉNIVELÉ</Text>
+                        <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉNIVELÉ</Text>
                         <TouchableOpacity onPress={() => setElevPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: d.elevation ? C.text : 'rgba(123,47,255,0.3)', fontSize: 14 }}>{d.elevation || '—'}</Text>
+                          <Text style={{ color: d.elevation ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.elevation || '—'}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -7829,6 +7832,18 @@ export default function App() {
           </View>
           <Text style={[s.navLabel, bottomTab === 'photos' && { color: C.primary, fontWeight: '700' }]}>Photos</Text>
         </TouchableOpacity>
+
+        {/* Troisieme onglet reserve aux organisateurs : l espace existe deja
+            comme 3e page du carrousel, il n avait juste pas de bouton — il
+            fallait passer par le menu pour y revenir. */}
+        {organizerSession && (
+          <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('events'); setOpenedEvent(null); }}>
+            <View style={s.navIconWrap}>
+              <Icon.GearOrg size={22} color={bottomTab === 'events' ? C.primary : C.text} />
+            </View>
+            <Text style={[s.navLabel, bottomTab === 'events' && { color: C.primary, fontWeight: '700' }]}>Mes events</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Pill recherche par dossard — rendue APRES le bottom nav et le
