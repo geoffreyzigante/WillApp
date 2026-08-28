@@ -12,3 +12,11 @@ export const API_URL = 'https://will-api.geoffreyzigante.workers.dev';
 // du checkout Stripe ; cette valeur est juste utilisee cote UI pour
 // afficher le total temps reel.
 export const PRICE_PER_PHOTO_EUR = 1;
+
+// Vente de photos : fonctionnalite a venir, pas encore ouverte.
+//
+// Tant qu elle est fermee, l entree "Mon panier" du menu est retiree — pas
+// grisee. Une entree annoncee mais inactive est refusee par l App Store
+// (regle 2.1, fonctionnalites placeholder). Le jour de l ouverture, il
+// suffit de passer ce drapeau a true.
+export const VENTE_PHOTOS_OUVERTE = false;
