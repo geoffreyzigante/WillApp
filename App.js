@@ -4659,8 +4659,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         contact,
         contact_admin: contactAdmin.trim().toLowerCase(), // UI-12
         phone: phone.trim(),
-        event_date: eventDate ? eventDate.toISOString().slice(0, 10) : '',
-        event_date_end: eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : '',
+        event_date: isoJourLocal(eventDate),
+        event_date_end: isoJourLocal(eventDateEnd),
         start_time: startTime || '',
         location: city ? `${city} (${postalCode})` : '',
         address: address.trim(),
@@ -4941,8 +4941,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     // Previews valeurs courantes pour la home
     const previewDate = eventDate
       ? formatDateForForm(
-          eventDate.toISOString().slice(0, 10),
-          eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : null,
+          isoJourLocal(eventDate),
+          eventDateEnd ? isoJourLocal(eventDateEnd) : null,
         )
       : (dateTbd ? 'Date à venir' : 'Non définie');
     const previewLocation = city
@@ -5206,8 +5206,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               setEventDate(start);
               setEventDateEnd(end);
               await savePartial({
-                event_date: start ? start.toISOString().slice(0, 10) : '',
-                event_date_end: end ? end.toISOString().slice(0, 10) : '',
+                event_date: isoJourLocal(start),
+                event_date_end: isoJourLocal(end),
               });
             }}
           />
@@ -5699,8 +5699,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                       <Text style={{ color: (eventDate || dateTbd) ? C.text : C.textSoft, fontSize: 15 }}>
                         {eventDate
                           ? formatDateForForm(
-                              eventDate.toISOString().slice(0, 10),
-                              eventDateEnd ? eventDateEnd.toISOString().slice(0, 10) : null,
+                              isoJourLocal(eventDate),
+                              eventDateEnd ? isoJourLocal(eventDateEnd) : null,
                             )
                           : (dateTbd ? 'Date à venir' : 'Choisir une date (ou une plage)')}
                       </Text>
@@ -8001,6 +8001,14 @@ export default function App() {
           // encore propage cote worker -> 400 selfie_required -> re-ouvre la
           // SelfieModal en boucle.
           await runSelfieUpload(uri);
+          // Notifications : c est ICI qu il faut demander la permission. Le
+          // selfie enregistre, l app vient de promettre « on te reconnait sur
+          // les photos » — la notification est la suite logique de cette
+          // promesse. Jusqu ici la demande n arrivait qu au premier suivi
+          // d event : un coureur qui ne suit rien n etait jamais sollicite,
+          // donc jamais joignable (zero jeton enregistre cote serveur).
+          const jeton = runnerSession?.token;
+          if (jeton) ensurePushRegistered(jeton, { ask: true });
           // Phase D : si un follow attendait le selfie, relance-le maintenant.
           const pendingEvent = pendingFollowRef.current;
           if (pendingEvent) {

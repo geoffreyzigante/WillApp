@@ -75,6 +75,19 @@ export const formatDateForForm = (iso, isoEnd) => {
   return formatDateLong(iso, isoEnd);
 };
 
+// Date d un jour, en heure LOCALE, au format AAAA-MM-JJ.
+//
+// A ne PAS remplacer par toISOString().slice(0, 10) : les selecteurs rendent
+// un Date a minuit local, et minuit a Paris c est 22 h la veille en UTC. Le
+// 28 aout partait donc en base comme le 27 — l event se retrouvait classe
+// dans les passes le jour meme de sa creation.
+export const isoJourLocal = (d) => {
+  if (!d) return '';
+  const j = d instanceof Date ? d : new Date(d);
+  if (isNaN(j.getTime())) return '';
+  return `${j.getFullYear()}-${String(j.getMonth() + 1).padStart(2, '0')}-${String(j.getDate()).padStart(2, '0')}`;
+};
+
 // "a venir / en cours" tant que end (ou start si pas d end) n est pas passe.
 // Tolerance 1 jour pour eviter qu un event en cours disparaisse a minuit pile.
 export const isUpcoming = (iso, isoEnd) => {

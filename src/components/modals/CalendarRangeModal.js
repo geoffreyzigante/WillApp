@@ -100,7 +100,7 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
   const summary = (() => {
     if (!start) return 'Tape un jour pour commencer';
     if (!end) return `Début : ${start.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} · tape un 2e jour pour finir (ou le même pour 1 jour)`;
-    return formatDateForForm(start.toISOString().slice(0, 10), sameDay(start, end) ? null : end.toISOString().slice(0, 10));
+    return formatDateForForm(isoJourLocal(start), sameDay(start, end) ? null : isoJourLocal(end));
   })();
 
   // Cell renderer factorise : on separe le fill (bar pale violet) du dot
