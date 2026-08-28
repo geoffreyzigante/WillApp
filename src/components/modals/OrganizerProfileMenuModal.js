@@ -13,13 +13,37 @@ import {
   Animated, Dimensions, Easing,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { InfoRow } from '../InfoRow';
 import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
 import { authStyles } from '../../constants/formStyles';
 
 const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
+
+// Memes lignes que le compte coureur : libelle gris, valeur en couleur de
+// texte, actions a gauche avec chevron.
+function Ligne({ label, value, dernier }) {
+  return (
+    <View style={[compte.ligne, !dernier && compte.ligneSeparee]}>
+      <Text style={compte.ligneLabel}>{label}</Text>
+      <Text style={compte.ligneValeur} numberOfLines={1}>{value || '—'}</Text>
+    </View>
+  );
+}
+
+function Action({ label, onPress, ton = 'normal', dernier }) {
+  const couleur = ton === 'danger' ? '#C2413B' : ton === 'lien' ? C.primary : '#1a0a3e';
+  return (
+    <TouchableOpacity
+      style={[compte.action, !dernier && compte.ligneSeparee]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Text style={[compte.actionLabel, { color: couleur }]}>{label}</Text>
+      <Text style={compte.chevron}>›</Text>
+    </TouchableOpacity>
+  );
+}
 
 export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerSession, organizerApiFetch, onLogout, onUpdate, onDeleteAccount, heroOffset = 0 }) {
   // Transition "axe partage" : ce qui part recule vers la gauche en
@@ -149,12 +173,9 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
             {profile && !editing && (
               <View style={drawer.section}>
                 <Text style={drawer.secLabel}>Mes infos</Text>
-                <InfoRow label="Prénom" value={profile.firstName} />
-                <InfoRow label="Nom" value={profile.lastName} />
-                <InfoRow label="Email" value={profile.email} last />
-                <TouchableOpacity onPress={() => setEditing(true)} style={{ marginTop: 12 }}>
-                  <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Modifier les infos</Text>
-                </TouchableOpacity>
+                <Ligne label="Prénom" value={profile.firstName} />
+                <Ligne label="Nom" value={profile.lastName} />
+                <Ligne label="Email" value={profile.email} dernier />
               </View>
             )}
 
@@ -190,10 +211,9 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
 
             {profile && !editing && !changingPwd && (
               <View style={drawer.section}>
-                <Text style={drawer.secLabel}>Sécurité</Text>
-                <TouchableOpacity onPress={() => setChangingPwd(true)}>
-                  <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Modifier mon mot de passe</Text>
-                </TouchableOpacity>
+                <Text style={drawer.secLabel}>Réglages</Text>
+                <Action label="Modifier mes infos" onPress={() => setEditing(true)} />
+                <Action label="Modifier mon mot de passe" onPress={() => setChangingPwd(true)} dernier />
               </View>
             )}
 
@@ -233,18 +253,18 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
               </View>
             )}
 
-            {profile && (
-              <TouchableOpacity onPress={() => { onClose(); onLogout?.(); }} style={{ alignItems: 'center', marginTop: 16, paddingVertical: 12 }}>
-                <Text style={{ color: C.error, fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
-              </TouchableOpacity>
-            )}
-
-            {profile && onDeleteAccount && (
-              <TouchableOpacity onPress={onDeleteAccount} style={{ alignItems: 'center', marginTop: 4, paddingVertical: 10 }}>
-                <Text style={{ color: C.textSoft, fontSize: 12, textDecorationLine: 'underline' }}>
-                  Supprimer mon compte
-                </Text>
-              </TouchableOpacity>
+            {profile && !editing && !changingPwd && (
+              <>
+                <View style={drawer.section}>
+                  <Action label="Se déconnecter" onPress={() => { onClose(); onLogout?.(); }} dernier />
+                </View>
+                {onDeleteAccount ? (
+                  <View style={[drawer.section, { borderBottomWidth: 0 }]}>
+                    <Text style={drawer.secLabel}>Zone sensible</Text>
+                    <Action label="Supprimer mon compte" ton="danger" onPress={onDeleteAccount} dernier />
+                  </View>
+                ) : null}
+              </>
             )}
             </Animated.View>
           </ScrollView>
@@ -306,4 +326,20 @@ const drawer = StyleSheet.create({
     textTransform: 'uppercase', color: 'rgba(26,10,62,0.4)',
     marginBottom: 10,
   },
+});
+
+const compte = StyleSheet.create({
+  ligne: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 11,
+  },
+  ligneSeparee: { borderBottomWidth: 1, borderBottomColor: 'rgba(26,10,62,0.07)' },
+  ligneLabel: { fontSize: 14, color: 'rgba(26,10,62,0.45)' },
+  ligneValeur: { flex: 1, textAlign: 'right', fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
+  action: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 13,
+  },
+  actionLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
+  chevron: { fontSize: 18, color: 'rgba(26,10,62,0.35)' },
 });

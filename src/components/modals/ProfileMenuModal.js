@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { InfoRow } from '../InfoRow';
 import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
 import { s } from '../../constants/styles';
@@ -38,6 +37,35 @@ const dateToIso = (d) => {
 // donnait l impression d une autre application.
 const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
+
+// Ligne d information : libelle a gauche, valeur a droite. Le libelle etait
+// en violet pale sur blanc — illisible et bavard ; il passe en gris neutre,
+// et c est la valeur qui porte la couleur du texte.
+function Ligne({ label, value, dernier }) {
+  return (
+    <View style={[compte.ligne, !dernier && compte.ligneSeparee]}>
+      <Text style={compte.ligneLabel}>{label}</Text>
+      <Text style={compte.ligneValeur} numberOfLines={1}>{value || '—'}</Text>
+    </View>
+  );
+}
+
+// Action : meme gabarit que les lignes du menu (libelle a gauche, chevron a
+// droite) plutot qu un lien centre. Quatre liens centres de quatre couleurs
+// differentes empiles, c est ce qui faisait desordre.
+function Action({ label, onPress, ton = 'normal', dernier }) {
+  const couleur = ton === 'danger' ? '#C2413B' : ton === 'lien' ? C.primary : '#1a0a3e';
+  return (
+    <TouchableOpacity
+      style={[compte.action, !dernier && compte.ligneSeparee]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <Text style={[compte.actionLabel, { color: couleur }]}>{label}</Text>
+      <Text style={compte.chevron}>›</Text>
+    </TouchableOpacity>
+  );
+}
 
 export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload, heroOffset = 0 }) {
   // Transition "axe partage" : ce qui part recule vers la gauche en
@@ -176,54 +204,44 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
               {profile && (
                 <View style={drawer.section}>
                   <Text style={drawer.secLabel}>Selfie</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                    <Text style={drawer.rowLabel}>
+                  <View style={compte.selfieLigne}>
+                    <Text style={compte.ligneValeur2}>
                       {selfieUri ? 'Enregistré' : 'Pas encore de selfie'}
                     </Text>
                     <View style={{ flex: 1 }} />
                     {!selfieUri ? (
                       <TouchableOpacity onPress={onRetake}>
-                        <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Ajouter</Text>
+                        <Text style={compte.lien}>Ajouter</Text>
                       </TouchableOpacity>
                     ) : (
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <View style={{ flexDirection: 'row', gap: 18 }}>
-                          <TouchableOpacity onPress={onView}>
-                            <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Voir</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={onDelete}>
-                            <Text style={{ color: C.error, fontWeight: '600', fontSize: 14 }}>Supprimer</Text>
-                          </TouchableOpacity>
-                        </View>
-                        {uploadState === 'failed' && (
-                          // Audit B15 fix : Reessayer affiche EN PLUS de Voir/Supprimer
-                          // (pas a la place) pour ne pas bloquer le user dans le cycle
-                          // failed -> retry failed sans pouvoir reprendre un selfie propre.
-                          <TouchableOpacity onPress={onRetryUpload} style={{ marginTop: 6 }}>
-                            <Text style={{ color: C.error, fontWeight: '600', fontSize: 12 }}>
-                              Échec envoi · Réessayer
-                            </Text>
-                          </TouchableOpacity>
-                        )}
+                      <View style={{ flexDirection: 'row', gap: 18 }}>
+                        <TouchableOpacity onPress={onView}>
+                          <Text style={compte.lien}>Voir</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={onRetake}>
+                          <Text style={compte.lien}>Remplacer</Text>
+                        </TouchableOpacity>
                       </View>
                     )}
                   </View>
+                  {selfieUri && uploadState === 'failed' && (
+                    <TouchableOpacity onPress={onRetryUpload} style={{ marginTop: 8 }}>
+                      <Text style={{ color: '#C2413B', fontWeight: '600', fontSize: 12 }}>
+                        Échec envoi · Réessayer
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
 
               {/* Bloc Infos */}
               {profile && !editing && (
                 <View style={drawer.section}>
-                  <InfoRow label="Prénom" value={profile.firstName} />
-                  <InfoRow label="Nom" value={profile.lastName} />
-                  <InfoRow label="Email" value={profile.email} />
-                  <InfoRow label="Date de naissance" value={formatDobFr(profile.dateOfBirth)} last />
-                  <TouchableOpacity
-                    onPress={() => setEditing(true)}
-                    style={{ marginTop: 14, alignItems: 'center' }}
-                  >
-                    <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Modifier les infos</Text>
-                  </TouchableOpacity>
+                  <Text style={drawer.secLabel}>Mes infos</Text>
+                  <Ligne label="Prénom" value={profile.firstName} />
+                  <Ligne label="Nom" value={profile.lastName} />
+                  <Ligne label="Email" value={profile.email} />
+                  <Ligne label="Date de naissance" value={formatDobFr(profile.dateOfBirth)} dernier />
                 </View>
               )}
 
@@ -288,9 +306,11 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
               )}
 
               {profile && !editing && !changingPwd && (
-                <TouchableOpacity onPress={() => setChangingPwd(true)} style={{ alignItems: 'center', marginTop: 6, paddingVertical: 10 }}>
-                  <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>Modifier mon mot de passe</Text>
-                </TouchableOpacity>
+                <View style={drawer.section}>
+                  <Text style={drawer.secLabel}>Réglages</Text>
+                  <Action label="Modifier mes infos" onPress={() => setEditing(true)} />
+                  <Action label="Modifier mon mot de passe" onPress={() => setChangingPwd(true)} dernier />
+                </View>
               )}
 
               {profile && changingPwd && (
@@ -331,27 +351,30 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                 </View>
               )}
 
-              {profile && (
-                <TouchableOpacity onPress={() => { onClose(); onLogout?.(); }} style={{ alignItems: 'center', marginTop: 12, paddingVertical: 12 }}>
-                  <Text style={{ color: C.error, fontWeight: '600', fontSize: 14 }}>Se déconnecter</Text>
-                </TouchableOpacity>
+              {profile && !editing && !changingPwd && (
+                <>
+                  <View style={drawer.section}>
+                    <Action label="Se déconnecter" onPress={() => { onClose(); onLogout?.(); }} dernier />
+                  </View>
+
+                  {/* Actions irreversibles, groupees et annoncees comme
+                      telles : dispersees dans la page et soulignees, elles
+                      criaient plus fort que le reste. */}
+                  <View style={[drawer.section, { borderBottomWidth: 0 }]}>
+                    <Text style={drawer.secLabel}>Zone sensible</Text>
+                    {selfieUri ? (
+                      <Action label="Supprimer mon selfie" ton="danger" onPress={onDelete} />
+                    ) : null}
+                    {onDeleteFaceData ? (
+                      <Action label="Supprimer mes données faciales" ton="danger" onPress={onDeleteFaceData} />
+                    ) : null}
+                    {onDeleteAccount ? (
+                      <Action label="Supprimer mon compte" ton="danger" onPress={onDeleteAccount} dernier />
+                    ) : null}
+                  </View>
+                </>
               )}
 
-              {profile && onDeleteFaceData && (
-                <TouchableOpacity onPress={onDeleteFaceData} style={{ alignItems: 'center', marginTop: 12, paddingVertical: 10 }}>
-                  <Text style={{ color: '#7B2FFF', fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' }}>
-                    Supprimer mes données faciales
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {profile && onDeleteAccount && (
-                <TouchableOpacity onPress={onDeleteAccount} style={{ alignItems: 'center', marginTop: 4, paddingVertical: 10 }}>
-                  <Text style={{ color: C.textSoft, fontSize: 12, textDecorationLine: 'underline' }}>
-                    Supprimer mon compte
-                  </Text>
-                </TouchableOpacity>
-              )}
               </Animated.View>
             </ScrollView>
         </KeyboardAvoidingView>
@@ -426,4 +449,23 @@ const drawer = StyleSheet.create({
     marginBottom: 10,
   },
   rowLabel: { fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
+});
+
+const compte = StyleSheet.create({
+  ligne: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 11,
+  },
+  ligneSeparee: { borderBottomWidth: 1, borderBottomColor: 'rgba(26,10,62,0.07)' },
+  ligneLabel: { fontSize: 14, color: 'rgba(26,10,62,0.45)' },
+  ligneValeur: { flex: 1, textAlign: 'right', fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
+  ligneValeur2: { fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
+  selfieLigne: { flexDirection: 'row', alignItems: 'center' },
+  lien: { color: C.primary, fontWeight: '600', fontSize: 14 },
+  action: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 13,
+  },
+  actionLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
+  chevron: { fontSize: 18, color: 'rgba(26,10,62,0.35)' },
 });
