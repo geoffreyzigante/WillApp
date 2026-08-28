@@ -105,8 +105,8 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
 
           {consentGiven === false ? (
             <>
-              <Text style={s.modalTitle}>Reconnaissance faciale</Text>
-              <Text style={[s.modalSub, { textAlign: 'left', lineHeight: 20 }]}>
+              <Text style={[s.modalTitle, selfie.titre]}>Reconnaissance faciale</Text>
+              <Text style={[s.modalSub, selfie.texte, { textAlign: 'left' }]}>
                 Pour t'envoyer automatiquement tes photos d'event, Will utilise ton selfie comme référence biométrique. L'image et l'empreinte faciale générée par AWS Rekognition sont chiffrées, stockées sur des serveurs européens (eu-west-1 Francfort).{'\n\n'}
                 Ton consentement est valable <Text style={{ fontWeight: '700' }}>12 mois renouvelables</Text>. Tu recevras un rappel à J-30 et J-7 avant l'échéance. Sans renouvellement, ton selfie est automatiquement supprimé.{'\n\n'}
                 Tu peux retirer ton consentement à tout moment depuis ton profil.
@@ -142,11 +142,12 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[s.btnPrimary, !consentChecked && { opacity: 0.4 }]}
+                style={[selfie.cta, !consentChecked && { opacity: 0.4 }]}
                 onPress={acceptConsent}
                 disabled={!consentChecked}
+                activeOpacity={0.85}
               >
-                <Text style={s.btnPrimaryText}>Continuer</Text>
+                <Text style={selfie.ctaTexte}>Continuer</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -156,8 +157,8 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
                   Étape 2 sur 2
                 </Text>
               )}
-              <Text style={s.modalTitle}>{signupMode ? 'Prends ton selfie' : 'Mon selfie'}</Text>
-              <Text style={s.modalSub}>
+              <Text style={[s.modalTitle, selfie.titre]}>{signupMode ? 'Prends ton selfie' : 'Mon selfie'}</Text>
+              <Text style={[s.modalSub, selfie.texte]}>
                 {signupMode
                   ? "Will reconnaîtra ton visage sur les photos des events Will. Image chiffrée, serveurs européens. Consentement valable 12 mois renouvelables."
                   : "Ton selfie est utilisé pour la reconnaissance faciale sur tous les events Will. Chiffré, serveurs européens. Consentement valable 12 mois renouvelables."}
@@ -172,9 +173,9 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
                     onPressOut={onPreviewPressOut}
                   >
                     {uri ? (
-                      <ExpoImage source={{ uri }} style={s.selfiePreview} contentFit="cover" />
+                      <ExpoImage source={{ uri }} style={selfie.apercu} contentFit="cover" />
                     ) : (
-                      <View style={[s.selfiePreview, { backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center' }]}>
+                      <View style={[selfie.apercu, { backgroundColor: C.primaryLight, alignItems: 'center', justifyContent: 'center' }]}>
                         <Icon.User size={80} color={C.primary} />
                       </View>
                     )}
@@ -182,21 +183,21 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
                 </Animated.View>
               </View>
 
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <TouchableOpacity style={[s.btnSecondary, { flex: 1 }]} onPress={take}>
-                  <Text style={s.btnSecondaryText}>Prendre une photo</Text>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity style={[selfie.pastille, { flex: 1 }]} onPress={take} activeOpacity={0.8}>
+                  <Text style={selfie.pastilleTexte}>Prendre une photo</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.btnSecondary, { flex: 1 }]} onPress={pick}>
-                  <Text style={s.btnSecondaryText}>Choisir</Text>
+                <TouchableOpacity style={[selfie.pastille, { flex: 1 }]} onPress={pick} activeOpacity={0.8}>
+                  <Text style={selfie.pastilleTexte}>Choisir</Text>
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity style={[s.btnPrimary, !uri && { opacity: 0.4 }]} onPress={save} disabled={!uri || busy}>
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnPrimaryText}>Enregistrer mon selfie</Text>}
+              <TouchableOpacity style={[selfie.cta, !uri && { opacity: 0.4 }]} onPress={save} disabled={!uri || busy} activeOpacity={0.85}>
+                {busy ? <ActivityIndicator color="#fff" /> : <Text style={selfie.ctaTexte}>Enregistrer mon selfie</Text>}
               </TouchableOpacity>
 
-              <TouchableOpacity style={s.modalCancel} onPress={signupMode ? (onSkip || onClose) : onClose}>
-                <Text style={s.modalCancelText}>{signupMode ? 'Faire mon selfie plus tard' : 'Fermer'}</Text>
+              <TouchableOpacity style={selfie.fermer} onPress={signupMode ? (onSkip || onClose) : onClose}>
+                <Text style={selfie.fermerTexte}>{signupMode ? 'Faire mon selfie plus tard' : 'Fermer'}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -214,3 +215,34 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
     </Modal>
   );
 }
+
+// Meme vocabulaire que le reste de l app : titre AVEstiana violet, texte
+// gris lisible (il etait en violet pale, presque efface), actions en
+// pastilles plates et CTA violet plein h50 — comme la connexion.
+const selfie = StyleSheet.create({
+  titre: { color: C.primary, fontSize: 26, marginBottom: 8 },
+  texte: {
+    color: 'rgba(26,10,62,0.55)',
+    fontSize: 13.5,
+    lineHeight: 19,
+    marginBottom: 18,
+  },
+  apercu: { width: 190, height: 190, borderRadius: 24 },
+  pastille: {
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#F3EFFE',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pastilleTexte: { color: C.primary, fontWeight: '600', fontSize: 14 },
+  cta: {
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: C.primary,
+    alignItems: 'center', justifyContent: 'center',
+    marginTop: 14,
+  },
+  ctaTexte: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  fermer: { paddingVertical: 14, alignItems: 'center', marginTop: 6 },
+  fermerTexte: { color: 'rgba(26,10,62,0.45)', fontWeight: '600', fontSize: 14 },
+});
