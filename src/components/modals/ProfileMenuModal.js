@@ -38,6 +38,8 @@ const dateToIso = (d) => {
 // donnait l impression d une autre application.
 const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
+// Carre plein cadre dans la section (largeur du tiroir moins ses marges).
+const APERCU_TAILLE = DRAWER_W - 40;
 
 // Ligne d information : libelle a gauche, valeur a droite. Le libelle etait
 // en violet pale sur blanc — illisible et bavard ; il passe en gris neutre,
@@ -95,10 +97,20 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
     ]).start(() => { if (!visible) setMonte(false); });
   }, [visible, panelOpacity, contentX, contentScale, contentOpacity]);
 
-  // Apercu du selfie : il s ouvre DANS le tiroir, en surimpression. Avant,
-  // "Voir" fermait le menu et le compte pour ouvrir un ecran violet plein
-  // cadre — on changeait d endroit pour regarder une photo.
+  // Apercu du selfie : la photo se deplie DANS la section Selfie, a la
+  // largeur du tiroir. La surimpression precedente faisait flotter un carre
+  // au milieu de l ecran, a cheval sur le bord du tiroir — et il fallait
+  // assombrir tout le reste pour la rendre lisible.
   const [apercuSelfie, setApercuSelfie] = useState(false);
+  const apercuH = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(apercuH, {
+      toValue: apercuSelfie ? APERCU_TAILLE + 14 : 0,
+      duration: apercuSelfie ? 280 : 200,
+      easing: apercuSelfie ? Easing.bezier(0.22, 1, 0.36, 1) : Easing.bezier(0.4, 0, 0.6, 1),
+      useNativeDriver: false,
+    }).start();
+  }, [apercuSelfie, apercuH]);
 
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -209,8 +221,8 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                       </TouchableOpacity>
                     ) : (
                       <View style={{ flexDirection: 'row', gap: 18 }}>
-                        <TouchableOpacity onPress={() => setApercuSelfie(true)}>
-                          <Text style={compte.lien}>Voir</Text>
+                        <TouchableOpacity onPress={() => setApercuSelfie((v) => !v)}>
+                          <Text style={compte.lien}>{apercuSelfie ? 'Masquer' : 'Voir'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={onRetake}>
                           <Text style={compte.lien}>Remplacer</Text>
@@ -218,6 +230,17 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                       </View>
                     )}
                   </View>
+                  {selfieUri ? (
+                    <Animated.View style={[compte.apercu, { height: apercuH }]}>
+                      <ExpoImage
+                        source={{ uri: selfieUri }}
+                        style={compte.apercuImage}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                      />
+                    </Animated.View>
+                  ) : null}
+
                   {selfieUri && uploadState === 'failed' && (
                     <TouchableOpacity onPress={onRetryUpload} style={{ marginTop: 8 }}>
                       <Text style={{ color: '#C2413B', fontWeight: '600', fontSize: 12 }}>
@@ -390,21 +413,6 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
         </View>
       </Animated.View>
 
-      {apercuSelfie && selfieUri ? (
-        <TouchableOpacity
-          style={compte.apercu}
-          activeOpacity={1}
-          onPress={() => setApercuSelfie(false)}
-        >
-          <ExpoImage
-            source={{ uri: selfieUri }}
-            style={compte.apercuImage}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-          />
-          <Text style={compte.apercuAide}>Touche pour fermer</Text>
-        </TouchableOpacity>
-      ) : null}
     </>
   );
 }
@@ -506,21 +514,15 @@ const compte = StyleSheet.create({
   actionLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
   chevron: { fontSize: 18, color: 'rgba(26,10,62,0.35)' },
 
+  // Le retrait de 14 px vit DANS le conteneur (qui est masque a hauteur 0),
+  // sinon il laissait un trou sous la ligne quand l apercu est ferme.
   apercu: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(15,7,35,0.92)',
-    alignItems: 'center', justifyContent: 'center',
-    zIndex: 12, elevation: 42,
+    width: APERCU_TAILLE,
+    overflow: 'hidden',
   },
   apercuImage: {
-    width: '78%',
-    aspectRatio: 1,
-    borderRadius: 24,
-  },
-  apercuAide: {
-    marginTop: 18,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
+    width: APERCU_TAILLE, height: APERCU_TAILLE,
+    marginTop: 14,
+    borderRadius: 18,
   },
 });
