@@ -168,36 +168,18 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
 
       <Animated.View
         pointerEvents={visible ? 'auto' : 'none'}
-        style={[drawer.panel, { opacity: panelOpacity }]}
+        style={[drawer.panel, { top: heroOffset || 228, opacity: panelOpacity }]}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
-          <View style={drawer.head} pointerEvents="box-none">
-            <TouchableOpacity onPress={onBack || onClose} hitSlop={12} style={drawer.back}>
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                <Path d="M15 18l-6-6 6-6" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-              <Text style={drawer.backText}>Menu</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onClose} hitSlop={12} style={drawer.close} accessibilityLabel="Fermer">
-              <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-                <Path d="M6 6l12 12M18 6L6 18" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" />
-              </Svg>
-            </TouchableOpacity>
-          </View>
 
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 40 }}
             >
-              {/* Aucun bandeau ici : celui du menu est juste dessous, au meme
-                  endroit, et reste visible a travers ce panneau transparent.
-                  Le redessiner ne changeait que son sous-titre — d ou
-                  l impression d une entete qui saute d une vue a l autre. */}
-              <View style={{ height: heroOffset || 228 }} pointerEvents="none" />
               <Animated.View style={{ flex: 1, opacity: contentOpacity, transform: [{ translateX: contentX }, { scale: contentScale }] }}>
 
               {/* Bloc Selfie */}
@@ -379,6 +361,22 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
             </ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
+
+      <Animated.View style={[drawer.headWrap, { opacity: panelOpacity }]} pointerEvents="box-none">
+        <View style={drawer.head} pointerEvents="box-none">
+          <TouchableOpacity onPress={onBack || onClose} hitSlop={12} style={drawer.back}>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Path d="M15 18l-6-6 6-6" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+            <Text style={drawer.backText}>Menu</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} hitSlop={12} style={drawer.close} accessibilityLabel="Fermer">
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+              <Path d="M6 6l12 12M18 6L6 18" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" />
+            </Svg>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
     </Modal>
   );
 }
@@ -387,19 +385,25 @@ const drawer = StyleSheet.create({
   // Panneau sans fond ni ombre : il se pose DANS le tiroir du menu, dont il
   // reprend le blanc translucide et le bandeau. Lui redonner un fond
   // empilait deux blancs — d ou l aplat blanc au premier tap.
+  // Le panneau demarre SOUS le bandeau du menu (top = sa hauteur) et coupe
+  // ce qui deborde : sinon le contenu defilait par-dessus le violet, qui lui
+  // ne bouge pas puisqu il appartient au menu.
   panel: {
     position: 'absolute',
-    top: 0, right: 0, bottom: 0,
+    right: 0, bottom: 0,
     width: DRAWER_W,
     overflow: 'hidden',
+  },
+  headWrap: {
+    position: 'absolute',
+    top: 0, right: 0,
+    width: DRAWER_W,
+    zIndex: 4,
   },
   // Entete posee PAR-DESSUS le bandeau : celui-ci monte jusqu au bord haut
   // du tiroir, comme dans le menu. Avant, la barre retour/fermer poussait le
   // violet 100 px plus bas et laissait une bande blanche en haut.
   head: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    zIndex: 3,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
