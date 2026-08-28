@@ -13,9 +13,6 @@ import {
   Animated, Dimensions, Easing,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Icon } from '../Icon';
 import { InfoRow } from '../InfoRow';
 import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
@@ -24,7 +21,7 @@ import { authStyles } from '../../constants/formStyles';
 const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
 
-export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerSession, organizerApiFetch, onLogout, onUpdate, onDeleteAccount }) {
+export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerSession, organizerApiFetch, onLogout, onUpdate, onDeleteAccount, heroOffset = 0 }) {
   // Transition "axe partage" : ce qui part recule vers la gauche en
   // s effacant, ce qui arrive vient de la droite — la meme grammaire que les
   // grandes apps iOS. Trois choses jouent ensemble et se recouvrent :
@@ -119,9 +116,6 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
         pointerEvents={visible ? 'auto' : 'none'}
         style={[drawer.panel, { opacity: panelOpacity }]}
       >
-        {Platform.OS === 'ios' ? (
-          <BlurView intensity={48} tint="light" style={StyleSheet.absoluteFillObject} />
-        ) : null}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
@@ -137,7 +131,7 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
             ) : null}
             <View style={{ flex: 1 }} />
             <TouchableOpacity onPress={onClose} hitSlop={12} style={drawer.close} accessibilityLabel="Fermer">
-              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
                 <Path d="M6 6l12 12M18 6L6 18" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" />
               </Svg>
             </TouchableOpacity>
@@ -148,20 +142,8 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 40 }}
           >
-            {profile ? (
-              <LinearGradient
-                colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={drawer.hero}
-              >
-                <View style={drawer.heroAvatar}>
-                  <Icon.User size={26} color="#FFFFFF" />
-                </View>
-                <Text style={drawer.heroName} numberOfLines={1}>Salut {profile.firstName}</Text>
-                <Text style={drawer.heroStatus} numberOfLines={1}>{profile.email}</Text>
-              </LinearGradient>
-            ) : null}
+            {/* Le bandeau du menu, juste dessous, tient lieu d entete. */}
+            <View style={{ height: heroOffset || 228 }} pointerEvents="none" />
             <Animated.View style={{ flex: 1, opacity: contentOpacity, transform: [{ translateX: contentX }, { scale: contentScale }] }}>
 
             {profile && !editing && (
@@ -277,14 +259,6 @@ const drawer = StyleSheet.create({
     position: 'absolute',
     top: 0, right: 0, bottom: 0,
     width: DRAWER_W,
-    // Meme fond que le menu, au centieme pres : les deux vues se succedent
-    // dans le meme tiroir, une nuance de blanc differente se voit.
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(255,255,255,0.82)' : '#fff',
-    shadowColor: 'rgba(15,7,35,0.6)',
-    shadowOpacity: 0.45,
-    shadowOffset: { width: -8, height: 0 },
-    shadowRadius: 32,
-    elevation: 32,
     overflow: 'hidden',
   },
   head: {
@@ -295,7 +269,7 @@ const drawer = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: 46,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingBottom: 8,
   },
   back: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 6 },

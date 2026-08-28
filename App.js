@@ -8057,7 +8057,7 @@ export default function App() {
 
       <BurgerMenuModal
         visible={burgerMenu}
-        onClose={() => setBurgerMenu(false)}
+        onClose={() => { setBurgerMenu(false); setProfileMenu(false); setOrganizerProfileMenu(false); }}
         isAuthed={!!runnerSession}
         runnerFirstName={runnerSession?.profile?.firstName || ''}
         selfieUri={selfieUri}

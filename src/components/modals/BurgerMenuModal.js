@@ -10,7 +10,7 @@
 // Toutes les actions ferment le drawer + setTimeout 200ms avant l action
 // suivante (modal stacking iOS, cf feedback_rn_modal_stacking).
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Easing } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
@@ -79,6 +79,10 @@ export function BurgerMenuModal({
   // s effacent completement pendant que la carte compte arrive. Au retour
   // elles reviennent, decalees de 80 ms — le temps que la carte ait libere
   // la place.
+  // Hauteur reelle du bandeau : les tiroirs "compte" se posent par-dessus
+  // sans le redessiner, il leur faut donc la place exacte qu il occupe.
+  const [heroH, setHeroH] = useState(0);
+
   const contenuOpacity = useRef(new Animated.Value(1)).current;
   const contenuX = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -184,6 +188,7 @@ export function BurgerMenuModal({
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.hero}
+                  onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}
                 >
                   <TouchableOpacity
                     onPress={selfieUri ? fire(onViewSelfie) : empiler(onOpenAccount)}
@@ -311,7 +316,9 @@ export function BurgerMenuModal({
         </View>
       </Animated.View>
 
-      {children}
+      {React.Children.map(children, (enfant) => (
+        React.isValidElement(enfant) ? React.cloneElement(enfant, { heroOffset: heroH ? heroH + 6 : 0 }) : enfant
+      ))}
     </Modal>
   );
 }
