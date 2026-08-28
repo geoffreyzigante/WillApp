@@ -1231,7 +1231,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // a 10 fps. Si pas de visage -> arme un timeout 30s qui bascule en idle
       // (5 fps Vision) jusqu'au prochain visage. Le worklet lit idleModeSV
       // a chaque frame pour ajuster le skip mod.
-      if (count > 0) {
+      // Reveil sur TOUT visage detecte, pas seulement ceux en zone. `count`
+      // ne compte que la bande centrale : un coureur qui approche par le bord
+      // ne reveillait donc rien, et la camera restait a 5 fps jusqu a ce qu il
+      // soit deja au milieu — soit +100 a 200 ms de latence sur le seul
+      // evenement qui compte. `flat` est non-null des qu au moins un visage
+      // est present n importe ou dans le cadre.
+      const visagePresent = count > 0 || flat != null;
+      if (visagePresent) {
         if (idleTimeoutRef.current) {
           clearTimeout(idleTimeoutRef.current);
           idleTimeoutRef.current = null;
