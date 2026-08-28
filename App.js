@@ -8168,6 +8168,7 @@ export default function App() {
         origin={openedPhoto?.origin}
         eventTitle={openedPhoto?.eventTitle}
         eventDate={openedPhoto?.eventDate}
+        eventType={openedPhoto?.eventType}
         photosForSale={!!openedPhoto?.photosForSale}
         eventCode={openedPhoto?.eventCode || null}
         onClose={() => setOpenedPhoto(null)}

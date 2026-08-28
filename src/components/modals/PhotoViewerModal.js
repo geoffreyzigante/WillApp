@@ -37,6 +37,8 @@ import { FavStar } from '../FavStar';
 import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
 import { detectPhotoExtension, extractBurstTs } from '../../utils/photo';
+import { displayEventType } from '../../utils/format';
+import { colorForType } from '../../constants/colors';
 import { useCart } from '../../hooks/useCart';
 
 // Flag fonctionnalite Supprimer dans la visionneuse. Refonte 2026-05 : la
@@ -52,7 +54,7 @@ export function PhotoViewerModal({
   allowDelete, onDelete,
   photoFavoritesSet, onTogglePhotoFavorite,
   onTogglePhotoVisibility,
-  origin, eventTitle, eventDate,
+  origin, eventTitle, eventDate, eventType,
   photosForSale = false, eventCode = null,
 }) {
   const [busy, setBusy] = useState(false);
@@ -107,7 +109,7 @@ export function PhotoViewerModal({
 
   // Entete sur deux lignes (event + prise de vue), et de la place sous la
   // photo pour le bouton : il chevauchait le bord bas de l image.
-  const HEADER_H = 68;
+  const HEADER_H = 96;
   const BUTTON_AREA_H = 78;
   const RUNNER_BOTTOM_RESERVE = 96;
   const photoMargin = 8;
@@ -561,6 +563,18 @@ export function PhotoViewerModal({
               alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20,
             }, uiStyle]}
           >
+            {eventType ? (
+              <View style={{
+                backgroundColor: colorForType(eventType),
+                paddingHorizontal: 10, paddingVertical: 4,
+                borderRadius: 999,
+                marginBottom: 6,
+              }}>
+                <Text style={{ color: '#fff', fontSize: 10.5, fontWeight: '700', letterSpacing: 0.3 }}>
+                  {displayEventType(eventType)}
+                </Text>
+              </View>
+            ) : null}
             {eventTitle ? (
               <Text numberOfLines={1} style={{
                 color: C.primary,

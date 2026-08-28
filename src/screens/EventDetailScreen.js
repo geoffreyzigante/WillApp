@@ -779,6 +779,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
             photosForSale: !!event?.photos_for_sale,
             eventCode: event?.code,
+            eventType: event?.event_type || null,
           })}
         />
       </View>
@@ -799,6 +800,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
             photosForSale: !!event?.photos_for_sale,
             eventCode: event?.code,
+            eventType: event?.event_type || null,
           })}
         />
       </View>

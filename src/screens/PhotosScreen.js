@@ -35,6 +35,7 @@ import { SpinningLoader, RefreshableScrollView } from '../components/loaders';
 import { C, TYPE_COLORS, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
 import { extractBurstTs, extractIdx, detectPhotoExtension } from '../utils/photo';
+import { formatDateLong } from '../utils/format';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
 
@@ -662,10 +663,17 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
                 // pv porte l URL de la vignette : on rouvre la visionneuse
                 // sur la photo d origine, pleine resolution.
                 const p = visiblePhotos.find((x) => x.id === pv?.id) || pv;
+                // L entete de la visionneuse a besoin de l event : ici les
+                // photos viennent de plusieurs events a la fois, on le
+                // retrouve par son code.
+                const ev = events.find((e) => e.code === p?.eventCode) || null;
                 onOpenPhoto?.(p, visiblePhotos, {
                   origin,
                   photosForSale: !!p?.paid,
                   eventCode: p?.eventCode || null,
+                  eventTitle: ev?.name || null,
+                  eventDate: ev?.event_date ? formatDateLong(ev.event_date, ev.event_date_end) : null,
+                  eventType: ev?.event_type || null,
                 });
               }}
               photoFavoritesSet={photoFavoritesSet}
