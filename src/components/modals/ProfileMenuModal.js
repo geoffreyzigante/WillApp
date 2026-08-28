@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
+  View, Text, TouchableOpacity, TextInput, ScrollView,
   KeyboardAvoidingView, ActivityIndicator, Alert, Platform, StyleSheet,
   Animated, Dimensions,
   Easing,
@@ -154,8 +154,14 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
     }
   };
 
+  // Pas de <Modal> ici : sur Android chaque Modal est une FENETRE separee,
+  // et en ouvrir une par-dessus une autre fait clignoter celle du dessous le
+  // temps que le systeme la compose. Ce panneau est donc une simple couche
+  // posee dans la Modal du menu, qui l accueille deja comme enfant.
+  if (!monte) return null;
+
   return (
-    <Modal visible={monte} transparent animationType="none" onRequestClose={onBack || onClose}>
+    <>
       {/* Aucun voile : le menu en dessous assombrit deja l ecran. Le voile
           leger qu il y avait ici couvrait AUSSI le tiroir — desormais
           transparent — et grisait le fond de la carte. Il ne reste qu une
@@ -377,7 +383,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
           </TouchableOpacity>
         </View>
       </Animated.View>
-    </Modal>
+    </>
   );
 }
 
@@ -393,12 +399,17 @@ const drawer = StyleSheet.create({
     right: 0, bottom: 0,
     width: DRAWER_W,
     overflow: 'hidden',
+    // Le tiroir du menu porte elevation:32 ; sur Android l elevation prime
+    // sur l ordre de l arbre, il faut donc passer au-dessus explicitement.
+    zIndex: 10,
+    elevation: 40,
   },
   headWrap: {
     position: 'absolute',
     top: 0, right: 0,
     width: DRAWER_W,
-    zIndex: 4,
+    zIndex: 11,
+    elevation: 41,
   },
   // Entete posee PAR-DESSUS le bandeau : celui-ci monte jusqu au bord haut
   // du tiroir, comme dans le menu. Avant, la barre retour/fermer poussait le
