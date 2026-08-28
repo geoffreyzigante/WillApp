@@ -47,3 +47,6 @@ App.js.bak2
 
 # Rapports d audit ephemeres (regeneres par agent, ne pas versionner)
 AUDIT.md
+
+# Dossiers de travail locaux
+_to_delete/
