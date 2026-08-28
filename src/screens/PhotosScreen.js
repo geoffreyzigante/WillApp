@@ -37,6 +37,7 @@ import { s } from '../constants/styles';
 import { extractBurstTs, extractIdx, detectPhotoExtension } from '../utils/photo';
 import { graverMention } from '../services/graverMention';
 import { formatDateLong } from '../utils/format';
+import { API_URL } from '../constants/api';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
 
@@ -170,6 +171,23 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     for (const e of events) map[e.code] = colorForType(e.event_type);
     return map;
   }, [events]);
+
+  // Events dont l app ne connait ni le nom ni le type : "Mes photos" agrege
+  // des courses qui ne sont pas dans la liste publique en memoire (passees,
+  // non listees, accessibles par code). Sans ca, la visionneuse s ouvrait
+  // sans titre. Resolus une fois chacun, gardes en memoire.
+  const [evResolus, setEvResolus] = useState({});
+  const evDemandesRef = useRef(new Set());
+  const resoudreEvent = useCallback(async (code) => {
+    if (!code || evDemandesRef.current.has(code)) return;
+    evDemandesRef.current.add(code);
+    try {
+      const r = await fetch(`${API_URL}/public-events/${encodeURIComponent(code)}`);
+      if (!r.ok) return;
+      const d = await r.json();
+      setEvResolus((prev) => ({ ...prev, [code]: d }));
+    } catch {}
+  }, []);
 
   const refreshKnownEvents = useCallback(async () => {
     if (!runnerApiFetch) return [];
@@ -374,6 +392,20 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
   }, [loading, photos]);
 
   useEffect(() => { refreshAll(); }, [refreshAll]);
+
+  // Resolution anticipee : au chargement des photos, on va chercher les
+  // events dont on n a ni le nom (worker ancien) ni la fiche publique, pour
+  // que l entete soit deja prete a la premiere ouverture.
+  useEffect(() => {
+    if (photos.length === 0) return;
+    const manquants = new Set();
+    for (const p of photos) {
+      if (!p.eventCode || p.eventName) continue;
+      if (events.some((e) => e.code === p.eventCode)) continue;
+      manquants.add(p.eventCode);
+    }
+    manquants.forEach((code) => resoudreEvent(code));
+  }, [photos, events, resoudreEvent]);
 
   // Indexation en cours : on reinterroge, mais de moins en moins souvent
   // (12 s, 18 s, 24 s...) et pas au-dela de ~3 minutes. Toutes les 7 s sans
@@ -687,11 +719,14 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
                 // retrouve par son code.
                 // L event vient d abord de la reponse /personal-gallery
                 // (toujours juste), sinon de la liste publique en memoire.
-                const ev = events.find((e) => e.code === p?.eventCode) || null;
+                const ev = events.find((e) => e.code === p?.eventCode)
+                  || evResolus[p?.eventCode]
+                  || null;
                 const nom = p?.eventName || ev?.name || null;
                 const dateBrute = p?.eventDate || ev?.event_date || null;
                 const dateFin = p?.eventDateEnd || ev?.event_date_end || null;
                 const type = p?.eventType || ev?.event_type || null;
+                if (!nom && p?.eventCode) resoudreEvent(p.eventCode);
                 onOpenPhoto?.(p, visiblePhotos, {
                   origin,
                   photosForSale: !!p?.paid,
