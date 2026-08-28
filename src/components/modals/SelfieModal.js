@@ -19,7 +19,6 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
-import * as ImagePicker from 'expo-image-picker';
 import { Image as ExpoImage } from 'expo-image';
 import Svg, { Path } from 'react-native-svg';
 import { Icon } from '../Icon';
@@ -66,17 +65,6 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
 
   const take = () => {
     setCameraOpen(true);
-  };
-
-  const pick = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return Alert.alert('Permission refusée');
-    const r = await ImagePicker.launchImageLibraryAsync({
-      quality: 0.7,
-      allowsEditing: true,
-      aspect: [1, 1],
-    });
-    if (!r.canceled && r.assets?.[0]?.uri) setUri(r.assets[0].uri);
   };
 
   const save = async () => {
@@ -183,14 +171,13 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
                 </Animated.View>
               </View>
 
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <TouchableOpacity style={[selfie.pastille, { flex: 1 }]} onPress={take} activeOpacity={0.8}>
-                  <Text style={selfie.pastilleTexte}>Prendre une photo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[selfie.pastille, { flex: 1 }]} onPress={pick} activeOpacity={0.8}>
-                  <Text style={selfie.pastilleTexte}>Choisir</Text>
-                </TouchableOpacity>
-              </View>
+              {/* Prise de vue en direct uniquement : autoriser une photo de
+                  la galerie reviendrait a laisser n importe qui enregistrer
+                  le visage d un autre. C est la seule barriere qui rattache
+                  le compte a la personne. */}
+              <TouchableOpacity style={selfie.pastille} onPress={take} activeOpacity={0.8}>
+                <Text style={selfie.pastilleTexte}>Prendre une photo</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity style={[selfie.cta, !uri && { opacity: 0.4 }]} onPress={save} disabled={!uri || busy} activeOpacity={0.85}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={selfie.ctaTexte}>Enregistrer mon selfie</Text>}
