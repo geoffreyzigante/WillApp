@@ -8161,6 +8161,18 @@ export default function App() {
           onDeleteFaceData={() => { setProfileMenu(false); setBurgerMenu(false); deleteFaceData(); }}
           uploadState={selfieUploadState}
           onRetryUpload={retrySelfieUpload}
+          onActiverNotifs={async () => {
+            const t = runnerSession?.token;
+            if (!t) return;
+            const dejaVu = await Notifications.getPermissionsAsync().catch(() => null);
+            // Deja refuse : iOS rend la demande inerte, seul le panneau
+            // Reglages permet de revenir en arriere.
+            if (dejaVu && dejaVu.status !== 'granted' && dejaVu.canAskAgain === false) {
+              Linking.openSettings();
+              return;
+            }
+            await ensurePushRegistered(t, { ask: true });
+          }}
         />
 
         <OrganizerProfileMenuModal

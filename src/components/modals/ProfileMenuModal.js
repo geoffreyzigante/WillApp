@@ -4,7 +4,7 @@
 //
 // Audit B12b : geo.api KO/timeout/sans match -> fallback saisie manuelle.
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, TextInput, ScrollView,
   KeyboardAvoidingView, ActivityIndicator, Alert, Platform, StyleSheet,
@@ -14,6 +14,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Notifications from 'expo-notifications';
 import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
 import { s } from '../../constants/styles';
@@ -70,7 +71,7 @@ function Action({ label, onPress, ton = 'normal', dernier }) {
   );
 }
 
-export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload, heroOffset = 0 }) {
+export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload, heroOffset = 0, onActiverNotifs }) {
   // Transition "axe partage" : ce qui part recule vers la gauche en
   // s effacant, ce qui arrive vient de la droite — la meme grammaire que les
   // grandes apps iOS. Trois choses jouent ensemble et se recouvrent :
@@ -109,6 +110,19 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
   // largeur du tiroir. La surimpression precedente faisait flotter un carre
   // au milieu de l ecran, a cheval sur le bord du tiroir — et il fallait
   // assombrir tout le reste pour la rendre lisible.
+  // Etat des notifications. Sans point d entree explicite, la permission
+  // n etait demandee qu au moment du selfie : impossible a rejouer, et
+  // l app n apparaissait meme pas dans les reglages iOS (le systeme ne
+  // liste une app qu apres sa premiere demande).
+  const [notifs, setNotifs] = useState(null); // null = inconnu
+  const relireNotifs = useCallback(async () => {
+    try {
+      const p = await Notifications.getPermissionsAsync();
+      setNotifs({ accorde: p.status === 'granted', peutDemander: p.canAskAgain !== false });
+    } catch { setNotifs(null); }
+  }, []);
+  useEffect(() => { if (visible) relireNotifs(); }, [visible, relireNotifs]);
+
   const [apercuSelfie, setApercuSelfie] = useState(false);
   const apercuH = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -332,6 +346,26 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
 
               {profile && !editing && !changingPwd && (
                 <View style={drawer.section}>
+                  <Text style={drawer.secLabel}>Notifications</Text>
+                  <View style={compte.selfieLigne}>
+                    <Text style={compte.ligneValeur2}>
+                      {notifs?.accorde ? 'Activées' : 'Désactivées'}
+                    </Text>
+                    <View style={{ flex: 1 }} />
+                    {!notifs?.accorde ? (
+                      <TouchableOpacity onPress={async () => { await onActiverNotifs?.(); relireNotifs(); }}>
+                        <Text style={compte.lien}>{notifs?.peutDemander === false ? 'Ouvrir les réglages' : 'Activer'}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  <Text style={compte.aide}>
+                    On te prévient quand une photo de toi arrive, une seule fois par série.
+                  </Text>
+                </View>
+              )}
+
+              {profile && !editing && !changingPwd && (
+                <View style={drawer.section}>
                   <Text style={drawer.secLabel}>Réglages</Text>
                   <Action label="Modifier mes infos" onPress={() => setEditing(true)} />
                   <Action label="Modifier mon mot de passe" onPress={() => setChangingPwd(true)} dernier />
@@ -515,6 +549,7 @@ const compte = StyleSheet.create({
   ligneValeur2: { fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
   selfieLigne: { flexDirection: 'row', alignItems: 'center' },
   lien: { color: C.primary, fontWeight: '600', fontSize: 14 },
+  aide: { marginTop: 8, fontSize: 12.5, lineHeight: 17, color: 'rgba(26,10,62,0.45)' },
   action: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 13,
