@@ -35,6 +35,7 @@ import { SpinningLoader, RefreshableScrollView } from '../components/loaders';
 import { C, TYPE_COLORS, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
 import { extractBurstTs, extractIdx, detectPhotoExtension } from '../utils/photo';
+import { graverMention } from '../services/graverMention';
 import { formatDateLong } from '../utils/format';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
@@ -481,15 +482,16 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         if (!photo?.uri) { failed++; continue; }
         let staged = null;
         try {
-          // Comme dans la visionneuse : on retire nowm=1 pour que le fichier
-          // enregistre porte la mention « Photo capturée par Will ».
-          const urlFichier = String(photo.uri).replace(/[&?]nowm=1/, '');
-          const ext = await detectPhotoExtension(urlFichier);
+          const ext = await detectPhotoExtension(photo.uri);
           const filename = `will_${Date.now()}_${i}.${ext}`;
           staged = new File(Paths.cache, filename);
-          const downloaded = await File.downloadFileAsync(urlFichier, staged, { idempotent: true });
-          const localUri = downloaded?.uri || staged.uri;
+          const downloaded = await File.downloadFileAsync(photo.uri, staged, { idempotent: true });
+          let localUri = downloaded?.uri || staged.uri;
+          // Mention gravee dans le fichier, comme dans la visionneuse.
+          const grave = ext === 'dng' ? null : await graverMention(localUri);
+          if (grave) localUri = grave;
           await MediaLibrary.saveToLibraryAsync(localUri);
+          if (grave) { try { const f = new File(grave); if (f.exists) f.delete(); } catch {} }
           saved++;
         } catch (e) {
           failed++;

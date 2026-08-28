@@ -37,6 +37,7 @@ import { FavStar } from '../FavStar';
 import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
 import { detectPhotoExtension, extractBurstTs } from '../../utils/photo';
+import { graverMention } from '../../services/graverMention';
 import { displayEventType } from '../../utils/format';
 import { colorForType } from '../../constants/colors';
 import { useCart } from '../../hooks/useCart';
@@ -391,6 +392,7 @@ export function PhotoViewerModal({
     if (!currentPhoto?.uri || busy) return;
     setBusy(true);
     let staged = null;
+    let grave3 = null;
     try {
       const perm = await MediaLibrary.requestPermissionsAsync(true);
       if (!perm.granted) {
@@ -402,16 +404,16 @@ export function PhotoViewerModal({
         Alert.alert('Hors ligne', 'Pas de connexion internet — impossible de télécharger la photo.');
         return;
       }
-      // A l ecran la photo est servie propre (nowm=1) et la mention est un
-      // calque de l interface. Dans le FICHIER, elle doit faire partie des
-      // pixels : on retire nowm=1 et le worker grave « Photo capturée par
-      // Will » en bas a gauche, comme le fait le site au telechargement.
-      const url = String(currentPhoto.uri).replace(/[&?]nowm=1/, '');
+      const url = currentPhoto.uri;
       const ext = await detectPhotoExtension(url);
       const filename = `will_${Date.now()}.${ext}`;
       staged = new File(Paths.cache, filename);
       const downloaded = await File.downloadFileAsync(url, staged, { idempotent: true });
-      const localUri = downloaded?.uri || staged.uri;
+      let localUri = downloaded?.uri || staged.uri;
+      // La mention fait partie des pixels du fichier enregistre, comme sur le
+      // site. Si la gravure n est pas possible, on enregistre l original.
+      const grave = ext === 'dng' ? null : await graverMention(localUri);
+      if (grave) { grave3 = grave; localUri = grave; }
       try {
         await MediaLibrary.saveToLibraryAsync(localUri);
         Alert.alert('Photo sauvegardée', 'Disponible dans ta pellicule Photos.');
@@ -434,6 +436,7 @@ export function PhotoViewerModal({
       Alert.alert('Erreur', friendly);
     } finally {
       try { if (staged?.exists) staged.delete(); } catch {}
+      try { if (grave3) { const f = new File(grave3); if (f.exists) f.delete(); } } catch {}
       setBusy(false);
     }
   };
