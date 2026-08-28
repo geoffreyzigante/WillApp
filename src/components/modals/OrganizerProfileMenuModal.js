@@ -38,7 +38,6 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
   const contentX = useRef(new Animated.Value(28)).current;
   const contentScale = useRef(new Animated.Value(0.985)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (visible) setMonte(true);
     Animated.parallel([
@@ -46,9 +45,8 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
       Animated.timing(contentX, { toValue: visible ? 0 : 28, duration: visible ? 300 : 200, delay: visible ? 80 : 0, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
       Animated.timing(contentScale, { toValue: visible ? 1 : 0.985, duration: visible ? 300 : 200, delay: visible ? 80 : 0, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
       Animated.timing(contentOpacity, { toValue: visible ? 1 : 0, duration: visible ? 220 : 150, delay: visible ? 80 : 0, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
-      Animated.timing(backdropOpacity, { toValue: visible ? 1 : 0, duration: visible ? 240 : 200, easing: visible ? ENTREE : SORTIE, useNativeDriver: true }),
     ]).start(() => { if (!visible) setMonte(false); });
-  }, [visible, panelOpacity, contentX, contentScale, contentOpacity, backdropOpacity]);
+  }, [visible, panelOpacity, contentX, contentScale, contentOpacity]);
 
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -104,13 +102,15 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
 
   return (
     <Modal visible={monte} transparent animationType="none" onRequestClose={onBack || onClose}>
-      {/* Voile leger seulement : le menu en dessous assombrit deja l ecran,
-          deux voiles empiles viraient au noir. */}
-      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backdropOpacity }]}>
-        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose}>
-          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,7,35,0.18)' }]} />
-        </TouchableOpacity>
-      </Animated.View>
+      {/* Aucun voile : le menu en dessous assombrit deja l ecran. Le voile
+          leger qu il y avait ici couvrait AUSSI le tiroir — desormais
+          transparent — et grisait le fond de la carte. Il ne reste qu une
+          zone tactile invisible pour fermer en tapant a cote. */}
+      <TouchableOpacity
+        style={StyleSheet.absoluteFillObject}
+        activeOpacity={1}
+        onPress={onClose}
+      />
 
       <Animated.View
         pointerEvents={visible ? 'auto' : 'none'}
