@@ -16,7 +16,7 @@
 // overlay n'est pas paint pour eviter le screenshot CLEAN entre photo load
 // et watermark load.
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, FlatList, Dimensions, Platform,
   StatusBar, AppState, Alert, ActivityIndicator, StyleSheet,
@@ -208,12 +208,18 @@ export function PhotoViewerModal({
     }
   };
 
-  useEffect(() => {
+  // useLayoutEffect, pas useEffect : l ancien effet s executait APRES le
+  // premier affichage, donc une image etait peinte avec la carte deja pleine
+  // taille avant que l animation ne la renvoie sur la vignette. C est ce
+  // sursaut d une frame qui donnait l ouverture "brute". animateIn passe
+  // aussi devant les setState, pour que l animation demarre avant le travail
+  // de rendu de la liste.
+  useLayoutEffect(() => {
     if (!visible) return;
+    animateIn();
     setCurrentIndex(targetIndex);
     resetTransforms();
     setLocalHiddenMap({});
-    animateIn();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, targetIndex]);
 
@@ -557,6 +563,12 @@ export function PhotoViewerModal({
                   initialScrollIndex={targetIndex}
                   keyExtractor={(p, i) => p.id || `photo-${i}`}
                   getItemLayout={(_, index) => ({ length: cardW, offset: cardW * index, index })}
+                  // Par defaut FlatList monte 10 elements : dix images plein
+                  // ecran a decoder pile pendant l animation d ouverture.
+                  initialNumToRender={1}
+                  maxToRenderPerBatch={2}
+                  windowSize={3}
+                  removeClippedSubviews
                   onScrollToIndexFailed={(info) => {
                     setTimeout(() => photoListRef.current?.scrollToOffset({
                       offset: cardW * info.index, animated: false,
