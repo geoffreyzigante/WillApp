@@ -586,9 +586,15 @@ export function PhotoViewerModal({
                           backgroundColor: 'transparent',
                         }, radiusStyle]}>
                           {item?.uri ? (
+                            // Remplacant pendant le chargement : la miniature,
+                            // deja en cache disque depuis la grille. C etait
+                            // la MEME image pleine resolution auparavant,
+                            // autant dire rien — d ou l ouverture sur du vide
+                            // puis l apparition seche.
                             <ExpoImage
                               source={{ uri: item.uri }}
-                              placeholder={{ uri: item.uri }}
+                              placeholder={{ uri: item.thumbMdUri || item.thumbUri || item.uri }}
+                              placeholderContentFit="cover"
                               style={[
                                 { width: '100%', height: '100%' },
                                 photosForSale && !wmReady ? { opacity: 0 } : null,
@@ -596,7 +602,7 @@ export function PhotoViewerModal({
                               contentFit="cover"
                               cachePolicy="memory-disk"
                               priority="high"
-                              transition={0}
+                              transition={180}
                               recyclingKey={item.id}
                               onLoad={(e) => {
                                 const w = e?.source?.width;
