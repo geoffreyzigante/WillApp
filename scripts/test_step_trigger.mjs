@@ -76,7 +76,10 @@ console.log('\n[TEST 4] Le credit partage ne vole personne : hors bande, pas cre
 {
   const trig = createStepTrigger();
   // A est dans la bande, B est colle au bord droit (hors bande).
+  // Deux images : un visage apparu dans la bande attend une confirmation
+  // avant de pouvoir declencher (cf. minObsPourApparition).
   trig.ingest([100.0, 2, 0.70, 0.5, 0.17, 0.17, 0.95, 0.5, 0.17, 0.17]);
+  trig.ingest([100.1, 2, 0.70, 0.5, 0.17, 0.17, 0.95, 0.5, 0.17, 0.17]);
   const st = trig.debugState();
   const dansBande = st.tracks.find(tr => Math.abs(tr.x - 0.70) < 0.01);
   const horsBande = st.tracks.find(tr => Math.abs(tr.x - 0.95) < 0.01);
@@ -119,9 +122,11 @@ console.log('\n[TEST 6] Le plancher du capteur est respecte');
 console.log('\n[TEST 7] Un visage perdu puis retrouve repart avec un budget neuf');
 {
   const trig = createStepTrigger();
-  trig.ingest([100.0, 1, 0.70, 0.5, 0.17, 0.17]);   // photo 1
+  trig.ingest([100.0, 1, 0.70, 0.5, 0.17, 0.17]);
+  trig.ingest([100.1, 1, 0.70, 0.5, 0.17, 0.17]);   // photo 1
   // Disparition pendant 1 s (> coastMs), puis retour au meme endroit.
-  const actions = trig.ingest([101.0, 1, 0.70, 0.5, 0.17, 0.17]);
+  trig.ingest([101.0, 1, 0.70, 0.5, 0.17, 0.17]);
+  const actions = trig.ingest([101.1, 1, 0.70, 0.5, 0.17, 0.17]);
   assert(actions.length === 1, 'le visage retrouve declenche a nouveau');
 }
 
@@ -160,6 +165,32 @@ console.log('\n[TEST 4ter] Un flux etale coute plus de photos — et c est voulu
   }
   assert(tirs / 8 < 1.5, `flux de 8 -> moins de 1,5 photo par coureur (got ${(tirs / 8).toFixed(2)})`);
   assert(tirs / 8 < 3, 'toujours moins cher par tete qu un coureur isole');
+}
+
+console.log('\n[TEST 9] Flux continu de 50 coureurs : le volume reste borne');
+{
+  // Le cas reel annonce : pelotons de 20 a 50, sans un instant de creux. Le
+  // worklet ne remonte que 8 visages, donc le sous-ensemble suivi change sans
+  // arret et les budgets se renouvellent. Sans limiteur, le declencheur tire
+  // au rythme du cooldown pendant toute la duree du flux.
+  const trig = createStepTrigger();
+  const dt = 0.1;
+  let t = 100, tirs = 0;
+  // 50 coureurs qui defilent en 50 s, 8 visages visibles a tout instant.
+  for (let k = 0; k < 500; k++) {
+    const flat = [t, 8];
+    for (let i = 0; i < 8; i++) {
+      // Position qui defile en boucle : simule le flux continu.
+      const x = ((1.2 - (k * 0.05 + i * 0.15)) % 1.6 + 1.6) % 1.6 - 0.3;
+      flat.push(x, 0.5, 0.17, 0.17);
+    }
+    tirs += trig.ingest(flat).length;
+    t += dt;
+  }
+  const parSeconde = tirs / 50;
+  assert(parSeconde <= 3.1, `flux continu -> au plus 3 photos par seconde (got ${parSeconde.toFixed(2)})`);
+  assert(tirs <= 160, `50 s de flux continu -> volume borne (got ${tirs})`);
+  assert(tirs > 50, `mais le flux est bien servi, pas etouffe (got ${tirs})`);
 }
 
 console.log('\n[TEST 8] Entree invalide : aucun tir, aucune exception');

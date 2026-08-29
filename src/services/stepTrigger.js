@@ -58,6 +58,29 @@ export const STEP_TRIGGER_DEFAULTS = {
   velAlpha: 0.4,
   // Cap defensif, miroir du worklet.
   maxFaces: 8,
+  // ── Limiteur global ─────────────────────────────────────────────────────
+  // Plafond glissant, toutes personnes confondues. Sans lui, un flux continu
+  // sature : le worklet ne remonte que les `maxFaces` plus grands visages, et
+  // sur un peloton de vingt a cinquante coureurs a distance comparable, le
+  // sous-ensemble retenu bouge d une image a l autre. Des tracks naissent et
+  // meurent en permanence, chacun avec ses trois reperes intacts, et le
+  // declencheur tire au rythme du cooldown — une photo toutes les 180 ms tant
+  // que le flux dure, soit 5,5 par seconde pilotees par le capteur et non par
+  // les coureurs.
+  //
+  // 30 par 10 s = 3 par seconde. Sur un flux d un coureur par seconde, cela
+  // fait exactement 3 photos par coureur ; au-dela, la degradation est douce
+  // et bornee au lieu d etre une saturation.
+  //
+  // Le meme garde-fou existe dans lineTrigger.js (maxPer10s: 24). Il aurait
+  // du etre repris ici des le depart.
+  maxPer10s: 30,
+  // Nombre d observations minimum avant qu un visage apparu DEJA dans la
+  // bande puisse declencher. A une seule observation on ne sait pas encore
+  // s il s agit d un vrai coureur ou d un visage qui entre et sort du
+  // classement des plus grands. Les tirs par franchissement ne sont pas
+  // concernes : ils exigent deja une position precedente, donc deux images.
+  minObsPourApparition: 2,
 };
 
 export function createStepTrigger(options = {}) {
@@ -78,6 +101,10 @@ export function createStepTrigger(options = {}) {
   let tracks = [];
   let nextId = 1;
   let lastFireTs = -Infinity;
+  // Horodatages des tirs recents, pour le limiteur glissant. Elague a chaque
+  // consultation : contrairement a lineTrigger, aucun chemin ne contourne le
+  // limiteur, donc le tableau ne peut pas croitre sans borne.
+  let fireTimes = [];
 
   const dansLaBande = (x) => x >= bornes.min && x <= bornes.max;
 
@@ -161,7 +188,19 @@ export function createStepTrigger(options = {}) {
       tr.obs += 1;
 
       const cr = franchis(tr, prevX, det.x);
-      if (cr.length) candidats.push({ tr, indices: cr, reason: 'repere-franchi' });
+      if (cr.length) {
+        candidats.push({ tr, indices: cr, reason: 'repere-franchi' });
+      } else if (
+        tr.obs === cfg.minObsPourApparition
+        && tr.consumed.size === 0
+        && dansLaBande(det.x)
+      ) {
+        // Visage repere tard — contre-jour, sortie de virage — deja dans la
+        // bande a sa premiere detection. Sans ce cas il ne declencherait que
+        // s il lui reste un repere devant lui, et jamais s il est apparu
+        // apres le dernier.
+        candidats.push({ tr, indices: [repereLePlusProche(det.x)], reason: 'apparu-dans-bande' });
+      }
     }
 
     // ── 2. Detections non appariees : nouveaux tracks ──────────────────────
@@ -178,9 +217,10 @@ export function createStepTrigger(options = {}) {
         consumed: new Set(),
       };
       tracks.push(tr);
-      if (dansLaBande(det.x)) {
-        candidats.push({ tr, indices: [repereLePlusProche(det.x)], reason: 'apparu-dans-bande' });
-      }
+      // Volontairement PAS candidat des la premiere image : voir
+      // minObsPourApparition. Il le deviendra a la suivante s il est toujours
+      // la, ou declenchera normalement par franchissement.
+      void dansLaBande;
     }
 
     // ── 3. Decision ───────────────────────────────────────────────────────
@@ -189,6 +229,10 @@ export function createStepTrigger(options = {}) {
     // couter vingt fois un coureur isole.
     if (candidats.length === 0) return [];
     if (t - lastFireTs < cfg.cooldownMs) return [];
+
+    // Limiteur glissant sur 10 s.
+    while (fireTimes.length && t - fireTimes[0] > 10000) fireTimes.shift();
+    if (fireTimes.length >= cfg.maxPer10s) return [];
 
     // Le declencheur nomme est celui dont le visage est le plus grand : c est
     // le plus proche, donc celui pour qui la photo sera la plus exploitable.
@@ -215,6 +259,7 @@ export function createStepTrigger(options = {}) {
     }
 
     lastFireTs = t;
+    fireTimes.push(t);
     return [{
       type: 'fire',
       reason: choisi.reason,
@@ -228,13 +273,15 @@ export function createStepTrigger(options = {}) {
   function reset() {
     tracks = [];
     lastFireTs = -Infinity;
+    fireTimes = [];
   }
 
   function debugState() {
     return {
       reperes: reperes.slice(),
       bornes,
-      tracks: tracks.map(tr => ({ id: tr.id, x: tr.x, consumed: [...tr.consumed] })),
+      tracks: tracks.map(tr => ({ id: tr.id, x: tr.x, obs: tr.obs, consumed: [...tr.consumed] })),
+      tirsDansLaFenetre: fireTimes.length,
     };
   }
 
