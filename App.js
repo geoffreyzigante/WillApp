@@ -121,6 +121,7 @@ import { scorePhotoSafely } from './src/services/qualityScorer';
 import { caps, reportFrameProcessor, describeCapabilities } from './src/services/capabilities';
 // Declenchement par lignes (cf. CONCEPTION_LIGNES_NOTE.md).
 import { createLineTrigger } from './src/services/lineTrigger';
+import { createStepTrigger } from './src/services/stepTrigger';
 // Niveaux de capture : adapte le nombre de lignes au materiel et a la course.
 import {
   tierFor, createLatencyProbe, createPhotoSizeProbe, photosPerRunnerFor,
@@ -1083,6 +1084,32 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const lineCfgRef = useRef({ enabled: false, shadow: false });
   const lineTriggerRef = useRef(null);
   if (lineTriggerRef.current === null) lineTriggerRef.current = createLineTrigger();
+
+  // ── Mode de capture ─────────────────────────────────────────────────────
+  // 'rafale' = comportement historique (mitraillage sur entree en zone puis
+  //            tri qualite). Valeur par defaut : rien ne change sans geste
+  //            explicite du benevole.
+  // 'pas'    = declenchement au pas de distance (src/services/stepTrigger.js) :
+  //            trois reperes fixes dans les 50 % centraux, une photo par
+  //            franchissement, credit partage sur tous les visages presents.
+  //            Aucun tri en aval — les photos partent telles quelles.
+  //
+  // La bascule vit dans une REF autant que dans un etat : onHumansDetectedJS
+  // est memoise avec des dependances vides, sa closure est donc figee au
+  // premier rendu. Lire l etat directement donnerait eternellement 'rafale'.
+  const [modeCapture, setModeCapture] = useState('rafale');
+  const modeCaptureRef = useRef('rafale');
+  const stepTriggerRef = useRef(null);
+  if (stepTriggerRef.current === null) stepTriggerRef.current = createStepTrigger();
+  const basculerModeCapture = () => {
+    const suivant = modeCaptureRef.current === 'pas' ? 'rafale' : 'pas';
+    modeCaptureRef.current = suivant;
+    setModeCapture(suivant);
+    // Le tracker repart propre : les reperes deja consommes par un passage en
+    // cours n auraient aucun sens dans l autre mode.
+    try { stepTriggerRef.current?.reset(); } catch {}
+    console.log(`[mode] capture = ${suivant}`);
+  };
   // Signature JSON des seuils /config appliques au tracker. Sert a ne le
   // recreer QUE quand un seuil change reellement (le refetch /config toutes
   // les 5 min recree l'objet camera sans changer les valeurs).
@@ -1251,6 +1278,34 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         }, IDLE_AFTER_MS);
       }
       if (!isAutoArmedRef.current) return;
+
+      // ── Mode "pas de distance" ────────────────────────────────────────
+      // Debranche entierement l ancien pipeline : pas de rafale, pas de garde
+      // statique, pas de tri. Le tracker decide, on execute. Les photos sont
+      // marquees lineTriggered, donc posees upload_kept des l enqueue et
+      // ignorees par le reducer.
+      if (modeCaptureRef.current === 'pas') {
+        if (!flat || !stepTriggerRef.current) return;
+        let actions = [];
+        try {
+          actions = stepTriggerRef.current.ingest(flat);
+        } catch (e) {
+          // Le tracker ne doit jamais faire tomber la capture.
+          console.warn('[pas] ingest error', e?.message || e);
+          return;
+        }
+        for (const a of actions) {
+          if (inFlightSetRef.current.size >= MAX_IN_FLIGHT) break;
+          const pr = captureOne({
+            burstTs: Date.now(), idx: 0, lineTriggered: true, xPredicted: a.x,
+          });
+          inFlightSetRef.current.add(pr);
+          updateInFlight();
+          pr.finally(() => { inFlightSetRef.current.delete(pr); updateInFlight(); });
+          console.log(`[pas] tir repere=${a.repere} x=${a.x.toFixed(3)} credites=${a.creditedIds.length}`);
+        }
+        return;
+      }
 
       // ── Declenchement par lignes ──────────────────────────────────────
       // Le tracker recoit TOUS les visages (pas seulement ceux en zone) : il
@@ -3896,6 +3951,18 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 ? <Text style={{ color: P.accent, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Actif</Text>
                 : null}
               onPress={() => { fermerPanneaux(); setFramingMode(v => !v); }}
+            />
+            <RangeePanneau
+              libelle="Mode de capture"
+              droite={
+                <Text style={{
+                  color: modeCapture === 'pas' ? P.accent : P.label,
+                  fontSize: 13, fontFamily: 'Montserrat-SemiBold',
+                }}>
+                  {modeCapture === 'pas' ? 'Pas de distance' : 'Rafale'}
+                </Text>
+              }
+              onPress={() => { fermerPanneaux(); basculerModeCapture(); }}
             />
             <RangeePanneau
               libelle="Compteurs à l'écran"

@@ -1,0 +1,175 @@
+// Tests du declenchement au pas de distance.
+//
+// Meme esprit que test_quality_failsafes.mjs : on teste des INVARIANTS
+// metier, pas des details d implementation. Rejouables image par image,
+// puisque le module est pur et que tout le temps vient du `ts` fourni.
+//
+// Lancer :  npm run test:step
+
+import { createStepTrigger } from '../src/services/stepTrigger.js';
+
+let ko = 0;
+function assert(cond, label) {
+  if (cond) { console.log(`  ✓ ${label}`); }
+  else { console.log(`  ✗ ${label}`); ko++; }
+}
+
+// Simule une traversee : le visage entre par la droite (x = 1) et sort a
+// gauche (x = 0), a `vitesse` largeurs d image par seconde, echantillonne a
+// `fps` images par seconde. Retourne le nombre de tirs et leurs positions.
+function traversee(trig, { vitesse, fps = 10, t0 = 100, aire = 0.03 }) {
+  const dt = 1 / fps;
+  const tirs = [];
+  let t = t0;
+  for (let x = 1.0; x >= 0; x -= vitesse * dt) {
+    const w = Math.sqrt(aire), h = Math.sqrt(aire);
+    const actions = trig.ingest([t, 1, x, 0.5, w, h]);
+    for (const a of actions) tirs.push(Number(a.x.toFixed(3)));
+    t += dt;
+  }
+  return tirs;
+}
+
+console.log('\n[TEST 1] Le compte de 3 ne depend pas de la vitesse');
+{
+  // 4 m de distance -> cadre ~4,2 m. Les vitesses sont converties en
+  // largeurs d image par seconde : marche 1,4/4,2 = 0,33 ; course 3,3/4,2
+  // = 0,79 ; velo a 10 m (cadre 10 m) 8,3/10 = 0,83.
+  for (const [nom, v] of [['marche', 0.33], ['course', 0.79], ['velo a 10 m', 0.83]]) {
+    const trig = createStepTrigger();
+    const tirs = traversee(trig, { vitesse: v });
+    assert(tirs.length === 3, `${nom} (${v} largeur/s) -> 3 photos [got ${tirs.length}: ${tirs.join(', ')}]`);
+  }
+}
+
+console.log('\n[TEST 2] Toutes les photos sont dans les 50 % centraux');
+{
+  for (const v of [0.2, 0.5, 0.79, 1.2]) {
+    const trig = createStepTrigger();
+    const tirs = traversee(trig, { vitesse: v });
+    const hors = tirs.filter(x => x < 0.25 || x > 0.75);
+    assert(hors.length === 0, `v=${v} -> aucune photo hors bande [positions ${tirs.join(', ')}]`);
+  }
+}
+
+console.log('\n[TEST 3] Un peloton coute moins cher qu un coureur isole');
+{
+  const solo = createStepTrigger();
+  const tirsSolo = traversee(solo, { vitesse: 0.79 });
+
+  // 5 visages groupes, meme vitesse, decales de 0,06 largeur.
+  const trig = createStepTrigger();
+  const dt = 0.1, v = 0.79;
+  let t = 100, tirs = 0;
+  for (let x = 1.15; x >= -0.3; x -= v * dt) {
+    const flat = [t, 5];
+    for (let i = 0; i < 5; i++) flat.push(x - i * 0.06, 0.5, 0.17, 0.17);
+    tirs += trig.ingest(flat).length;
+    t += dt;
+  }
+  assert(tirsSolo.length === 3, `solo -> 3 photos (got ${tirsSolo.length})`);
+  assert(tirs <= 6, `peloton de 5 -> au plus 6 photos pour 5 coureurs (got ${tirs})`);
+  assert(tirs / 5 < tirsSolo.length, `peloton moins cher par tete (${(tirs / 5).toFixed(1)} vs 3,0)`);
+}
+
+console.log('\n[TEST 4] Le credit partage ne vole personne : hors bande, pas credite');
+{
+  const trig = createStepTrigger();
+  // A est dans la bande, B est colle au bord droit (hors bande).
+  trig.ingest([100.0, 2, 0.70, 0.5, 0.17, 0.17, 0.95, 0.5, 0.17, 0.17]);
+  const st = trig.debugState();
+  const dansBande = st.tracks.find(tr => Math.abs(tr.x - 0.70) < 0.01);
+  const horsBande = st.tracks.find(tr => Math.abs(tr.x - 0.95) < 0.01);
+  assert(dansBande && dansBande.consumed.length === 1, 'le visage dans la bande consomme un repere');
+  assert(horsBande && horsBande.consumed.length === 0, 'le visage hors bande garde son budget intact');
+}
+
+console.log('\n[TEST 5] Un visage immobile ne mitraille pas');
+{
+  const trig = createStepTrigger();
+  let t = 100, tirs = 0;
+  // Une affiche au centre du cadre pendant 10 secondes.
+  for (let i = 0; i < 100; i++) {
+    tirs += trig.ingest([t, 1, 0.5, 0.5, 0.17, 0.17]).length;
+    t += 0.1;
+  }
+  assert(tirs === 1, `scene immobile -> 1 seule photo en 10 s (got ${tirs})`);
+}
+
+console.log('\n[TEST 6] Le plancher du capteur est respecte');
+{
+  const trig = createStepTrigger({ cooldownMs: 180 });
+  // Coureur rapide echantillonne a 30 fps : les tirs se bousculeraient si
+  // rien ne les espacait.
+  const tirs = [];
+  let t = 100;
+  for (let x = 1.0; x >= 0; x -= 0.8 / 30) {
+    const actions = trig.ingest([t, 1, x, 0.5, 0.17, 0.17]);
+    for (const a of actions) tirs.push(t);
+    t += 1 / 30;
+  }
+  assert(tirs.length >= 2, `au moins 2 tirs pour que le test ait un sens (got ${tirs.length})`);
+  let okEcart = true;
+  for (let i = 1; i < tirs.length; i++) {
+    if ((tirs[i] - tirs[i - 1]) * 1000 < 179) okEcart = false;
+  }
+  assert(okEcart, `jamais deux photos a moins de 180 ms (${tirs.length} tirs)`);
+}
+
+console.log('\n[TEST 7] Un visage perdu puis retrouve repart avec un budget neuf');
+{
+  const trig = createStepTrigger();
+  trig.ingest([100.0, 1, 0.70, 0.5, 0.17, 0.17]);   // photo 1
+  // Disparition pendant 1 s (> coastMs), puis retour au meme endroit.
+  const actions = trig.ingest([101.0, 1, 0.70, 0.5, 0.17, 0.17]);
+  assert(actions.length === 1, 'le visage retrouve declenche a nouveau');
+}
+
+console.log('\n[TEST 4bis] Coureurs de front : 3 photos pour tout le monde');
+{
+  // Le seul cas ou le credit partage joue a PLEIN est le groupe assez etroit
+  // pour que tous soient dans la bande a chacun des trois tirs. Cela demande
+  // un etalement inferieur a ~0,08 de largeur — soit des coureurs cote a
+  // cote, ce qui est exactement le cas d une ligne de front sur route.
+  const trig = createStepTrigger();
+  const dt = 0.1, v = 0.5;
+  let t = 100, tirs = 0;
+  for (let x = 1.3; x >= -0.4; x -= v * dt) {
+    const flat = [t, 4];
+    for (let i = 0; i < 4; i++) flat.push(x - i * 0.02, 0.5, 0.17, 0.17);
+    tirs += trig.ingest(flat).length;
+    t += dt;
+  }
+  assert(tirs <= 3, `4 coureurs de front -> au plus 3 photos (got ${tirs})`);
+}
+
+console.log('\n[TEST 4ter] Un flux etale coute plus de photos — et c est voulu');
+{
+  // 8 coureurs etales sur 0,56 de largeur : plus large que la bande, donc
+  // les derniers y entrent quand les premiers en sont sortis. Leur imposer
+  // le plafond de 3 priverait ceux de derriere de toute photo. Le bon
+  // invariant n est pas "3 par groupe" mais "peu de photos PAR COUREUR".
+  const trig = createStepTrigger();
+  const dt = 0.1, v = 0.5;
+  let t = 100, tirs = 0;
+  for (let x = 1.4; x >= -0.6; x -= v * dt) {
+    const flat = [t, 8];
+    for (let i = 0; i < 8; i++) flat.push(x - i * 0.07, 0.5, 0.17, 0.17);
+    tirs += trig.ingest(flat).length;
+    t += dt;
+  }
+  assert(tirs / 8 < 1.5, `flux de 8 -> moins de 1,5 photo par coureur (got ${(tirs / 8).toFixed(2)})`);
+  assert(tirs / 8 < 3, 'toujours moins cher par tete qu un coureur isole');
+}
+
+console.log('\n[TEST 8] Entree invalide : aucun tir, aucune exception');
+{
+  const trig = createStepTrigger();
+  assert(trig.ingest(null).length === 0, 'flat null');
+  assert(trig.ingest([]).length === 0, 'flat vide');
+  assert(trig.ingest([0, 0]).length === 0, 'ts nul');
+  assert(trig.ingest([100, 1, NaN, 0.5, 0.1, 0.1]).length === 0, 'coordonnee NaN ignoree');
+}
+
+console.log(ko === 0 ? '\n✓ Tous les invariants sont tenus.\n' : `\n✗ ${ko} assertion(s) KO.\n`);
+process.exit(ko === 0 ? 0 : 1);

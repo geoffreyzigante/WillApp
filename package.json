@@ -7,12 +7,15 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test:quality": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/_loader_js_extension.mjs\", pathToFileURL(\"./\"));' scripts/test_quality_failsafes.mjs"
+    "test:quality": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/_loader_js_extension.mjs\", pathToFileURL(\"./\"));' scripts/test_quality_failsafes.mjs",
+    "test:step": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/_loader_js_extension.mjs\", pathToFileURL(\"./\"));' scripts/test_step_trigger.mjs",
+    "test": "npm run test:quality && npm run test:step"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-community/netinfo": "11.4.1",
+    "@shopify/react-native-skia": "2.2.12",
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.34",
     "expo-battery": "~10.0.8",
