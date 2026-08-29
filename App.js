@@ -208,6 +208,11 @@ import { startHeartbeat, enqueueAlert } from './src/services/heartbeat';
 // considere qu un crash iOS a eu lieu et re-entre automatiquement en mode
 // photographe (LOT 1.5 pilote).
 const PHOTOGRAPHER_ACTIVE_KEY = '@will_photographer_active';
+// Position des deux interrupteurs de l ecran photographe. Persistee parce
+// qu une relance — volontaire, ou apres un plantage, ou apres un OTA — les
+// remettait silencieusement a leurs defauts. Le benevole croyait tester un
+// mode et en testait un autre : constate le 2026-08-29, deux passages perdus.
+const MODES_CAPTURE_KEY = 'will:photographe:modes';
 import { C, TYPE_COLORS, colorForType } from './src/constants/colors';
 import {
   cartChangeListeners,
@@ -1164,6 +1169,34 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // premier rendu. Lire l etat directement donnerait eternellement 'rafale'.
   const [modeCapture, setModeCapture] = useState('rafale');
   const modeCaptureRef = useRef('rafale');
+  // Relecture au montage. Asynchrone, donc l ecran s ouvre sur les defauts
+  // puis bascule — c est sans consequence, aucune capture n a lieu dans cet
+  // intervalle (l auto-armement demande 900 ms).
+  useEffect(() => {
+    let annule = false;
+    AsyncStorage.getItem(MODES_CAPTURE_KEY)
+      .then(brut => {
+        if (annule || !brut) return;
+        const m = JSON.parse(brut);
+        if (m?.capture === 'pas' || m?.capture === 'rafale') {
+          modeCaptureRef.current = m.capture;
+          setModeCapture(m.capture);
+        }
+        if (m?.qualite === 'qualite' || m?.qualite === 'rapide') {
+          modeQualiteRef.current = m.qualite;
+          setModeQualite(m.qualite);
+        }
+        console.log(`[mode] restaure capture=${m?.capture} rendu=${m?.qualite}`);
+      })
+      .catch(() => {});
+    return () => { annule = true; };
+  }, []);
+  const enregistrerModes = () => {
+    AsyncStorage.setItem(MODES_CAPTURE_KEY, JSON.stringify({
+      capture: modeCaptureRef.current,
+      qualite: modeQualiteRef.current,
+    })).catch(() => {});
+  };
   const stepTriggerRef = useRef(null);
   if (stepTriggerRef.current === null) stepTriggerRef.current = createStepTrigger();
   // ── Mode de rendu ───────────────────────────────────────────────────────
@@ -1192,6 +1225,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       const suivant = modeQualiteRef.current === 'qualite' ? 'rapide' : 'qualite';
       modeQualiteRef.current = suivant;
       setModeQualite(suivant);
+      enregistrerModes();
       console.log(`[mode] rendu = ${suivant}`);
     } catch (e) {
       console.warn('[mode] bascule rendu impossible —', e?.message || String(e));
@@ -1206,6 +1240,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // Le tracker repart propre : les reperes deja consommes par un passage
       // en cours n auraient aucun sens dans l autre mode.
       stepTriggerRef.current?.reset();
+      enregistrerModes();
       console.log(`[mode] capture = ${suivant}`);
     } catch (e) {
       console.warn('[mode] bascule impossible —', e?.message || String(e));
@@ -2663,8 +2698,33 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             ? item.localUri.slice(7)
             : item.localUri;
           const res = await scorePhotoSafely(scoreSrcPath);
+          // ─── Refus des photos sans aucun visage, TOUS MODES ───────────
+          // Le tri qualite ne voit jamais les photos declenchees par lignes ou
+          // par pas de distance : elles sont posees upload_kept des l enqueue,
+          // et le reducer ne traite que les items non encore decides. Le
+          // filtre « sans visage » pose dans qualityReducer.js ne s appliquait
+          // donc qu a la rafale.
+          //
+          // Constat terrain du 2026-08-29 : sur six photos en mode pas, trois
+          // avaient faceCount=0 et sont toutes parties en galerie. Ce sont les
+          // trois dont l obturateur a mis le plus longtemps — le coureur etait
+          // deja sorti du cadre.
+          //
+          // Le refus vit donc ICI, juste apres le scoreur et avant le gate
+          // d upload, ou tout passe quel que soit le declencheur. Une photo
+          // sans visage ne sera de toute facon rattachee a personne par
+          // Rekognition : la livrer ne sert aucun coureur et pollue la
+          // galerie publique.
+          //
+          // Un scoreur en panne (res.ok === false) ne fait rien jeter : on ne
+          // sait pas ce qu il y a sur l image, donc on la garde.
+          const sansVisage = res.ok && (res.signals?.faceCount ?? 0) === 0;
           const scorePatch = res.ok
-            ? { qualityScore: res.signals, qualityScoredAt: Date.now() }
+            ? {
+                qualityScore: res.signals,
+                qualityScoredAt: Date.now(),
+                ...(sansVisage ? { upload_kept: false, upload_skipped: true } : {}),
+              }
             : { qualityScoreFailed: true, qualityScoreFailReason: res.reason, qualityScoredAt: Date.now() };
           const scored = queueRef.current.map(it =>
             it.id === item.id ? { ...it, ...scorePatch } : it
@@ -2672,7 +2732,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           await commitQueue(scored);
           recordScore(item, res);
           if (res.ok) {
-            console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)}`);
+            console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)}${sansVisage ? ' -> REFUSEE (aucun visage)' : ''}`);
 
             // ─── Auto-calibration de la latence ──────────────────────────
             // On compare la position PREDITE par le tracker au moment du tir
