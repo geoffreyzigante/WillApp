@@ -4189,11 +4189,16 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             const yHaut = yBas - 2 * dY;
             const a = yHaut * FRAME_H;
             const b = yBas * FRAME_H;
+            // Meme poids visuel que les montants de la bande de rafale :
+            // 1 px, blanc tres attenue. Pointille pour que la croix se lise
+            // comme un repere pose sur l image et non comme un element de
+            // la scene — un trait plein en travers du cadre finit par se
+            // confondre avec un cable ou une barriere.
             const commun = {
               stroke: '#fff',
-              strokeWidth: 2,
-              strokeOpacity: 0.62,
-              strokeLinecap: 'round',
+              strokeWidth: 1,
+              strokeOpacity: 0.32,
+              strokeDasharray: '6 6',
             };
             return (
               <>
