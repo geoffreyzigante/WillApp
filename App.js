@@ -682,6 +682,26 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     },
   });
 
+  // ─── Configuration lue depuis un chemin FIGE ────────────────────────────
+  // processQueue et drainQueue ne sont jamais appeles depuis un rendu frais :
+  // leurs appelants — le callback du frame processor, les effets a
+  // dependances vides, l intervalle de 30 s, les listeners NetInfo et
+  // AppState — ont tous ete crees au PREMIER rendu et gardent la closure de
+  // ce rendu-la. Elles lisaient donc l objet `eventConfig` initial, celui
+  // d avant la premiere reponse de /config.
+  //
+  // Consequence mesuree : aucun des leviers annonces comme « modifiables a
+  // chaud sans rebuild » ne repondait. Ni le kill switch du tri qualite, ni
+  // le gate d upload, ni le mode d envoi, ni l upload en deux temps — dont
+  // tout le code existe et n a jamais pu s executer une seule fois.
+  //
+  // La ref est reassignee a chaque changement de config ; les deux workers la
+  // lisent au moment de leur execution. Le motif est deja utilise dans ce
+  // fichier pour la camera (lineCfgRef, staticGuardCfgRef, zoneSV) : c est
+  // uniquement cote upload qu il manquait.
+  const eventConfigRef = useRef(eventConfig);
+  useEffect(() => { eventConfigRef.current = eventConfig; }, [eventConfig]);
+
   useEffect(() => {
     const fetchConfig = () => {
       fetch(`${API_URL}/config`)
@@ -2633,7 +2653,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
   const processingRef = useRef(false);
   async function processQueue() {
-    const verboseProcess = !!eventConfig.debug?.verboseLogs;
+    const verboseProcess = !!eventConfigRef.current.debug?.verboseLogs;
     if (processingRef.current) return;
     processingRef.current = true;
     try {
@@ -2979,7 +2999,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // le cooldown nextAttemptAt (backoff exponentiel).
       // processed===true uniquement : les bruts non traites sont gerees par
       // processQueue, jamais uploades tels quels.
-      // Kill switch pilote (Q-B01) : lecture eventConfig.pilote.drop_enabled
+      // Kill switch pilote (Q-B01) : lecture eventConfigRef.current.pilote.drop_enabled
       // depuis /config worker. Refetch toutes les 5 min pendant la session
       // photographe (cf useEffect au mount App), donc modifiable a chaud
       // via PUT /admin/config sans rebuild EAS.
@@ -2988,7 +3008,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // pendant l event, il set pilote.drop_enabled=false cote serveur ->
       // le prochain refetch /config bascule dropEnabled a false -> tout
       // upload_skipped devient uploadable.
-      const dropEnabled = eventConfig.pilote?.drop_enabled ?? true;
+      const dropEnabled = eventConfigRef.current.pilote?.drop_enabled ?? true;
       // gateEnabled : cf CONCEPTION_TRI_SOLO_UPLOAD.md etape A. Filtre strict
       // upload_kept===true uniquement -> les items non encore decides par le
       // reducer attendent (drain les prendra au prochain kick post-decision).
@@ -2998,7 +3018,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // Legacy path (gate_enabled=false, kill switch runtime) : filtre
       // permissif upload_skipped !== true, laisse fuir les undecided -> permet
       // un rollback immediat via /config sans OTA en cas de regression.
-      const gateEnabled = eventConfig.upload?.gate_enabled ?? true;
+      const gateEnabled = eventConfigRef.current.upload?.gate_enabled ?? true;
       console.log('[drain] dropEnabled=', dropEnabled, 'gateEnabled=', gateEnabled, '(from /config, refetch 5 min)');
       const uploadable = arr
         .map((it, i) => ({ it, i }))
@@ -3012,10 +3032,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         return;
       }
 
-      const verbose = !!eventConfig.debug?.verboseLogs;
-      const maxRetries = eventConfig.upload?.maxRetries ?? MAX_RETRIES_DEFAULT;
-      const uploadMode = eventConfig.upload?.mode || 'immediate';
-      const batchSize = eventConfig.upload?.batchSize ?? 10;
+      const verbose = !!eventConfigRef.current.debug?.verboseLogs;
+      const maxRetries = eventConfigRef.current.upload?.maxRetries ?? MAX_RETRIES_DEFAULT;
+      const uploadMode = eventConfigRef.current.upload?.mode || 'immediate';
+      const batchSize = eventConfigRef.current.upload?.batchSize ?? 10;
       // mode 'wifi' : si Cellular, on défère
       if (uploadMode === 'wifi' && state?.type && state.type !== 'wifi') {
         if (verbose) console.log('[upload] mode=wifi, type=', state.type, '— on attend');
@@ -3051,8 +3071,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       //
       // Defaut OFF : a mesurer sur de vraies photos d event (poids reel de
       // la copie, taux de match inchange) avant d activer via /config.
-      const twoTier = eventConfig.upload?.two_tier === true;
-      const lightQuality = eventConfig.upload?.lightQuality ?? LIGHT_QUALITY_DEFAULT;
+      const twoTier = eventConfigRef.current.upload?.two_tier === true;
+      const lightQuality = eventConfigRef.current.upload?.lightQuality ?? LIGHT_QUALITY_DEFAULT;
       // Les RAW (.dng) ne sont ni analysables ni recompressables ici : ils
       // sautent la voie legere. lightSkipped = voie legere abandonnee pour
       // cet item (gain nul, ou echecs repetes) -> il part directement full.
