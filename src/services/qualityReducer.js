@@ -167,6 +167,13 @@ function groupByBurst(items) {
 // allFailed = true -> failsafe : tous kept, aucun skipped (pas de tri
 // possible). PROMESSE "jamais 0 photo livree" garantie ici + par la
 // regle "top-1 toujours kept" du sort.
+// Demi-largeur de la bande de cadrage evaluee cote JS, en fraction de la
+// largeur d image. 0.25 = les 50 % centraux. Le scoreur natif applique de son
+// cote une bande plus etroite (36 %) codee en dur dans le Swift ; ce reglage-ci
+// l elargit sans rebuild. Monter au-dela de ~0.35 revient a ne plus filtrer le
+// cadrage du tout.
+const ZONE_HALF_WIDTH_JS = 0.25;
+
 // Photos SANS AUCUN visage : jetees une par une, avant tout failsafe.
 // Regle produit : une photo sans visage n est rattachee a aucun coureur par
 // Rekognition, donc la garder ne sert personne — elle ne fait que polluer la
@@ -235,20 +242,37 @@ function reduceBurstSurCandidats(items, weights, faceAreaNorm, topN) {
   // zone, la photo est in-zone. Plus de heuristique sur biggestFaceCenter.
   // Fallback : si facesInZone absent (vieille build sans le champ),
   // retombe sur biggestFaceCenter pour ne pas casser.
+  // Un visage compte comme "cadre" si l UNE des deux conditions tient :
+  //
+  //   1. Le scoreur natif en a vu au moins un dans SA zone. Elle est codee
+  //      en dur a 36 % des centraux (zoneHalfWidth = 0.18 dans
+  //      PhotoQualityScorer.swift) et compte TOUS les visages, ce qui la rend
+  //      juste sur un groupe.
+  //   2. Le plus grand visage est dans la bande ZONE_HALF_WIDTH_JS ci-dessus,
+  //      elargie a 50 %. Ce test-la vit en JS, donc il est modifiable par OTA
+  //      sans rebuild natif — c est ce qui permet de depasser les 36 % du
+  //      Swift. Limitation assumee : le scoreur ne renvoie que le centre du
+  //      PLUS GRAND visage, donc un groupe dont le plus grand est decentre
+  //      mais dont un autre est bien cadre n est rattrape que par (1).
+  //
+  // L union des deux ne peut donc que garder PLUS de photos qu avant, jamais
+  // moins : aucune regression possible sur les groupes.
+  //
+  // Item sans qualityScore (scoreur en panne) : candidat par defaut, on ne
+  // sait pas, on garde.
   function isInZone(item) {
     const sig = item.qualityScore;
     if (!sig) return true;
-    if (typeof sig.facesInZone === 'number') {
-      return sig.facesInZone >= 1;
-    }
-    // Fallback legacy
-    const fc = sig.faceCount ?? 0;
-    if (fc === 0) return false;
+    if (typeof sig.facesInZone === 'number' && sig.facesInZone >= 1) return true;
     const cx = Array.isArray(sig.biggestFaceCenter)
       ? Number(sig.biggestFaceCenter[0])
       : NaN;
-    if (!Number.isFinite(cx)) return true;
-    return Math.abs(cx - 0.5) <= 0.18;
+    // Centre inconnu : on ne peut pas elargir. On garde le comportement
+    // historique — si le scoreur natif n a rien dit du tout sur sa zone
+    // (vieille build sans facesInZone), on suppose la photo cadree plutot
+    // que de la jeter sur une absence d information.
+    if (!Number.isFinite(cx)) return typeof sig.facesInZone !== 'number';
+    return Math.abs(cx - 0.5) <= ZONE_HALF_WIDTH_JS;
   }
   const inZoneItems = items.filter(isInZone);
   const outOfZoneIds = new Set(

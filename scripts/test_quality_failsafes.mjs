@@ -205,6 +205,28 @@ console.log('\n[TEST 5quater] Rafale MIXTE : les photos sans visage sautent, les
   assert(out.kept.size === 2, `kept.size=2 (got ${out.kept.size})`);
 }
 
+console.log('\n[TEST 5quinquies] Elargissement a 50 % : visage a 44 % du cadre');
+{
+  // Le scoreur natif dit 0 visage dans SA zone (36 % centraux) mais renvoie
+  // le centre du plus grand visage a 0.28 — soit dans les 50 % centraux.
+  // Avant : jete. Maintenant : garde.
+  const decale = [1, 2, 3, 4].map(n => ({
+    id: `d${n}`, burstTs: 4400, status: 'pending',
+    qualityScore: { faceCount: 1, facesInZone: 0, biggestFaceCenter: [0.28, 0.5], faceConfidence: 0.9 - n * 0.1, biggestFaceArea: 0.05, yaw: 0.1, eyesOpen: true, eyesOpenApplicable: true, brightness: 0.55 },
+  }));
+  const out = reduceBurst(decale);
+  assert(out.kept.size === 3, `decale 44% -> top-3 applique (got kept=${out.kept.size})`);
+  assert(out.skipped.size === 1, `decale 44% -> 1 skipped (got ${out.skipped.size})`);
+
+  // A 0.10, soit 20 % du bord, on reste hors bande : failsafe, tout garde.
+  const tresDecale = [1, 2].map(n => ({
+    id: `td${n}`, burstTs: 4500, status: 'pending',
+    qualityScore: { faceCount: 1, facesInZone: 0, biggestFaceCenter: [0.10, 0.5], faceConfidence: 0.8, biggestFaceArea: 0.03, yaw: 0.1, eyesOpen: true, eyesOpenApplicable: true, brightness: 0.5 },
+  }));
+  const out2 = reduceBurst(tresDecale);
+  assert(out2.kept.size === 2, `tres decale -> failsafe garde tout (got ${out2.kept.size})`);
+}
+
 console.log('\n[TEST 5ter] Rafale sans visage EN ZONE mais visage present → tout kept');
 {
   // Cadrage rate, mais quelqu un est bien la : le failsafe historique doit
