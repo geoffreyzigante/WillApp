@@ -1787,6 +1787,21 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // tracker doit voir un coureur approcher AVANT qu'il entre, sinon il n'a
     // aucune vitesse au franchissement de la premiere ligne. `count`, lui,
     // reste le compte EN ZONE — les deux ne sont pas interchangeables.
+    // MIROIR HORIZONTAL. Le plugin renvoie cx dans le repere de Vision, ou
+    // l origine est en BAS A GAUCHE : il bascule bien cy (1 - midY) mais pas
+    // cx. Resultat, tout ce qui lit une position horizontale la lit en
+    // miroir de ce que le benevole voit — l anneau de detection remonte le
+    // passage a l envers, et les reperes du pas de distance s allument dans
+    // l ordre inverse de la course.
+    //
+    // Rien de tout cela ne se voyait avant : la zone de declenchement et les
+    // lignes sont symetriques autour du centre, donc un miroir ne change ni
+    // qui declenche ni quand. Il a fallu afficher une position a l ecran
+    // pour que l erreur devienne visible.
+    //
+    // Corrige ici plutot que dans le Swift pour rester livrable par OTA. Le
+    // vrai correctif est dans HumanDetectorPlugin.swift, au prochain build
+    // natif : y poser cx = 1 - midX et retirer cette ligne.
     let bx = -1, by = -1, ba = 0;
     let flat = null;
     const faces = result?.faces;
@@ -1794,7 +1809,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       const CAP = 8;
       const ax = [], ay = [], aw = [], ah = [], aa = [];
       for (let i = 0; i < faces.length; i++) {
-        const f = faces[i];
+        const f0 = faces[i];
+        const f = { cx: 1 - f0.cx, cy: f0.cy, w: f0.w, h: f0.h };
         const a = f.w * f.h;
         if (a > ba) { ba = a; bx = f.cx; by = f.cy; }
         let pos = aa.length;
