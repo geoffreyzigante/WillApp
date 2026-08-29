@@ -167,7 +167,39 @@ function groupByBurst(items) {
 // allFailed = true -> failsafe : tous kept, aucun skipped (pas de tri
 // possible). PROMESSE "jamais 0 photo livree" garantie ici + par la
 // regle "top-1 toujours kept" du sort.
+// Photos SANS AUCUN visage : jetees une par une, avant tout failsafe.
+// Regle produit : une photo sans visage n est rattachee a aucun coureur par
+// Rekognition, donc la garder ne sert personne — elle ne fait que polluer la
+// galerie publique. C est un filtre PAR PHOTO, pas par rafale : une rafale
+// mixte garde ses photos avec visage et jette les autres.
+//
+// Les failsafes ("jamais 0 photo livree") ne portent donc que sur les photos
+// ou quelqu un est effectivement present. Une photo dont le scorer n a rien
+// renvoye (qualityScore absent) reste candidate : on ne sait pas, on garde.
 export function reduceBurst(items, weights, faceAreaNorm, topN) {
+  if (!items || items.length === 0) {
+    return { kept: new Set(), skipped: new Set(), allFailed: false, perItem: [] };
+  }
+  const estVide = (it) => {
+    const sig = it && it.qualityScore;
+    return !!sig && (sig.faceCount ?? 0) === 0;
+  };
+  const vides = items.filter(estVide);
+  if (vides.length === 0) {
+    return reduceBurstSurCandidats(items, weights, faceAreaNorm, topN);
+  }
+  const candidats = items.filter(it => !estVide(it));
+  const out = candidats.length > 0
+    ? reduceBurstSurCandidats(candidats, weights, faceAreaNorm, topN)
+    : { kept: new Set(), skipped: new Set(), allFailed: false, perItem: [] };
+  for (const it of vides) {
+    out.skipped.add(it.id);
+    out.perItem.push({ id: it.id, composite: FAILED_SCORE, decision: 'skipped-sans-visage' });
+  }
+  return out;
+}
+
+function reduceBurstSurCandidats(items, weights, faceAreaNorm, topN) {
   if (!items || items.length === 0) {
     return { kept: new Set(), skipped: new Set(), allFailed: false, perItem: [] };
   }

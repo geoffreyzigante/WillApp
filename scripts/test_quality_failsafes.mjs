@@ -155,15 +155,67 @@ console.log('\n[TEST 4 sanity] 2 bursts paralleles → reduits independamment');
 // ──────────────────────────────────────────────────────────────────────
 // Test 5 (edge) : burst d'un seul item (cas burst tronque ou single shot)
 // ──────────────────────────────────────────────────────────────────────
-console.log('\n[TEST 5 edge] Burst single → toujours kept (jamais 0)');
+console.log('\n[TEST 5 edge] Burst single AVEC visage → toujours kept (jamais 0)');
 {
+  // Un seul cliche, visage present mais tout va mal par ailleurs (hors zone,
+  // sombre, yeux fermes). La promesse "jamais 0 photo" doit tenir : quelqu un
+  // est sur l image, on livre.
   const single = [
     { id: 'solo', burstTs: 4000, status: 'pending',
-      qualityScore: { faceCount: 0, faceConfidence: 0, biggestFaceArea: 0, yaw: 1.5, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.05 } },
+      qualityScore: { faceCount: 1, facesInZone: 0, faceConfidence: 0.2, biggestFaceArea: 0.004, yaw: 1.5, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.05 } },
   ];
   const out = reduceBurst(single);
   assert(out.kept.size === 1, `single burst -> kept.size=1 (got ${out.kept.size})`);
   assert(out.kept.has('solo'), 'solo est kept');
+}
+
+console.log('\n[TEST 5bis] Rafale entierement vide (0 visage partout) → tout skipped');
+{
+  // Declenchement parti trop tard : le coureur est deja sorti du cadre. Le
+  // scorer a bien tourne (qualityScore present) mais ne voit personne. Sans
+  // visage, Rekognition ne rattachera jamais ces photos a un coureur : les
+  // garder ne sert personne et pollue la galerie publique.
+  const vide = [1, 2, 3].map(n => ({
+    id: `vide${n}`, burstTs: 4100, status: 'pending',
+    qualityScore: { faceCount: 0, facesInZone: 0, faceConfidence: 0, biggestFaceArea: 0, yaw: 0, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.5 },
+  }));
+  const out = reduceBurst(vide);
+  assert(out.kept.size === 0, `rafale vide -> kept.size=0 (got ${out.kept.size})`);
+  assert(out.skipped.size === 3, `rafale vide -> skipped.size=3 (got ${out.skipped.size})`);
+  assert(out.allFailed === false, 'rafale vide != allFailed (le scorer a tourne)');
+}
+
+console.log('\n[TEST 5quater] Rafale MIXTE : les photos sans visage sautent, les autres restent');
+{
+  // Le cas reel : la rafale part a temps, les 2 premieres photos ont le
+  // coureur, les 2 dernieres sont parties apres sa sortie du cadre.
+  const mixte = [
+    { id: 'ok1', burstTs: 4300, status: 'pending',
+      qualityScore: { faceCount: 1, facesInZone: 1, faceConfidence: 0.9, biggestFaceArea: 0.03, yaw: 0.1, eyesOpen: true, eyesOpenApplicable: true, brightness: 0.55 } },
+    { id: 'ok2', burstTs: 4300, status: 'pending',
+      qualityScore: { faceCount: 1, facesInZone: 1, faceConfidence: 0.7, biggestFaceArea: 0.02, yaw: 0.3, eyesOpen: true, eyesOpenApplicable: true, brightness: 0.5 } },
+    { id: 'vide1', burstTs: 4300, status: 'pending',
+      qualityScore: { faceCount: 0, facesInZone: 0, faceConfidence: 0, biggestFaceArea: 0, yaw: 0, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.5 } },
+    { id: 'vide2', burstTs: 4300, status: 'pending',
+      qualityScore: { faceCount: 0, facesInZone: 0, faceConfidence: 0, biggestFaceArea: 0, yaw: 0, eyesOpen: false, eyesOpenApplicable: false, brightness: 0.5 } },
+  ];
+  const out = reduceBurst(mixte);
+  assert(out.kept.has('ok1') && out.kept.has('ok2'), 'les 2 photos avec visage sont kept');
+  assert(out.skipped.has('vide1') && out.skipped.has('vide2'), 'les 2 photos sans visage sont skipped');
+  assert(out.kept.size === 2, `kept.size=2 (got ${out.kept.size})`);
+}
+
+console.log('\n[TEST 5ter] Rafale sans visage EN ZONE mais visage present → tout kept');
+{
+  // Cadrage rate, mais quelqu un est bien la : le failsafe historique doit
+  // continuer de tout garder. C est la frontiere a ne pas franchir.
+  const horsZone = [1, 2].map(n => ({
+    id: `hz${n}`, burstTs: 4200, status: 'pending',
+    qualityScore: { faceCount: 1, facesInZone: 0, faceConfidence: 0.8, biggestFaceArea: 0.02, yaw: 0.2, eyesOpen: true, eyesOpenApplicable: true, brightness: 0.5 },
+  }));
+  const out = reduceBurst(horsZone);
+  assert(out.kept.size === 2, `hors zone -> kept.size=2 (got ${out.kept.size})`);
+  assert(out.skipped.size === 0, `hors zone -> skipped.size=0 (got ${out.skipped.size})`);
 }
 
 // ──────────────────────────────────────────────────────────────────────
