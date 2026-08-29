@@ -9,7 +9,8 @@
     "web": "expo start --web",
     "test:quality": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/_loader_js_extension.mjs\", pathToFileURL(\"./\"));' scripts/test_quality_failsafes.mjs",
     "test:step": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/_loader_js_extension.mjs\", pathToFileURL(\"./\"));' scripts/test_step_trigger.mjs",
-    "test": "npm run test:quality && npm run test:step"
+    "test": "npm run test:quality && npm run test:step && npm run test:journal",
+    "test:journal": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/_loader_js_extension.mjs\", pathToFileURL(\"./\"));' scripts/test_journal.mjs"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

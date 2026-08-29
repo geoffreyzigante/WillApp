@@ -100,6 +100,11 @@ import * as Updates from 'expo-updates';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Battery from 'expo-battery';
 
+// Journal embarque, installe des l evaluation du bundle : il doit capturer ce
+// qui se passe AVANT le premier rendu, notamment les erreurs de demarrage.
+// Idempotent, donc sans effet en double apres un rechargement OTA.
+installerJournal();
+
 import { API_URL, PRICE_PER_PHOTO_EUR } from './src/constants/api';
 import {
   UPLOAD_QUEUE_KEY,
@@ -122,6 +127,9 @@ import { caps, reportFrameProcessor, describeCapabilities } from './src/services
 // Declenchement par lignes (cf. CONCEPTION_LIGNES_NOTE.md).
 import { createLineTrigger } from './src/services/lineTrigger';
 import { createStepTrigger } from './src/services/stepTrigger';
+import {
+  installerJournal, lignesJournal, journalVersTexte, viderJournal, statsJournal,
+} from './src/services/journal';
 // Niveaux de capture : adapte le nombre de lignes au materiel et a la course.
 import {
   tierFor, createLatencyProbe, createPhotoSizeProbe, photosPerRunnerFor,
@@ -2223,6 +2231,41 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     return { n, nMax, basse, haute, parCoureur, restants, suffisant };
   })();
   // Menu flottant a gauche du viewer : ferme par defaut, ouvert via chevron.
+  const [journalOpen, setJournalOpen] = useState(false);
+  const [journalFiltre, setJournalFiltre] = useState('');
+  const [journalSeulAlertes, setJournalSeulAlertes] = useState(false);
+  // Le tampon evolue sans que React le sache. Tant que l ecran est ouvert, on
+  // le relit une fois par seconde ; ferme, on ne fait rien.
+  const [journalTick, setJournalTick] = useState(0);
+  useEffect(() => {
+    if (!journalOpen) return undefined;
+    const id = setInterval(() => setJournalTick(n => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [journalOpen]);
+  const journalLignes = useMemo(
+    () => lignesJournal({
+      filtre: journalFiltre,
+      niveaux: journalSeulAlertes ? ['warn', 'error'] : null,
+      limite: 400,
+    }),
+    [journalFiltre, journalSeulAlertes, journalTick, journalOpen],
+  );
+  const partagerJournal = async () => {
+    try {
+      const texte = journalVersTexte();
+      if (!texte) { Alert.alert('Journal vide', "Rien a exporter pour l'instant."); return; }
+      const d = new Date();
+      const nom = `will-journal-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}.txt`;
+      const f = new File(Paths.cache, nom);
+      try { f.delete(); } catch {}
+      f.create();
+      f.write(texte);
+      await Share.share({ url: f.uri, title: nom });
+    } catch (e) {
+      Alert.alert('Export impossible', String(e?.message || e));
+    }
+  };
+
   const [menuOpen, setMenuOpen] = useState(false);
   // Selecteurs d Epreuve et de Poste. Ils remplacent la double roulette
   // toujours visible : le handoff les met dans des panneaux, pour degager le
@@ -4175,6 +4218,22 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               onPress={() => { fermerPanneaux(); setFramingMode(v => !v); }}
             />
             <RangeePanneau
+              libelle="Journal"
+              droite={(() => {
+                const st = statsJournal();
+                const alertes = st.warn + st.error;
+                return (
+                  <Text style={{
+                    color: alertes > 0 ? P.danger : P.label,
+                    fontSize: 13, fontFamily: 'Montserrat-SemiBold',
+                  }}>
+                    {alertes > 0 ? `${alertes} ⚠` : `${st.total}`}
+                  </Text>
+                );
+              })()}
+              onPress={() => { fermerPanneaux(); setJournalOpen(true); }}
+            />
+            <RangeePanneau
               libelle="Compteurs à l'écran"
               droite={techExpanded
                 ? <Text style={{ color: P.accent, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Actif</Text>
@@ -4437,6 +4496,132 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           />
         </View>
       </View>
+
+      {/* ─── Journal embarque ───────────────────────────────────────────
+          iOS n offre aucun moyen de lire la sortie console d une app sans un
+          Mac et un cable. Au bord d un parcours, c est-a-dire la ou les
+          problemes se produisent, c est inutilisable. Cet ecran rend le
+          diagnostic autonome. */}
+      <Modal
+        visible={journalOpen}
+        animationType="slide"
+        onRequestClose={() => setJournalOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#0A0A0A' }}>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            paddingHorizontal: 14, paddingTop: 56, paddingBottom: 10,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: 'rgba(255,255,255,0.12)',
+          }}>
+            <TouchableOpacity
+              onPress={() => setJournalOpen(false)}
+              hitSlop={10}
+              accessibilityLabel="Fermer le journal"
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 17 }}>×</Text>
+            </TouchableOpacity>
+            <TextInput
+              value={journalFiltre}
+              onChangeText={setJournalFiltre}
+              placeholder="Filtrer — pas, capture, drain…"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{
+                flex: 1, height: 32, borderRadius: 8, paddingHorizontal: 10,
+                backgroundColor: 'rgba(255,255,255,0.10)', color: '#fff', fontSize: 13,
+              }}
+            />
+            <TouchableOpacity
+              onPress={() => setJournalSeulAlertes(v => !v)}
+              hitSlop={8}
+              accessibilityLabel="N'afficher que les alertes"
+              style={{
+                height: 32, paddingHorizontal: 10, borderRadius: 8,
+                backgroundColor: journalSeulAlertes ? P.brand : 'rgba(255,255,255,0.10)',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>⚠</Text>
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={journalLignes}
+            keyExtractor={(l) => String(l.n)}
+            initialNumToRender={40}
+            windowSize={7}
+            removeClippedSubviews
+            ListEmptyComponent={
+              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
+                Aucune ligne{journalFiltre ? ' pour ce filtre' : ''}.
+              </Text>
+            }
+            renderItem={({ item }) => {
+              const d = new Date(item.t);
+              const hhmmss = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+              const couleur = item.niveau === 'error' ? '#FF8AA5'
+                : item.niveau === 'warn' ? '#EBAA4E' : 'rgba(255,255,255,0.88)';
+              return (
+                <View style={{
+                  flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 3,
+                  borderBottomWidth: StyleSheet.hairlineWidth,
+                  borderBottomColor: 'rgba(255,255,255,0.06)',
+                }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, width: 74 }}>
+                    {hhmmss}
+                  </Text>
+                  <Text selectable style={{ color: couleur, fontSize: 11, flex: 1 }}>
+                    {item.texte}
+                  </Text>
+                </View>
+              );
+            }}
+          />
+
+          <View style={{
+            flexDirection: 'row', gap: 10, paddingHorizontal: 14,
+            paddingTop: 10, paddingBottom: 30,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: 'rgba(255,255,255,0.12)',
+          }}>
+            <TouchableOpacity
+              onPress={partagerJournal}
+              style={{
+                flex: 1, height: 42, borderRadius: 10, backgroundColor: P.brand,
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>
+                Exporter
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert('Vider le journal', 'Les lignes deja enregistrees seront perdues.', [
+                  { text: 'Annuler', style: 'cancel' },
+                  { text: 'Vider', style: 'destructive', onPress: () => { viderJournal(); setJournalTick(n => n + 1); } },
+                ]);
+              }}
+              style={{
+                width: 96, height: 42, borderRadius: 10,
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>
+                Vider
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* ─── Mini-galerie sheet ─── ouverte au tap d'une vignette de la bande,
           grille 3 cols complete. Tap vignette dans la sheet → viewer plein
