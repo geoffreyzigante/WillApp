@@ -1102,13 +1102,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const stepTriggerRef = useRef(null);
   if (stepTriggerRef.current === null) stepTriggerRef.current = createStepTrigger();
   const basculerModeCapture = () => {
-    const suivant = modeCaptureRef.current === 'pas' ? 'rafale' : 'pas';
-    modeCaptureRef.current = suivant;
-    setModeCapture(suivant);
-    // Le tracker repart propre : les reperes deja consommes par un passage en
-    // cours n auraient aucun sens dans l autre mode.
-    try { stepTriggerRef.current?.reset(); } catch {}
-    console.log(`[mode] capture = ${suivant}`);
+    try {
+      const suivant = modeCaptureRef.current === 'pas' ? 'rafale' : 'pas';
+      modeCaptureRef.current = suivant;
+      setModeCapture(suivant);
+      // Le tracker repart propre : les reperes deja consommes par un passage
+      // en cours n auraient aucun sens dans l autre mode.
+      stepTriggerRef.current?.reset();
+      console.log(`[mode] capture = ${suivant}`);
+    } catch (e) {
+      console.warn('[mode] bascule impossible —', e?.message || String(e));
+    }
   };
   // Signature JSON des seuils /config appliques au tracker. Sert a ne le
   // recreer QUE quand un seuil change reellement (le refetch /config toutes
@@ -1285,24 +1289,26 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // marquees lineTriggered, donc posees upload_kept des l enqueue et
       // ignorees par le reducer.
       if (modeCaptureRef.current === 'pas') {
-        if (!flat || !stepTriggerRef.current) return;
-        let actions = [];
+        // Tout le bloc est garde : ce chemin est le plus recent du fichier, il
+        // tourne dans un callback figé au premier rendu, et une exception non
+        // rattrapee ici deviendrait une RCTFatalException — l app se ferme
+        // sans message, a l instant meme ou le benevole bascule le mode.
+        // Mieux vaut une frame perdue qu une session perdue.
         try {
-          actions = stepTriggerRef.current.ingest(flat);
+          if (!flat || !stepTriggerRef.current) return;
+          const actions = stepTriggerRef.current.ingest(flat) || [];
+          for (const a of actions) {
+            if (inFlightSetRef.current.size >= 3) break;
+            const pr = captureOne({
+              burstTs: Date.now(), idx: 0, lineTriggered: true, xPredicted: a.x,
+            });
+            inFlightSetRef.current.add(pr);
+            updateInFlight();
+            pr.finally(() => { inFlightSetRef.current.delete(pr); updateInFlight(); });
+            console.log(`[pas] tir repere=${a.repere} credites=${a.creditedIds.length}`);
+          }
         } catch (e) {
-          // Le tracker ne doit jamais faire tomber la capture.
-          console.warn('[pas] ingest error', e?.message || e);
-          return;
-        }
-        for (const a of actions) {
-          if (inFlightSetRef.current.size >= MAX_IN_FLIGHT) break;
-          const pr = captureOne({
-            burstTs: Date.now(), idx: 0, lineTriggered: true, xPredicted: a.x,
-          });
-          inFlightSetRef.current.add(pr);
-          updateInFlight();
-          pr.finally(() => { inFlightSetRef.current.delete(pr); updateInFlight(); });
-          console.log(`[pas] tir repere=${a.repere} x=${a.x.toFixed(3)} credites=${a.creditedIds.length}`);
+          console.warn('[pas] erreur, frame ignoree —', e?.message || String(e));
         }
         return;
       }
@@ -3953,18 +3959,6 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               onPress={() => { fermerPanneaux(); setFramingMode(v => !v); }}
             />
             <RangeePanneau
-              libelle="Mode de capture"
-              droite={
-                <Text style={{
-                  color: modeCapture === 'pas' ? P.accent : P.label,
-                  fontSize: 13, fontFamily: 'Montserrat-SemiBold',
-                }}>
-                  {modeCapture === 'pas' ? 'Pas de distance' : 'Rafale'}
-                </Text>
-              }
-              onPress={() => { fermerPanneaux(); basculerModeCapture(); }}
-            />
-            <RangeePanneau
               libelle="Compteurs à l'écran"
               droite={techExpanded
                 ? <Text style={{ color: P.accent, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Actif</Text>
@@ -4141,17 +4135,59 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         }}
         pointerEvents={unPanneauOuvert ? 'none' : 'auto'}
       >
-        {/* Compteurs sous le cadre, optionnels. */}
-        {techExpanded && (
-          <Text
+        {/* Ligne compteurs + mode de capture. Occupe la hauteur COUNTER_H
+            deja reservee par le calcul de geometrie : le bloc de commandes
+            et le cadre ne bougent pas selon que les compteurs sont affiches
+            ou non. */}
+        <View
+          style={{
+            height: COUNTER_H, flexDirection: 'row', alignItems: 'center',
+            justifyContent: techExpanded ? 'space-between' : 'center',
+          }}
+        >
+          {techExpanded && (
+            <Text
+              numberOfLines={1}
+              style={{ color: P.labelMuted, fontSize: 13, fontFamily: 'Montserrat-Medium', flexShrink: 1 }}
+            >
+              {compteursTexte}
+            </Text>
+          )}
+          {/* Bascule rafale / pas de distance. Deux segments plutot qu un
+              interrupteur : le benevole doit lire le mode actif d un coup
+              d oeil, sans avoir a interpreter une position d aiguille. */}
+          <TouchableOpacity
+            onPress={basculerModeCapture}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Mode de capture : ${modeCapture === 'pas' ? 'pas de distance' : 'rafale'}. Toucher pour changer.`}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={{
-              textAlign: 'center', color: P.labelMuted, fontSize: 13,
-              fontFamily: 'Montserrat-Medium', marginBottom: G.rowGap,
+              flexDirection: 'row', alignItems: 'center',
+              height: 22, borderRadius: 11, backgroundColor: P.surface,
+              paddingHorizontal: 3, flex: 0,
             }}
           >
-            {compteursTexte}
-          </Text>
-        )}
+            <View style={{
+              paddingHorizontal: 9, height: 16, borderRadius: 8, justifyContent: 'center',
+              backgroundColor: modeCapture === 'rafale' ? P.brand : 'transparent',
+            }}>
+              <Text style={{
+                fontSize: 10, fontFamily: 'Montserrat-SemiBold',
+                color: modeCapture === 'rafale' ? P.surface : P.labelMuted,
+              }}>Rafale</Text>
+            </View>
+            <View style={{
+              paddingHorizontal: 9, height: 16, borderRadius: 8, justifyContent: 'center',
+              backgroundColor: modeCapture === 'pas' ? P.brand : 'transparent',
+            }}>
+              <Text style={{
+                fontSize: 10, fontFamily: 'Montserrat-SemiBold',
+                color: modeCapture === 'pas' ? P.surface : P.labelMuted,
+              }}>Pas</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
 
         {/* Rangee 1 : Infos + Stop */}
         <View style={{ flexDirection: 'row', marginBottom: G.rowGap }}>
