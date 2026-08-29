@@ -92,7 +92,7 @@ import ReAnimated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
-import Svg, { Path, Circle, Ellipse, Defs, Mask, Rect, SvgXml } from 'react-native-svg';
+import Svg, { Path, Circle, Ellipse, Defs, Mask, Rect, SvgXml, Line } from 'react-native-svg';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import NetInfo from '@react-native-community/netinfo';
 import { Paths, File, Directory } from 'expo-file-system';
@@ -2475,6 +2475,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         ...(r.lineTriggered ? { lineTriggered: true, upload_kept: true } : {}),
         // Prediction du tracker au moment du tir (cf. latencyCalibrator).
         ...(Number.isFinite(r.xPredicted) ? { xPredicted: r.xPredicted } : {}),
+        ...(Number.isFinite(r.captureMs) ? { captureMs: r.captureMs } : {}),
         ...(Number.isFinite(r.vxAtFire) ? { vxAtFire: r.vxAtFire } : {}),
       });
     }
@@ -2718,7 +2719,25 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           //
           // Un scoreur en panne (res.ok === false) ne fait rien jeter : on ne
           // sait pas ce qu il y a sur l image, donc on la garde.
-          const sansVisage = res.ok && (res.signals?.faceCount ?? 0) === 0;
+          // ─── Refus : seulement quand il existe une RAISON ────────────
+          // Version precedente : toute photo sans visage etait refusee. Trop
+          // stricte, et surtout incoherente — le declencheur a vu un visage
+          // dans la bande 200 ms plus tot, donc refuser sur l avis du scoreur
+          // revient a laisser un detecteur contredire l autre.
+          //
+          // Terrain du 2026-08-29 : sur trois tirs, deux photos refusees. La
+          // premiere avait un obturateur de 200 ms — a la vitesse mesuree, le
+          // coureur n avait parcouru que 7 % du cadre, il ne pouvait pas etre
+          // sorti. C etait un echec de detection sur un petit visage, pas une
+          // photo vide. La troisieme avait 662 ms : la, le doute n existe pas.
+          //
+          // On ne refuse donc que si le scoreur ne voit rien ET que
+          // l obturateur a ete assez lent pour que le sujet ait pu sortir.
+          // Le doute profite a la photo : mieux vaut en livrer une douteuse
+          // que perdre une bonne.
+          const SEUIL_REFUS_MS = 400;
+          const captureLente = !Number.isFinite(item.captureMs) || item.captureMs >= SEUIL_REFUS_MS;
+          const sansVisage = res.ok && (res.signals?.faceCount ?? 0) === 0 && captureLente;
 
           // SUPPRESSION IMMEDIATE, pas un simple marquage upload_skipped.
           //
@@ -2742,8 +2761,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             if (isMountedRef.current) setLostByQualityCount(lostByQualityCountRef.current);
             await commitQueue(queueRef.current.filter(it => it.id !== item.id));
             recordScore(item, res);
-            console.log(`[score] ${item.id} REFUSEE (aucun visage) — supprimee, `
-              + `elapsed=${res.elapsedMs}ms bright=${res.signals.brightness?.toFixed(2)}`);
+            console.log(`[score] ${item.id} REFUSEE (aucun visage, obturateur ${item.captureMs}ms) — supprimee`);
             continue;
           }
 
@@ -2756,7 +2774,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           await commitQueue(scored);
           recordScore(item, res);
           if (res.ok) {
-            console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)}`);
+            console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)} obt=${item.captureMs}ms`
+              + ((res.signals.faceCount ?? 0) === 0 ? ' — GARDEE malgre 0 visage (obturateur rapide)' : ''));
 
             // ─── Auto-calibration de la latence ──────────────────────────
             // On compare la position PREDITE par le tracker au moment du tir
@@ -3725,12 +3744,16 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     const idx = burstCtx?.idx ?? 0;
 
     let photo = null;
+    // Duree d obturateur, hoistee : elle sert plus bas a decider si une photo
+    // sans visage est une vraie photo vide ou un simple echec de detection.
+    let dureeCapture = null;
     try {
       photo = await cameraRef.current.takePhoto({
         flash: 'off',
         enableShutterSound: false,
       });
       const dt = Date.now() - t0;
+      dureeCapture = dt;
       // Alimente la sonde de latence (niveaux de capture). Mesure deja
       // calculee pour le log : cout nul.
       latencyProbeRef.current?.push(dt);
@@ -3789,6 +3812,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         lineTriggered,
         xPredicted,
         vxAtFire,
+        captureMs: dureeCapture,
       }]);
       capturedCountRef.current += 1;
       if (isMountedRef.current) setCapturedCount(capturedCountRef.current);
@@ -4140,6 +4164,45 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           exposure={cameraExposure}
           enableLocation={false}
         />
+
+        {/* ─── Croix de cadrage, commune aux deux modes ──────────────────
+            Deux traits inclines a 12°, partant des bords gauche et droit du
+            cadre et se croisant en son milieu. Les extremites basses tombent
+            exactement au quart bas de l image.
+            Repere de POSE, pas de declenchement : il ne pilote rien dans la
+            capture. Il donne au benevole une reference stable pour aligner
+            l appareil sur la route, ce qu aucun trait vertical ne permettait
+            — la route arrive en biais, pas de face. */}
+        <Svg
+          pointerEvents="none"
+          width={FRAME_W}
+          height={FRAME_H}
+          style={{ position: 'absolute', left: 0, top: 0 }}
+        >
+          {(() => {
+            // tan(12°) rapporte a la demi-largeur, converti en fraction de
+            // HAUTEUR : le cadre est en 3:4, donc un meme angle occupe moins
+            // de hauteur relative que de largeur.
+            const DEG = 12;
+            const dY = (0.5 * Math.tan((DEG * Math.PI) / 180)) / (4 / 3);
+            const yBas = 0.75;              // quart bas
+            const yHaut = yBas - 2 * dY;
+            const a = yHaut * FRAME_H;
+            const b = yBas * FRAME_H;
+            const commun = {
+              stroke: '#fff',
+              strokeWidth: 2,
+              strokeOpacity: 0.62,
+              strokeLinecap: 'round',
+            };
+            return (
+              <>
+                <Line x1={0} y1={a} x2={FRAME_W} y2={b} {...commun} />
+                <Line x1={0} y1={b} x2={FRAME_W} y2={a} {...commun} />
+              </>
+            );
+          })()}
+        </Svg>
 
         {/* ─── Reperes de capture, propres a chaque mode ─────────────────
             Discretion assumee : blanc a faible opacite, traits courts poses
