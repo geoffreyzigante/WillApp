@@ -437,6 +437,46 @@ function RangeeValeur({ libelle, valeur, onPress }) {
   );
 }
 
+// Bascule a deux etats, posee sous les commandes. Deux segments plutot qu un
+// interrupteur : le benevole doit lire l etat actif d un coup d oeil, sans
+// avoir a interpreter une position d aiguille. Definie au niveau MODULE pour
+// la meme raison que les autres briques de cet ecran (cf. plus haut).
+function Bascule({ gaucheLibelle, droiteLibelle, aDroite, onPress, accessibilityLabel }) {
+  const segment = (libelle, actif) => (
+    <View
+      style={{
+        paddingHorizontal: 10, height: 18, borderRadius: 9, justifyContent: 'center',
+        backgroundColor: actif ? P.brand : 'transparent',
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 10.5, fontFamily: 'Montserrat-SemiBold',
+          color: actif ? '#fff' : P.labelMuted,
+        }}
+      >
+        {libelle}
+      </Text>
+    </View>
+  );
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+      style={{
+        flexDirection: 'row', alignItems: 'center',
+        height: 24, borderRadius: 12, backgroundColor: P.surface, paddingHorizontal: 3,
+      }}
+    >
+      {segment(gaucheLibelle, !aDroite)}
+      {segment(droiteLibelle, aDroite)}
+    </TouchableOpacity>
+  );
+}
+
 // Rangee de panneau, 50 px, filet de separation en retrait de 20 px.
 function RangeePanneau({ libelle, droite, couleur, onPress, dernier }) {
   return (
@@ -1118,6 +1158,38 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const modeCaptureRef = useRef('rafale');
   const stepTriggerRef = useRef(null);
   if (stepTriggerRef.current === null) stepTriggerRef.current = createStepTrigger();
+  // ── Mode de rendu ───────────────────────────────────────────────────────
+  // 'rapide'  = comportement historique. Priorite vitesse cote AVFoundation :
+  //             obturateur qui rend la main en 80-200 ms, mais Deep Fusion et
+  //             le tampon d obturation instantanee desactives, et bracketing
+  //             HDR actif. Defaut : rien ne change sans geste explicite.
+  // 'qualite' = priorite equilibree. Rend Deep Fusion — la pile multi-images
+  //             qui supprime le bruit sans ajouter de flou, soit 1,5 a 2
+  //             diaphragmes en lumiere faible — et coupe le HDR, dont le
+  //             bracketing fantome sur un sujet en mouvement. La photo livree
+  //             est en plus reduite a QUALITE_MAX_WIDTH : moyenner quatre
+  //             pixels voisins vaut un demi-diaphragme de bruit en moins, et
+  //             2160 px de large restent au-dessus de ce qu exige un ecran de
+  //             telephone ou un tirage A4.
+  //
+  // Contrepartie honnete : la capture rend la main plus lentement. Le bon
+  // instant est preserve (c est le role du tampon), mais le debit baisse —
+  // a surveiller en mode pas de distance, ou trois photos doivent tenir dans
+  // la traversee de la bande.
+  const QUALITE_MAX_WIDTH = 2160;
+  const [modeQualite, setModeQualite] = useState('rapide');
+  const modeQualiteRef = useRef('rapide');
+  const basculerModeQualite = () => {
+    try {
+      const suivant = modeQualiteRef.current === 'qualite' ? 'rapide' : 'qualite';
+      modeQualiteRef.current = suivant;
+      setModeQualite(suivant);
+      console.log(`[mode] rendu = ${suivant}`);
+    } catch (e) {
+      console.warn('[mode] bascule rendu impossible —', e?.message || String(e));
+    }
+  };
+
   const basculerModeCapture = () => {
     try {
       const suivant = modeCaptureRef.current === 'pas' ? 'rafale' : 'pas';
@@ -2656,7 +2728,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // degrade reste l ancien comportement, jamais une photo perdue.
           let fichierFinal = dstFile.uri;
           let cleFinale = item.key;
-          const jpeg = await makeLightCopy(dstFile.uri, { quality: 0.9, maxWidth: 100000 });
+          // maxWidth 100000 = aucune reduction (comportement historique). En
+          // mode qualite on descend a QUALITE_MAX_WIDTH : la reduction moyenne
+          // le bruit des pixels voisins, ce qui est exactement ce qu on veut
+          // sur une photo prise a ISO eleve.
+          const largeurCible = modeQualiteRef.current === 'qualite' ? QUALITE_MAX_WIDTH : 100000;
+          const jpeg = await makeLightCopy(dstFile.uri, { quality: 0.9, maxWidth: largeurCible });
           if (jpeg.ok) {
             fichierFinal = jpeg.uri;
             cleFinale = String(item.key).replace(/\.heic$/i, '.jpg');
@@ -3888,8 +3965,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // Deep Fusion + Night mode -> capture en 80-200 ms au lieu de 300-800 ms.
           video={true}
           photo={true}
-          photoQualityBalance="speed"
-          photoHdr={!!format?.supportsPhotoHdr}
+          // Voir modeQualite : 'speed' coupe Deep Fusion et le tampon
+          // d obturation instantanee, 'balanced' les rend. Le HDR est coupe
+          // en mode qualite — son bracketing inclut une pose longue, qui
+          // fantome sur un coureur.
+          photoQualityBalance={modeQualite === 'qualite' ? 'balanced' : 'speed'}
+          photoHdr={modeQualite === 'qualite' ? false : !!format?.supportsPhotoHdr}
           videoHdr={!!format?.supportsVideoHdr}
           lowLightBoost={!!device?.supportsLowLightBoost}
           frameProcessor={frameProcessor}
@@ -4332,41 +4413,28 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           onPress={() => ouvrirPanneau('km')}
         />
 
-        {/* Bascule du mode de capture. Deux segments plutot qu un
-            interrupteur : le benevole doit lire le mode actif d un coup
-            d oeil, sans avoir a interpreter une position d aiguille. */}
-        <View style={{ height: SWITCH_H, alignItems: 'center', justifyContent: 'flex-end' }}>
-          <TouchableOpacity
+        {/* Bascules : quoi declencher, et comment rendre. Deux reglages
+            independants — on peut vouloir le pas de distance en rendu rapide,
+            ou la rafale en rendu qualite. */}
+        <View style={{
+          height: SWITCH_H, flexDirection: 'row', alignItems: 'flex-end',
+          justifyContent: 'center',
+        }}>
+          <Bascule
+            gaucheLibelle="Rafale"
+            droiteLibelle="Pas"
+            aDroite={modeCapture === 'pas'}
             onPress={basculerModeCapture}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={`Mode de capture : ${modeCapture === 'pas' ? 'pas de distance' : 'rafale'}. Toucher pour changer.`}
-            hitSlop={{ top: 10, bottom: 10, left: 14, right: 14 }}
-            style={{
-              flexDirection: 'row', alignItems: 'center',
-              height: 24, borderRadius: 12, backgroundColor: P.surface,
-              paddingHorizontal: 3,
-            }}
-          >
-            <View style={{
-              paddingHorizontal: 11, height: 18, borderRadius: 9, justifyContent: 'center',
-              backgroundColor: modeCapture === 'rafale' ? P.brand : 'transparent',
-            }}>
-              <Text style={{
-                fontSize: 11, fontFamily: 'Montserrat-SemiBold',
-                color: modeCapture === 'rafale' ? '#fff' : P.labelMuted,
-              }}>Rafale</Text>
-            </View>
-            <View style={{
-              paddingHorizontal: 11, height: 18, borderRadius: 9, justifyContent: 'center',
-              backgroundColor: modeCapture === 'pas' ? P.brand : 'transparent',
-            }}>
-              <Text style={{
-                fontSize: 11, fontFamily: 'Montserrat-SemiBold',
-                color: modeCapture === 'pas' ? '#fff' : P.labelMuted,
-              }}>Pas de distance</Text>
-            </View>
-          </TouchableOpacity>
+            accessibilityLabel={`Declenchement : ${modeCapture === 'pas' ? 'pas de distance' : 'rafale'}. Toucher pour changer.`}
+          />
+          <View style={{ width: 10 }} />
+          <Bascule
+            gaucheLibelle="Rapide"
+            droiteLibelle="Qualité"
+            aDroite={modeQualite === 'qualite'}
+            onPress={basculerModeQualite}
+            accessibilityLabel={`Rendu : ${modeQualite === 'qualite' ? 'qualite' : 'rapide'}. Toucher pour changer.`}
+          />
         </View>
       </View>
 
