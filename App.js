@@ -2719,12 +2719,36 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // Un scoreur en panne (res.ok === false) ne fait rien jeter : on ne
           // sait pas ce qu il y a sur l image, donc on la garde.
           const sansVisage = res.ok && (res.signals?.faceCount ?? 0) === 0;
+
+          // SUPPRESSION IMMEDIATE, pas un simple marquage upload_skipped.
+          //
+          // Le nettoyage des items skipped, plus bas dans drainQueue, exige
+          // qu un FRERE de la meme rafale soit confirme sur R2 — garantie
+          // « jamais 0 photo livree ». En mode pas de distance chaque photo
+          // est sa propre rafale : elle n a pas de frere, donc ce nettoyage
+          // ne se declenche jamais et l item reste en file indefiniment.
+          // Symptome constate le 2026-08-29 : « 1 en attente » qui ne
+          // descend plus.
+          //
+          // Ici la garantie ne s applique pas : une photo sans aucun visage
+          // ne sera rattachee a personne, donc la supprimer ne prive aucun
+          // coureur. On la retire tout de suite, avant la gravure et la
+          // conversion JPEG — ce qui economise au passage le travail le plus
+          // couteux du pipeline.
+          if (sansVisage) {
+            try { new File(item.localUri).delete(); } catch {}
+            try { deleteSidecar(item.id); } catch {}
+            lostByQualityCountRef.current += 1;
+            if (isMountedRef.current) setLostByQualityCount(lostByQualityCountRef.current);
+            await commitQueue(queueRef.current.filter(it => it.id !== item.id));
+            recordScore(item, res);
+            console.log(`[score] ${item.id} REFUSEE (aucun visage) — supprimee, `
+              + `elapsed=${res.elapsedMs}ms bright=${res.signals.brightness?.toFixed(2)}`);
+            continue;
+          }
+
           const scorePatch = res.ok
-            ? {
-                qualityScore: res.signals,
-                qualityScoredAt: Date.now(),
-                ...(sansVisage ? { upload_kept: false, upload_skipped: true } : {}),
-              }
+            ? { qualityScore: res.signals, qualityScoredAt: Date.now() }
             : { qualityScoreFailed: true, qualityScoreFailReason: res.reason, qualityScoredAt: Date.now() };
           const scored = queueRef.current.map(it =>
             it.id === item.id ? { ...it, ...scorePatch } : it
@@ -2732,7 +2756,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           await commitQueue(scored);
           recordScore(item, res);
           if (res.ok) {
-            console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)}${sansVisage ? ' -> REFUSEE (aucun visage)' : ''}`);
+            console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)}`);
 
             // ─── Auto-calibration de la latence ──────────────────────────
             // On compare la position PREDITE par le tracker au moment du tir
@@ -3321,6 +3345,38 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           const cleaned = queueRef.current.filter(it => !cleanupIds.has(it.id));
           await commitQueue(cleaned);
           console.log(`[quality-cleanup] removed ${toCleanup.length} upload_skipped photo(s) for ${confirmedKeptBurstTs.size} confirmed burst(s)`);
+        }
+      }
+
+      // ─── Orphelines : skipped sans aucun frere en file ──────────────────
+      // Le nettoyage ci-dessus attend qu un frere de la meme rafale soit
+      // confirme sur R2. Si la rafale n a jamais eu de frere — cas d une
+      // photo isolee, ce qui est la norme en mode pas de distance — cette
+      // condition ne peut pas etre remplie, et l item reste en file pour
+      // toujours. C est le « 1 en attente » qui ne descend plus.
+      //
+      // On ne prend que les items sans aucun frere restant en file ET vieux
+      // de plus de deux minutes : un frere encore en cours de traitement ou
+      // d upload interdit la suppression, donc la garantie « jamais 0 photo »
+      // reste entiere.
+      {
+        const cur = queueRef.current;
+        const limite = Date.now() - 120000;
+        const orphelines = cur.filter(it =>
+             it.upload_skipped === true
+          && it.status !== 'uploading'
+          && it.status !== 'processing'
+          && (it.burstTs == null || it.burstTs < limite)
+          && !cur.some(o => o.id !== it.id && o.burstTs === it.burstTs)
+        );
+        if (orphelines.length > 0) {
+          const ids = new Set(orphelines.map(it => it.id));
+          for (const it of orphelines) {
+            try { new File(it.localUri).delete(); } catch {}
+            if (it.processed === false && it.id) deleteSidecar(it.id);
+          }
+          await commitQueue(queueRef.current.filter(it => !ids.has(it.id)));
+          console.log(`[quality-cleanup] ${orphelines.length} orpheline(s) skipped sans frere retiree(s) de la file`);
         }
       }
       // ──────────────────────────────────────────────────────────────────
