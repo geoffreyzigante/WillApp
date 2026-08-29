@@ -3984,14 +3984,19 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // doit vivre pour que les fetch finissent -- d'ou le message rassurant
   // "elles repartiront a ta prochaine ouverture". Ton volontairement neutre,
   // pas de style destructive sur "Quitter quand meme" (action reversible).
+  // On n avertit que pour les photos qui NE partiront PAS toutes seules.
+  // Celles deja confiees a l uploader natif voyagent par une NSURLSession
+  // d arriere-plan, qui survit a la fermeture de la fenetre : les compter ici
+  // ferait rester le benevole devant son ecran sans aucune raison.
   function confirmLeaveWithPending(proceed) {
-    if (pendingCount === 0) { proceed(); return; }
+    const enAttente = queueStats?.pending || 0;
+    if (enAttente === 0) { proceed(); return; }
     Alert.alert(
-      'Photos en cours d\'envoi',
-      `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer. Garde l'app ouverte encore un instant pour qu'elles partent. Si tu quittes, elles repartiront à ta prochaine ouverture.`,
+      `${enAttente} photo${enAttente > 1 ? 's' : ''} pas encore partie${enAttente > 1 ? 's' : ''}`,
+      'Reste quelques secondes, ou elles repartiront à ta prochaine ouverture.',
       [
         { text: 'Rester', style: 'cancel' },
-        { text: 'Quitter quand même', onPress: proceed },
+        { text: 'Quitter', onPress: proceed },
       ],
       { cancelable: true },
     );
