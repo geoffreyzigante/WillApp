@@ -46,13 +46,30 @@ export const STEP_TRIGGER_DEFAULTS = {
   // Aire minimale pour etre credite. Sous ce seuil le visage est trop petit
   // pour que Rekognition le rattache : le crediter lui consommerait un
   // repere sur une photo ou il n est pas exploitable.
-  creditMinArea: 0.005,
+  //
+  // Abaisse de 0.005 a 0.001 le 2026-08-29. Les aires mesurees au terrain
+  // valent 0.0012 a 0.0070 : l ancien seuil, herite de lineTrigger, excluait
+  // donc la majorite des visages a la distance de tir reelle. En peloton,
+  // personne n aurait ete credite et chacun aurait declenche ses propres
+  // photos. 0.001 correspond a un visage de ~95 px de large sur la photo
+  // livree, largement au-dessus de ce que Rekognition sait rattacher.
+  //
+  // Abaisse a 0.0003 le 2026-08-30 pour couvrir les 6 m : a cette distance
+  // l aire tombe vers 0.0007, et le seuil precedent excluait donc les
+  // coureurs les plus eloignes du partage.
+  creditMinArea: 0.0003,
   // Appariement d une image a l autre, en largeurs de visage.
   gateFactor: 1.5,
   gateFloor: 0.10,
   // Survie d un track sans detection. Au-dela il est oublie, et le visage
   // qui reapparait repart avec un budget neuf.
-  coastMs: 400,
+  //
+  // Porte de 400 a 800 ms le 2026-08-30. Constat terrain : a 6 m la detection
+  // devient intermittente — un visage n est vu qu une image sur deux ou trois
+  // — et 400 ms tuaient le track entre deux apparitions. Le coureur repartait
+  // alors avec un budget neuf a chaque trou, et ne franchissait jamais trois
+  // reperes d affilee. C est ce qui faisait decrocher le mode a distance.
+  coastMs: 800,
   // Lissage de vitesse, utilise seulement pour predire la position lors de
   // l appariement — jamais pour decider d un tir.
   velAlpha: 0.4,
@@ -81,6 +98,11 @@ export const STEP_TRIGGER_DEFAULTS = {
   // classement des plus grands. Les tirs par franchissement ne sont pas
   // concernes : ils exigent deja une position precedente, donc deux images.
   minObsPourApparition: 2,
+  // Aire en dessous de laquelle on n exige plus la confirmation ci-dessus.
+  // Un visage lointain clignote : lui demander deux observations consecutives
+  // revient a ne jamais le declencher. Le risque de faux positif reste borne
+  // par le limiteur global et par la bande centrale.
+  aireApparitionDirecte: 0.0015,
 };
 
 export function createStepTrigger(options = {}) {
@@ -191,7 +213,8 @@ export function createStepTrigger(options = {}) {
       if (cr.length) {
         candidats.push({ tr, indices: cr, reason: 'repere-franchi' });
       } else if (
-        tr.obs === cfg.minObsPourApparition
+        (tr.obs === cfg.minObsPourApparition
+          || (tr.obs === 1 && (det.w || 0) * (det.h || 0) < cfg.aireApparitionDirecte))
         && tr.consumed.size === 0
         && dansLaBande(det.x)
       ) {

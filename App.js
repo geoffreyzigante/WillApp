@@ -149,7 +149,7 @@ import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
 import { fovFromFormat, TARGET_DISTANCE_M, MOUNT_HEIGHT_M, DISTANCE_CHOICES_M } from './src/services/framingGuide';
 import { reduceBursts, sanitizeQualityConfig } from './src/services/qualityReducer';
-import { recordScore, recordBurstReduction, getSummary as getQualitySummary } from './src/services/qualityTelemetry';
+import { recordScore, recordBurstReduction } from './src/services/qualityTelemetry';
 import {
   formatTimeAgo,
   MONTHS_FULL,
@@ -2157,23 +2157,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     return () => clearInterval(t);
   }, [eventConfig.quality]);
 
-  // Telemetrie : log summary toutes les 60s pour visibilite au calibrage E
-  // (distribution signaux + composite + temps d'execution scorer).
-  // getQualitySummary() est pur, pas d'effet de bord.
-  useEffect(() => {
-    const t = setInterval(() => {
-      const s = getQualitySummary();
-      if (s.counters.scored === 0 && s.counters.scoreFailed === 0) return;
-      console.log('[quality-summary]', JSON.stringify({
-        c: s.counters,
-        photos: s.photosScored,
-        bursts: s.burstsReduced,
-        signals: s.signals,
-        burstSize: s.burstSizeDistribution,
-      }));
-    }, 60000);
-    return () => clearInterval(t);
-  }, []);
+  // Resume de telemetrie RETIRE le 2026-08-30. Il rejouait cinq tris
+  // complets sur l integralite des photos notees, toutes les 60 secondes,
+  // pour un unique console.log. A plusieurs milliers de photos c etait une
+  // saccade periodique sur le fil qui porte aussi la capture — pour une
+  // trace que personne ne consulte au bord d un parcours. Les compteurs
+  // restent alimentes dans qualityTelemetry, lisibles a la demande.
+
   // ───────────────────────────────────────────────────────────────────────
 
   // AppState : retour foreground → kick les deux workers (au cas où la
@@ -2635,6 +2625,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // Sur erreur : bump retries, backoff exponentiel (meme barreme que upload).
   // Au-dela de MAX_RETRIES_DEFAULT, marque l'item 'failed' (l'admin peut
   // force-retry via le sous-ecran admin -> reset retries -> picked up here).
+  // Seuil au-dela duquel une capture est jugee assez lente pour que le sujet
+  // ait pu sortir du cadre. Sert deux fois : a decider si la photo merite
+  // d etre notee, et a decider si une photo sans visage doit etre refusee.
+  const SEUIL_SCORE_MS = 400;
+  const scoreEchantillonRef = useRef(0);
+
   const processingRef = useRef(false);
   async function processQueue() {
     const verboseProcess = !!eventConfig.debug?.verboseLogs;
@@ -2694,7 +2690,33 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         // qu une photo au visage colle au bord du cadre est partie en galerie
         // sans que rien ne la regarde. Le score ne les fait pas jeter
         // (upload_kept est deja pose) : il sert a mesurer.
-        if (!item.qualityScore && !item.qualityScoreFailed) {
+        // ─── Faut-il vraiment noter cette photo ? ─────────────────────
+        // Le scoreur coute 50 a 190 ms de processeur et un decodage complet
+        // de 12 Mpx. Sur mille photos, c est une minute de CPU soutenu sur
+        // une file qui partage le silicium avec la capture.
+        //
+        // Trois cas seulement le justifient :
+        //
+        //   - photo de RAFALE : le tri du burst a besoin du score pour
+        //     choisir les trois meilleures. Sans lui, plus de tri.
+        //   - CAPTURE LENTE : c est le seul cas ou la photo peut etre vide,
+        //     le sujet ayant eu le temps de sortir. C est exactement la
+        //     population que le refus vise.
+        //   - un ECHANTILLON d une sur dix, pour continuer d alimenter le
+        //     calibrateur de latence, qui n a pas besoin de tout voir.
+        //
+        // Le reste — capture rapide, declenchee par pas de distance — est
+        // garde sans analyse : le declencheur a vu un visage dans la bande
+        // 150 ms plus tot, son avis vaut bien celui du scoreur.
+        scoreEchantillonRef.current += 1;
+        const captureLenteAvantScore =
+          !Number.isFinite(item.captureMs) || item.captureMs >= SEUIL_SCORE_MS;
+        const meriteScore =
+             !item.lineTriggered
+          || captureLenteAvantScore
+          || scoreEchantillonRef.current % 10 === 0;
+
+        if (meriteScore && !item.qualityScore && !item.qualityScoreFailed) {
           const scoreSrcPath = item.localUri.startsWith('file://')
             ? item.localUri.slice(7)
             : item.localUri;
@@ -2735,8 +2757,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // l obturateur a ete assez lent pour que le sujet ait pu sortir.
           // Le doute profite a la photo : mieux vaut en livrer une douteuse
           // que perdre une bonne.
-          const SEUIL_REFUS_MS = 400;
-          const captureLente = !Number.isFinite(item.captureMs) || item.captureMs >= SEUIL_REFUS_MS;
+          const captureLente = captureLenteAvantScore;
           const sansVisage = res.ok && (res.signals?.faceCount ?? 0) === 0 && captureLente;
 
           // SUPPRESSION IMMEDIATE, pas un simple marquage upload_skipped.
@@ -4159,7 +4180,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // fantome sur un coureur.
           photoQualityBalance={modeQualite === 'qualite' ? 'balanced' : 'speed'}
           photoHdr={modeQualite === 'qualite' ? false : !!format?.supportsPhotoHdr}
-          videoHdr={!!format?.supportsVideoHdr}
+          // videoHdr coupe : il ne sert qu au rendu de l apercu, la detection
+          // travaille sur le buffer brut. Sur un flux permanent de plusieurs
+          // heures, c est du traitement d image continu paye en batterie pour
+          // une image que personne ne regarde en detail.
+          videoHdr={false}
           lowLightBoost={!!device?.supportsLowLightBoost}
           frameProcessor={frameProcessor}
           pixelFormat="yuv"
