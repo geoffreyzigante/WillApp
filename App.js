@@ -973,6 +973,23 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // scene au moment ou le benevole en a besoin), ni apercu de la photo prise
   // (il coupe le flux camera en pleine rafale). Les bords suffisent a dire
   // « c est parti » sans rien cacher.
+  // ── Reperes de l ecran de capture ───────────────────────────────────────
+  // Tout passe par des Animated.Value pilotees en setValue depuis le callback
+  // de detection : a 10 images par seconde, un setState re-rendrait tout
+  // PhotographerScreen dix fois par seconde pendant des heures. setValue ne
+  // declenche aucun rendu React.
+  //
+  // Signe de vie (mode rafale) : position du plus grand visage, normalisee.
+  const vieX = useRef(new Animated.Value(0.5)).current;
+  const vieY = useRef(new Animated.Value(0.5)).current;
+  const vieOn = useRef(new Animated.Value(0)).current;
+  // Reperes du pas de distance : un par position, 0 = eteint, 1 = consomme.
+  const repereA = useRef(new Animated.Value(0)).current;
+  const repereB = useRef(new Animated.Value(0)).current;
+  const repereC = useRef(new Animated.Value(0)).current;
+  const reperesAnim = useMemo(() => [repereA, repereB, repereC], [repereA, repereB, repereC]);
+  const reperesResetRef = useRef(null);
+
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const captureScale = useRef(new Animated.Value(1)).current;
   const headerSlideY = useRef(new Animated.Value(-120)).current;
@@ -1258,6 +1275,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       lastFrameAtRef.current = Date.now();
       faceInZoneRef.current = count > 0;
       updateFaceTrail(count, bigX, bigY);
+      // Signe de vie : suit le plus grand visage vu, en zone ou non. C est
+      // precisement ce qui distingue « je ne vois personne » de « je vois
+      // mais je ne declenche pas » — deux pannes qui se ressemblent a
+      // l ecran et qui n ont rien a voir.
+      if (bigX >= 0 && bigY >= 0) {
+        vieX.setValue(bigX);
+        vieY.setValue(bigY);
+        vieOn.setValue(1);
+      } else {
+        vieOn.setValue(0);
+      }
       // Cadence Vision dynamique : visage detecte -> repasse immediatement
       // a 10 fps. Si pas de visage -> arme un timeout 30s qui bascule en idle
       // (5 fps Vision) jusqu'au prochain visage. Le worklet lit idleModeSV
@@ -1305,6 +1333,16 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             inFlightSetRef.current.add(pr);
             updateInFlight();
             pr.finally(() => { inFlightSetRef.current.delete(pr); updateInFlight(); });
+            // Le repere s allume. C est la jauge de placement du benevole :
+            // s il n en voit que deux s allumer sur un passage, il est trop
+            // pres — la troisieme photo n a pas eu la place de partir.
+            reperesAnim[a.repere]?.setValue(1);
+            if (reperesResetRef.current) clearTimeout(reperesResetRef.current);
+            reperesResetRef.current = setTimeout(() => {
+              reperesResetRef.current = null;
+              if (!isMountedRef.current) return;
+              for (const v of reperesAnim) v.setValue(0);
+            }, 1400);
             console.log(`[pas] tir repere=${a.repere} credites=${a.creditedIds.length}`);
           }
         } catch (e) {
@@ -3697,7 +3735,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // deborder l ecran d un coup.
   const CONTROLS_H = 3 * G.rowH + 2 * G.rowGap;   // 136
   const COUNTER_H = 24;                            // ligne de compteurs, toujours reservee
-  const dispoH = winH - FRAME_TOP - G.rowGap - COUNTER_H - CONTROLS_H - BOTTOM_SAFE - G.rowGap;
+  // Bascule du mode de capture, sous les commandes. Sa hauteur est reservee
+  // ICI comme le reste : le bloc de commandes est en position absolue, rien
+  // ne le pousse. Ajouter une rangee sans l inscrire dans le calcul la ferait
+  // sortir de l ecran par le bas — c est exactement ce qui etait arrive a la
+  // rangee « Poste » sur iPhone SE.
+  const SWITCH_H = 30;
+  const dispoH = winH - FRAME_TOP - G.rowGap - COUNTER_H - CONTROLS_H - SWITCH_H - BOTTOM_SAFE - G.rowGap;
 
   // Le ratio 3:4 n est PAS negociable : le cadre est la photo livree. Quand la
   // hauteur manque, on retrecit la LARGEUR pour garder le ratio, au lieu
@@ -3832,6 +3876,73 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           exposure={cameraExposure}
           enableLocation={false}
         />
+
+        {/* ─── Reperes de capture, propres a chaque mode ─────────────────
+            Discretion assumee : blanc a faible opacite, traits courts poses
+            sur les bords du cadre plutot que lignes pleines en travers de
+            l image. Le principe pose en aout tient toujours — un repere ne
+            merite sa place que s il change ce que le benevole FAIT. Ceux-ci
+            en changent : la bande dit ou la capture se declenche, le signe
+            de vie dit si le detecteur voit quelqu un, et les trois reperes
+            allumes disent si les trois photos sont bien parties. */}
+        {modeCapture === 'rafale' ? (
+          <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+            {/* Bande de declenchement : deux montants sur le tiers central
+                vertical seulement. Une ligne pleine barrerait le visage des
+                coureurs pendant toute la course. */}
+            {(() => {
+              const zoneW = Math.max(0.1, Math.min(1, (eventConfig.camera?.captureZoneWidthPercent ?? 30) / 100));
+              if (zoneW >= 1) return null;
+              const insetPct = ((1 - zoneW) / 2) * 100;
+              const montant = {
+                position: 'absolute', top: '33%', bottom: '33%', width: 1,
+                backgroundColor: 'rgba(255,255,255,0.28)',
+              };
+              return (
+                <>
+                  <View style={[montant, { left: `${insetPct}%` }]} />
+                  <View style={[montant, { right: `${insetPct}%` }]} />
+                </>
+              );
+            })()}
+            {/* Signe de vie : anneau qui suit le plus grand visage detecte. */}
+            <Animated.View
+              style={{
+                position: 'absolute', left: -9, top: -9, width: 18, height: 18,
+                borderRadius: 9, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.75)',
+                opacity: vieOn,
+                transform: [
+                  { translateX: vieX.interpolate({ inputRange: [0, 1], outputRange: [0, FRAME_W] }) },
+                  { translateY: vieY.interpolate({ inputRange: [0, 1], outputRange: [0, FRAME_H] }) },
+                ],
+              }}
+            />
+          </View>
+        ) : (
+          <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+            {/* Trois reperes fixes, en haut et en bas du cadre. Ils
+                s allument un par un au passage : deux allumes au lieu de
+                trois = trop pres de la route. */}
+            {[0, 1, 2].map((i) => {
+              // Memes positions que stepTrigger.js : bande centrale de 50 %,
+              // repere au centre de chaque tiers -> 33,3 %, 50 %, 66,7 %.
+              const pct = (0.25 + (0.5 * (i + 0.5)) / 3) * 100;
+              const anim = reperesAnim[i];
+              const commun = {
+                position: 'absolute', left: `${pct}%`, width: 2, height: 9,
+                marginLeft: -1, borderRadius: 1,
+              };
+              return (
+                <React.Fragment key={i}>
+                  <View style={[commun, { top: 0, backgroundColor: 'rgba(255,255,255,0.30)' }]} />
+                  <View style={[commun, { bottom: 0, backgroundColor: 'rgba(255,255,255,0.30)' }]} />
+                  <Animated.View style={[commun, { top: 0, backgroundColor: P.brand, opacity: anim }]} />
+                  <Animated.View style={[commun, { bottom: 0, backgroundColor: P.brand, opacity: anim }]} />
+                </React.Fragment>
+              );
+            })}
+          </View>
+        )}
 
         {/* Reperes de detection. La largeur vient de /config, PAS du handoff :
             captureZoneWidthPercent est modifiable a chaud en cours d event, et
@@ -4135,59 +4246,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         }}
         pointerEvents={unPanneauOuvert ? 'none' : 'auto'}
       >
-        {/* Ligne compteurs + mode de capture. Occupe la hauteur COUNTER_H
-            deja reservee par le calcul de geometrie : le bloc de commandes
-            et le cadre ne bougent pas selon que les compteurs sont affiches
-            ou non. */}
-        <View
-          style={{
-            height: COUNTER_H, flexDirection: 'row', alignItems: 'center',
-            justifyContent: techExpanded ? 'space-between' : 'center',
-          }}
-        >
-          {techExpanded && (
-            <Text
-              numberOfLines={1}
-              style={{ color: P.labelMuted, fontSize: 13, fontFamily: 'Montserrat-Medium', flexShrink: 1 }}
-            >
-              {compteursTexte}
-            </Text>
-          )}
-          {/* Bascule rafale / pas de distance. Deux segments plutot qu un
-              interrupteur : le benevole doit lire le mode actif d un coup
-              d oeil, sans avoir a interpreter une position d aiguille. */}
-          <TouchableOpacity
-            onPress={basculerModeCapture}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={`Mode de capture : ${modeCapture === 'pas' ? 'pas de distance' : 'rafale'}. Toucher pour changer.`}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        {/* Compteurs sous le cadre, optionnels. */}
+        {techExpanded && (
+          <Text
             style={{
-              flexDirection: 'row', alignItems: 'center',
-              height: 22, borderRadius: 11, backgroundColor: P.surface,
-              paddingHorizontal: 3, flex: 0,
+              textAlign: 'center', color: P.labelMuted, fontSize: 13,
+              fontFamily: 'Montserrat-Medium', marginBottom: G.rowGap,
             }}
           >
-            <View style={{
-              paddingHorizontal: 9, height: 16, borderRadius: 8, justifyContent: 'center',
-              backgroundColor: modeCapture === 'rafale' ? P.brand : 'transparent',
-            }}>
-              <Text style={{
-                fontSize: 10, fontFamily: 'Montserrat-SemiBold',
-                color: modeCapture === 'rafale' ? P.surface : P.labelMuted,
-              }}>Rafale</Text>
-            </View>
-            <View style={{
-              paddingHorizontal: 9, height: 16, borderRadius: 8, justifyContent: 'center',
-              backgroundColor: modeCapture === 'pas' ? P.brand : 'transparent',
-            }}>
-              <Text style={{
-                fontSize: 10, fontFamily: 'Montserrat-SemiBold',
-                color: modeCapture === 'pas' ? P.surface : P.labelMuted,
-              }}>Pas</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+            {compteursTexte}
+          </Text>
+        )}
 
         {/* Rangee 1 : Infos + Stop */}
         <View style={{ flexDirection: 'row', marginBottom: G.rowGap }}>
@@ -4238,6 +4307,43 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           valeur={kmItems[kmIdx]?.label || '-'}
           onPress={() => ouvrirPanneau('km')}
         />
+
+        {/* Bascule du mode de capture. Deux segments plutot qu un
+            interrupteur : le benevole doit lire le mode actif d un coup
+            d oeil, sans avoir a interpreter une position d aiguille. */}
+        <View style={{ height: SWITCH_H, alignItems: 'center', justifyContent: 'flex-end' }}>
+          <TouchableOpacity
+            onPress={basculerModeCapture}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Mode de capture : ${modeCapture === 'pas' ? 'pas de distance' : 'rafale'}. Toucher pour changer.`}
+            hitSlop={{ top: 10, bottom: 10, left: 14, right: 14 }}
+            style={{
+              flexDirection: 'row', alignItems: 'center',
+              height: 24, borderRadius: 12, backgroundColor: P.surface,
+              paddingHorizontal: 3,
+            }}
+          >
+            <View style={{
+              paddingHorizontal: 11, height: 18, borderRadius: 9, justifyContent: 'center',
+              backgroundColor: modeCapture === 'rafale' ? P.brand : 'transparent',
+            }}>
+              <Text style={{
+                fontSize: 11, fontFamily: 'Montserrat-SemiBold',
+                color: modeCapture === 'rafale' ? '#fff' : P.labelMuted,
+              }}>Rafale</Text>
+            </View>
+            <View style={{
+              paddingHorizontal: 11, height: 18, borderRadius: 9, justifyContent: 'center',
+              backgroundColor: modeCapture === 'pas' ? P.brand : 'transparent',
+            }}>
+              <Text style={{
+                fontSize: 11, fontFamily: 'Montserrat-SemiBold',
+                color: modeCapture === 'pas' ? '#fff' : P.labelMuted,
+              }}>Pas de distance</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ─── Mini-galerie sheet ─── ouverte au tap d'une vignette de la bande,
