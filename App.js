@@ -1237,7 +1237,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // instant est preserve (c est le role du tampon), mais le debit baisse —
   // a surveiller en mode pas de distance, ou trois photos doivent tenir dans
   // la traversee de la bande.
-  const QUALITE_MAX_WIDTH = 2160;
+  // 2400 px de large : plancher VALIDE SUR LE TERRAIN (Chateau Gaillard,
+  // 2026-06-28). En dessous, SearchFacesByImage cesse de matcher — et la
+  // panne est silencieuse, aucune erreur, juste zero resultat. Cette valeur
+  // doit rester EGALE au width de compressForAnalysis cote worker et a
+  // LIGHT_MAX_WIDTH. Etait a 2160, soit 10 % sous le plancher.
+  const QUALITE_MAX_WIDTH = 2400;
   const [modeQualite, setModeQualite] = useState('rapide');
   const modeQualiteRef = useRef('rapide');
   const basculerModeQualite = () => {
@@ -2915,12 +2920,22 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // degrade reste l ancien comportement, jamais une photo perdue.
           let fichierFinal = dstFile.uri;
           let cleFinale = item.key;
-          // maxWidth 100000 = aucune reduction (comportement historique). En
-          // mode qualite on descend a QUALITE_MAX_WIDTH : la reduction moyenne
-          // le bruit des pixels voisins, ce qui est exactement ce qu on veut
-          // sur une photo prise a ISO eleve.
-          const largeurCible = modeQualiteRef.current === 'qualite' ? QUALITE_MAX_WIDTH : 100000;
-          const jpeg = await makeLightCopy(dstFile.uri, { quality: 0.9, maxWidth: largeurCible });
+          // Largeur plafonnee a QUALITE_MAX_WIDTH dans LES DEUX modes.
+          // Avant : le mode rapide envoyait la pleine resolution capteur
+          // (maxWidth 100000) et le mode qualite descendait a 2160, sous le
+          // plancher Rekognition. Les deux convergent sur la seule valeur
+          // validee sur le terrain. Sur un capteur deja <= 2400 de large,
+          // scale-down ne fait rien : c est une borne, pas un agrandissement.
+          const largeurCible = QUALITE_MAX_WIDTH;
+          // Qualite JPEG. 0.9 etait tres au-dessus du besoin : la copie
+          // d analyse tourne a 0.45 sans perte de match connue. Ce qui casse
+          // Rekognition c est la RESOLUTION, pas la qualite (cf lightCopy.js).
+          // 0.7 divise le poids par ~2.5 pour une difference invisible a
+          // l oeil sur un visage de coureur.
+          // Reglable a chaud via /config upload.jpegQuality : si le terrain
+          // dement ce raisonnement, un PUT suffit, sans OTA ni redemarrage.
+          const qualiteJpeg = eventConfigRef.current.upload?.jpegQuality ?? 0.7;
+          const jpeg = await makeLightCopy(dstFile.uri, { quality: qualiteJpeg, maxWidth: largeurCible });
           if (jpeg.ok) {
             fichierFinal = jpeg.uri;
             cleFinale = String(item.key).replace(/\.heic$/i, '.jpg');
@@ -2928,6 +2943,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             if (verboseProcess) {
               console.log(`[jpeg] ${item.id} ${jpeg.width}x${jpeg.height} -> ${cleFinale.split('/').pop()}`);
             }
+            // Poids REEL de ce qui part sur le reseau. Jamais mesure jusqu ici :
+            // les 1,94 Mo de constants/queue.js sont le HEIC AVANT conversion,
+            // pas le JPEG envoye. Sans cette ligne, tout dimensionnement de la
+            // file reste une estimation. Non conditionne a verboseLogs : c est
+            // la donnee qui manque, et elle ne coute qu une ligne par photo.
+            try {
+              const octets = new File(jpeg.uri).size;
+              if (Number.isFinite(octets) && octets > 0) {
+                console.log(`[poids] ${jpeg.width}x${jpeg.height} q${qualiteJpeg} -> ${Math.round(octets / 1024)} Ko`);
+              }
+            } catch { /* taille indisponible : jamais bloquant */ }
           } else {
             console.warn(`[jpeg] conversion KO ${item.id} (${jpeg.reason}) — envoi du HEIC`);
           }
