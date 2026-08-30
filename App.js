@@ -4430,6 +4430,21 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   return (
     <View style={{ flex: 1, backgroundColor: P.appBg }}>
 
+      {/* Fond tap-pour-fermer au niveau ECRAN. Le fond du Panneau ne couvre
+          que le cadre camera (absoluteFill relatif a son parent) : taper
+          SOUS le cadre — la ou vivent les commandes, desactivees pendant
+          qu un panneau est ouvert — ne fermait rien. Ce calque est place
+          SOUS toutes les autres couches : il n attrape que les touches
+          qu aucune couche superieure ne consomme. */}
+      {unPanneauOuvert && (
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={fermerPanneaux}
+          accessibilityLabel="Fermer le panneau"
+          style={StyleSheet.absoluteFillObject}
+        />
+      )}
+
       {/* ─── 2. Barre de titre ─────────────────────────────────────────── */}
       <View
         style={{
