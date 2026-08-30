@@ -78,12 +78,19 @@ static void WillHandleBgSessionEvents(id self, SEL _cmd, UIApplication *app,
 // veille, pour finir de preparer (convertir) les photos et les remettre a la
 // session background AVANT que le JS ne s endorme. Sans elle, tout ce qui
 // n etait pas converti au verrouillage attendait une reouverture.
-static UIBackgroundTaskIdentifier gWillProtectedTask = UIBackgroundTaskInvalid;
+// UIBackgroundTaskInvalid n est PAS une constante de compilation (extern
+// const) : interdit comme initialiseur statique. Le BOOL fait foi, la
+// valeur du task n est lue que quand il est actif.
+static UIBackgroundTaskIdentifier gWillProtectedTask;
+static BOOL gWillProtectedActive = NO;
 
-@implementation BackgroundUploader
+// Classe dediee pour le +load : RCT_EXPORT_MODULE() definit deja +load sur
+// BackgroundUploader (enregistrement du module aupres du bridge) — un second
+// +load dans la meme classe est un doublon refuse a la compilation.
+@interface WillBgSessionInstaller : NSObject
+@end
 
-RCT_EXPORT_MODULE();
-
+@implementation WillBgSessionInstaller
 + (void)load {
   [[NSNotificationCenter defaultCenter]
     addObserverForName:UIApplicationDidFinishLaunchingNotification
@@ -100,6 +107,11 @@ RCT_EXPORT_MODULE();
     }
   }];
 }
+@end
+
+@implementation BackgroundUploader
+
+RCT_EXPORT_MODULE();
 
 + (BOOL)requiresMainQueueSetup { return NO; }
 
@@ -291,15 +303,18 @@ RCT_EXPORT_METHOD(beginProtectedWindow:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
   dispatch_async(dispatch_get_main_queue(), ^{
-    if (gWillProtectedTask != UIBackgroundTaskInvalid) { resolve(@{@"granted": @YES}); return; }
+    if (gWillProtectedActive) { resolve(@{@"granted": @YES}); return; }
     gWillProtectedTask = [[UIApplication sharedApplication]
       beginBackgroundTaskWithName:@"will-preparation"
                 expirationHandler:^{
       NSLog(@"[BackgroundUploader] fenetre protegee expiree par iOS");
-      [[UIApplication sharedApplication] endBackgroundTask:gWillProtectedTask];
-      gWillProtectedTask = UIBackgroundTaskInvalid;
+      if (gWillProtectedActive) {
+        [[UIApplication sharedApplication] endBackgroundTask:gWillProtectedTask];
+        gWillProtectedActive = NO;
+      }
     }];
-    resolve(@{@"granted": @(gWillProtectedTask != UIBackgroundTaskInvalid)});
+    gWillProtectedActive = (gWillProtectedTask != UIBackgroundTaskInvalid);
+    resolve(@{@"granted": @(gWillProtectedActive)});
   });
 }
 
@@ -307,9 +322,9 @@ RCT_EXPORT_METHOD(endProtectedWindow:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
   dispatch_async(dispatch_get_main_queue(), ^{
-    if (gWillProtectedTask != UIBackgroundTaskInvalid) {
+    if (gWillProtectedActive) {
       [[UIApplication sharedApplication] endBackgroundTask:gWillProtectedTask];
-      gWillProtectedTask = UIBackgroundTaskInvalid;
+      gWillProtectedActive = NO;
     }
     resolve(nil);
   });
