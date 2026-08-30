@@ -1887,7 +1887,21 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     const mid = sorted[Math.floor(sorted.length / 2)];
     const camCfg = eventConfig?.camera || {};
     const denBright = Number(camCfg.shutterSpeedMaxBright) || 0; // 0 = no cap (defaut)
-    const denDim = Number(camCfg.shutterSpeedMaxDim) || 500;
+    let denDim = Number(camCfg.shutterSpeedMaxDim) || 500;
+    // ── Plancher par discipline ─────────────────────────────────────────
+    // Le plancher d obturateur depend de la vitesse du sujet, et l app sait
+    // a quel event elle est connectee. Un cycliste a 35 km/h laisse ~40 mm
+    // de file a 1/250 — visible sur un visage — la ou un coureur a 12 km/h
+    // en laisse 13, imperceptibles. Regle : sur une epreuve velo, jamais
+    // plus lent que 1/500, quel que soit le reglage global. Monotone : la
+    // configuration peut durcir (Dim=1000 s applique), jamais ramollir en
+    // dessous de 1/500 pour le velo. Detection par le type d event declare
+    // par l organisateur ; inconnu = comportement inchange.
+    try {
+      const type = String(session?.event?.event_type || '').toLowerCase();
+      const velo = /v[ée]lo|cyclo|cyclis|vtt|gravel|bike|triathlon|duathlon/.test(type);
+      if (velo && denDim < 500) denDim = 500;
+    } catch { /* jamais bloquant */ }
     let label, cap;
     if (mid <= 0.001) {
       label = 'OK';
