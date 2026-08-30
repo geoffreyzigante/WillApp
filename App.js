@@ -50,6 +50,10 @@ function detectHumans(frame, options) {
 // Retourne { iso, shutter, brightness } ou null.
 const exposureReaderPlugin = VisionCameraProxy.initFrameProcessorPlugin('readExposure', {});
 
+// Capture par le worklet frameProcessor : la correction d orientation 180
+// ne s applique qu au plugin iOS (cf commentaire dans le worklet).
+const IOS_FLIP = Platform.OS === 'ios';
+
 // Publie l'etat des deux frame processors vers capabilities.js. On reutilise
 // la detection ci-dessus : pas de second initFrameProcessorPlugin.
 reportFrameProcessor('detectHumans', humanDetectorPlugin != null);
@@ -1996,6 +2000,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // natif : poser cx = 1 - midX, cy = midY, et retirer ces deux lignes.
     let bx = -1, by = -1, ba = 0;
     let flat = null;
+    // La rotation 180 ci-dessous compense l orientation du buffer DU PLUGIN
+    // iOS (constate au terrain le 2026-08-29) — ce n est pas un trait du
+    // contrat natif. Le plugin Kotlin produit les coordonnees contractuelles
+    // directes : lui appliquer la meme correction inverserait les reperes
+    // dans l autre sens. IOS_FLIP est capture a la creation du worklet.
+    // A VERIFIER au premier essai Android avec les reperes a l ecran —
+    // meme methode qui a revele le defaut iOS.
     // Mode instant + build patche : le tracker suit les SILHOUETTES, pas
     // les visages — un torse a 6 m ne clignote pas. Les aires passees au
     // tracker sont ~10-40x celles d un visage ; tous ses seuils sont des
@@ -2010,7 +2021,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       const ax = [], ay = [], aw = [], ah = [], aa = [];
       for (let i = 0; i < faces.length; i++) {
         const f0 = faces[i];
-        const f = { cx: 1 - f0.cx, cy: 1 - f0.cy, w: f0.w, h: f0.h };
+        const f = IOS_FLIP
+          ? { cx: 1 - f0.cx, cy: 1 - f0.cy, w: f0.w, h: f0.h }
+          : { cx: f0.cx, cy: f0.cy, w: f0.w, h: f0.h };
         const a = f.w * f.h;
         if (a > ba) { ba = a; bx = f.cx; by = f.cy; }
         let pos = aa.length;
