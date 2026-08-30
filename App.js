@@ -454,7 +454,10 @@ function RangeeValeur({ libelle, valeur, onPress }) {
 // interrupteur : le benevole doit lire l etat actif d un coup d oeil, sans
 // avoir a interpreter une position d aiguille. Definie au niveau MODULE pour
 // la meme raison que les autres briques de cet ecran (cf. plus haut).
-function Bascule({ gaucheLibelle, droiteLibelle, aDroite, onPress, accessibilityLabel }) {
+// Deux formes d appel : l historique (gaucheLibelle/droiteLibelle/aDroite)
+// pour les bascules a deux etats, et `libelles` + `actifIdx` pour trois et
+// plus — ajoutee avec le mode Instant, sans toucher aux appelants existants.
+function Bascule({ gaucheLibelle, droiteLibelle, aDroite, libelles, actifIdx, onPress, accessibilityLabel }) {
   const segment = (libelle, actif) => (
     <View
       style={{
@@ -484,8 +487,12 @@ function Bascule({ gaucheLibelle, droiteLibelle, aDroite, onPress, accessibility
         height: 24, borderRadius: 12, backgroundColor: P.surface, paddingHorizontal: 3,
       }}
     >
-      {segment(gaucheLibelle, !aDroite)}
-      {segment(droiteLibelle, aDroite)}
+      {Array.isArray(libelles)
+        ? libelles.map((l, i) => <React.Fragment key={l}>{segment(l, i === actifIdx)}</React.Fragment>)
+        : (<>
+            {segment(gaucheLibelle, !aDroite)}
+            {segment(droiteLibelle, aDroite)}
+          </>)}
     </TouchableOpacity>
   );
 }
@@ -1198,7 +1205,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       .then(brut => {
         if (annule || !brut) return;
         const m = JSON.parse(brut);
-        if (m?.capture === 'pas' || m?.capture === 'rafale') {
+        if (m?.capture === 'pas' || m?.capture === 'rafale' || m?.capture === 'instant') {
           modeCaptureRef.current = m.capture;
           setModeCapture(m.capture);
         }
@@ -1259,7 +1266,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
   const basculerModeCapture = () => {
     try {
-      const suivant = modeCaptureRef.current === 'pas' ? 'rafale' : 'pas';
+      // Cycle a trois : rafale -> pas -> instant -> rafale.
+      // 'instant' = le declenchement du pas + le tampon d obturation
+      // instantanee (zero-shutter-lag) + aucun filtre destructeur local.
+      const ordre = ['rafale', 'pas', 'instant'];
+      const suivant = ordre[(ordre.indexOf(modeCaptureRef.current) + 1) % ordre.length];
       modeCaptureRef.current = suivant;
       setModeCapture(suivant);
       // Le tracker repart propre : les reperes deja consommes par un passage
@@ -1456,7 +1467,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // statique, pas de tri. Le tracker decide, on execute. Les photos sont
       // marquees lineTriggered, donc posees upload_kept des l enqueue et
       // ignorees par le reducer.
-      if (modeCaptureRef.current === 'pas') {
+      if (modeCaptureRef.current === 'pas' || modeCaptureRef.current === 'instant') {
         // Tout le bloc est garde : ce chemin est le plus recent du fichier, il
         // tourne dans un callback figé au premier rendu, et une exception non
         // rattrapee ici deviendrait une RCTFatalException — l app se ferme
@@ -2813,7 +2824,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // Le doute profite a la photo : mieux vaut en livrer une douteuse
           // que perdre une bonne.
           const captureLente = captureLenteAvantScore;
-          const sansVisage = res.ok && (res.signals?.faceCount ?? 0) === 0 && captureLente;
+          // Mode instant : JAMAIS de suppression locale. C est le principe
+          // du mode — rien de ce qui detruit une photo ne tourne sur le
+          // telephone ; le masquage des photos sans visage existe deja cote
+          // serveur (face-gate de la galerie publique). Motive par l audit du
+          // 2026-08-30 : captureMs mesure la latence du pipeline, pas
+          // l obturateur, et depasse 400 ms sous throttling en plein soleil —
+          // la regle supprimait des photos precisement au passage du peloton.
+          const sansVisage = res.ok && (res.signals?.faceCount ?? 0) === 0 && captureLente
+            && item.captureMode !== 'instant';
 
           // SUPPRESSION IMMEDIATE, pas un simple marquage upload_skipped.
           //
@@ -3180,7 +3199,36 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // L'etat est mis a jour par le listener module-level dans
       // src/services/thermalMonitor.js. Si le module natif n'est pas dispo,
       // reste 'nominal' = 3.
-      const CONCURRENCY = concurrencyForThermal(getCurrentThermalState());
+      const CONCURRENCY_CPU = concurrencyForThermal(getCurrentThermalState());
+      // MAIS ce plafond thermique ne concerne que la voie de secours `fetch`,
+      // ou c est NOTRE processus qui pousse les octets.
+      //
+      // Sur la voie native, le transfert est fait par NSURLSession en session
+      // d arriere-plan : nous ne faisons qu ouvrir une tache et attendre un
+      // evenement. Cote CPU, cent taches coutent autant que trois. Le nombre
+      // qui compte n est pas notre debit, c est COMBIEN DE TRANSFERTS SONT
+      // ENTRE LES MAINS D iOS au moment ou l app s endort.
+      //
+      // A trois, un benevole qui verrouille son telephone avec 183 photos en
+      // file en livre TROIS. Les 180 autres attendent qu il rouvre l app —
+      // ce qu il ne fera jamais. Mesure a Vernon-Giverny, 2026-08-30 :
+      //   09:14:44  [upload] drain 183 items (online=true)
+      // Une tache creee avant la suspension, elle, va jusqu au bout : iOS la
+      // porte, ecran eteint, app fermee. C est tout l interet de
+      // backgroundSessionConfiguration, et on ne s en servait qu a 1,6 %.
+      //
+      // Plafond a 256 par simple hygiene : au-dela, la liste des promesses en
+      // attente n apporte plus rien (iOS ordonnance de toute facon) et une
+      // file pathologique n a pas a se transformer en 3000 appels de pont.
+      // Cote memoire c est gratuit : l upload natif lit depuis le fichier,
+      // aucun blob n est charge.
+      const MAX_REMISE_IOS = 256;
+      const CONCURRENCY = hasBackgroundUploader
+        ? Math.min(Math.max(lot.length, CONCURRENCY_CPU), MAX_REMISE_IOS)
+        : CONCURRENCY_CPU;
+      if (hasBackgroundUploader && lot.length > CONCURRENCY_CPU) {
+        console.log(`[upload] remise a iOS : ${CONCURRENCY} taches d un coup (file ${lot.length})`);
+      }
       let cursor = 0;
       // mark all as uploading upfront so UI reflète. MERGE-COMMIT (pas
       // overwrite) : on lit queueRef.current AU MOMENT DU COMMIT et on
@@ -3938,6 +3986,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         xPredicted,
         vxAtFire,
         captureMs: dureeCapture,
+        // Mode au moment de la CAPTURE, pas du scoring : la regle REFUSEE
+        // s applique bien plus tard, le benevole peut avoir change de mode
+        // entre-temps. La photo est jugee selon le contrat sous lequel elle
+        // a ete prise.
+        captureMode: modeCaptureRef.current,
       }]);
       capturedCountRef.current += 1;
       if (isMountedRef.current) setCapturedCount(capturedCountRef.current);
@@ -4282,8 +4335,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // d obturation instantanee, 'balanced' les rend. Le HDR est coupe
           // en mode qualite — son bracketing inclut une pose longue, qui
           // fantome sur un coureur.
-          photoQualityBalance={modeQualite === 'qualite' ? 'balanced' : 'speed'}
-          photoHdr={modeQualite === 'qualite' ? false : !!format?.supportsPhotoHdr}
+          // Mode instant : 'balanced' quel que soit le rendu. 'speed'
+          // desactive le tampon d obturation instantanee (zero-shutter-lag) ;
+          // or ce tampon est le coeur du mode — la photo servie est une frame
+          // DEJA exposee a l instant du franchissement, donc coureur centre
+          // et latence de declenchement quasi nulle. HDR coupe : son
+          // bracketing fantome sur un sujet en mouvement.
+          photoQualityBalance={modeCapture === 'instant' || modeQualite === 'qualite' ? 'balanced' : 'speed'}
+          photoHdr={modeCapture === 'instant' ? false : (modeQualite === 'qualite' ? false : !!format?.supportsPhotoHdr)}
           // videoHdr coupe : il ne sert qu au rendu de l apercu, la detection
           // travaille sur le buffer brut. Sur un flux permanent de plusieurs
           // heures, c est du traitement d image continu paye en batterie pour
@@ -4798,11 +4857,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           justifyContent: 'center',
         }}>
           <Bascule
-            gaucheLibelle="Rafale"
-            droiteLibelle="Pas"
-            aDroite={modeCapture === 'pas'}
+            libelles={['Rafale', 'Pas', 'Instant']}
+            actifIdx={modeCapture === 'rafale' ? 0 : modeCapture === 'pas' ? 1 : 2}
             onPress={basculerModeCapture}
-            accessibilityLabel={`Declenchement : ${modeCapture === 'pas' ? 'pas de distance' : 'rafale'}. Toucher pour changer.`}
+            accessibilityLabel={`Declenchement : ${modeCapture}. Toucher pour changer.`}
           />
           <View style={{ width: 10 }} />
           <Bascule
