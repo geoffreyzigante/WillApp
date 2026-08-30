@@ -95,12 +95,26 @@ public class HumanDetectorPlugin: FrameProcessorPlugin {
       zoneWidth = z.doubleValue
     }
     zoneWidth = max(0.0, min(1.0, zoneWidth))
+    // [will-instant] Detection des SILHOUETTES en plus des visages, sur
+    // demande du worklet (mode Instant). Un torse est ~6x plus haut qu un
+    // visage : detectable bien plus loin, sans clignotement, de dos et
+    // casque compris. Le visage reste la cible du SERVEUR (photo pleine
+    // resolution) — ici on ne change que ce que le tracker suit.
+    var wantHumans = false
+    if let h = arguments?["humans"] as? Bool { wantHumans = h }
+    else if let h = arguments?["humans"] as? NSNumber { wantHumans = h.boolValue }
     let half = zoneWidth / 2.0
     let zMin = 0.5 - half
     let zMax = 0.5 + half
 
     do {
-      try handler.perform([request])
+      var vnRequests: [VNRequest] = [request]
+      let humansRequest = VNDetectHumanRectanglesRequest()
+      if wantHumans {
+        if #available(iOS 15.0, *) { humansRequest.upperBodyOnly = true }
+        vnRequests.append(humansRequest)
+      }
+      try handler.perform(vnRequests)
       let results = (request.results as? [VNFaceObservation]) ?? []
       let raw = results.count
       let filtered = results.filter { obs in
@@ -138,10 +152,26 @@ public class HumanDetectorPlugin: FrameProcessorPlugin {
         lastLoggedFiltered = filtered
       }
 
-      return ["count": filtered, "ts": ts, "faces": faces]
+      // [will-instant] Silhouettes, memes conventions que les visages
+      // (cy bascule en repere image, origine en haut). La correction 180
+      // appliquee cote worklet vaut donc pour les deux listes.
+      var humans: [[String: Any]] = []
+      if wantHumans {
+        let hres = (humansRequest.results as? [VNHumanObservation]) ?? []
+        humans = hres.map { obs -> [String: Any] in
+          let b = obs.boundingBox
+          return [
+            "cx": Double(b.midX),
+            "cy": 1.0 - Double(b.midY),
+            "w":  Double(b.width),
+            "h":  Double(b.height),
+          ]
+        }
+      }
+      return ["count": filtered, "ts": ts, "faces": faces, "humans": humans]
     } catch {
       NSLog("[FaceDetector] perform failed: \(error.localizedDescription)")
-      return ["count": 0, "ts": ts, "faces": [[String: Any]]()]
+      return ["count": 0, "ts": ts, "faces": [[String: Any]](), "humans": [[String: Any]]()]
     }
   }
 

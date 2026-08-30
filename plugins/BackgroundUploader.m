@@ -11,12 +11,17 @@
 //  Implementation ObjC pure (pas de bridging header React requis dans ce
 //  projet). Logique conservee de la version Swift initiale.
 //
-//  Limitations V1 :
+//  Limitations :
 //  - Si l'app est explicitement killed (swipe up app switcher), les tasks
-//    en cours sont cancelled par iOS. Pas de relaunch via AppDelegate
-//    handleEventsForBackgroundURLSession pour cette V1.
+//    en cours sont cancelled par iOS. C est un comportement systeme, aucune
+//    API ne le contourne — la consigne benevole reste "verrouille, ne ferme
+//    pas".
 //  - Au cold start, on retrouve les tasks survivantes via getAllTasks et
 //    on les reattache au delegate.
+//  - V2 (2026-08-30) : handleEventsForBackgroundURLSession est desormais
+//    installe a l execution (cf. +load) — un kill SYSTEME en plein transfert
+//    n interrompt plus rien, et l app est relancee en arriere-plan pour
+//    encaisser les evenements.
 //
 //  Pattern d'usage cote JS :
 //    NativeModules.BackgroundUploader.enqueueUpload(url, filePath, headers,
@@ -29,6 +34,8 @@
 #import <Foundation/Foundation.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
+#import <UIKit/UIKit.h>
+#import <objc/runtime.h>
 
 static NSString * const kSessionId    = @"com.geoffreyzigante.will.upload.bg";
 static NSString * const kMapFilename  = @"background_uploader_map.json";
@@ -44,9 +51,55 @@ static const NSTimeInterval kProgressThrottleS = 0.2;
 
 @end
 
+// [will-bg-v2] Levee de la "limitation V1" : handleEventsForBackgroundURLSession.
+//
+// Quand iOS tue l app pendant un transfert (pression memoire), la session
+// d arriere-plan SURVIT et va au bout — mais iOS relance ensuite l app pour
+// lui remettre les evenements, via cette methode d AppDelegate qui n existait
+// pas. On l ajoute au delegate A L EXECUTION (class_addMethod au premier
+// lancement) : tout reste dans ce fichier, aucun patch d AppDelegate. Si
+// ExpoAppDelegate implemente deja le selecteur, on ne touche a rien.
+//
+// Le completion handler recu est range ici et rendu a iOS dans
+// URLSessionDidFinishEventsForBackgroundURLSession — le contrat exact d Apple.
+static void (^gWillBgCompletionHandler)(void) = nil;
+
+static void WillHandleBgSessionEvents(id self, SEL _cmd, UIApplication *app,
+                                      NSString *identifier, void (^completionHandler)(void)) {
+  if ([identifier isEqualToString:kSessionId]) {
+    gWillBgCompletionHandler = [completionHandler copy];
+    NSLog(@"[BackgroundUploader] relaunch pour evenements de session background");
+  } else {
+    completionHandler();
+  }
+}
+
+// [will-bg-v2] Fenetre protegee : ~30 s garanties par iOS apres la mise en
+// veille, pour finir de preparer (convertir) les photos et les remettre a la
+// session background AVANT que le JS ne s endorme. Sans elle, tout ce qui
+// n etait pas converti au verrouillage attendait une reouverture.
+static UIBackgroundTaskIdentifier gWillProtectedTask = UIBackgroundTaskInvalid;
+
 @implementation BackgroundUploader
 
 RCT_EXPORT_MODULE();
+
++ (void)load {
+  [[NSNotificationCenter defaultCenter]
+    addObserverForName:UIApplicationDidFinishLaunchingNotification
+                object:nil
+                 queue:[NSOperationQueue mainQueue]
+            usingBlock:^(NSNotification * _Nonnull note) {
+    id delegate = [UIApplication sharedApplication].delegate;
+    if (!delegate) return;
+    Class cls = [delegate class];
+    SEL sel = @selector(application:handleEventsForBackgroundURLSession:completionHandler:);
+    if (!class_respondsToSelector(cls, sel)) {
+      class_addMethod(cls, sel, (IMP)WillHandleBgSessionEvents, "v@:@@@?");
+      NSLog(@"[BackgroundUploader] handleEventsForBackgroundURLSession installe sur %@", cls);
+    }
+  }];
+}
 
 + (BOOL)requiresMainQueueSetup { return NO; }
 
@@ -83,6 +136,17 @@ RCT_EXPORT_MODULE();
                                             delegate:self
                                        delegateQueue:nil];
   return _session;
+}
+
+- (void)URLSessionDidFinishEventsForBackgroundURLSession:(NSURLSession *)session {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (gWillBgCompletionHandler) {
+      void (^h)(void) = gWillBgCompletionHandler;
+      gWillBgCompletionHandler = nil;
+      h();
+      NSLog(@"[BackgroundUploader] evenements background livres, handler rendu a iOS");
+    }
+  });
 }
 
 #pragma mark - Persistance taskMap
@@ -219,6 +283,36 @@ RCT_EXPORT_METHOD(getActiveUploads:(RCTPromiseResolveBlock)resolve
       resolve(@{@"activeItemIds": active});
     });
   }];
+}
+
+// [will-bg-v2] beginProtectedWindow / endProtectedWindow : cf. commentaire
+// de gWillProtectedTask. Idempotent, jamais bloquant.
+RCT_EXPORT_METHOD(beginProtectedWindow:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (gWillProtectedTask != UIBackgroundTaskInvalid) { resolve(@{@"granted": @YES}); return; }
+    gWillProtectedTask = [[UIApplication sharedApplication]
+      beginBackgroundTaskWithName:@"will-preparation"
+                expirationHandler:^{
+      NSLog(@"[BackgroundUploader] fenetre protegee expiree par iOS");
+      [[UIApplication sharedApplication] endBackgroundTask:gWillProtectedTask];
+      gWillProtectedTask = UIBackgroundTaskInvalid;
+    }];
+    resolve(@{@"granted": @(gWillProtectedTask != UIBackgroundTaskInvalid)});
+  });
+}
+
+RCT_EXPORT_METHOD(endProtectedWindow:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (gWillProtectedTask != UIBackgroundTaskInvalid) {
+      [[UIApplication sharedApplication] endBackgroundTask:gWillProtectedTask];
+      gWillProtectedTask = UIBackgroundTaskInvalid;
+    }
+    resolve(nil);
+  });
 }
 
 RCT_EXPORT_METHOD(cancelUpload:(NSString *)itemId

@@ -148,7 +148,7 @@ const LIGHT_ID_SUFFIX = '#light';
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
 import { fovFromFormat, TARGET_DISTANCE_M, MOUNT_HEIGHT_M, DISTANCE_CHOICES_M } from './src/services/framingGuide';
-import { reduceBursts, sanitizeQualityConfig } from './src/services/qualityReducer';
+import { reduceBursts, sanitizeQualityConfig, computeComposite } from './src/services/qualityReducer';
 import { recordScore, recordBurstReduction } from './src/services/qualityTelemetry';
 import {
   formatTimeAgo,
@@ -993,6 +993,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // la preview en continu, independant de armed/detection).
   const isAutoArmedSV = useMemo(() => Worklets.createSharedValue(false), []);
   const isDetectionEnabledSV = useMemo(() => Worklets.createSharedValue(false), []);
+  // Mode instant : lu par le worklet pour demander au plugin la detection
+  // des SILHOUETTES (VNDetectHumanRectangles) en plus des visages. Sur un
+  // build ancien le plugin ignore l argument et ne renvoie pas de champ
+  // humans — le worklet retombe sur les visages, rien ne casse.
+  const modeInstantSV = useMemo(() => Worklets.createSharedValue(0), []);
   useEffect(() => { isAutoArmedSV.value = isAutoArmed; }, [isAutoArmed, isAutoArmedSV]);
   useEffect(() => { isDetectionEnabledSV.value = isDetectionEnabled; }, [isDetectionEnabled, isDetectionEnabledSV]);
 
@@ -1208,6 +1213,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         if (m?.capture === 'pas' || m?.capture === 'rafale' || m?.capture === 'instant') {
           modeCaptureRef.current = m.capture;
           setModeCapture(m.capture);
+          modeInstantSV.value = m.capture === 'instant' ? 1 : 0;
         }
         if (m?.qualite === 'qualite' || m?.qualite === 'rapide') {
           modeQualiteRef.current = m.qualite;
@@ -1273,6 +1279,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       const suivant = ordre[(ordre.indexOf(modeCaptureRef.current) + 1) % ordre.length];
       modeCaptureRef.current = suivant;
       setModeCapture(suivant);
+      modeInstantSV.value = suivant === 'instant' ? 1 : 0;
       // Le tracker repart propre : les reperes deja consommes par un passage
       // en cours n auraient aucun sens dans l autre mode.
       stepTriggerRef.current?.reset();
@@ -1476,14 +1483,41 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         try {
           if (!flat || !stepTriggerRef.current) return;
           const actions = stepTriggerRef.current.ingest(flat) || [];
+          const enInstant = modeCaptureRef.current === 'instant';
+          // Instant v2 : DEUX prises par repere -> jusqu a 6 en vol.
+          const capVol = enInstant ? 6 : 3;
           for (const a of actions) {
-            if (inFlightSetRef.current.size >= 3) break;
-            const pr = captureOne({
-              burstTs: Date.now(), idx: 0, lineTriggered: true, xPredicted: a.x,
-            });
-            inFlightSetRef.current.add(pr);
-            updateInFlight();
-            pr.finally(() => { inFlightSetRef.current.delete(pr); updateInFlight(); });
+            if (inFlightSetRef.current.size >= capVol) {
+              // P6 de l audit : un tir jete ici etait invisible. La trace
+              // d abord — le remede (file d attente courte) viendra apres
+              // mesure de la frequence reelle.
+              console.warn(`[pas] tir abandonne (inFlight=${inFlightSetRef.current.size}/${capVol})`);
+              break;
+            }
+            const burstTs = Date.now();
+            const lancer = (idx) => {
+              const pr = captureOne({
+                burstTs, idx, lineTriggered: true, xPredicted: a.x,
+              });
+              inFlightSetRef.current.add(pr);
+              updateInFlight();
+              pr.finally(() => { inFlightSetRef.current.delete(pr); updateInFlight(); });
+            };
+            lancer(0);
+            // Instant v2 : la seconde prise, ~140 ms plus tard — un autre
+            // instant de foulee. La paire partage son burstTs ; apres
+            // notation, la moins bonne passe upload_skipped et le nettoyage
+            // standard la retire une fois la meilleure confirmee sur R2.
+            // 6 capturees, 3 livrees : le choix remplace le pari.
+            if (enInstant) {
+              setTimeout(() => {
+                try {
+                  if (!isMountedRef.current || !isAutoArmedRef.current) return;
+                  if (inFlightSetRef.current.size >= capVol) return;
+                  lancer(1);
+                } catch { /* jamais bloquant */ }
+              }, 140);
+            }
             // Le repere s allume. C est la jauge de placement du benevole :
             // s il n en voit que deux s allumer sur un passage, il est trop
             // pres — la troisieme photo n a pas eu la place de partir.
@@ -1921,6 +1955,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     const result = detectHumans(frame, {
       zoneWidthPercent: zoneSV.value,
       axis: 'midX',
+      humans: modeInstantSV.value === 1,
     });
     const count = result?.count ?? 0;
     // v2 du plugin : on reduit les bbox DANS le worklet. Deux sorties :
@@ -1963,7 +1998,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // natif : poser cx = 1 - midX, cy = midY, et retirer ces deux lignes.
     let bx = -1, by = -1, ba = 0;
     let flat = null;
-    const faces = result?.faces;
+    // Mode instant + build patche : le tracker suit les SILHOUETTES, pas
+    // les visages — un torse a 6 m ne clignote pas. Les aires passees au
+    // tracker sont ~10-40x celles d un visage ; tous ses seuils sont des
+    // MINIMA, donc elles passent, et le plus grand = le plus proche reste
+    // vrai. Le plugin renvoie les deux listes dans les memes conventions,
+    // la correction 180 ci-dessous vaut pour les deux. Build ancien :
+    // result.humans absent -> visages, comportement inchange.
+    const humansArr = result?.humans;
+    const faces = (humansArr && humansArr.length > 0) ? humansArr : result?.faces;
     if (faces && faces.length > 0) {
       const CAP = 8;
       const ax = [], ay = [], aw = [], ah = [], aa = [];
@@ -1985,7 +2028,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       }
     }
     onHumansDetectedJS(count, bx, by, ba, flat);
-  }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV, idleModeSV, isAutoArmedSV, isDetectionEnabledSV]);
+  }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV, idleModeSV, isAutoArmedSV, isDetectionEnabledSV, modeInstantSV]);
 
   // === Mode offline-first : queue persistante ===
   // - Photos copiées dans Paths.document/will_pending/ (survit au kill app)
@@ -2210,6 +2253,27 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // et la capture auto reste gelée alors que le bouton Go! affiche actif.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
+      // ─── Mise en veille : fenetre protegee ──────────────────────────
+      // iOS accorde ~30 s de sursis via beginBackgroundTask (module natif,
+      // build instant-capture). On les emploie a FINIR : convertir ce qui
+      // reste de brut, puis remettre les fichiers prets a la session
+      // d arriere-plan — qui, elle, survit au sommeil. Sans cette fenetre,
+      // tout ce qui n etait pas converti au verrouillage attendait une
+      // reouverture qui, chez un benevole, n arrive jamais.
+      // Build ancien : methodes absentes, on tente quand meme la fin de
+      // preparation — le JS a de toute facon quelques secondes avant le gel.
+      if (next === 'background' || next === 'inactive') {
+        // La camera se coupe D ABORD (comportement historique, et le toggle
+        // false->true au retour est ce qui degele le frame processor).
+        setCameraActive(false);
+        (async () => {
+          try { await BackgroundUploaderModule?.beginProtectedWindow?.(); } catch {}
+          try { await processQueue(); } catch {}
+          try { await drainQueue(); } catch {}
+          try { await BackgroundUploaderModule?.endProtectedWindow?.(); } catch {}
+        })();
+        return;
+      }
       if (next === 'active') {
         processQueue();
         drainQueue();
@@ -2217,8 +2281,6 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         // filtrée (frameSkipSV % 3) et retarder la 1ère détection de ~100ms.
         try { frameSkipSV.value = 0; isoTickSV.value = 0; } catch {}
         setCameraActive(true);
-      } else if (next === 'background' || next === 'inactive') {
-        setCameraActive(false);
       }
     });
     return () => sub.remove();
@@ -2311,6 +2373,43 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     }),
     [journalFiltre, journalSeulAlertes, journalTick, journalOpen],
   );
+  // ── Remontee du journal vers le dashboard admin ─────────────────────
+  // Toutes les 60 s, si la vue est ouverte et que des lignes NOUVELLES
+  // existent, le journal part en POST vers le worker (~40 Ko de texte).
+  // L admin le lit depuis le dashboard sans toucher au telephone — fini les
+  // exports a la main en bord de course.
+  //
+  // Fire-and-forget assume : un echec (hors ligne, worker injoignable) est
+  // silencieux et on retentera au tick suivant. Le journal ne doit JAMAIS
+  // creer de bruit dans le journal — un warn ici partirait dans le prochain
+  // envoi, qui echouerait peut-etre aussi, et ainsi de suite.
+  //
+  // La detection de nouveaute passe par le numero de sequence de la ligne la
+  // plus recente (l.n, monotone), pas par le nombre de lignes : le tampon est
+  // circulaire, sa taille stagne a 800 alors que les lignes defilent.
+  const dernierJournalPousseRef = useRef(0);
+  useEffect(() => {
+    if (!session?.token) return undefined;
+    const pousser = async () => {
+      try {
+        const derniere = lignesJournal({ limite: 1 })[0];
+        if (!derniere || derniere.n === dernierJournalPousseRef.current) return;
+        const texte = journalVersTexte();
+        if (!texte) return;
+        const r = await photographerApiFetch(
+          `/photographer/journal?eventCode=${encodeURIComponent(session.event.code)}`,
+          { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: texte },
+        );
+        if (r.ok) dernierJournalPousseRef.current = derniere.n;
+      } catch { /* jamais bloquant, jamais logue */ }
+    };
+    // Premier envoi rapide (10 s apres l ouverture : le temps que le demarrage
+    // ait logue quelque chose d utile), puis cadence de croisiere.
+    const t0 = setTimeout(pousser, 10000);
+    const id = setInterval(pousser, 60000);
+    return () => { clearTimeout(t0); clearInterval(id); };
+  }, [session?.token]);
+
   const partagerJournal = async () => {
     try {
       const texte = journalVersTexte();
@@ -2503,6 +2602,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         ...(Number.isFinite(r.xPredicted) ? { xPredicted: r.xPredicted } : {}),
         ...(Number.isFinite(r.captureMs) ? { captureMs: r.captureMs } : {}),
         ...(Number.isFinite(r.vxAtFire) ? { vxAtFire: r.vxAtFire } : {}),
+        // Le mode sous lequel la photo a ete PRISE. Sans ce champ, la regle
+        // REFUSEE lisait toujours undefined et l exemption du mode instant
+        // etait lettre morte (bug de la v1 du mode, corrige ici).
+        ...(r.captureMode ? { captureMode: r.captureMode } : {}),
+        ...(r.willJpegPath ? { willJpegPath: r.willJpegPath } : {}),
       });
     }
     const next = [...queueRef.current, ...newQueueItems];
@@ -2777,9 +2881,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         scoreEchantillonRef.current += 1;
         const captureLenteAvantScore =
           !Number.isFinite(item.captureMs) || item.captureMs >= SEUIL_SCORE_MS;
+        // Instant v2 : les paires se departagent au score — il faut donc
+        // noter TOUTES les photos instant, pas un echantillon.
+        const estInstant = item.captureMode === 'instant';
         const meriteScore =
              !item.lineTriggered
           || captureLenteAvantScore
+          || estInstant
           || scoreEchantillonRef.current % 10 === 0;
 
         if (meriteScore && !item.qualityScore && !item.qualityScoreFailed) {
@@ -2868,6 +2976,38 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           );
           await commitQueue(scored);
           recordScore(item, res);
+
+          // ─── Instant v2 : choix de paire ─────────────────────────────
+          // Deux prises par repere, un burstTs commun. Quand la seconde de
+          // la paire recoit sa note, on departage au composite existant.
+          // La perdante passe upload_skipped — JAMAIS supprimee ici : le
+          // nettoyage standard la retire une fois la gagnante confirmee sur
+          // R2, la garantie "jamais 0 photo livree" reste intacte.
+          //   - un des deux scores manque -> les deux partent (failsafe) ;
+          //   - la perdante est deja partie ou en vol -> on la laisse, une
+          //     photo en trop coute moins qu une annulation a mi-transfert.
+          if (res.ok && estInstant) {
+            try {
+              const frere = queueRef.current.find(it =>
+                it.id !== item.id && it.burstTs === item.burstTs
+                && it.captureMode === 'instant' && !it.upload_skipped);
+              const moi = queueRef.current.find(it => it.id === item.id);
+              if (frere?.qualityScore && moi?.qualityScore && !moi.upload_skipped) {
+                const sMoi = computeComposite(moi.qualityScore);
+                const sLui = computeComposite(frere.qualityScore);
+                const perdant = sMoi >= sLui ? frere : moi;
+                const gagnant = sMoi >= sLui ? moi : frere;
+                if (perdant.status === 'pending') {
+                  const apresChoix = queueRef.current.map(it =>
+                    it.id === perdant.id
+                      ? { ...it, upload_kept: false, upload_skipped: true }
+                      : it);
+                  await commitQueue(apresChoix);
+                  console.log(`[instant] paire ${item.burstTs} : garde ${gagnant.id}, ecarte ${perdant.id}`);
+                }
+              }
+            } catch { /* choix rate -> les deux partent, jamais bloquant */ }
+          }
           if (res.ok) {
             console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)} obt=${item.captureMs}ms`
               + ((res.signals.faceCount ?? 0) === 0 ? ' — GARDEE malgre 0 visage (obturateur rapide)' : ''));
@@ -2906,6 +3046,46 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           }
         }
         // ────────────────────────────────────────────────────────────────
+
+        // ─── Voie native Instant v2 ───────────────────────────────────
+        // Le build patche VisionCamera pour encoder le JPEG de livraison
+        // (2400 px, q0.5) AU MOMENT de la capture, depuis le buffer encore
+        // en memoire. Quand ce fichier existe, tout le travail lourd de ce
+        // worker — gravure (no-op), decodage HEIC 12 Mpx, resize,
+        // reencodage — se reduit a UN deplacement de fichier. C est le gros
+        // du gain thermique d Instant v2. Build ancien : champ absent,
+        // voie classique ci-dessous, rien ne change.
+        // La notation (au-dessus) a deja eu lieu sur le HEIC brut.
+        if (item.willJpegPath) {
+          let voieNativeOk = false;
+          try {
+            const srcJpeg = new File(item.willJpegPath);
+            if (srcJpeg.exists) {
+              const cible = new File(processedDir(), `${item.id}.jpg`);
+              if (cible.exists) { try { cible.delete(); } catch {} }
+              srcJpeg.move(cible);
+              try { new File(item.localUri).delete(); } catch {}
+              deleteSidecar(item.id);
+              const apresNatif = queueRef.current.map(it =>
+                it.id === item.id
+                  ? { ...it, processed: true, status: 'pending', retries: 0, nextAttemptAt: null,
+                      localUri: cible.uri, key: String(item.key).replace(/\.heic$/i, '.jpg'), isJpeg: true }
+                  : it
+              );
+              await commitQueue(apresNatif);
+              try {
+                const octets = cible.size;
+                if (Number.isFinite(octets) && octets > 0) {
+                  console.log(`[poids] natif -> ${Math.round(octets / 1024)} Ko`);
+                }
+              } catch { /* jamais bloquant */ }
+              voieNativeOk = true;
+            }
+          } catch (e) {
+            console.warn(`[process] voie native KO ${item.id}: ${e?.message || e} — voie classique`);
+          }
+          if (voieNativeOk) continue;
+        }
 
         // Calcule le label EXIF depuis sidecar (shutter / ISO / aperture).
         const sidecar = readSidecar(item.id);
@@ -3986,6 +4166,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         xPredicted,
         vxAtFire,
         captureMs: dureeCapture,
+        // Build instant-capture : VisionCamera a encode le JPEG de livraison
+        // (2400 px q0.5) au moment de la prise. Absent sur build ancien.
+        willJpegPath: photo?.willJpegPath || null,
         // Mode au moment de la CAPTURE, pas du scoring : la regle REFUSEE
         // s applique bien plus tard, le benevole peut avoir change de mode
         // entre-temps. La photo est jugee selon le contrat sous lequel elle
