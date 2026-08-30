@@ -1484,8 +1484,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           if (!flat || !stepTriggerRef.current) return;
           const actions = stepTriggerRef.current.ingest(flat) || [];
           const enInstant = modeCaptureRef.current === 'instant';
-          // Instant v2 : DEUX prises par repere -> jusqu a 6 en vol.
-          const capVol = enInstant ? 6 : 3;
+          // La paire n a de sens QUE sur le build instant-capture : sur le
+          // build precedent, 6 captures partiraient dans le pipeline lourd
+          // (decodage + reencodage par photo) — exactement ce qu on cherche
+          // a eteindre. beginProtectedWindow n existe que sur le nouveau
+          // build : c est notre marqueur de capacite.
+          const buildV2 = !!BackgroundUploaderModule?.beginProtectedWindow;
+          const paireActive = enInstant && buildV2;
+          const capVol = paireActive ? 6 : 3;
           for (const a of actions) {
             if (inFlightSetRef.current.size >= capVol) {
               // P6 de l audit : un tir jete ici etait invisible. La trace
@@ -1509,7 +1515,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             // notation, la moins bonne passe upload_skipped et le nettoyage
             // standard la retire une fois la meilleure confirmee sur R2.
             // 6 capturees, 3 livrees : le choix remplace le pari.
-            if (enInstant) {
+            if (paireActive) {
               setTimeout(() => {
                 try {
                   if (!isMountedRef.current || !isAutoArmedRef.current) return;
@@ -3018,7 +3024,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             // venir que d une erreur sur la latence d obturateur.
             const cx = res.signals?.biggestFaceCenter?.[0];
             if (Number.isFinite(item.xPredicted) && Number.isFinite(item.vxAtFire)
-                && Number.isFinite(cx)) {
+                && Number.isFinite(cx)
+                // 2e prise d une paire instant : tiree 140 ms APRES la
+                // prediction, volontairement. L ecart mesure serait ce
+                // delai, pas la latence systeme — on ne l apprend pas.
+                && !(item.captureMode === 'instant' && item.idx === 1)) {
               const retenu = latencyCalRef.current.ajouter(item.xPredicted, cx, item.vxAtFire);
               const hors = Math.abs(cx - 0.5) > 0.25;
               console.log(`[latence] ${item.id} predit=${item.xPredicted.toFixed(3)} `
