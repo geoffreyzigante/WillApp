@@ -32,6 +32,14 @@
 //   - `ts` en SECONDES, base monotone arbitraire ;
 //   - format d entree plat [ts, n, cx,cy,w,h, ...].
 
+// PORTEE — recalibre le 2026-08-30 sur photos terrain (Vernon-Giverny).
+// Un coureur a la distance ou le mode rafale fonctionne encore donne un
+// visage de ~28x38 px sur 2400x3200, soit une aire de 0.00035. Les seuils
+// d origine (apparition directe a 0.0015) etaient QUATRE FOIS trop hauts :
+// la piste ne pouvait naitre qu apres deux detections consecutives, or a
+// cette distance la detection clignote et deux d affilee n arrivent presque
+// jamais. Resultat, le mode pas semblait "voir moins loin" que rafale alors
+// que la detection est la meme — c est ce qu il en EXIGEAIT qui differait.
 export const STEP_TRIGGER_DEFAULTS = {
   // Fraction CENTRALE de la largeur ou le tir est autorise. 0.5 = x dans
   // [0.25, 0.75]. Mettre 1 revient a autoriser tout le cadre.
@@ -57,7 +65,7 @@ export const STEP_TRIGGER_DEFAULTS = {
   // Abaisse a 0.0003 le 2026-08-30 pour couvrir les 6 m : a cette distance
   // l aire tombe vers 0.0007, et le seuil precedent excluait donc les
   // coureurs les plus eloignes du partage.
-  creditMinArea: 0.0003,
+  creditMinArea: 0.00020,
   // Appariement d une image a l autre, en largeurs de visage.
   gateFactor: 1.5,
   gateFloor: 0.10,
@@ -69,7 +77,7 @@ export const STEP_TRIGGER_DEFAULTS = {
   // — et 400 ms tuaient le track entre deux apparitions. Le coureur repartait
   // alors avec un budget neuf a chaque trou, et ne franchissait jamais trois
   // reperes d affilee. C est ce qui faisait decrocher le mode a distance.
-  coastMs: 800,
+  coastMs: 1600,
   // Lissage de vitesse, utilise seulement pour predire la position lors de
   // l appariement — jamais pour decider d un tir.
   velAlpha: 0.4,
@@ -102,7 +110,7 @@ export const STEP_TRIGGER_DEFAULTS = {
   // Un visage lointain clignote : lui demander deux observations consecutives
   // revient a ne jamais le declencher. Le risque de faux positif reste borne
   // par le limiteur global et par la bande centrale.
-  aireApparitionDirecte: 0.0015,
+  aireApparitionDirecte: 0.00030,
 };
 
 export function createStepTrigger(options = {}) {

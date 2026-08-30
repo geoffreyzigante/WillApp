@@ -124,10 +124,27 @@ console.log('\n[TEST 7] Un visage perdu puis retrouve repart avec un budget neuf
   const trig = createStepTrigger();
   trig.ingest([100.0, 1, 0.70, 0.5, 0.17, 0.17]);
   trig.ingest([100.1, 1, 0.70, 0.5, 0.17, 0.17]);   // photo 1
-  // Disparition pendant 1 s (> coastMs), puis retour au meme endroit.
-  trig.ingest([101.0, 1, 0.70, 0.5, 0.17, 0.17]);
-  const actions = trig.ingest([101.1, 1, 0.70, 0.5, 0.17, 0.17]);
+  // Disparition de 2 s, franchement au-dela de coastMs (1600 ms) : la piste
+  // est morte, celui qui revient est quelqu un d autre.
+  trig.ingest([102.2, 1, 0.70, 0.5, 0.17, 0.17]);
+  const actions = trig.ingest([102.3, 1, 0.70, 0.5, 0.17, 0.17]);
   assert(actions.length === 1, 'le visage retrouve declenche a nouveau');
+}
+
+console.log('\n[TEST 7bis] Un clignotement DANS coastMs ne cree pas un second coureur');
+{
+  // C est la raison d etre de coastMs, et ce que le passage a 1600 ms achete :
+  // a 6-8 m la detection clignote, un trou d une seconde est un trou de
+  // DETECTION, pas un depart. Si la piste mourait la, le meme coureur
+  // repartirait avec trois photos neuves a chaque clignotement.
+  const trig = createStepTrigger();
+  trig.ingest([200.0, 1, 0.70, 0.5, 0.17, 0.17]);
+  trig.ingest([200.1, 1, 0.70, 0.5, 0.17, 0.17]);   // photo 1 (repere 0.667)
+  // Trou d 1 s, sous coastMs. Retour a une position COHERENTE avec la
+  // trajectoire — un vrai coureur a continue d avancer pendant le trou.
+  trig.ingest([201.1, 1, 0.69, 0.5, 0.17, 0.17]);
+  const actions = trig.ingest([201.2, 1, 0.69, 0.5, 0.17, 0.17]);
+  assert(actions.length === 0, `clignotement -> aucun tir en double (got ${actions.length})`);
 }
 
 console.log('\n[TEST 4bis] Coureurs de front : 3 photos pour tout le monde');
