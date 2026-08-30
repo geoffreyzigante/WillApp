@@ -2627,10 +2627,40 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // bumps retries + planifie le prochain essai avec backoff exponentiel
   // (retryDelayMs : 2s, 4s, 8s, plafond 8s). Au-dela : 'failed' definitif
   // (l'utilisateur peut force-retry via le sous-ecran admin).
+  // Plafond de backoff pour un item qui a epuise ses essais mais dont le
+  // fichier est toujours la. Un evenement dure des heures : un reseau
+  // saturé au passage du peloton ne l est plus vingt minutes plus tard.
+  const RETRY_PLAFOND_MS = 5 * 60 * 1000;
+  // Garde-fou absolu. Sans lui, un item que le SERVEUR refuse (cle malformee,
+  // 400 definitif) reessaierait toutes les 5 minutes jusqu a la fin des temps.
+  const RETRY_ABANDON_FACTEUR = 10;
+
   function nextRetryState(item, maxRetries) {
     const retries = (item.retries || 0) + 1;
     if (retries >= maxRetries) {
-      return { ...item, retries, status: 'failed', nextAttemptAt: null };
+      // Avant : 'failed' et nextAttemptAt null, donc plus AUCUNE tentative,
+      // jamais. L item restait dans le compteur indefiniment — la file ne
+      // retombait plus a zero et le photographe n avait aucun moyen de savoir
+      // si ses photos etaient perdues ou juste en retard. Constate le
+      // 2026-08-30 : dix minutes de drains consecutifs sans un seul envoi.
+      //
+      // Un echec reseau et un fichier disparu ne meritent pas le meme sort.
+      //
+      //   Fichier absent  -> il n y a plus rien a envoyer. 'failed' est la
+      //                      verite, et c est ce que doit voir l ecran admin.
+      //   Fichier present -> la photo est recuperable. On ralentit au lieu
+      //                      d abandonner.
+      let fichierPresent = false;
+      try { fichierPresent = !!item.localUri && new File(item.localUri).exists; } catch {}
+      if (!fichierPresent || retries >= maxRetries * RETRY_ABANDON_FACTEUR) {
+        return { ...item, retries, status: 'failed', nextAttemptAt: null };
+      }
+      return {
+        ...item,
+        retries,
+        status: 'pending',
+        nextAttemptAt: Date.now() + RETRY_PLAFOND_MS,
+      };
     }
     return {
       ...item,
@@ -2936,8 +2966,36 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // dement ce raisonnement, un PUT suffit, sans OTA ni redemarrage.
           const qualiteJpeg = eventConfigRef.current.upload?.jpegQuality ?? 0.7;
           const jpeg = await makeLightCopy(dstFile.uri, { quality: qualiteJpeg, maxWidth: largeurCible });
+          // makeLightCopy ecrit dans Library/Caches (contrat saveAsync). C est
+          // le bon endroit pour la copie legere, qui vit trois secondes. C est
+          // le PIRE pour la photo pleine, qui doit survivre a une file d upload
+          // de trente minutes : iOS purge Caches des qu il manque de place,
+          // sans prevenir, et comme le HEIC est supprime juste apres, le JPEG
+          // en cache devient le SEUL exemplaire de la photo.
+          //
+          // Constate le 2026-08-30, Vernon-Giverny :
+          //   [upload] LOST id=... processed file missing at
+          //   .../Library/Caches/ImageManipulator/70FF0F9E-....jpg
+          // Ces photos n etaient pas en retard. Elles etaient detruites.
+          //
+          // On la deplace donc dans processedDir, qui est persistant, AVANT de
+          // supprimer le HEIC. Si le deplacement echoue, on jette le JPEG et on
+          // repart sur le HEIC : mieux vaut envoyer un fichier que le serveur
+          // decode mal que confier la seule copie a un dossier volatil.
+          let jpegPersiste = false;
           if (jpeg.ok) {
-            fichierFinal = jpeg.uri;
+            try {
+              const cible = new File(processedDir(), `${item.id}.jpg`);
+              if (cible.exists) { try { cible.delete(); } catch {} }
+              new File(jpeg.uri).move(cible);
+              fichierFinal = cible.uri;
+              jpegPersiste = true;
+            } catch (e) {
+              console.warn(`[jpeg] persistance KO ${item.id}: ${e?.message || e} — envoi du HEIC`);
+              try { new File(jpeg.uri).delete(); } catch {}
+            }
+          }
+          if (jpegPersiste) {
             cleFinale = String(item.key).replace(/\.heic$/i, '.jpg');
             try { new File(dstFile.uri).delete(); } catch {}
             if (verboseProcess) {
@@ -2949,12 +3007,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             // file reste une estimation. Non conditionne a verboseLogs : c est
             // la donnee qui manque, et elle ne coute qu une ligne par photo.
             try {
-              const octets = new File(jpeg.uri).size;
+              const octets = new File(fichierFinal).size;
               if (Number.isFinite(octets) && octets > 0) {
                 console.log(`[poids] ${jpeg.width}x${jpeg.height} q${qualiteJpeg} -> ${Math.round(octets / 1024)} Ko`);
               }
             } catch { /* taille indisponible : jamais bloquant */ }
-          } else {
+          } else if (!jpeg.ok) {
             console.warn(`[jpeg] conversion KO ${item.id} (${jpeg.reason}) — envoi du HEIC`);
           }
 
@@ -2966,7 +3024,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           const afterProcess = queueRef.current.map(it =>
             it.id === item.id
               ? { ...it, processed: true, status: 'pending', retries: 0, nextAttemptAt: null,
-                  localUri: fichierFinal, key: cleFinale, isJpeg: jpeg.ok }
+                  localUri: fichierFinal, key: cleFinale, isJpeg: jpegPersiste }
               : it
           );
           await commitQueue(afterProcess);
