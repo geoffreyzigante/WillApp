@@ -148,7 +148,7 @@ const LIGHT_ID_SUFFIX = '#light';
 import { useDeviceTilt } from './src/hooks/useDeviceTilt';
 import FramingGuide from './src/components/FramingGuide';
 import { fovFromFormat, TARGET_DISTANCE_M, MOUNT_HEIGHT_M, DISTANCE_CHOICES_M } from './src/services/framingGuide';
-import { reduceBursts, sanitizeQualityConfig, computeComposite } from './src/services/qualityReducer';
+import { reduceBursts, sanitizeQualityConfig } from './src/services/qualityReducer';
 import { recordScore, recordBurstReduction } from './src/services/qualityTelemetry';
 import {
   formatTimeAgo,
@@ -1483,47 +1483,25 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         try {
           if (!flat || !stepTriggerRef.current) return;
           const actions = stepTriggerRef.current.ingest(flat) || [];
-          const enInstant = modeCaptureRef.current === 'instant';
-          // La paire n a de sens QUE sur le build instant-capture : sur le
-          // build precedent, 6 captures partiraient dans le pipeline lourd
-          // (decodage + reencodage par photo) — exactement ce qu on cherche
-          // a eteindre. beginProtectedWindow n existe que sur le nouveau
-          // build : c est notre marqueur de capacite.
-          const buildV2 = !!BackgroundUploaderModule?.beginProtectedWindow;
-          const paireActive = enInstant && buildV2;
-          const capVol = paireActive ? 6 : 3;
           for (const a of actions) {
-            if (inFlightSetRef.current.size >= capVol) {
-              // P6 de l audit : un tir jete ici etait invisible. La trace
-              // d abord — le remede (file d attente courte) viendra apres
-              // mesure de la frequence reelle.
-              console.warn(`[pas] tir abandonne (inFlight=${inFlightSetRef.current.size}/${capVol})`);
+            if (inFlightSetRef.current.size >= 3) {
+              // P6 de l audit : un tir jete ici etait invisible. La trace reste.
+              console.warn(`[pas] tir abandonne (inFlight=${inFlightSetRef.current.size}/3)`);
               break;
             }
-            const burstTs = Date.now();
-            const lancer = (idx) => {
-              const pr = captureOne({
-                burstTs, idx, lineTriggered: true, xPredicted: a.x,
-              });
-              inFlightSetRef.current.add(pr);
-              updateInFlight();
-              pr.finally(() => { inFlightSetRef.current.delete(pr); updateInFlight(); });
-            };
-            lancer(0);
-            // Instant v2 : la seconde prise, ~140 ms plus tard — un autre
-            // instant de foulee. La paire partage son burstTs ; apres
-            // notation, la moins bonne passe upload_skipped et le nettoyage
-            // standard la retire une fois la meilleure confirmee sur R2.
-            // 6 capturees, 3 livrees : le choix remplace le pari.
-            if (paireActive) {
-              setTimeout(() => {
-                try {
-                  if (!isMountedRef.current || !isAutoArmedRef.current) return;
-                  if (inFlightSetRef.current.size >= capVol) return;
-                  lancer(1);
-                } catch { /* jamais bloquant */ }
-              }, 140);
-            }
+            // Une ligne = une photo. La paire de prises (Instant v2 initial,
+            // deux prises a 140 ms par repere puis choix au score) est
+            // retiree le 2026-08-30 apres deux passages de terrain : les
+            // deux prises etaient quasi identiques, le choix de paire a ete
+            // le seul etage bugge du build, et le cout (2x captures, 2x
+            // notation, logique de depart) n achetait presque rien. Le ZSL
+            // suffit : la photo est deja celle de l instant du franchissement.
+            const pr = captureOne({
+              burstTs: Date.now(), idx: 0, lineTriggered: true, xPredicted: a.x,
+            });
+            inFlightSetRef.current.add(pr);
+            updateInFlight();
+            pr.finally(() => { inFlightSetRef.current.delete(pr); updateInFlight(); });
             // Le repere s allume. C est la jauge de placement du benevole :
             // s il n en voit que deux s allumer sur un passage, il est trop
             // pres — la troisieme photo n a pas eu la place de partir.
@@ -2887,13 +2865,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         scoreEchantillonRef.current += 1;
         const captureLenteAvantScore =
           !Number.isFinite(item.captureMs) || item.captureMs >= SEUIL_SCORE_MS;
-        // Instant v2 : les paires se departagent au score — il faut donc
-        // noter TOUTES les photos instant, pas un echantillon.
-        const estInstant = item.captureMode === 'instant';
         const meriteScore =
              !item.lineTriggered
           || captureLenteAvantScore
-          || estInstant
           || scoreEchantillonRef.current % 10 === 0;
 
         if (meriteScore && !item.qualityScore && !item.qualityScoreFailed) {
@@ -2983,37 +2957,6 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           await commitQueue(scored);
           recordScore(item, res);
 
-          // ─── Instant v2 : choix de paire ─────────────────────────────
-          // Deux prises par repere, un burstTs commun. Quand la seconde de
-          // la paire recoit sa note, on departage au composite existant.
-          // La perdante passe upload_skipped — JAMAIS supprimee ici : le
-          // nettoyage standard la retire une fois la gagnante confirmee sur
-          // R2, la garantie "jamais 0 photo livree" reste intacte.
-          //   - un des deux scores manque -> les deux partent (failsafe) ;
-          //   - la perdante est deja partie ou en vol -> on la laisse, une
-          //     photo en trop coute moins qu une annulation a mi-transfert.
-          if (res.ok && estInstant) {
-            try {
-              const frere = queueRef.current.find(it =>
-                it.id !== item.id && it.burstTs === item.burstTs
-                && it.captureMode === 'instant' && !it.upload_skipped);
-              const moi = queueRef.current.find(it => it.id === item.id);
-              if (frere?.qualityScore && moi?.qualityScore && !moi.upload_skipped) {
-                const sMoi = computeComposite(moi.qualityScore);
-                const sLui = computeComposite(frere.qualityScore);
-                const perdant = sMoi >= sLui ? frere : moi;
-                const gagnant = sMoi >= sLui ? moi : frere;
-                if (perdant.status === 'pending') {
-                  const apresChoix = queueRef.current.map(it =>
-                    it.id === perdant.id
-                      ? { ...it, upload_kept: false, upload_skipped: true }
-                      : it);
-                  await commitQueue(apresChoix);
-                  console.log(`[instant] paire ${item.burstTs} : garde ${gagnant.id}, ecarte ${perdant.id}`);
-                }
-              }
-            } catch { /* choix rate -> les deux partent, jamais bloquant */ }
-          }
           if (res.ok) {
             console.log(`[score] ${item.id} elapsed=${res.elapsedMs}ms faceCount=${res.signals.faceCount} conf=${res.signals.faceConfidence?.toFixed(2)} area=${res.signals.biggestFaceArea?.toFixed(4)} bright=${res.signals.brightness?.toFixed(2)} obt=${item.captureMs}ms`
               + ((res.signals.faceCount ?? 0) === 0 ? ' — GARDEE malgre 0 visage (obturateur rapide)' : ''));
@@ -3024,11 +2967,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             // venir que d une erreur sur la latence d obturateur.
             const cx = res.signals?.biggestFaceCenter?.[0];
             if (Number.isFinite(item.xPredicted) && Number.isFinite(item.vxAtFire)
-                && Number.isFinite(cx)
-                // 2e prise d une paire instant : tiree 140 ms APRES la
-                // prediction, volontairement. L ecart mesure serait ce
-                // delai, pas la latence systeme — on ne l apprend pas.
-                && !(item.captureMode === 'instant' && item.idx === 1)) {
+                && Number.isFinite(cx)) {
               const retenu = latencyCalRef.current.ajouter(item.xPredicted, cx, item.vxAtFire);
               const hors = Math.abs(cx - 0.5) > 0.25;
               console.log(`[latence] ${item.id} predit=${item.xPredicted.toFixed(3)} `
@@ -4129,7 +4068,16 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           photoSizeProbeRef.current?.push(sz);
         }
       } catch {}
-      console.log(`[capture] takePhoto resolved ${sizeKb}kb in ${dt}ms`);
+      // Temps de pose REEL de la photo, depuis son EXIF. Jamais logge
+      // jusqu ici : impossible de verifier que le plafond d obturateur
+      // tenait (la photo du 2026-08-30 18:53 montrait un file incompatible
+      // avec 1/500). Cette ligne est la preuve, photo par photo.
+      let expoStr = '';
+      try {
+        const et = photo?.metadata?.['{Exif}']?.ExposureTime;
+        if (Number.isFinite(et) && et > 0) expoStr = ` expo=1/${Math.round(1 / et)}`;
+      } catch { /* EXIF absent : on logge sans */ }
+      console.log(`[capture] takePhoto resolved ${sizeKb}kb in ${dt}ms${expoStr}`);
     } catch (e) {
       console.warn(`[capture] takePhoto FAILED: ${e?.message || String(e)}`);
     }
