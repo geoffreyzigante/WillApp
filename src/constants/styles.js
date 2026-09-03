@@ -42,27 +42,27 @@ export const s = StyleSheet.create({
   selfieDoneBanner: { backgroundColor: C.white, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 8, borderWidth: 1, borderColor: C.primaryLight },
   selfieCheckCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.pinkPill, alignItems: 'center', justifyContent: 'center' },
   selfieDoneTitle: { fontSize: 15, color: C.primary, fontFamily: 'AVEstiana', fontStyle: 'normal' },
-  selfieDoneSub: { fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
+  selfieDoneSub: { fontFamily: 'Montserrat', fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
   selfieDelete: { padding: 6 },
 
   selfieCard: { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 8 },
   // Utilise le nom PostScript natif 'AVEstiana-Bold' (vs alias 'AVEstiana')
   // pour que iOS resolve le font sans ambiguite weight / style.
   selfieTitle: { color: '#fff', fontSize: 24, fontFamily: 'AVEstiana-Bold', lineHeight: 28 },
-  selfieSub: { color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
+  selfieSub: { fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
   selfieAvatar: { width: 68, height: 68, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 
   eventPick: { backgroundColor: C.white, borderRadius: 14, padding: 14, marginTop: 8 },
-  eventPickName: { fontWeight: '700', fontSize: 15, color: C.text },
-  eventPickDate: { fontSize: 12, color: C.textSoft, marginTop: 2 },
+  eventPickName: { fontFamily: 'Montserrat-SemiBold', fontSize: 15, color: C.text },
+  eventPickDate: { fontFamily: 'Montserrat', fontSize: 12, color: C.textSoft, marginTop: 2 },
 
   sectionTitle: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 22, color: C.text },
   pill: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: 12 },
   pillActive: { backgroundColor: C.primary },
-  pillText: { color: C.primary, fontWeight: '600', fontSize: 13 },
-  pillTextActive: { color: '#fff' },
+  pillText: { color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 13 },
+  pillTextActive: { fontFamily: 'Montserrat-Bold', color: '#fff' },
 
-  empty: { textAlign: 'center', color: C.textSoft, marginTop: 24, fontSize: 14 },
+  empty: { fontFamily: 'Montserrat', textAlign: 'center', color: C.textSoft, marginTop: 24, fontSize: 14 },
 
   eventCard: { height: 110, borderRadius: 16, overflow: 'hidden', marginBottom: 10, backgroundColor: '#222', justifyContent: 'center' },
   eventCardCenter: { paddingHorizontal: 16, zIndex: 2 },
@@ -87,19 +87,19 @@ export const s = StyleSheet.create({
   modalSheet: { backgroundColor: C.bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, paddingBottom: 40, maxHeight: SCREEN_H * 0.9 },
   modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#D0CCE3', alignSelf: 'center', marginBottom: 18 },
   modalTitle: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 22, color: C.text, textAlign: 'center', marginBottom: 6 },
-  modalSub: { color: C.textSoft, textAlign: 'center', marginBottom: 18, fontSize: 13 },
+  modalSub: { fontFamily: 'Montserrat', color: C.textSoft, textAlign: 'center', marginBottom: 18, fontSize: 13 },
   modalCancel: { padding: 14, alignItems: 'center', marginTop: 12 },
-  modalCancelText: { color: C.textSoft, fontWeight: '600' },
+  modalCancelText: { color: C.textSoft, fontFamily: 'Montserrat-SemiBold' },
 
   btnPrimary: { backgroundColor: C.primary, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 16 },
-  btnPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  btnPrimaryText: { color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 },
   btnSecondary: { backgroundColor: C.white, padding: 14, borderRadius: 14, alignItems: 'center', marginTop: 10 },
-  btnSecondaryText: { color: C.primary, fontWeight: '600', fontSize: 14 },
+  btnSecondaryText: { color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 },
 
   selfiePreviewWrap: { alignItems: 'center', marginVertical: 16 },
   selfiePreview: { width: 160, height: 160, borderRadius: 80 },
 
   typePill: { backgroundColor: C.white, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 6 },
   typePillActive: { backgroundColor: C.primary },
-  typePillText: { fontSize: 12, color: C.text, fontWeight: '600' },
+  typePillText: { fontSize: 12, color: C.text, fontFamily: 'Montserrat-SemiBold' },
 });

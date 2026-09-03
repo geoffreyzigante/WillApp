@@ -12,7 +12,7 @@
  *    declenchement — coureur centre par construction.
  *
  * 2. PhotoCaptureDelegate.swift — encode le JPEG de livraison (2400 px sur le
- *    petit cote, q0.5) AU MOMENT de la capture, depuis les octets encore en
+ *    petit cote, q0.75, progressif, EXIF conserve) AU MOMENT de la capture, depuis les octets encore en
  *    memoire. Le telephone ne redecode plus jamais ce qu il vient d encoder :
  *    c etait le poste de chauffe n1 (decodage 12 Mpx + resize + reencodage
  *    par photo, cote JS). 2400 px = plancher Rekognition valide sur le
@@ -35,19 +35,19 @@ const MARKER = '[will-instant-capture]';
 const CONFIG_ANCHOR = `      // TODO: Enable isResponsiveCaptureEnabled? (iOS 17+)
       // TODO: Enable isFastCapturePrioritizationEnabled? (iOS 17+)`;
 
-const CONFIG_REPLACEMENT = `      // ${MARKER} iOS 17 : captures qui se chevauchent + priorite
-      // vitesse automatique sous charge, et zero-shutter-lag explicite.
-      if #available(iOS 17.0, *) {
-        if photoOutput.isResponsiveCaptureSupported {
-          photoOutput.isResponsiveCaptureEnabled = true
-          if photoOutput.isFastCapturePrioritizationSupported {
-            photoOutput.isFastCapturePrioritizationEnabled = true
-          }
-        }
-        if photoOutput.isZeroShutterLagSupported {
-          photoOutput.isZeroShutterLagEnabled = true
-        }
-      }`;
+const CONFIG_REPLACEMENT = `      // ${MARKER} Les enables iOS 17 (responsive capture, fast capture
+      // prioritization, zero-shutter-lag) sont RETIRES depuis le 2026-09-01.
+      //
+      // Ils sortaient les selfies physiquement retournes a 180 deg, avec un
+      // EXIF qui annonce pourtant une image droite : rien cote app ne peut
+      // rattraper ca. Deux garde-fous ont ete tentes sans succes —
+      // isMirrored (toujours false, donc inoperant) puis la position du
+      // device (.back), qui laissait encore passer le cas. Un troisieme
+      // essai coutait un build de plus pour un gain de vitesse dont la
+      // capture course se passe : elle tient deja sa cadence sans eux.
+      //
+      // Le JPEG de livraison 2400 px encode dans PhotoCaptureDelegate, lui,
+      // reste en place : c est lui qui porte le vrai gain de bout en bout.`;
 
 const IMPORT_ANCHOR = `import AVFoundation`;
 const IMPORT_REPLACEMENT = `import AVFoundation
@@ -81,8 +81,26 @@ const DELEGATE_REPLACEMENT = `      // ${MARKER} JPEG de livraison 2400 px, enco
           if let willThumb = CGImageSourceCreateThumbnailAtIndex(willSrc, 0, willOpts as CFDictionary) {
             let willURL = path.deletingPathExtension().appendingPathExtension("will.jpg")
             if let willDest = CGImageDestinationCreateWithURL(willURL as CFURL, "public.jpeg" as CFString, 1, nil) {
-              CGImageDestinationAddImage(willDest, willThumb,
-                [kCGImageDestinationLossyCompressionQuality: 0.5] as CFDictionary)
+              // Qualite 0.75 : 0.5 laissait des artefacts visibles (grain de
+              // compression pris pour du bruit capteur). ~500 Ko en 2400 px.
+              // Progressif : l image se precise au chargement au lieu
+              // d apparaitre d un bloc — percu 2x plus rapide sur 4G.
+              // EXIF + TIFF recopies de l original (le thumbnail ImageIO les
+              // jette) ; orientation remise a 1 puisque les pixels ont ete
+              // redresses par la transform.
+              var willEnc: [CFString: Any] = [
+                kCGImageDestinationLossyCompressionQuality: 0.75,
+                kCGImagePropertyJFIFDictionary: [kCGImagePropertyJFIFIsProgressive: true] as CFDictionary,
+                kCGImagePropertyOrientation: 1,
+              ]
+              if let exif = willProps?[kCGImagePropertyExifDictionary] {
+                willEnc[kCGImagePropertyExifDictionary] = exif
+              }
+              if var tiff = willProps?[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
+                tiff[kCGImagePropertyTIFFOrientation] = 1
+                willEnc[kCGImagePropertyTIFFDictionary] = tiff as CFDictionary
+              }
+              CGImageDestinationAddImage(willDest, willThumb, willEnc as CFDictionary)
               if CGImageDestinationFinalize(willDest) {
                 willJpegPath = willURL.absoluteString
               }

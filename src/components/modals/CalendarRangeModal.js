@@ -6,8 +6,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Modal, View, Text, TouchableOpacity } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { C } from '../../constants/colors';
-import { formatDateForForm } from '../../utils/format';
+import { formatDateForForm, isoJourLocal } from '../../utils/format';
 
 // allowTbd : ajoute l action "Date a venir" (date pas encore fixee).
 // onConfirm est alors appele avec (null, null) — les appelants doivent le
@@ -135,7 +136,7 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
         ) : null}
         <Text style={{
           color: disabled ? '#cfcadd' : isEdge ? '#fff' : (showLeftBar || showRightBar) ? C.text : C.text,
-          fontWeight: isEdge ? '700' : '500',
+          fontFamily: isEdge ? 'Montserrat-SemiBold' : 'Montserrat-Medium',
           fontSize: 14,
         }}>
           {d.getDate()}
@@ -146,21 +147,22 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity activeOpacity={1} onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+      <BlurView intensity={28} tint="light" style={{ flex: 1 }}>
+      <TouchableOpacity activeOpacity={1} onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.55)', justifyContent: 'flex-end' }}>
         <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, paddingBottom: 30 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <TouchableOpacity onPress={goPrev} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#f5f3ff' }}>
-              <Text style={{ fontSize: 22, color: C.primary, marginTop: -2 }}>‹</Text>
+              <Text style={{ fontFamily: 'Montserrat', fontSize: 22, color: C.primary, marginTop: -2 }}>‹</Text>
             </TouchableOpacity>
-            <Text style={{ fontSize: 17, fontWeight: '700', color: C.text }}>{monthLabel}</Text>
+            <Text style={{ fontSize: 17, fontFamily: 'Montserrat-SemiBold', color: C.text }}>{monthLabel}</Text>
             <TouchableOpacity onPress={goNext} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#f5f3ff' }}>
-              <Text style={{ fontSize: 22, color: C.primary, marginTop: -2 }}>›</Text>
+              <Text style={{ fontFamily: 'Montserrat', fontSize: 22, color: C.primary, marginTop: -2 }}>›</Text>
             </TouchableOpacity>
           </View>
           <View style={{ flexDirection: 'row', marginBottom: 2 }}>
             {['L','M','M','J','V','S','D'].map((d, i) => (
               <View key={i} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
-                <Text style={{ color: C.textSoft, fontSize: 11, fontWeight: '700' }}>{d}</Text>
+                <Text style={{ color: C.textSoft, fontSize: 11, fontFamily: 'Montserrat-SemiBold' }}>{d}</Text>
               </View>
             ))}
           </View>
@@ -169,7 +171,7 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
               {monthDays.slice(row * 7, row * 7 + 7).map((d, i) => renderCell(d, `${row}-${i}`))}
             </View>
           ))}
-          <Text style={{ color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 14, paddingHorizontal: 4, lineHeight: 17 }}>
+          <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 14, paddingHorizontal: 4, lineHeight: 17 }}>
             {summary}
           </Text>
           {allowTbd && (
@@ -180,24 +182,25 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
                 alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E0FF',
               }}
             >
-              <Text style={{ color: C.primary, fontSize: 14, fontWeight: '700' }}>
+              <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>
                 Date à venir
               </Text>
-              <Text style={{ color: C.textSoft, fontSize: 11, marginTop: 2 }}>
+              <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, marginTop: 2 }}>
                 La date n'est pas encore fixée
               </Text>
             </TouchableOpacity>
           )}
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
             <TouchableOpacity onPress={onClose} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: '#f5f3ff' }}>
-              <Text style={{ color: C.primary, fontSize: 15, fontWeight: '700' }}>Annuler</Text>
+              <Text style={{ color: C.primary, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={handleConfirm} disabled={!canConfirm} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.pinkPill, opacity: canConfirm ? 1 : 0.5 }}>
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Confirmer</Text>
+              <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Confirmer</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </TouchableOpacity>
+      </BlurView>
     </Modal>
   );
 }

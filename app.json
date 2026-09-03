@@ -15,8 +15,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.geoffreyzigante.will",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "CFBundleDisplayName": "Will",
+        "CADisableMinimumFrameDurationOnPhone": false,
         "NSCameraUsageDescription": "Will utilise la caméra pour détecter les coureurs et prendre des photos automatiquement, et pour capturer votre selfie afin de retrouver vos photos grâce à la reconnaissance faciale.",
         "NSMicrophoneUsageDescription": "Will n'enregistre pas d'audio. Cette permission est requise par la librairie camera mais n'est pas utilisee par l'application.",
         "NSPhotoLibraryUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",

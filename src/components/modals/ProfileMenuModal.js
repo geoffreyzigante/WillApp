@@ -9,7 +9,7 @@ import {
   View, Text, TouchableOpacity, TextInput, ScrollView,
   KeyboardAvoidingView, ActivityIndicator, Alert, Platform, StyleSheet,
   Animated, Dimensions,
-  Easing,
+  Easing, Linking, AppState,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
@@ -71,7 +71,7 @@ function Action({ label, onPress, ton = 'normal', dernier }) {
   );
 }
 
-export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, uploadState = 'idle', onRetryUpload, heroOffset = 0, onActiverNotifs }) {
+export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, onRetake, onDelete, runnerSession, runnerApiFetch, onLogout, onUpdateProfile, onDeleteAccount, onDeleteFaceData, onTokenRenouvele, uploadState = 'idle', onRetryUpload, heroOffset = 0, onActiverNotifs }) {
   // Transition "axe partage" : ce qui part recule vers la gauche en
   // s effacant, ce qui arrive vient de la droite — la meme grammaire que les
   // grandes apps iOS. Trois choses jouent ensemble et se recouvrent :
@@ -122,6 +122,13 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
     } catch { setNotifs(null); }
   }, []);
   useEffect(() => { if (visible) relireNotifs(); }, [visible, relireNotifs]);
+  // Retour des Reglages iOS : l app repasse active -> on relit l etat reel,
+  // sinon le Oui/Non afficherait l ancien etat.
+  useEffect(() => {
+    if (!visible) return;
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') relireNotifs(); });
+    return () => sub.remove();
+  }, [visible, relireNotifs]);
 
   const [apercuSelfie, setApercuSelfie] = useState(false);
   const apercuH = useRef(new Animated.Value(0)).current;
@@ -162,9 +169,17 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) { setPwdError(data.error || 'Erreur'); return; }
+      // Le serveur coupe les autres appareils et renouvelle le jeton courant :
+      // sans cette reprise, on se deconnecterait soi-meme.
+      if (data.token) onTokenRenouvele?.(data.token);
       setCurrentPwd(''); setNewPwd(''); setPwdConfirm('');
       setChangingPwd(false);
-      Alert.alert('Mot de passe modifié', 'Ton nouveau mot de passe est actif.');
+      Alert.alert(
+        'Mot de passe modifié',
+        data.sessions_revoquees
+          ? 'Ton nouveau mot de passe est actif. Les autres appareils ont été déconnectés.'
+          : 'Ton nouveau mot de passe est actif.',
+      );
     } catch (e) {
       setPwdError('Erreur réseau');
     } finally {
@@ -209,7 +224,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
       <TouchableOpacity
         style={StyleSheet.absoluteFillObject}
         activeOpacity={1}
-        onPress={onClose}
+        onPress={editing ? () => setEditing(false) : onClose}
       />
 
       <Animated.View
@@ -223,6 +238,8 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
 
             <ScrollView
               keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 40 }}
             >
@@ -265,7 +282,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
 
                   {selfieUri && uploadState === 'failed' && (
                     <TouchableOpacity onPress={onRetryUpload} style={{ marginTop: 8 }}>
-                      <Text style={{ color: '#C2413B', fontWeight: '600', fontSize: 12 }}>
+                      <Text style={{ color: '#C2413B', fontFamily: 'Montserrat-SemiBold', fontSize: 12 }}>
                         Échec envoi · Réessayer
                       </Text>
                     </TouchableOpacity>
@@ -288,12 +305,12 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
               {profile && editing && (
                 <View style={drawer.section}>
                   <TextInput
-                    placeholder="Prénom" placeholderTextColor={C.textSoft}
+                    placeholder="Prénom" placeholderTextColor="#A89CB8"
                     value={firstName} onChangeText={setFirstName}
                     style={authStyles.input}
                   />
                   <TextInput
-                    placeholder="Nom" placeholderTextColor={C.textSoft}
+                    placeholder="Nom" placeholderTextColor="#A89CB8"
                     value={lastName} onChangeText={setLastName}
                     style={authStyles.input}
                   />
@@ -301,10 +318,10 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                     onPress={() => setShowDobPicker(true)}
                     style={[authStyles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
                   >
-                    <Text style={{ color: dateOfBirth ? C.text : C.textSoft, fontSize: 15 }}>
+                    <Text style={{ fontFamily: 'Montserrat', color: dateOfBirth ? C.text : '#A89CB8', fontSize: 15 }}>
                       {dateOfBirth ? formatDobFr(dateOfBirth) : 'Date de naissance'}
                     </Text>
-                    <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
+                    <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12 }}>Modifier</Text>
                   </TouchableOpacity>
                   {showDobPicker && (
                     <DateTimePicker
@@ -323,22 +340,41 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                       onPress={() => setShowDobPicker(false)}
                       style={{ alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 16, marginBottom: 8 }}
                     >
-                      <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>OK</Text>
+                      <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>OK</Text>
                     </TouchableOpacity>
                   )}
+
+                  {/* Notifications : etat systeme, pas un simple switch.
+                      Oui -> seuls les Reglages iOS peuvent couper ; Non ->
+                      nouvelle demande (ou Reglages si deja refusee). */}
+                  <View style={[compte.selfieLigne, { paddingVertical: 11 }]}>
+                    <Text style={compte.ligneLabel}>Notifications</Text>
+                    <View style={{ flex: 1 }} />
+                    <Text style={compte.ligneValeur2}>{notifs?.accorde ? 'Oui' : 'Non'}</Text>
+                    <TouchableOpacity
+                      style={{ marginLeft: 14 }}
+                      onPress={async () => {
+                        if (notifs?.accorde) { Linking.openSettings(); return; }
+                        await onActiverNotifs?.();
+                        relireNotifs();
+                      }}
+                    >
+                      <Text style={compte.lien}>{notifs?.accorde ? 'Désactiver' : 'Activer'}</Text>
+                    </TouchableOpacity>
+                  </View>
 
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <TouchableOpacity
                       onPress={() => setEditing(false)}
                       style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: '#f5f3ff' }}
                     >
-                      <Text style={{ color: C.text, fontWeight: '600' }}>Annuler</Text>
+                      <Text style={{ color: C.text, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={save} disabled={busy}
                       style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.primary, opacity: busy ? 0.6 : 1 }}
                     >
-                      {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Enregistrer</Text>}
+                      {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>Enregistrer</Text>}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -349,17 +385,12 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                   <Text style={drawer.secLabel}>Notifications</Text>
                   <View style={compte.selfieLigne}>
                     <Text style={compte.ligneValeur2}>
-                      {notifs?.accorde ? 'Activées' : 'Désactivées'}
+                      {notifs?.accorde ? 'Oui' : 'Non'}
                     </Text>
-                    <View style={{ flex: 1 }} />
-                    {!notifs?.accorde ? (
-                      <TouchableOpacity onPress={async () => { await onActiverNotifs?.(); relireNotifs(); }}>
-                        <Text style={compte.lien}>{notifs?.peutDemander === false ? 'Ouvrir les réglages' : 'Activer'}</Text>
-                      </TouchableOpacity>
-                    ) : null}
                   </View>
                   <Text style={compte.aide}>
                     On te prévient quand une photo de toi arrive, une seule fois par série.
+                    Modifiable via « Modifier mes infos ».
                   </Text>
                 </View>
               )}
@@ -374,37 +405,37 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
 
               {profile && changingPwd && (
                 <View style={drawer.section}>
-                  <Text style={{ color: C.text, fontSize: 14, fontWeight: '700', marginBottom: 10 }}>
+                  <Text style={{ color: C.text, fontSize: 14, fontFamily: 'Montserrat-SemiBold', marginBottom: 10 }}>
                     Changer mon mot de passe
                   </Text>
                   <PasswordInput
-                    placeholder="Mot de passe actuel" placeholderTextColor={C.textSoft}
+                    placeholder="Mot de passe actuel" placeholderTextColor="#A89CB8"
                     value={currentPwd} onChangeText={setCurrentPwd}
                     style={authStyles.input}
                   />
                   <PasswordInput
-                    placeholder="Nouveau mot de passe (8 car. min)" placeholderTextColor={C.textSoft}
+                    placeholder="Nouveau mot de passe (8 car. min)" placeholderTextColor="#A89CB8"
                     value={newPwd} onChangeText={setNewPwd}
                     style={authStyles.input}
                   />
                   <PasswordInput
-                    placeholder="Confirmer le nouveau" placeholderTextColor={C.textSoft}
+                    placeholder="Confirmer le nouveau" placeholderTextColor="#A89CB8"
                     value={pwdConfirm} onChangeText={setPwdConfirm}
                     style={authStyles.input}
                   />
-                  {pwdError ? <Text style={{ color: '#ff6b6b', fontSize: 12, marginTop: 4 }}>{pwdError}</Text> : null}
+                  {pwdError ? <Text style={{ fontFamily: 'Montserrat', color: '#ff6b6b', fontSize: 12, marginTop: 4 }}>{pwdError}</Text> : null}
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <TouchableOpacity
                       onPress={() => { setChangingPwd(false); setCurrentPwd(''); setNewPwd(''); setPwdConfirm(''); setPwdError(''); }}
                       style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: '#f5f3ff' }}
                     >
-                      <Text style={{ color: C.text, fontWeight: '600' }}>Annuler</Text>
+                      <Text style={{ color: C.text, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={submitPwd} disabled={pwdBusy}
                       style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.primary, opacity: pwdBusy ? 0.6 : 1 }}
                     >
-                      {pwdBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Modifier</Text>}
+                      {pwdBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>Modifier</Text>}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -441,17 +472,24 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
 
       <Animated.View style={[drawer.headWrap, { opacity: panelOpacity }]} pointerEvents="box-none">
         <View style={drawer.head} pointerEvents="box-none">
-          <TouchableOpacity onPress={onBack || onClose} hitSlop={12} style={drawer.back}>
+          <TouchableOpacity
+            onPress={editing ? () => setEditing(false) : (onBack || onClose)}
+            hitSlop={12} style={drawer.back}
+          >
             <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
               <Path d="M15 18l-6-6 6-6" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
-            <Text style={drawer.backText}>Menu</Text>
+            <Text style={drawer.backText}>{editing ? 'Retour' : 'Menu'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} hitSlop={12} style={drawer.close} accessibilityLabel="Fermer">
-            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-              <Path d="M6 6l12 12M18 6L6 18" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" />
-            </Svg>
-          </TouchableOpacity>
+          {/* En edition, pas de croix : fermer tout le menu d ici perdait
+              la saisie en cours. Retour d abord, fermer ensuite. */}
+          {!editing && (
+            <TouchableOpacity onPress={onClose} hitSlop={12} style={drawer.close} accessibilityLabel="Fermer">
+              <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 6l12 12M18 6L6 18" stroke="#FFFFFF" strokeWidth={2.4} strokeLinecap="round" />
+              </Svg>
+            </TouchableOpacity>
+          )}
         </View>
       </Animated.View>
 
@@ -495,7 +533,7 @@ const drawer = StyleSheet.create({
     paddingBottom: 8,
   },
   back: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 6 },
-  backText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  backText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Montserrat-SemiBold' },
   close: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
@@ -531,11 +569,11 @@ const drawer = StyleSheet.create({
     borderBottomColor: 'rgba(26,10,62,0.07)',
   },
   secLabel: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 1.1,
+    fontSize: 11, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.1,
     textTransform: 'uppercase', color: 'rgba(26,10,62,0.4)',
     marginBottom: 10,
   },
-  rowLabel: { fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
+  rowLabel: { fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: '#1a0a3e' },
 });
 
 const compte = StyleSheet.create({
@@ -544,18 +582,18 @@ const compte = StyleSheet.create({
     paddingVertical: 11,
   },
   ligneSeparee: { borderBottomWidth: 1, borderBottomColor: 'rgba(26,10,62,0.07)' },
-  ligneLabel: { fontSize: 14, color: 'rgba(26,10,62,0.45)' },
-  ligneValeur: { flex: 1, textAlign: 'right', fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
-  ligneValeur2: { fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
+  ligneLabel: { fontFamily: 'Montserrat', fontSize: 14, color: 'rgba(26,10,62,0.45)' },
+  ligneValeur: { flex: 1, textAlign: 'right', fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: '#1a0a3e' },
+  ligneValeur2: { fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: '#1a0a3e' },
   selfieLigne: { flexDirection: 'row', alignItems: 'center' },
-  lien: { color: C.primary, fontWeight: '600', fontSize: 14 },
-  aide: { marginTop: 8, fontSize: 12.5, lineHeight: 17, color: 'rgba(26,10,62,0.45)' },
+  lien: { color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 },
+  aide: { fontFamily: 'Montserrat', marginTop: 8, fontSize: 12.5, lineHeight: 17, color: 'rgba(26,10,62,0.45)' },
   action: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 13,
   },
-  actionLabel: { flex: 1, fontSize: 15, fontWeight: '600' },
-  chevron: { fontSize: 18, color: 'rgba(26,10,62,0.35)' },
+  actionLabel: { flex: 1, fontSize: 15, fontFamily: 'Montserrat-SemiBold' },
+  chevron: { fontFamily: 'Montserrat', fontSize: 18, color: 'rgba(26,10,62,0.35)' },
 
   // Le retrait de 14 px vit DANS le conteneur (qui est masque a hauteur 0),
   // sinon il laissait un trou sous la ligne quand l apercu est ferme.

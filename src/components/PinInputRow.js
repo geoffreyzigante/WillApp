@@ -49,7 +49,11 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
     const d = String(raw || '').replace(/\D/g, '').slice(-1);
     const next = [...digits];
     next[i] = d;
-    const joined = next.join('').slice(0, 4);
+    // Les cases vides etaient des espaces, et join() les gardait : effacer le
+    // 2e chiffre de 1234 rendait « 134 », les suivants se decalant a gauche
+    // sous les yeux de l utilisateur. On garde la position, on coupe a la
+    // derniere case remplie.
+    const joined = next.map(c => (c && /\d/.test(c) ? c : ' ')).join('').replace(/\s+$/, '');
     onChange(joined);
     if (d && i < 3) inputs.current[i + 1]?.focus();
     if (joined.length === 4 && /^\d{4}$/.test(joined) && onComplete) {
@@ -108,7 +112,7 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
                 }}
               >
                 <Text style={{
-                  fontSize, fontWeight: '700',
+                  fontSize, 
                   fontFamily: 'AVEstiana',
                   color: C.primary,
                 }}>
@@ -155,7 +159,7 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
                     }}
                   >
                     <Text style={{
-                      fontSize: 26, fontWeight: '400',
+                      fontSize: 26, 
                       color: C.text, fontFamily: 'Montserrat',
                     }}>
                       {k}
@@ -191,7 +195,7 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
               borderWidth: 1.5,
               borderColor: error ? C.error : (filled ? C.primary : '#e8defc'),
               backgroundColor: filled ? '#faf9ff' : '#fff',
-              fontSize, fontWeight: '700',
+              fontSize, 
               fontFamily: 'AVEstiana',
               color: C.primary,
               textAlign: 'center',

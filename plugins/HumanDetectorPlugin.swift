@@ -59,6 +59,14 @@ public class HumanDetectorPlugin: FrameProcessorPlugin {
   private var lastLoggedRaw: Int = -1
   private var lastLoggedFiltered: Int = -1
 
+  // [will-cpu] En mode instant (wantHumans), le visage ne sert qu a VALIDER
+  // l orientation d une silhouette — une detection suffit, la validation est
+  // acquise cote JS. Faire tourner les DEUX detecteurs a chaque frame
+  // doublait le cout Vision pour rien : le face detector ne tourne plus
+  // qu une frame sur 3 dans ce mode. Hors instant, il est le signal
+  // primaire : chaque frame, comportement inchange.
+  private var frameParite: Int = 0
+
   public override init(proxy: VisionCameraProxyHolder, options: [AnyHashable: Any]? = nil) {
     super.init(proxy: proxy, options: options)
   }
@@ -108,14 +116,19 @@ public class HumanDetectorPlugin: FrameProcessorPlugin {
     let zMax = 0.5 + half
 
     do {
-      var vnRequests: [VNRequest] = [request]
+      frameParite = (frameParite + 1) % 3
+      let runFaces = !wantHumans || frameParite == 0
+      var vnRequests: [VNRequest] = []
+      if runFaces { vnRequests.append(request) }
       let humansRequest = VNDetectHumanRectanglesRequest()
       if wantHumans {
         if #available(iOS 15.0, *) { humansRequest.upperBodyOnly = true }
         vnRequests.append(humansRequest)
       }
       try handler.perform(vnRequests)
-      let results = (request.results as? [VNFaceObservation]) ?? []
+      // Sans runFaces, request.results garderait les resultats d une frame
+      // precedente : on ne les lit que si la requete a effectivement tourne.
+      let results = runFaces ? ((request.results as? [VNFaceObservation]) ?? []) : []
       let raw = results.count
       let filtered = results.filter { obs in
         let c: Double = (axis == "midX")
@@ -128,13 +141,33 @@ public class HumanDetectorPlugin: FrameProcessorPlugin {
       // renvoie ses bbox avec l'origine en BAS a gauche ; on bascule cy en
       // repere image (origine en haut) pour coller aux conventions JS/RN et
       // eviter une inversion silencieuse cote tracker.
+      // 2026-09-01 : la pose (yaw / roll / pitch) accompagne desormais chaque
+      // visage. VNDetectFaceRectanglesRequest la fournit gratuitement (aucune
+      // request supplementaire) ; l ecran selfie s en sert pour refuser un
+      // visage de trois quarts, que la seule bbox ne permettait pas de
+      // distinguer d un visage de face. Angles en DEGRES. `pose` vaut 0 quand
+      // Vision ne renvoie pas l information : le JS ignore alors le critere.
       let faces: [[String: Any]] = results.map { obs in
         let b = obs.boundingBox
+        let radVersDeg = 180.0 / Double.pi
+        var pitchDeg = 0.0
+        var posePitch = false
+        if #available(iOS 15.0, *), let p = obs.pitch?.doubleValue {
+          pitchDeg = p * radVersDeg
+          posePitch = true
+        }
+        let yawDeg = (obs.yaw?.doubleValue ?? 0) * radVersDeg
+        let rollDeg = (obs.roll?.doubleValue ?? 0) * radVersDeg
+        let posePresente = (obs.yaw != nil || obs.roll != nil || posePitch)
         return [
           "cx": Double(b.midX),
           "cy": 1.0 - Double(b.midY),
           "w":  Double(b.width),
           "h":  Double(b.height),
+          "yaw": yawDeg,
+          "roll": rollDeg,
+          "pitch": pitchDeg,
+          "pose": posePresente ? 1 : 0,
         ]
       }
 

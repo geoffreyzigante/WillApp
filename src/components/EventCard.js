@@ -63,7 +63,7 @@ export function EventCard({ event, onPress, isFollowing, onToggleFollow, style }
             zIndex: 3,
           }}
         >
-          <Text style={{ color: tint, fontSize: 10, fontWeight: '700' }}>
+          <Text style={{ color: tint, fontSize: 10, fontFamily: 'Montserrat-SemiBold' }}>
             {displayEventType(event.event_type)}
           </Text>
         </View>

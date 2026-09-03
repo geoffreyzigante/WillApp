@@ -107,7 +107,7 @@ export function OverlayWheel({ items, selectedIndex, onChange }) {
                   color: isSel ? PINK : 'rgba(255,255,255,0.7)',
                   opacity,
                   fontSize: isSel ? 17 : 15,
-                  fontWeight: isSel ? '400' : '300',
+                  
                   fontFamily: 'Montserrat',
                   maxWidth: '100%',
                 }}>{it.label}</Text>

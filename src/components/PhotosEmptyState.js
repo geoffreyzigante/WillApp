@@ -27,12 +27,12 @@ export function PhotosEmptyState({ selfieUri, onFindEvent }) {
       </View>
 
       <Text style={{
-        fontSize: 22, fontWeight: '800', color: '#1A1426',
+        fontSize: 22, fontFamily: 'Montserrat-Bold', color: '#1A1426',
         textAlign: 'center', letterSpacing: -0.3, marginBottom: 10,
       }}>
         Suis un event pour{'\n'}recevoir tes photos
       </Text>
-      <Text style={{
+      <Text style={{ fontFamily: 'Montserrat',
         fontSize: 14, color: 'rgba(123,47,255,0.3)', lineHeight: 20,
         textAlign: 'center', marginBottom: 22,
         paddingHorizontal: 12,
@@ -59,7 +59,7 @@ export function PhotosEmptyState({ selfieUri, onFindEvent }) {
             <Circle cx="11" cy="11" r="8" />
             <Path d="M21 21l-4-4" />
           </Svg>
-          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Trouver un event</Text>
+          <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Trouver un event</Text>
         </TouchableOpacity>
       )}
 

@@ -75,10 +75,10 @@ export function ConsentRenewBanner({ runnerApiFetch, isAuthed }) {
       flexDirection: 'row', alignItems: 'center', gap: 10,
     }}>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontWeight: '800', color: isUrgent ? '#7A1F1F' : '#7A4F00', fontSize: 13 }}>
+        <Text style={{ fontFamily: 'Montserrat-Bold', color: isUrgent ? '#7A1F1F' : '#7A4F00', fontSize: 13 }}>
           {isUrgent ? 'Renouvelle ton consentement' : 'Consentement bientot expire'}
         </Text>
-        <Text style={{ color: isUrgent ? '#7A1F1F' : '#7A4F00', fontSize: 12, marginTop: 2, lineHeight: 16 }}>
+        <Text style={{ fontFamily: 'Montserrat', color: isUrgent ? '#7A1F1F' : '#7A4F00', fontSize: 12, marginTop: 2, lineHeight: 16 }}>
           {isUrgent
             ? `Plus que ${daysLabel}. Sans renouvellement, ton selfie sera supprime et la reconnaissance s arretera.`
             : `Ton consentement Will expire dans ${daysLabel}. Renouvelle en 1 tap.`}
@@ -94,7 +94,7 @@ export function ConsentRenewBanner({ runnerApiFetch, isAuthed }) {
         }}
         activeOpacity={0.85}
       >
-        {busy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Renouveler</Text>}
+        {busy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 13 }}>Renouveler</Text>}
       </TouchableOpacity>
     </View>
   );

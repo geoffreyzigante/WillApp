@@ -17,8 +17,8 @@ export function PinDisplay({ pin, masked = true }) {
           key={i}
           style={{
             fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-            fontSize: 28, fontWeight: '700',
-            color: valid ? C.primary : C.textSoft,
+            fontSize: 28, 
+            color: valid ? C.primary : '#A89CB8',
             minWidth: 22, textAlign: 'center',
           }}
         >

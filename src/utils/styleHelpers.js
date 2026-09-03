@@ -15,7 +15,7 @@ export const modeChipStyleApp = (active) => ({
 });
 
 export const modeChipTextStyleApp = (active) => ({
-  fontSize: 11, fontWeight: '700',
+  fontSize: 11, fontFamily: 'Montserrat-SemiBold',
   color: active ? '#fff' : '#666',
 });
 

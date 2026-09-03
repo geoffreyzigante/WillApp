@@ -13,8 +13,8 @@ export function InfoRow({ label, value, last }) {
       paddingVertical: 10,
       borderBottomWidth: last ? 0 : 1, borderBottomColor: '#f0eaff',
     }}>
-      <Text style={{ color: C.textSoft, fontSize: 14 }}>{label}</Text>
-      <Text style={{ color: C.text, fontSize: 14, fontWeight: '500', flex: 1, textAlign: 'right' }} numberOfLines={1}>{value || '—'}</Text>
+      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 14 }}>{label}</Text>
+      <Text style={{ color: C.text, fontSize: 14, fontFamily: 'Montserrat-Medium', flex: 1, textAlign: 'right' }} numberOfLines={1}>{value || '—'}</Text>
     </View>
   );
 }

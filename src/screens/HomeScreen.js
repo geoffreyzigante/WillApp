@@ -8,8 +8,9 @@ import { View, Text, TouchableOpacity, TextInput, Animated, Keyboard, Pressable,
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { Icon } from '../components/Icon';
-import { SelfieIllustration } from '../components/SelfieIllustration';
-import { IlluPasDeFavoris } from '../components/IlluPasDeFavoris';
+import { LinearGradient } from 'expo-linear-gradient';
+import { EtatVideWill } from '../components/EtatVideWill';
+import { Haptics } from '../services/haptics';
 import { IlluPasDePhotos } from '../components/IlluPasDePhotos';
 import { EventCard } from '../components/EventCard';
 import { HotOnesCarousel } from '../components/HotOnesCarousel';
@@ -126,6 +127,16 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
     // devant les events reellement programmes. Meme regle que la vitrine.
     if (!da !== !db) return da ? -1 : 1;
     if (!da && !db) return (a.name || '').localeCompare(b.name || '');
+    // Passes : du plus recent au plus ancien. Favoris (melange a venir +
+    // passes) : les a venir d'abord (le plus proche en tete), puis les
+    // passes (le plus recent en tete) — meme regle que /public-events.
+    if (tab === 'past') return db.localeCompare(da);
+    if (tab === 'follows') {
+      const aUp = isUpcoming(a.event_date, a.event_date_end);
+      const bUp = isUpcoming(b.event_date, b.event_date_end);
+      if (aUp !== bUp) return aUp ? -1 : 1;
+      return aUp ? da.localeCompare(db) : db.localeCompare(da);
+    }
     return da.localeCompare(db);
   });
   // Resolution on-demand du code exact. Ne tire que si la saisie ressemble
@@ -229,7 +240,13 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
           switch Accueil <-> Photos. */}
 
       {/* Carrousel "Galerie ouverte" : derniers events passes avec photos. */}
-      <HotOnesCarousel events={events} onOpenEvent={onOpenEvent} />
+      <HotOnesCarousel
+        events={events}
+        onOpenEvent={onOpenEvent}
+        isAuthed={isAuthed}
+        onSignup={onOpenAuthSignup}
+        onLogin={onOpenAuthLogin}
+      />
 
       {/* Row tabs + bouton loupe a droite */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -258,16 +275,16 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               }}
             />
           )}
-          <TouchableOpacity onPress={() => setTab('upcoming')} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
+          <TouchableOpacity onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setTab('upcoming'); }} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
             <Text style={[s.pillText, tab === 'upcoming' && s.pillTextActive]}>À venir</Text>
           </TouchableOpacity>
           {tab === 'follows' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
-          <TouchableOpacity onPress={() => setTab('past')} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
+          <TouchableOpacity onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setTab('past'); }} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
             <Text style={[s.pillText, tab === 'past' && s.pillTextActive]}>Passés</Text>
           </TouchableOpacity>
           {tab === 'upcoming' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
-          <TouchableOpacity onPress={() => setTab('follows')} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
-            <Text style={[s.pillText, tab === 'follows' && s.pillTextActive]}>Favoris</Text>
+          <TouchableOpacity onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setTab('follows'); }} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
+            <Text style={[s.pillText, tab === 'follows' && s.pillTextActive]}>Suivis</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity
@@ -312,7 +329,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               onChangeText={setSearchQuery}
               placeholder="Rechercher un event"
               placeholderTextColor="#c9beed"
-              style={{ flex: 1, fontSize: 14, color: C.primary, fontWeight: '400', paddingVertical: 11 }}
+              style={{ flex: 1, fontSize: 14, color: C.primary, fontFamily: 'Montserrat', paddingVertical: 11 }}
               returnKeyType="search"
               autoCapitalize="none"
               autoCorrect={false}
@@ -323,7 +340,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               hitSlop={10}
               style={{ paddingHorizontal: 6 }}
             >
-              <Text style={{ color: C.textSoft, fontSize: 16 }}>✕</Text>
+              <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 16 }}>✕</Text>
             </TouchableOpacity>
           </View>
           <View style={{ height: 1, backgroundColor: 'rgba(0,0,0,0.06)' }} />
@@ -337,7 +354,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               autoCorrect={false}
               returnKeyType="go"
               onSubmitEditing={openByCode}
-              style={{ flex: 1, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: C.primary }}
+              style={{ fontFamily: 'Montserrat', flex: 1, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, color: C.primary }}
             />
             <TouchableOpacity
               activeOpacity={0.85}
@@ -346,15 +363,15 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               style={{ paddingHorizontal: 16, paddingVertical: 11, justifyContent: 'center' }}
             >
               <Text style={{
-                color: codeInput.trim() ? C.primary : C.textSoft,
-                fontSize: 14, fontWeight: '700',
+                color: codeInput.trim() ? C.primary : '#A89CB8',
+                fontSize: 14, fontFamily: 'Montserrat-SemiBold',
               }}>
                 {codeLoading ? '…' : 'Ouvrir'}
               </Text>
             </TouchableOpacity>
           </View>
           {!!codeError && (
-            <Text style={{ paddingHorizontal: 14, paddingBottom: 10, fontSize: 12, color: '#D6455B' }}>
+            <Text style={{ fontFamily: 'Montserrat', paddingHorizontal: 14, paddingBottom: 10, fontSize: 12, color: '#D6455B' }}>
               {codeError}
             </Text>
           )}
@@ -374,72 +391,29 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
             accessibilityLabel="Fermer la recherche"
           />
         )}
-        {tab === 'follows' && !isAuthed ? (
-          <View style={{ paddingVertical: 24, paddingHorizontal: 8, alignItems: 'center' }}>
-            <SelfieIllustration size={84} />
-            <Text style={{
-              fontSize: 22, fontFamily: 'AVEstiana', color: C.text,
-              textAlign: 'center', marginTop: 16, marginBottom: 8, lineHeight: 26,
-            }}>
-              Tes photos avant même{'\n'}la ligne d'arrivée
-            </Text>
-            <Text style={{
-              fontSize: 13, color: C.textSoft, textAlign: 'center',
-              lineHeight: 18, marginBottom: 22, paddingHorizontal: 8,
-            }}>
-              Ajoute tes events en favoris pour les suivre. Un selfie suffit pour être reconnu sur toutes les photos publiées (valable 12 mois renouvelables).
-            </Text>
-            <View style={{ alignSelf: 'stretch', gap: 10, marginBottom: 22 }}>
-              {[
-                { n: 1, t: 'Crée ton compte et prends ton selfie' },
-                { n: 2, t: 'Ajoute tes events en favoris pour les suivre' },
-                { n: 3, t: "Profite, Will s'occupe du reste" },
-              ].map(({ n, t }) => (
-                <View key={n} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FAF7FF', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
-                  <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{n}</Text>
-                  </View>
-                  <Text style={{ color: C.text, fontSize: 13, fontWeight: '500' }}>{t}</Text>
-                </View>
-              ))}
-            </View>
-            <TouchableOpacity
-              onPress={onOpenAuthSignup}
-              activeOpacity={0.88}
-              style={{
-                backgroundColor: C.primary,
-                paddingVertical: 14, paddingHorizontal: 32,
-                borderRadius: 14, alignSelf: 'stretch', alignItems: 'center',
-              }}
-            >
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Créer mon compte</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onOpenAuthLogin} style={{ marginTop: 12, paddingVertical: 6 }} activeOpacity={0.7}>
-              <Text style={{ color: C.primary, fontSize: 13, fontWeight: '500' }}>J'ai déjà un compte</Text>
-            </TouchableOpacity>
-          </View>
-        ) : filtered.length === 0 ? (
+        {filtered.length === 0 ? (
+          tab === 'follows' ? (
+            <EtatVideWill
+              variante="suivis"
+              titre={'Pas encore\nde suivis'}
+              sousTexte={"Ajoute tes events à suivre"}
+            />
+          ) : (
           <View style={{
             paddingVertical: 40,
             flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14,
           }}>
-            {/* Mirror site : mascotte a gauche, titre AV Estiana + sous-titre
-                Montserrat 500 empiles a droite. */}
-            {tab === 'follows' ? <IlluPasDeFavoris height={72} /> : <IlluPasDePhotos height={72} />}
+            <IlluPasDePhotos height={72} />
             <View style={{ alignItems: 'flex-start', gap: 3, flexShrink: 1 }}>
               <Text style={{
                 color: '#C9B6FF', fontSize: 18,
                 fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2,
               }}>
-                {tab === 'follows' ? 'Pas encore de favoris' : tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
+                {tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
               </Text>
-              {tab === 'follows' ? (
-                <Text style={{ color: C.text, fontSize: 12, fontFamily: 'Montserrat-Medium' }}>
-                  Ajoute tes events à suivre
-                </Text>
-              ) : null}
             </View>
           </View>
+          )
         ) : (
           <>
             {filtered.map((event) => (
@@ -463,7 +437,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
                   <TouchableOpacity
                     key={`cta-${i}`}
                     activeOpacity={0.85}
-                    onPress={() => onOpenOrgRole && onOpenOrgRole('orga')}
+                    onPress={() => onOpenOrgRole && onOpenOrgRole('create')}
                     style={{
                       backgroundColor: '#EDE7FF',
                       borderRadius: 16,
@@ -488,7 +462,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
                         color: '#7B2FFF',
                         fontFamily: 'Montserrat',
                         fontSize: 13,
-                        fontWeight: '700',
+                        
                       }}>
                         Lancer mon event
                       </Text>

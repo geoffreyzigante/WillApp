@@ -44,6 +44,13 @@ export const STEP_TRIGGER_DEFAULTS = {
   // Fraction CENTRALE de la largeur ou le tir est autorise. 0.5 = x dans
   // [0.25, 0.75]. Mettre 1 revient a autoriser tout le cadre.
   band: 0.50,
+  // Bande des REPERES, plus etroite que `band` : les trois photos tombent
+  // entre 0.375 et 0.625 au lieu de 0.333-0.667 — coureur plus au centre
+  // (demande user 2026-08-31). `band` reste la loi pour les apparitions et
+  // le credit partage. Ne pas descendre sous ~0.34 : a vitesse de cycliste,
+  // l ecart entre reperes passe sous le cooldown (180 ms) et la photo du
+  // milieu saute.
+  bandeReperes: 0.375,
   // Nombre de reperes, donc de photos, par passage. Les reperes sont
   // repartis regulierement DANS la bande, sans toucher ses bords.
   photosParPassage: 3,
@@ -106,11 +113,25 @@ export const STEP_TRIGGER_DEFAULTS = {
   // classement des plus grands. Les tirs par franchissement ne sont pas
   // concernes : ils exigent deja une position precedente, donc deux images.
   minObsPourApparition: 2,
-  // Aire en dessous de laquelle on n exige plus la confirmation ci-dessus.
-  // Un visage lointain clignote : lui demander deux observations consecutives
-  // revient a ne jamais le declencher. Le risque de faux positif reste borne
-  // par le limiteur global et par la bande centrale.
-  aireApparitionDirecte: 0.00030,
+  // Aire EN DESSOUS DE LAQUELLE on n exige plus la confirmation ci-dessus.
+  // Le sens est contre-intuitif et m a fait faire l erreur inverse le
+  // 2026-08-30 : c est une DISPENSE accordee aux visages LOINTAINS, pas un
+  // droit d entree reserve aux gros. Un visage lointain clignote ; lui
+  // demander deux observations consecutives revient a ne jamais le
+  // declencher. Baisser cette valeur RESSERRE la dispense.
+  //
+  // Consequence directe quand elle est trop basse : le PREMIER repere est
+  // systematiquement perdu. La piste naît a la premiere detection sans etre
+  // candidate, attend une deuxieme detection qui tarde a cette distance, et
+  // quand elle arrive le coureur a deja depasse le premier repere — le code
+  // lui attribue alors repereLePlusProche, celui du milieu. Deux photos au
+  // lieu de trois, toujours les memes deux. Constate sur le terrain.
+  //
+  // 0.0020 couvre tout coureur au-dela de ~4-5 m (mesure : 0.00035 a la
+  // distance de travail). Les visages proches gardent la double confirmation,
+  // ou le risque de faux positif est reel. Le limiteur global et la bande
+  // centrale bornent le reste.
+  aireApparitionDirecte: 0.0020,
 };
 
 export function createStepTrigger(options = {}) {
@@ -120,12 +141,15 @@ export function createStepTrigger(options = {}) {
   const bornes = { min: 0.5 - bande / 2, max: 0.5 + bande / 2 };
   const nb = Math.max(1, cfg.photosParPassage | 0);
 
-  // Reperes au centre de chaque tranche de bande : pour 3 dans [0.25, 0.75],
-  // cela donne 0.333, 0.500, 0.667. Aucun ne touche le bord, donc aucun tir
-  // ne peut atterrir hors de la bande a cause d un arrondi.
+  // Reperes au centre de chaque tranche de la bande RESSERREE (bandeReperes,
+  // bornee par band) : pour 3 dans [0.3125, 0.6875], cela donne 0.375,
+  // 0.500, 0.625. Aucun ne touche le bord, donc aucun tir ne peut atterrir
+  // hors de la bande large a cause d un arrondi.
+  const bandeR = Math.max(0.05, Math.min(bande, cfg.bandeReperes || bande));
+  const minR = 0.5 - bandeR / 2;
   const reperes = [];
   for (let i = 0; i < nb; i++) {
-    reperes.push(bornes.min + (bande * (i + 0.5)) / nb);
+    reperes.push(minR + (bandeR * (i + 0.5)) / nb);
   }
 
   let tracks = [];
@@ -177,11 +201,17 @@ export function createStepTrigger(options = {}) {
     const n = Math.max(0, Math.min(cfg.maxFaces, flat[1] | 0));
 
     const dets = [];
+    // Drapeaux "visage vu" en queue de tableau : flat[2 + n*4 + i]. Absents
+    // (ancien format, mode visages sans queue) -> true : le point EST un
+    // visage. En mode instant les points sont des silhouettes, detectees de
+    // dos comme de face ; le drapeau dit si un visage tombait dans la boite.
+    const fo = 2 + n * 4;
     for (let i = 0; i < n; i++) {
       const o = 2 + i * 4;
       const x = flat[o], y = flat[o + 1], w = flat[o + 2], h = flat[o + 3];
       if (!isFinite(x) || !isFinite(y)) continue;
-      dets.push({ x, y, w: isFinite(w) ? w : 0, h: isFinite(h) ? h : 0 });
+      const fvRaw = flat.length > fo + i ? flat[fo + i] : 1;
+      dets.push({ x, y, w: isFinite(w) ? w : 0, h: isFinite(h) ? h : 0, faceVu: fvRaw >= 1 });
     }
 
     // ── 0. Oubli des tracks perdus, AVANT tout appariement ─────────────────
@@ -216,13 +246,22 @@ export function createStepTrigger(options = {}) {
       tr.x = det.x; tr.y = det.y; tr.w = det.w; tr.h = det.h;
       tr.lastTs = t;
       tr.obs += 1;
+      // Validation d orientation : acquise une fois pour toutes. Un visage
+      // clignote a 6 m — une seule detection suffit, la silhouette porte le
+      // suivi ensuite.
+      if (det.faceVu) tr.faceVu = true;
 
       const cr = franchis(tr, prevX, det.x);
       if (cr.length) {
         candidats.push({ tr, indices: cr, reason: 'repere-franchi' });
       } else if (
-        (tr.obs === cfg.minObsPourApparition
-          || (tr.obs === 1 && (det.w || 0) * (det.h || 0) < cfg.aireApparitionDirecte))
+        // `tr.obs === 1` figurait ici en second terme : code mort. Une piste
+        // naît avec obs = 1 au paragraphe 2 et n entre dans cette boucle qu a
+        // l image SUIVANTE, ou `tr.obs += 1` s execute juste au-dessus. obs
+        // vaut donc 2 au minimum quand ce test est evalue. La dispense pour
+        // visage lointain n a jamais pu se declencher ; elle vit desormais au
+        // paragraphe 2, la ou la piste naît vraiment.
+        tr.obs === cfg.minObsPourApparition
         && tr.consumed.size === 0
         && dansLaBande(det.x)
       ) {
@@ -245,13 +284,37 @@ export function createStepTrigger(options = {}) {
         id: nextId++,
         x: det.x, y: det.y, w: det.w, h: det.h,
         vx: 0, lastTs: t, obs: 1,
+        faceVu: !!det.faceVu,
         consumed: new Set(),
       };
       tracks.push(tr);
-      // Volontairement PAS candidat des la premiere image : voir
-      // minObsPourApparition. Il le deviendra a la suivante s il est toujours
-      // la, ou declenchera normalement par franchissement.
-      void dansLaBande;
+
+      // Dispense pour visage LOINTAIN, a la naissance.
+      //
+      // Regle generale : une piste n est pas candidate a sa premiere image.
+      // A une seule observation on ne sait pas encore s il s agit d un vrai
+      // coureur. Cette prudence est bonne pour un visage proche, ou une
+      // deuxieme detection arrive a coup sur a l image suivante.
+      //
+      // Elle est ruineuse pour un visage lointain, qui clignote. La deuxieme
+      // detection arrive tard, et quand elle arrive le coureur a deja
+      // traverse le premier repere : repereLePlusProche lui attribue alors
+      // celui du milieu. Le premier repere est perdu a tous les coups —
+      // deux photos au lieu de trois, constate sur le terrain le 2026-08-30.
+      //
+      // Sous aireApparitionDirecte, et seulement si la piste naît DEJA dans
+      // la bande, elle declenche donc immediatement sur le repere le plus
+      // proche. Une piste qui naît hors bande n a rien a consommer : elle
+      // entrera par franchissement, ce qui est le chemin nominal.
+      //
+      // Faux positif possible : une detection d une seule image produit une
+      // photo. Borne par le cooldown (180 ms), le limiteur (30 / 10 s) et la
+      // bande centrale. Une photo de trop coute infiniment moins qu un
+      // coureur qui n a que deux photos sur trois.
+      const aireNaissance = (det.w || 0) * (det.h || 0);
+      if (dansLaBande(det.x) && aireNaissance < cfg.aireApparitionDirecte) {
+        candidats.push({ tr, indices: [repereLePlusProche(det.x)], reason: 'apparu-loin' });
+      }
     }
 
     // ── 3. Decision ───────────────────────────────────────────────────────
@@ -259,6 +322,11 @@ export function createStepTrigger(options = {}) {
     // sert tous ceux qu elle contient. C est ce qui empeche un peloton de
     // couter vingt fois un coureur isole.
     if (candidats.length === 0) return [];
+    // De dos ou 3/4 dos, Vision ne produit aucun visage : la piste n est
+    // jamais validee et ne tire jamais. En mode visages, faceVu est vrai
+    // par construction — ce filtre ne change rien.
+    const candidatsValides = candidats.filter(c => c.tr.faceVu);
+    if (candidatsValides.length === 0) return [];
     if (t - lastFireTs < cfg.cooldownMs) return [];
 
     // Limiteur glissant sur 10 s.
@@ -267,8 +335,8 @@ export function createStepTrigger(options = {}) {
 
     // Le declencheur nomme est celui dont le visage est le plus grand : c est
     // le plus proche, donc celui pour qui la photo sera la plus exploitable.
-    let choisi = candidats[0];
-    for (const c of candidats) {
+    let choisi = candidatsValides[0];
+    for (const c of candidatsValides) {
       if ((c.tr.w || 0) * (c.tr.h || 0) > (choisi.tr.w || 0) * (choisi.tr.h || 0)) choisi = c;
     }
 
@@ -311,7 +379,7 @@ export function createStepTrigger(options = {}) {
     return {
       reperes: reperes.slice(),
       bornes,
-      tracks: tracks.map(tr => ({ id: tr.id, x: tr.x, obs: tr.obs, consumed: [...tr.consumed] })),
+      tracks: tracks.map(tr => ({ id: tr.id, x: tr.x, obs: tr.obs, faceVu: !!tr.faceVu, consumed: [...tr.consumed] })),
       tirsDansLaFenetre: fireTimes.length,
     };
   }

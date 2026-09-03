@@ -1,23 +1,20 @@
-// Completion d un event organisateur — miroir exact de
-// WILL/dashboard/src/orga/components/EventCompletionPanel.js REQUIRED_FIELDS.
-// Toute modification ici doit etre repercutee la-bas, et inversement : les
-// deux surfaces annoncent le meme pourcentage a l orga.
+// Completion d un event organisateur — MIROIR de CHAMPS_EVENT_REQUIS dans
+// WILL/worker/index.js, qui est la source de verite : c est lui qui autorise
+// ou refuse la soumission. Ce fichier ne sert qu a afficher (jauge, pastilles
+// « il manque »). Toute modification doit partir du worker.
+// Miroir jumeau : WILL/dashboard/src/orga/components/EventCompletionPanel.js
+
+const plein = (v) => !!(v && String(v).trim());
 
 export const REQUIRED_FIELDS = [
   {
-    id: 'start_time',
-    label: 'Heure de départ',
-    check: (ev) => !!(ev.start_time && String(ev.start_time).trim()),
-  },
-  {
-    id: 'event_date_end',
-    label: 'Date de fin',
-    // Une date de debut suffit : un event d un jour a une fin implicite.
-    check: (ev) => !!ev.event_date,
+    id: 'event_date',
+    label: "Date de l'event",
+    check: (ev) => plein(ev.event_date),
   },
   {
     id: 'distances',
-    label: 'Distances',
+    label: 'Courses',
     check: (ev) => Array.isArray(ev.distances) && ev.distances.length > 0,
   },
   {
@@ -25,36 +22,43 @@ export const REQUIRED_FIELDS = [
     label: 'Participants estimés',
     check: (ev) => {
       const v = ev.estimated_participants;
-      return typeof v === 'number' ? v > 0 : !!(v && String(v).trim());
+      return typeof v === 'number' ? v > 0 : plein(v);
     },
   },
   {
     id: 'message',
     label: 'Description',
-    check: (ev) => !!(ev.message && String(ev.message).trim()),
-  },
-  {
-    id: 'phone',
-    label: 'Téléphone',
-    check: (ev, me) => {
-      const evPhone = ev.phone && String(ev.phone).trim();
-      const mePhone = me?.phone && String(me.phone).trim();
-      return !!(evPhone || mePhone);
-    },
-  },
-  {
-    id: 'website',
-    label: 'Site web',
-    check: (ev) => !!(ev.website && String(ev.website).trim()),
+    check: (ev) => plein(ev.message),
   },
   {
     id: 'cover_image',
     label: 'Image de couverture',
-    check: (ev) => !!(ev.cover_image && String(ev.cover_image).trim()),
+    check: (ev) => plein(ev.cover_image),
+  },
+  {
+    id: 'contact_admin',
+    label: 'Email administratif',
+    check: (ev, me) => plein(ev.contact_admin) || plein(ev.organizer_email) || plein(me?.email),
+  },
+  {
+    id: 'contact_public',
+    label: 'Contact public',
+    check: (ev, me) => plein(ev.contact) || plein(ev.phone) || plein(ev.website) || plein(me?.phone),
   },
 ];
 
 export function completionOf(ev, me) {
+  // Le worker joint sa propre liste aux events qu il renvoie : c est elle qui
+  // fait foi, puisque c est elle qui autorisera la soumission. On ne
+  // recalcule que pour des donnees locales (formulaire en cours de saisie),
+  // ou pour un ancien client qui ne la recoit pas encore.
+  if (Array.isArray(ev?.manquants)) {
+    const missing = ev.manquants;
+    const percent = typeof ev.completion === 'number'
+      ? ev.completion
+      : Math.round(((REQUIRED_FIELDS.length - missing.length) / REQUIRED_FIELDS.length) * 100);
+    return { missing, percent, isComplete: missing.length === 0 };
+  }
   const missing = REQUIRED_FIELDS.filter(f => !f.check(ev || {}, me));
   const percent = Math.round(((REQUIRED_FIELDS.length - missing.length) / REQUIRED_FIELDS.length) * 100);
   return { missing, percent, isComplete: missing.length === 0 };

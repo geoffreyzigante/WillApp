@@ -384,7 +384,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                   backgroundColor: 'rgba(255,255,255,0.22)',
                   paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
                 }}>
-                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{displayEventType(event.event_type)}</Text>
+                  <Text style={{ color: '#fff', fontSize: 10, fontFamily: 'Montserrat-SemiBold' }}>{displayEventType(event.event_type)}</Text>
                 </View>
               ) : null}
             </View>
@@ -466,14 +466,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     }}>
                       {/* Col 1.5 : label de course en gras tint. Wrap autorise. */}
                       <View style={{ flex: 1.5, paddingRight: 8 }}>
-                        <Text style={{ color: tint, fontSize: 15, fontWeight: '700' }}>
+                        <Text style={{ color: tint, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>
                           {labelText}
                         </Text>
                       </View>
                       {/* Col 1 : km secondaire en petit, meme tint. */}
                       <View style={{ flex: 1, paddingRight: 8 }}>
                         {kmSecondary ? (
-                          <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontWeight: '500' }}>
+                          <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontFamily: 'Montserrat-Medium' }}>
                             {kmSecondary}
                           </Text>
                         ) : null}
@@ -482,8 +482,8 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                       <View style={{ flex: 1, paddingRight: 8 }}>
                         {time ? (
                           <>
-                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontWeight: '500' }}>Départ</Text>
-                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontWeight: '500' }}>{time}</Text>
+                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontFamily: 'Montserrat-Medium' }}>Départ</Text>
+                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontFamily: 'Montserrat-Medium' }}>{time}</Text>
                           </>
                         ) : null}
                       </View>
@@ -491,8 +491,8 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                       <View style={{ flex: 1 }}>
                         {elev ? (
                           <>
-                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontWeight: '500' }}>Dénivelé</Text>
-                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontWeight: '500' }}>{elev} mD+</Text>
+                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontFamily: 'Montserrat-Medium' }}>Dénivelé</Text>
+                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontFamily: 'Montserrat-Medium' }}>{elev} mD+</Text>
                           </>
                         ) : null}
                       </View>
@@ -817,10 +817,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     if (!bibResults || bibResults.length === 0) {
       return (
         <View style={{ paddingVertical: 40, paddingHorizontal: 24, alignItems: 'center' }}>
-          <Text style={{ color: C.text, fontSize: 14, fontWeight: '600', textAlign: 'center', marginBottom: 6 }}>
+          <Text style={{ color: C.text, fontSize: 14, fontFamily: 'Montserrat-SemiBold', textAlign: 'center', marginBottom: 6 }}>
             Aucune photo trouvée pour le dossard {bibQuery.trim()}
           </Text>
-          <Text style={{ color: C.textSoft, fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
+          <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
             Scrolle la galerie pour chercher manuellement.
           </Text>
         </View>
@@ -828,7 +828,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     }
     return (
       <View style={{ paddingHorizontal: GRID_PADDING_H }}>
-        <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 8, marginBottom: 10 }}>
+        <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 8, marginBottom: 10 }}>
           {bibResults.length} photo{bibResults.length > 1 ? 's' : ''} trouvée{bibResults.length > 1 ? 's' : ''} pour le dossard {bibQuery.trim()}
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP }}>
@@ -938,7 +938,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           ? renderBibResults()
           : favOnly && visiblePhotos.length === 0 && !loading ? (
             <View style={{ paddingVertical: 40, alignItems: 'center', paddingHorizontal: 24 }}>
-              <Text style={{ color: C.textSoft, fontSize: 14, textAlign: 'center' }}>
+              <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 14, textAlign: 'center' }}>
                 Aucune photo en favoris pour cet event.
               </Text>
             </View>
@@ -959,18 +959,18 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 22 }}>
             <Text style={{
-              fontSize: 17, fontWeight: '800', color: '#1A1426',
+              fontSize: 17, fontFamily: 'Montserrat-Bold', color: '#1A1426',
               marginBottom: 10, textAlign: 'center',
             }}>
-              Retirer cet event des favoris ?
+              Ne plus suivre cet event ?
             </Text>
-            <Text style={{
+            <Text style={{ fontFamily: 'Montserrat',
               fontSize: 14, color: C.text, lineHeight: 20,
               marginBottom: 10, textAlign: 'center',
             }}>
               Tu ne recevras plus de notifs pour les nouvelles photos de cet event. Les photos déjà identifiées restent dans ta galerie.
             </Text>
-            <Text style={{
+            <Text style={{ fontFamily: 'Montserrat',
               fontSize: 11, color: C.textSoft, lineHeight: 15,
               marginBottom: 20, textAlign: 'center',
             }}>
@@ -985,7 +985,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 14, fontWeight: '600' }}>Annuler</Text>
+                <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => { setShowUnfollowConfirm(false); onToggleFollow(); }}
@@ -996,7 +996,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                 }}
                 activeOpacity={0.85}
               >
-                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Retirer</Text>
+                <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Retirer</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -7,29 +7,34 @@
 // Organisateur : code event + mot de passe + "Mot de passe oublie"
 //   qui ouvre un flow reset (request -> verify avec code email 6 chiffres).
 //
-// Sheet slide-in + drag-to-dismiss via useDismissibleSheet hook.
+// Design : ALIGNE sur AuthRunnerModal (decision user 2026-08-31,
+// uniformisation des ecrans de connexion) — fullscreen blanc, croix en
+// haut a gauche, titre AVEstiana violet, tout en violet (rose abandonne).
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, TextInput, ScrollView, SafeAreaView,
-  KeyboardAvoidingView, Animated, ActivityIndicator, Alert, Platform, StyleSheet,
+  Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
+  KeyboardAvoidingView, ActivityIndicator, Alert, Platform, StatusBar,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import Svg, { Path } from 'react-native-svg';
-import { C } from '../../constants/colors';
+import { C, colorForType } from '../../constants/colors';
 import { s } from '../../constants/styles';
 import { formSectionStyle } from '../../constants/formStyles';
 import { API_URL } from '../../constants/api';
 import { api } from '../../services/api';
 import { formatDateLong, cityLabel, isUpcoming } from '../../utils/format';
 import { PinInputRow } from '../PinInputRow';
-import { useDismissibleSheet } from '../../hooks/useDismissibleSheet';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Icon } from '../Icon';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function LoginModal({ visible, role, events, onClose, onSuccess }) {
+  const insets = useSafeAreaInsets();
+  // Dans une Modal RN, insets.top peut revenir a 0 (Android) : garde-fou.
+  const padHaut = (insets.top || StatusBar.currentHeight || 20) + 12;
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const { sheetTranslate, handlePanHandlers } = useDismissibleSheet(visible, onClose);
   // Reset flow (organisateur uniquement) : 'login' -> 'reset-request' -> 'reset-verify'
   const [resetMode, setResetMode] = useState('login');
   const [resetCode, setResetCode] = useState('');
@@ -81,7 +86,15 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   const upcoming = useMemo(
     () => events
       .filter(e => isUpcoming(e.event_date, e.event_date_end))
-      .sort((a, b) => (a.event_date || '').localeCompare(b.event_date || '')),
+      .sort((a, b) => {
+        const da = a.event_date || '';
+        const db = b.event_date || '';
+        // Sans date ("Date a venir") : en fin de liste — '' < toute date,
+        // le tri lexicographique seul les remonterait en tete.
+        if (!da !== !db) return da ? -1 : 1;
+        if (!da && !db) return (a.name || '').localeCompare(b.name || '');
+        return da.localeCompare(db);
+      }),
     [events],
   );
 
@@ -211,39 +224,56 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={{ flex: 1 }}>
-        {/* Backdrop : iOS systemThinMaterialDark (givre frostal natif,
-            plus leger qu'un Gaussian blur dense). Fade-in herite du
-            animationType="fade" du Modal. */}
-        <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
-        <SafeAreaView style={{ flex: 1 }}>
-          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'flex-end' }} onPress={onClose}>
-            <Animated.View style={{ transform: [{ translateY: sheetTranslate }] }}>
-            <TouchableOpacity activeOpacity={1} style={s.modalSheet} onPress={() => {}}>
-              <View {...handlePanHandlers} style={{ paddingVertical: 6, alignItems: 'center' }}>
-                <View style={s.modalHandle} />
-              </View>
-              <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginBottom: 4, marginTop: 4, textAlign: 'center' }]}>
-                {role === 'organizer' ? 'Espace organisateur' : 'Espace photographe'}
-              </Text>
-            <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 18, textAlign: 'center' }}>
-              {role === 'photographer' ? 'Sélectionne ton événement et entre ton code PIN' : 'Connecte-toi à ton événement'}
-            </Text>
+    <Modal visible={visible} onRequestClose={onClose} animationType="slide" presentationStyle="fullScreen">
+      <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+        <LinearGradient
+          colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{ paddingHorizontal: 24, paddingTop: padHaut, paddingBottom: 24 }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
+            <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontFamily: 'Montserrat', color: '#4a4458', fontSize: 22, lineHeight: 24 }}>✕</Text>
+            </TouchableOpacity>
+            {/* Le logo manquait a l appel sur les ecrans d entree : c est
+                pourtant la qu il compte, quand on ne sait pas encore ou on
+                est. Centre sur la rangee, la croix restant a gauche. */}
+            <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, alignItems: 'center' }}>
+              <Icon.Logo width={64} color="#fff" />
+            </View>
+          </View>
+          <Text style={{
+            fontFamily: 'AVEstiana', fontStyle: 'normal',
+            fontSize: 30, color: '#fff', textAlign: 'center', marginBottom: 8,
+          }}>
+            {role === 'organizer' ? 'Espace organisateur' : 'Espace photographe'}
+          </Text>
+          <Text style={{ fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.75)', fontSize: 13, textAlign: 'center' }}>
+            {role === 'photographer' ? 'Sélectionne ton événement et entre ton code PIN' : 'Connecte-toi à ton événement'}
+          </Text>
+        </LinearGradient>
+
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView
+            style={{ backgroundColor: '#ffffff' }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 28, paddingTop: 20, paddingBottom: 44 + insets.bottom }}
+          >
 
             {role === 'photographer' ? (
               <>
-                <Text style={[formSectionStyle.heading, { marginTop: 0 }]}>Événement</Text>
+                <Text style={{ fontSize: 15, fontFamily: 'Montserrat-Medium', color: '#3F3F46', marginBottom: 7 }}>Événement</Text>
                 {/* Search : filtre client. Masque quand un code est deja
                     selectionne (la liste se reduit alors a l event actif
                     et le PIN a la main, search inutile). */}
                 {!code && (
                   <View style={{
-                    borderWidth: 1,
-                    borderColor: C.pinkPill,
                     borderRadius: 14,
-                    backgroundColor: '#faf9ff',
+                    backgroundColor: '#F5F3FA',
                     marginBottom: 10,
                     overflow: 'hidden',
                   }}>
@@ -251,14 +281,14 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                       value={searchQuery}
                       onChangeText={setSearchQuery}
                       placeholder="Rechercher un event"
-                      placeholderTextColor={C.textSoft}
+                      placeholderTextColor="#A89CB8"
                       autoCapitalize="none"
                       autoCorrect={false}
-                      style={{
+                      style={{ fontFamily: 'Montserrat',
                         paddingHorizontal: 14,
                         paddingVertical: 11,
                         fontSize: 14,
-                        color: C.text,
+                        color: '#221c30',
                       }}
                     />
                     <View style={{ height: 1, backgroundColor: 'rgba(0,0,0,0.06)' }} />
@@ -267,7 +297,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         value={codeInput}
                         onChangeText={(v) => { setCodeInput(v); if (codeError) setCodeError(''); }}
                         placeholder="Code event"
-                        placeholderTextColor={C.textSoft}
+                        placeholderTextColor="#A89CB8"
                         autoCapitalize="none"
                         autoCorrect={false}
                         returnKeyType="go"
@@ -290,12 +320,12 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                             })
                             .catch(() => setCodeError('Connexion impossible. Vérifie ton réseau.'))
                             .finally(() => setCodeLoading(false)); }}
-                        style={{
+                        style={{ fontFamily: 'Montserrat',
                           flex: 1,
                           paddingHorizontal: 14,
                           paddingVertical: 11,
                           fontSize: 14,
-                          color: C.text,
+                          color: '#221c30',
                         }}
                       />
                       <TouchableOpacity
@@ -329,15 +359,15 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         }}
                       >
                         <Text style={{
-                          color: codeInput.trim() ? C.pinkPill : C.textSoft,
-                          fontSize: 14, fontWeight: '700',
+                          color: codeInput.trim() ? C.primary : '#8b83a0',
+                          fontSize: 14, fontFamily: 'Montserrat-SemiBold',
                         }}>
                           {codeLoading ? '…' : 'Ouvrir'}
                         </Text>
                       </TouchableOpacity>
                     </View>
                     {!!codeError && (
-                      <Text style={{
+                      <Text style={{ fontFamily: 'Montserrat',
                         paddingHorizontal: 14, paddingBottom: 10,
                         fontSize: 12, color: '#D6455B',
                       }}>
@@ -346,10 +376,10 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                     )}
                   </View>
                 )}
-                <ScrollView style={{ maxHeight: 230, marginBottom: 12 }}>
+                <View style={{ marginBottom: 12 }}>
                   {upcomingSearched.length === 0 && (
                     <View style={{ padding: 24, alignItems: 'center' }}>
-                      <Text style={{ color: C.textSoft, fontSize: 13 }}>
+                      <Text style={{ fontFamily: 'Montserrat', color: '#8b83a0', fontSize: 13 }}>
                         {upcoming.length === 0
                           ? 'Aucun événement à venir'
                           : 'Aucun résultat pour cette recherche'}
@@ -363,37 +393,41 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                       : upcomingSearched
                     ).map(e => {
                     const active = code === e.code;
+                    const tint = colorForType(e.event_type);
                     return (
                       <TouchableOpacity
                         key={e.code}
                         onPress={() => setCode(active ? '' : e.code)}
-                        activeOpacity={0.85}
+                        activeOpacity={0.9}
                         style={{
-                          backgroundColor: active ? C.pinkPill : '#faf9ff',
-                          borderRadius: 12,
-                          padding: 14,
-                          marginBottom: 8,
+                          backgroundColor: tint,
+                          borderRadius: 16,
+                          paddingHorizontal: 16,
+                          paddingVertical: 14,
+                          marginBottom: 10,
                           flexDirection: 'row',
                           alignItems: 'center',
                         }}
                       >
                         <View style={{ flex: 1 }}>
-                          <Text style={{ color: active ? '#fff' : C.text, fontSize: 14, fontWeight: '700' }} numberOfLines={1}>{e.name}</Text>
-                          <Text style={{ color: active ? 'rgba(255,255,255,0.85)' : C.textSoft, fontSize: 11, marginTop: 2 }}>
-                            {formatDateLong(e.event_date, e.event_date_end)}{e.location ? ` · ${cityLabel(e.location)}` : ''}
+                          <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 11, opacity: 0.9, marginBottom: 4 }}>
+                            {formatDateLong(e.event_date, e.event_date_end)}
+                          </Text>
+                          <Text style={{ color: '#fff', fontSize: 20, fontFamily: 'AVEstiana', fontStyle: 'normal' }} numberOfLines={1}>
+                            {e.name}
                           </Text>
                         </View>
                         {active && (
-                          <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
-                            <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-                              <Path d="M5 12l5 5L20 7" stroke={C.pinkPill} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+                          <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginLeft: 12 }}>
+                            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                              <Path d="M5 12l5 5L20 7" stroke={tint} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
                             </Svg>
                           </View>
                         )}
                       </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
                 {/* Saisie directe d un code event. Placee EN BAS de la
                     liste, avant le PIN : le comportement standard reste la
                     liste + search, le code entry est un fallback pour les
@@ -401,7 +435,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                     Masque quand un code est deja selectionne. */}
                 {code ? (
                   <>
-                    <Text style={[formSectionStyle.heading, { marginTop: 0 }]}>Code PIN photographe</Text>
+                    <Text style={{ fontSize: 15, fontFamily: 'Montserrat-Medium', color: '#3F3F46', marginBottom: 7 }}>Code PIN photographe</Text>
                     <View style={{ marginTop: 4, marginBottom: 8 }}>
                       <PinInputRow
                         key={pinErrorTick /* force remount sur erreur pour reset focus */}
@@ -415,13 +449,13 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         }}
                       />
                       {pinError ? (
-                        <Text style={{ color: C.error, fontSize: 13, textAlign: 'center', marginTop: 12, fontWeight: '500' }}>
+                        <Text style={{ color: C.error, fontSize: 13, textAlign: 'center', marginTop: 12, fontFamily: 'Montserrat-Medium' }}>
                           {pinError}
                         </Text>
                       ) : null}
                       {busy ? (
                         <View style={{ alignItems: 'center', marginTop: 12 }}>
-                          <ActivityIndicator color={C.pinkPill} />
+                          <ActivityIndicator color={C.primary} />
                         </View>
                       ) : null}
                     </View>
@@ -430,17 +464,17 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
               </>
             ) : resetMode !== 'login' ? (
               <>
-                <Text style={{ color: C.text, fontSize: 14, fontWeight: '600', marginBottom: 6 }}>
+                <Text style={{ color: C.text, fontSize: 14, fontFamily: 'Montserrat-SemiBold', marginBottom: 6 }}>
                   {resetMode === 'reset-request' ? 'Réinitialiser ton mot de passe' : 'Vérifier le code reçu'}
                 </Text>
-                <Text style={{ color: C.textSoft, fontSize: 12, marginBottom: 14 }}>
+                <Text style={{ fontFamily: 'Montserrat', color: '#8b83a0', fontSize: 12, marginBottom: 14 }}>
                   {resetMode === 'reset-request'
                     ? `Un code à 6 chiffres sera envoyé à l'email enregistré pour cet événement.`
                     : `Code envoyé à l'email de l'organisateur. Valable 15 minutes.`}
                 </Text>
                 <TextInput
                   placeholder="Code de l'événement"
-                  placeholderTextColor={C.textSoft}
+                  placeholderTextColor="#A89CB8"
                   value={code}
                   onChangeText={setCode}
                   autoCapitalize="none"
@@ -451,7 +485,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   <>
                     <TextInput
                       placeholder="Code reçu (6 chiffres)"
-                      placeholderTextColor={C.textSoft}
+                      placeholderTextColor="#A89CB8"
                       value={resetCode}
                       onChangeText={setResetCode}
                       keyboardType="number-pad"
@@ -461,7 +495,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                     />
                     <TextInput
                       placeholder="Nouveau mot de passe"
-                      placeholderTextColor={C.textSoft}
+                      placeholderTextColor="#A89CB8"
                       value={resetNewPassword}
                       onChangeText={setResetNewPassword}
                       secureTextEntry
@@ -474,7 +508,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
               <>
                 <TextInput
                   placeholder="Code de l'événement"
-                  placeholderTextColor={C.textSoft}
+                  placeholderTextColor="#A89CB8"
                   value={code}
                   onChangeText={setCode}
                   autoCapitalize="none"
@@ -482,7 +516,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 />
                 <TextInput
                   placeholder="Mot de passe"
-                  placeholderTextColor={C.textSoft}
+                  placeholderTextColor="#A89CB8"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
@@ -493,7 +527,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   hitSlop={8}
                   style={{ alignSelf: 'flex-end', paddingVertical: 6, paddingHorizontal: 4, marginTop: -4, marginBottom: 4 }}
                 >
-                  <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600' }}>Mot de passe oublié ?</Text>
+                  <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Mot de passe oublié ?</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -504,7 +538,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   onPress={resetMode === 'reset-request' ? requestReset : verifyReset}
                   disabled={resetBusy || (resetMode === 'reset-request' ? !code : (!resetCode || !resetNewPassword))}
                   style={{
-                    backgroundColor: C.pinkPill, paddingVertical: 14, borderRadius: 14,
+                    backgroundColor: C.primary, paddingVertical: 14, borderRadius: 14,
                     alignItems: 'center', marginTop: 8,
                     opacity: resetBusy ? 0.7 : 1,
                   }}
@@ -512,7 +546,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   {resetBusy ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                    <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>
                       {resetMode === 'reset-request' ? 'M\'envoyer un code' : 'Réinitialiser le mot de passe'}
                     </Text>
                   )}
@@ -522,7 +556,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   hitSlop={6}
                   style={{ alignItems: 'center', paddingVertical: 10, marginTop: 4 }}
                 >
-                  <Text style={{ color: C.textSoft, fontSize: 13 }}>Annuler</Text>
+                  <Text style={{ fontFamily: 'Montserrat', color: '#8b83a0', fontSize: 13 }}>Annuler</Text>
                 </TouchableOpacity>
               </>
             ) : role === 'photographer' ? null : (
@@ -533,18 +567,15 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 onPress={submit}
                 disabled={busy || !code || !password}
                 style={{
-                  backgroundColor: (code && password) ? C.pinkPill : '#e9e4f9',
+                  backgroundColor: (code && password) ? C.primary : '#e9e4f9',
                   paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 8,
                 }}
               >
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: (code && password) ? '#fff' : C.textSoft, fontSize: 15, fontWeight: '700' }}>Continuer</Text>}
+                {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: (code && password) ? '#fff' : '#8b83a0', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Continuer</Text>}
               </TouchableOpacity>
             )}
-            </TouchableOpacity>
-            </Animated.View>
-            </TouchableOpacity>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );

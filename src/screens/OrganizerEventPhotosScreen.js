@@ -192,11 +192,11 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
           {!selectionMode && photos.length > 0 ? (
             <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
-              <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Sélectionner</Text>
+              <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Sélectionner</Text>
             </TouchableOpacity>
           ) : selectionMode ? (
             <TouchableOpacity onPress={exitSelection} hitSlop={10}>
-              <Text style={{ color: C.textSoft, fontSize: 14, fontWeight: '600' }}>Annuler</Text>
+              <Text style={{ color: C.textSoft, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity onPress={onClose} hitSlop={10}>
@@ -234,7 +234,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
           <Circle cx="12" cy="12" r="9" stroke="#92400E" strokeWidth={1.8} />
           <Path d="M12 8v5M12 16h.01" stroke="#92400E" strokeWidth={1.8} strokeLinecap="round" />
         </Svg>
-        <Text style={{ color: '#92400E', fontSize: 12, flex: 1 }}>
+        <Text style={{ fontFamily: 'Montserrat', color: '#92400E', fontSize: 12, flex: 1 }}>
           Mode preview : tu vois toutes les photos, même celles prises avant le départ.{'\n'}Les coureurs ne voient que les photos après l'heure de leur course.
         </Text>
       </View>
@@ -251,7 +251,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
               backgroundColor: raceFilter === 'all' ? C.primary : '#f5f3ff',
             }}
           >
-            <Text style={{ color: raceFilter === 'all' ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>Toutes</Text>
+            <Text style={{ color: raceFilter === 'all' ? '#fff' : C.text, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Toutes</Text>
           </TouchableOpacity>
           {distances.map((d, i) => {
             const val = String(d.id || d.km);
@@ -265,7 +265,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
                   backgroundColor: active ? C.primary : '#f5f3ff',
                 }}
               >
-                <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontWeight: '700' }}>{raceTitle(d)}</Text>
+                <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>{raceTitle(d)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -275,7 +275,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
       <Text style={[s.sectionTitle, { marginVertical: 10 }]}>
         Photos {photos.length > 0 ? `(${filteredPhotos.length})` : ''}
         {hiddenCount > 0 && (
-          <Text style={{ color: C.error, fontSize: 13, fontWeight: '600' }}>
+          <Text style={{ color: C.error, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
             {'  · '}{hiddenCount} masquée{hiddenCount > 1 ? 's' : ''}
           </Text>
         )}
@@ -287,7 +287,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
     <View style={{ paddingVertical: 40, alignItems: 'center' }}>
       {loading
         ? <ActivityIndicator color={C.primary} />
-        : <Text style={{ color: C.textSoft }}>Aucune photo pour le moment</Text>}
+        : <Text style={{ fontFamily: 'Montserrat', color: C.textSoft }}>Aucune photo pour le moment</Text>}
     </View>
   );
 
@@ -386,7 +386,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
                 borderRadius: 999,
               }}
             >
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
+              <Text style={{ color: '#fff', fontSize: 10, fontFamily: 'Montserrat-SemiBold' }}>
                 {isBusy ? '…' : 'Publier'}
               </Text>
             </TouchableOpacity>
@@ -444,7 +444,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
                   <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
                     <Path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                   </Svg>
-                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+                  <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>
                     Supprimer ({selectedKeys.size})
                   </Text>
                 </>

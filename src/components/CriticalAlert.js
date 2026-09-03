@@ -121,11 +121,11 @@ export default function CriticalAlert({ kind, onDismiss, onAction }) {
             shadowOffset: { width: 0, height: 8 },
           }}
         >
-          <Text style={{ fontSize: 72, marginBottom: 12 }}>{cfg.icon}</Text>
+          <Text style={{ fontFamily: 'Montserrat', fontSize: 72, marginBottom: 12 }}>{cfg.icon}</Text>
           <Text
             style={{
               fontSize: 26,
-              fontWeight: '800',
+              fontFamily: 'Montserrat-Bold',
               textAlign: 'center',
               marginBottom: 12,
               color: '#111',
@@ -135,7 +135,7 @@ export default function CriticalAlert({ kind, onDismiss, onAction }) {
             {cfg.title}
           </Text>
           <Text
-            style={{
+            style={{ fontFamily: 'Montserrat',
               fontSize: 17,
               color: '#333',
               textAlign: 'center',
@@ -157,7 +157,7 @@ export default function CriticalAlert({ kind, onDismiss, onAction }) {
               alignItems: 'center',
             }}
           >
-            <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>
+            <Text style={{ color: '#fff', fontSize: 17, fontFamily: 'Montserrat-SemiBold' }}>
               {cfg.action.label}
             </Text>
           </TouchableOpacity>

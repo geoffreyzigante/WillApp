@@ -143,7 +143,7 @@ export function PanelWheel({ items, selectedIndex, onChange }) {
                 numberOfLines={1}
                 ellipsizeMode="tail"
                 style={{
-                  color: P.ink, fontSize: 17, fontWeight: '700',
+                  color: P.ink, fontSize: 17, 
                   fontFamily: 'Montserrat', maxWidth: '100%',
                 }}
               >

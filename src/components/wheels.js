@@ -59,7 +59,7 @@ export function WheelItem({ index, label, accent, scrollX, onPress }) {
         numberOfLines={1}
         ellipsizeMode="tail"
         style={[{
-          fontWeight: '600',
+          
           fontSize: 13.5,
           fontFamily: 'Montserrat',
           maxWidth: '100%',
@@ -192,7 +192,7 @@ export function RaceDropdown({ items, activeKey, onChange, accent, bg, compact =
           color: accent,
           fontFamily: 'Montserrat',
           fontSize: 13,
-          fontWeight: '500',
+          
         }}>{active?.label || 'Toutes les photos'}</Text>
         <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8, transform: [{ rotate: open ? '180deg' : '0deg' }] }}>
           <Path d="M6 9l6 6 6-6" stroke={accent} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
@@ -227,7 +227,7 @@ export function RaceDropdown({ items, activeKey, onChange, accent, bg, compact =
                       color: isActive ? '#fff' : C.text,
                       fontFamily: 'Montserrat',
                       fontSize: 14,
-                      fontWeight: '500',
+                      
                     }}>{it.label}</Text>
                   </TouchableOpacity>
                 );

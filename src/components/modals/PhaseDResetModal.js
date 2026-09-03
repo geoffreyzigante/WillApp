@@ -31,22 +31,22 @@ export function PhaseDResetModal({ visible, onClose }) {
             </Svg>
           </View>
           <Text style={{
-            fontSize: 18, fontWeight: '800', color: '#1A1426',
+            fontSize: 18, fontFamily: 'Montserrat-Bold', color: '#1A1426',
             textAlign: 'center', marginBottom: 10, letterSpacing: -0.3,
           }}>
             Reconnaissance Will, version 2
           </Text>
-          <Text style={{
+          <Text style={{ fontFamily: 'Montserrat',
             fontSize: 14, color: 'rgba(123,47,255,0.3)', lineHeight: 20,
             textAlign: 'center', marginBottom: 22,
           }}>
-            <Text style={{ fontWeight: '700', color: '#1A1426' }}>Un seul selfie</Text> suffit désormais pour recevoir tes photos sur tous les events Will. Consentement valable 12 mois renouvelables. Tu peux le retirer à tout moment depuis ton profil.
+            <Text style={{ fontFamily: 'Montserrat-SemiBold', color: '#1A1426' }}>Un seul selfie</Text> suffit désormais pour recevoir tes photos sur tous les events Will. Consentement valable 12 mois renouvelables. Tu peux le retirer à tout moment depuis ton profil.
           </Text>
           <TouchableOpacity onPress={onClose} style={{
             backgroundColor: '#7B2FFF', borderRadius: 999,
             paddingVertical: 13, alignItems: 'center',
           }} activeOpacity={0.85}>
-            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>J'ai compris</Text>
+            <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>J'ai compris</Text>
           </TouchableOpacity>
         </View>
       </View>

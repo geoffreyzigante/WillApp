@@ -19,6 +19,7 @@
     "@shopify/react-native-skia": "2.2.12",
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.34",
+    "expo-apple-authentication": "~8.0.8",
     "expo-battery": "~10.0.8",
     "expo-blur": "~15.0.8",
     "expo-build-properties": "~1.0.10",

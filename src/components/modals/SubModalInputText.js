@@ -32,12 +32,14 @@ export function SubModalInputText({ visible, title, value, onChangeText, placeho
           backgroundColor: '#fff',
         }}>
           <View style={{ width: 60 }} />
-          <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>{title}</Text>
+          <Text style={{ color: C.text, fontSize: 17, fontFamily: 'Montserrat-SemiBold' }}>{title}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
-            <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 22 }}>✕</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12 }} keyboardShouldPersistTaps="handled">
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12 }} keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets>
           <TextInput
             value={value || ''}
             onChangeText={onChangeText}
@@ -49,7 +51,7 @@ export function SubModalInputText({ visible, title, value, onChangeText, placeho
             multiline={!!multiline}
             maxLength={maxLength}
             textAlignVertical={multiline ? 'top' : 'auto'}
-            style={{
+            style={{ fontFamily: 'Montserrat',
               fontSize: 17, color: C.text,
               paddingVertical: 14, paddingHorizontal: 16,
               backgroundColor: '#fff', borderRadius: 14,
@@ -69,7 +71,7 @@ export function SubModalInputText({ visible, title, value, onChangeText, placeho
               opacity: busy ? 0.6 : 1,
             }}
           >
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
+            {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Enregistrer</Text>}
           </TouchableOpacity>
         </View>
       </View>

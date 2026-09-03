@@ -108,10 +108,10 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
         <ActivityIndicator color={C.primary} style={{ marginVertical: 24 }} />
       ) : events.length === 0 ? (
         <View style={{ paddingVertical: 36, paddingHorizontal: 24, alignItems: 'center' }}>
-          <Text style={{ color: '#1a0a3e', fontSize: 16, fontWeight: '600', marginBottom: 6 }}>
+          <Text style={{ color: '#1a0a3e', fontSize: 16, fontFamily: 'Montserrat-SemiBold', marginBottom: 6 }}>
             Aucun event pour l'instant
           </Text>
-          <Text style={{ color: 'rgba(26,10,62,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+          <Text style={{ fontFamily: 'Montserrat', color: 'rgba(26,10,62,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
             Crée ton premier event pour que Will envoie leurs photos à tes participants.
           </Text>
         </View>
@@ -130,11 +130,30 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                   borderRadius: 8,
                   zIndex: 10,
                 }}>
-                  <Text style={{ color: info.color, fontSize: 11, fontWeight: '700' }}>{info.label}</Text>
+                  <Text style={{ color: info.color, fontSize: 11, fontFamily: 'Montserrat-SemiBold' }}>{info.label}</Text>
                 </View>
               </View>
 
               <View style={{ backgroundColor: '#FFFFFF', borderBottomLeftRadius: 18, borderBottomRightRadius: 18, marginTop: -12, paddingTop: 18, paddingHorizontal: 12, paddingBottom: 12 }}>
+                {/* Un refus sans explication est pire qu un refus : le motif
+                    saisi par l admin est affiche ici, sous l event. */}
+                {e.status === 'rejected' && (
+                  <View style={{ backgroundColor: '#FEE2E2', borderRadius: 12, padding: 12, marginBottom: 8 }}>
+                    <Text style={{ color: C.error, fontSize: 13, fontFamily: 'Montserrat-SemiBold', marginBottom: e.rejected_motif ? 4 : 0 }}>
+                      Demande non retenue
+                    </Text>
+                    {e.rejected_motif ? (
+                      <Text style={{ color: '#7f1d1d', fontSize: 13, fontFamily: 'Montserrat', lineHeight: 18 }}>
+                        {e.rejected_motif}
+                      </Text>
+                    ) : null}
+                  </View>
+                )}
+                {e.status === 'pending' && (
+                  <Text style={{ color: C.textSoft, fontSize: 12, fontFamily: 'Montserrat', marginBottom: 8, textAlign: 'center' }}>
+                    L'équipe Will revient vers toi sous 24 h.
+                  </Text>
+                )}
                 {e.status === 'pending_payment' && (
                   <TouchableOpacity
                     onPress={() => pay(e.code)}
@@ -144,7 +163,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                     {paying === e.code ? (
                       <ActivityIndicator color="#fff" />
                     ) : (
-                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Mettre en ligne</Text>
+                      <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Mettre en ligne</Text>
                     )}
                   </TouchableOpacity>
                 )}
@@ -160,14 +179,14 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                     style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1EBFF' }}
                     activeOpacity={0.8}
                   >
-                    <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Modifier</Text>
+                    <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Modifier</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => onOpenEventPhotos?.(e)}
                     style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1EBFF' }}
                     activeOpacity={0.8}
                   >
-                    <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Photos</Text>
+                    <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Photos</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => deleteEvent(e)}
@@ -193,7 +212,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
         style={{ backgroundColor: C.primary, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 6 }}
         activeOpacity={0.85}
       >
-        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>+ Créer un événement</Text>
+        <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>+ Créer un événement</Text>
       </TouchableOpacity>
     </RefreshableScrollView>
   );

@@ -46,7 +46,7 @@ export function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onC
         <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginTop: 4, marginBottom: 4, textAlign: 'center' }]}>
           Mon panier
         </Text>
-        <Text style={{ color: C.textSoft, fontSize: 13, textAlign: 'center' }}>
+        <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 13, textAlign: 'center' }}>
           {total === 0 ? 'Vide pour le moment.' : `${total} photo${total > 1 ? 's' : ''} dans ton panier.`}
         </Text>
         {!embedded && onClose ? (
@@ -77,7 +77,7 @@ export function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onC
             <Text style={{ fontFamily: 'Montserrat-ExtraBold', fontSize: 17, color: C.text, textAlign: 'center', marginBottom: 8 }}>
               Aucune photo dans ton panier
             </Text>
-            <Text style={{ color: C.textSoft, fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
+            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
               Parcours les galeries de tes événements et ajoute les photos que tu souhaites télécharger.
             </Text>
           </View>
@@ -93,13 +93,13 @@ export function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onC
                     <Text style={{ fontFamily: 'Montserrat-ExtraBold', fontSize: 16, color: C.text, letterSpacing: -0.2 }} numberOfLines={2}>
                       {meta.name || code}
                     </Text>
-                    <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>
+                    <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 2 }}>
                       {[dateLabel, `${keys.length} photo${keys.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ')}
                     </Text>
                   </View>
                   {onOpenEvent ? (
                     <TouchableOpacity onPress={() => onOpenEvent(meta)} activeOpacity={0.7}>
-                      <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600' }}>Voir →</Text>
+                      <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Voir →</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>

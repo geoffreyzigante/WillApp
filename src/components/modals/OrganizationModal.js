@@ -22,7 +22,7 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
           <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginBottom: 4, marginTop: 4 }]}>
             Organisation
           </Text>
-          <Text style={{ color: C.textSoft, fontSize: 13, marginBottom: 20 }}>
+          <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 13, marginBottom: 20 }}>
             Choisis ton espace
           </Text>
 
@@ -48,8 +48,8 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
               <Icon.Events color="#fff" size={22} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: C.text, fontSize: 16, fontWeight: '700' }}>Espace organisateur</Text>
-              <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>Crée et gère tes événements</Text>
+              <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>Espace organisateur</Text>
+              <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 2 }}>Crée et gère tes événements</Text>
             </View>
             <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
               <Path d="m9 6 6 6-6 6" stroke={C.textSoft} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
@@ -83,8 +83,8 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
               <Icon.PhotoCam size={22} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: C.text, fontSize: 16, fontWeight: '700' }}>Espace photographe</Text>
-              <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>Capture les coureurs en direct</Text>
+              <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>Espace photographe</Text>
+              <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 2 }}>Capture les coureurs en direct</Text>
             </View>
             <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
               <Path d="m9 6 6 6-6 6" stroke={C.textSoft} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />

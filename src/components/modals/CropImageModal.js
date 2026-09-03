@@ -123,8 +123,8 @@ export function CropImageModal({ visible, asset, onCancel, onConfirm }) {
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000' }}>
         <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
           <View style={{ paddingHorizontal: 20, paddingVertical: 12, alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Cadrer l'image (2:1)</Text>
-            <Text style={{ color: '#bbb', fontSize: 12, marginTop: 4 }}>Glisse pour déplacer · pince pour zoomer</Text>
+            <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>Cadrer l'image (2:1)</Text>
+            <Text style={{ fontFamily: 'Montserrat', color: '#bbb', fontSize: 12, marginTop: 4 }}>Glisse pour déplacer · pince pour zoomer</Text>
           </View>
 
           <GestureDetector gesture={composed}>
@@ -151,10 +151,10 @@ export function CropImageModal({ visible, asset, onCancel, onConfirm }) {
 
           <View style={{ flexDirection: 'row', padding: 20, gap: 12 }}>
             <TouchableOpacity onPress={onCancel} disabled={busy} style={{ flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(123,47,255,0.3)', alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }}>Annuler</Text>
+              <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={doConfirm} disabled={busy} style={{ flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center', opacity: busy ? 0.6 : 1 }}>
-              <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{busy ? 'Traitement…' : 'Valider le cadrage'}</Text>
+              <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>{busy ? 'Traitement…' : 'Valider le cadrage'}</Text>
             </TouchableOpacity>
           </View>
         </SafeAreaView>

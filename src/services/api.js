@@ -103,7 +103,11 @@ export async function loadSelfieDataUri(runnerApiFetch) {
 
 export async function uploadSelfieToR2(uri, userId, runnerToken) {
   const blob = await (await fetch(uri)).blob();
-  const r = await apiFetch(`/selfie/${userId}`, {
+  // PUT /runner/selfie : le worker derive l userId du jeton. L ancienne route
+  // /selfie/{userId} dependait d un profile.userId local qui pouvait etre
+  // desynchronise du jeton sur un compte multi-roles — le site l a quittee
+  // pour cette raison, l app y etait restee.
+  const r = await apiFetch(`/runner/selfie`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'image/jpeg',
@@ -116,10 +120,18 @@ export async function uploadSelfieToR2(uri, userId, runnerToken) {
     // parse le body JSON pour proposer un message clair coté UI.
     let payload = null;
     try { payload = await r.json(); } catch (e) {}
-    if (payload?.error === 'face_too_small') {
-      const err = new Error('face_too_small');
-      err.code = 'face_too_small';
-      err.userMessage = payload.message || "Visage trop petit. Approche-toi de la caméra pour remplir l'ovale.";
+    // Trois motifs de refus, pas un seul : le site les traitait tous les
+    // trois, l app transformait les deux autres en « HTTP 400 » muet.
+    const motifs = {
+      face_too_small: "Visage trop petit. Approche-toi de la caméra pour remplir l'ovale.",
+      no_face_detected: "Aucun visage détecté. Place ton visage dans l'ovale, en pleine lumière.",
+      multiple_faces_detected: "Plusieurs visages détectés. Prends la photo seul.",
+    };
+    const code = payload?.code || payload?.error;
+    if (motifs[code]) {
+      const err = new Error(code);
+      err.code = code;
+      err.userMessage = payload.message || motifs[code];
       throw err;
     }
     throw new Error('HTTP ' + r.status);

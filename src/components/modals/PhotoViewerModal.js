@@ -22,7 +22,6 @@ import {
   StatusBar, AppState, Alert, ActivityIndicator, StyleSheet,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { BlurView } from 'expo-blur';
 import * as MediaLibrary from 'expo-media-library';
 import { Paths, File } from 'expo-file-system';
 import NetInfo from '@react-native-community/netinfo';
@@ -384,7 +383,9 @@ export function PhotoViewerModal({
     } else if (eventDate) {
       bouts.push(eventDate);
     }
-    bouts.push(`par ${currentPhoto?.photographer || 'Will'}`);
+    // "par Will" retire du sous-titre : la mention en surimpression sur la
+    // photo (ou le watermark en payant) porte deja le credit — deux mentions
+    // Will sur le meme ecran (constate user 2026-08-31).
     return bouts.join(' · ');
   }, [currentPhoto, eventDate]);
 
@@ -552,8 +553,10 @@ export function PhotoViewerModal({
             pointerEvents="none"
             style={[StyleSheet.absoluteFillObject, bgStyle]}
           >
-            <BlurView intensity={60} tint="light" style={StyleSheet.absoluteFillObject} />
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(255,255,255,0.65)' }]} />
+            {/* Fond blanc plein, iOS et Android (decision 2026-08-31) : le
+                givre coutait un rendu de flou par frame pour un gain visuel
+                faible — un aplat allege la navigation sur les deux OS. */}
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#ffffff' }]} />
           </ReAnimated.View>
 
           {/* Header : titre event + date */}
@@ -573,7 +576,7 @@ export function PhotoViewerModal({
                 borderRadius: 999,
                 marginBottom: 6,
               }}>
-                <Text style={{ color: '#fff', fontSize: 10.5, fontWeight: '700', letterSpacing: 0.3 }}>
+                <Text style={{ color: '#fff', fontSize: 10.5, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.3 }}>
                   {displayEventType(eventType)}
                 </Text>
               </View>
@@ -594,7 +597,7 @@ export function PhotoViewerModal({
                 color: 'rgba(26,10,62,0.6)',
                 fontFamily: 'Montserrat',
                 fontSize: 12,
-                fontWeight: '500',
+                
                 marginTop: 4,
                 textTransform: 'none',
               }}>{sousTitre}</Text>
@@ -688,8 +691,10 @@ export function PhotoViewerModal({
                               viewer du site (event/index.html, .vcredit) :
                               blanc, en bas a gauche, sans pastille — deux
                               ombres portees suffisent a la tenir lisible sur
-                              une photo claire. */}
-                          {item?.uri ? (
+                              une photo claire. Masquee sur les events
+                              payants : le watermark couvrant porte deja la
+                              marque, deux mentions Will faisaient doublon. */}
+                          {item?.uri && !photosForSale ? (
                             <View style={mention.bloc} pointerEvents="none">
                               <Text style={mention.texte}>Photo capturée par</Text>
                               <View style={mention.logo}>
@@ -796,7 +801,7 @@ export function PhotoViewerModal({
                       <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
                         <Path d="m4 12 5 5L20 6" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
                       </Svg>
-                      <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Publier</Text>
+                      <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Publier</Text>
                     </>
                   ) : (
                     <>
@@ -804,7 +809,7 @@ export function PhotoViewerModal({
                         <Path d="M3 3l18 18M10.6 6.1A10 10 0 0 1 12 6c5.5 0 9.5 5 9.5 6-.3.6-1 1.7-2 2.9M6.6 6.6C4.3 8.1 3 10.5 2.5 12c0 1 4 6 9.5 6 1.7 0 3.2-.4 4.5-1" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
                         <Path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
                       </Svg>
-                      <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Masquer</Text>
+                      <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Masquer</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -924,7 +929,7 @@ const mention = StyleSheet.create({
   },
   texte: {
     fontSize: 11,
-    fontWeight: '600',
+    fontFamily: 'Montserrat-SemiBold',
     letterSpacing: 0.44,
     color: '#FFFFFF',
     textShadowColor: 'rgba(0,0,0,0.75)',

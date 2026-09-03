@@ -16,7 +16,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, Image, Animated, Alert,
+  View, Text, TouchableOpacity, Image, Animated, Alert, Dimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
@@ -28,9 +28,8 @@ import NetInfo from '@react-native-community/netinfo';
 import { Icon } from '../components/Icon';
 import { SelfieBlock } from '../components/SelfieBlock';
 import { ConsentRenewBanner } from '../components/ConsentRenewBanner';
-import { PhotosEmptyState } from '../components/PhotosEmptyState';
 import { PhotoGrid } from '../components/PhotoGrid';
-import { EtatVidePhotos } from '../components/EtatVidePhotos';
+import { EtatVideWill } from '../components/EtatVideWill';
 import { SpinningLoader, RefreshableScrollView } from '../components/loaders';
 import { C, TYPE_COLORS, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
@@ -107,6 +106,46 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     )),
     [visiblePhotos, visibleCount],
   );
+  // Regroupement par course (2026-08-31) : la grille unique melangeait les
+  // events. Sections dans l ordre d apparition — les photos sont deja triees
+  // du plus recent au plus ancien, la course la plus recente vient donc en
+  // tete. Compteur calcule sur TOUTES les photos visibles du filtre (pas la
+  // tranche paginee) ; badge "nouvelles" = photos de moi posterieures au
+  // seuil fige au chargement.
+  // Seuil des badges "nouvelles" par course : fige a chaque refreshAll AVANT
+  // que l affichage de l onglet ne fasse avancer lastSeenRef — sinon le
+  // badge disparaitrait a l instant meme ou il devient visible. Infinity au
+  // depart : pas de badge sur le cache local avant le premier vrai fetch.
+  // DECLARE AVANT le useMemo qui la lit : declaree apres, la constante
+  // n existait pas encore quand le memo s executait au rendu -> crash au
+  // demarrage des qu il y avait des photos (2026-08-31).
+  const seuilNouvellesRef = useRef(Infinity);
+
+  const sections = useMemo(() => {
+    const parCode = new Map();
+    for (const p of vignettes) {
+      const c = p.eventCode || '?';
+      let sct = parCode.get(c);
+      if (!sct) { sct = { code: c, tint: p.tint || null, photos: [] }; parCode.set(c, sct); }
+      if (!sct.tint && p.tint) sct.tint = p.tint;
+      sct.photos.push(p);
+    }
+    const totaux = new Map();
+    const nouvelles = new Map();
+    for (const p of visiblePhotos) {
+      const c = p.eventCode || '?';
+      totaux.set(c, (totaux.get(c) || 0) + 1);
+      if (p._isPersonalMatch && extractBurstTs(p.id) > seuilNouvellesRef.current) {
+        nouvelles.set(c, (nouvelles.get(c) || 0) + 1);
+      }
+    }
+    return [...parCode.values()].map((sct) => ({
+      ...sct,
+      total: totaux.get(sct.code) || sct.photos.length,
+      nouvelles: nouvelles.get(sct.code) || 0,
+    }));
+  }, [vignettes, visiblePhotos]);
+
   const meCount = useMemo(() => photos.filter(p => p._isPersonalMatch).length, [photos]);
   const favCount = useMemo(() => (
     photoFavoritesSet ? photos.filter(p => photoFavoritesSet.has(p.id)).length : 0
@@ -303,12 +342,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         merged.push({
           uri: p.url || '',
           thumbUri: p.thumb_url || p.url || '',
-        thumbMdUri: p.thumb_md_url || p.thumb_url || p.url || '',
-        photographer: p.photographer || null,
-        takenAt: p.taken_at || p.uploaded || null,
           thumbMdUri: p.thumb_md_url || p.thumb_url || p.url || '',
-        photographer: p.photographer || null,
-        takenAt: p.taken_at || p.uploaded || null,
           photographer: p.photographer || null,
           takenAt: p.taken_at || p.uploaded || null,
           id: p.key,
@@ -350,6 +384,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       if (dt !== 0) return dt;
       return extractIdx(b.id) - extractIdx(a.id);
     });
+    seuilNouvellesRef.current = lastSeenRef.current;
     setPhotos(merged);
     setAnySearching(searching);
     setLoading(false);
@@ -568,6 +603,80 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     }
   }, [selectedIds, photos, downloading, exitSelection]);
 
+  // Barre de filtres Moi / Mes favoris / Tous. Extraite du bloc « il y a
+  // des photos » : elle doit rester visible quand un filtre — ou l onglet
+  // entier — ne renvoie rien, sinon on ne peut plus en sortir.
+  // Etat vide de l onglet, decline selon le filtre actif. Un seul endroit :
+  // le cas « aucune photo du tout » et le cas « ce filtre ne renvoie rien »
+  // doivent montrer la meme chose quand on est sur le meme onglet.
+  const etatVide = (
+    <EtatVideWill
+      variante={viewFilter === 'favs' ? 'favoris' : 'photos'}
+      titre={viewFilter === 'favs'
+        ? 'Pas encore\nde favoris'
+        : viewFilter === 'me'
+          ? 'Pas encore\nde photos de toi'
+          : 'Pas encore\nde photos'}
+      sousTexte={viewFilter === 'favs'
+        ? 'Ajoute tes photos favorites,\nde toi ou de tes amis'
+        : viewFilter === 'me'
+          ? 'Will te reconnaîtra sur les prochaines'
+          : 'Reviens après ton event'}
+    />
+  );
+
+  const barreFiltres = selectionMode ? null : (
+    <View
+        onLayout={(e) => setViewTabsContainerW(e.nativeEvent.layout.width - 8)}
+        style={{
+          flexDirection: 'row',
+          backgroundColor: C.pillBg,
+          borderRadius: 16,
+          padding: 4,
+          alignItems: 'center',
+          position: 'relative',
+          marginBottom: 10,
+        }}
+      >
+        {viewSlotW > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 4, top: 4, bottom: 4,
+              width: viewSlotW,
+              backgroundColor: C.primary,
+              borderRadius: 12,
+              transform: [{ translateX: viewTabsSlideX }],
+            }}
+          />
+        )}
+        <TouchableOpacity
+          onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setViewFilter('me'); }}
+          activeOpacity={0.85}
+          style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
+        >
+          <Text style={[s.pillText, viewFilter === 'me' && s.pillTextActive]} numberOfLines={1}>Moi ({meCount})</Text>
+        </TouchableOpacity>
+        {viewFilter === 'all' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
+        <TouchableOpacity
+          onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setViewFilter('favs'); }}
+          activeOpacity={0.85}
+          style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
+        >
+          <Text style={[s.pillText, viewFilter === 'favs' && s.pillTextActive]} numberOfLines={1}>Favoris ({favCount})</Text>
+        </TouchableOpacity>
+        {viewFilter === 'me' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
+        <TouchableOpacity
+          onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setViewFilter('all'); }}
+          activeOpacity={0.85}
+          style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
+        >
+          <Text style={[s.pillText, viewFilter === 'all' && s.pillTextActive]} numberOfLines={1}>Tous ({photos.length})</Text>
+        </TouchableOpacity>
+      </View>
+  );
+
   return (
     <View style={{ flex: 1 }}>
     <RefreshableScrollView
@@ -595,7 +704,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           marginTop: 4,
         }}>
           {toastPhase === 'searching' && <SpinningLoader size={14} color="#c9beed" />}
-          <Text style={{ color: '#c9beed', fontSize: 14, fontWeight: '500' }}>
+          <Text style={{ color: '#c9beed', fontSize: 14, fontFamily: 'Montserrat-Medium' }}>
             {toastPhase === 'searching' ? 'Recherche…' : (refreshToast || '')}
           </Text>
         </Animated.View>
@@ -608,82 +717,35 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
       )}
 
+      {/* Plus de page « Suis un event pour recevoir tes photos » : Will
+          reconnait le visage sur TOUS les events, suivre un event ne
+          conditionne que la notification. Un compte sans event connu tombe
+          donc sur le meme etat vide sobre que les autres. */}
       {!hasFollows ? (
-        <PhotosEmptyState selfieUri={selfieUri} onFindEvent={onFindEvent} />
+        <EtatVideWill variante="photos" titre={'Pas encore\nde photos'} sousTexte={"Reviens après ton event"} />
       ) : loading ? (
         <View style={{ paddingVertical: 40, alignItems: 'center' }}>
           <SpinningLoader size={26} color="#c9beed" />
-          <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 10 }}>Chargement…</Text>
+          <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 10 }}>Chargement…</Text>
         </View>
       ) : photos.length === 0 && anySearching ? (
         <View style={{ paddingVertical: 40, alignItems: 'center', paddingHorizontal: 24 }}>
           <SpinningLoader size={26} color="#7B2FFF" />
-          <Text style={{ color: '#5E1AD6', fontSize: 13, marginTop: 12, textAlign: 'center', fontWeight: '600' }}>
+          <Text style={{ color: '#5E1AD6', fontSize: 13, marginTop: 12, textAlign: 'center', fontFamily: 'Montserrat-SemiBold' }}>
             Will recherche tes photos…
           </Text>
-          <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 4, textAlign: 'center', lineHeight: 17 }}>
+          <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 4, textAlign: 'center', lineHeight: 17 }}>
             Cela peut prendre quelques secondes après l'upload du photographe.
           </Text>
         </View>
       ) : photos.length === 0 ? (
-        <EtatVidePhotos
-          texte={"Pas encore de photos"}
-          sousTexte={"Reviens après la course"}
-          style={{ paddingVertical: 24 }}
-        />
+        <>
+          {barreFiltres}
+          {etatVide}
+        </>
       ) : (
         <>
-          {!selectionMode && (
-            <View
-              onLayout={(e) => setViewTabsContainerW(e.nativeEvent.layout.width - 8)}
-              style={{
-                flexDirection: 'row',
-                backgroundColor: C.pillBg,
-                borderRadius: 16,
-                padding: 4,
-                alignItems: 'center',
-                position: 'relative',
-                marginBottom: 10,
-              }}
-            >
-              {viewSlotW > 0 && (
-                <Animated.View
-                  pointerEvents="none"
-                  style={{
-                    position: 'absolute',
-                    left: 4, top: 4, bottom: 4,
-                    width: viewSlotW,
-                    backgroundColor: C.primary,
-                    borderRadius: 12,
-                    transform: [{ translateX: viewTabsSlideX }],
-                  }}
-                />
-              )}
-              <TouchableOpacity
-                onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setViewFilter('me'); }}
-                activeOpacity={0.85}
-                style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
-              >
-                <Text style={[s.pillText, viewFilter === 'me' && s.pillTextActive]} numberOfLines={1}>Moi ({meCount})</Text>
-              </TouchableOpacity>
-              {viewFilter === 'all' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
-              <TouchableOpacity
-                onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setViewFilter('favs'); }}
-                activeOpacity={0.85}
-                style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
-              >
-                <Text style={[s.pillText, viewFilter === 'favs' && s.pillTextActive]} numberOfLines={1}>Mes favoris ({favCount})</Text>
-              </TouchableOpacity>
-              {viewFilter === 'me' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
-              <TouchableOpacity
-                onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setViewFilter('all'); }}
-                activeOpacity={0.85}
-                style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
-              >
-                <Text style={[s.pillText, viewFilter === 'all' && s.pillTextActive]} numberOfLines={1}>Tous ({photos.length})</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          {barreFiltres}
           {photos.length > 1 && (
             <View style={{
               flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -692,7 +754,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
               {selectionMode ? (
                 <>
                   <TouchableOpacity onPress={exitSelection} hitSlop={10} disabled={downloading}>
-                    <Text style={{ color: C.textSoft, fontSize: 13, fontWeight: '500' }}>Annuler</Text>
+                    <Text style={{ color: C.textSoft, fontSize: 13, fontFamily: 'Montserrat-Medium' }}>Annuler</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={downloadSelected}
@@ -700,7 +762,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
                     disabled={selectedIds.size === 0 || downloading}
                     style={{ opacity: (selectedIds.size === 0 || downloading) ? 0.35 : 1 }}
                   >
-                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '700' }}>
+                    <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
                       {downloading
                         ? 'Téléchargement…'
                         : `Télécharger${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
@@ -709,58 +771,70 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
                 </>
               ) : (
                 <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
-                  <Text style={{ color: '#c9beed', fontSize: 13, fontWeight: '500' }}>Sélectionner</Text>
+                  <Text style={{ color: '#c9beed', fontSize: 13, fontFamily: 'Montserrat-Medium' }}>Sélectionner</Text>
                 </TouchableOpacity>
               )}
             </View>
           )}
           {visiblePhotos.length === 0 ? (
-            <EtatVidePhotos
-              texte={viewFilter === 'favs'
-                ? 'Pas encore de favoris'
-                : viewFilter === 'me'
-                  ? 'Pas encore de photos de toi'
-                  : 'Pas encore de photos'}
-              style={{ paddingVertical: 24 }}
-            />
+            /* Meme habillage que les autres etats vides de l onglet : un
+               filtre sans resultat n est pas un cas a part. `reserve` tient
+               compte de la barre de filtres au-dessus. */
+            etatVide
           ) : (
-            /* vignettes : voir le useMemo — la grille affiche p.uri, donc
-               on lui passe la miniature et non l originale. */
-            <PhotoGrid
-              photos={vignettes}
-              numColumns={Math.max(1, Math.min(visiblePhotos.length, 4))}
-              onPress={(pv, _i, _photos, origin) => {
-                // pv porte l URL de la vignette : on rouvre la visionneuse
-                // sur la photo d origine, pleine resolution.
-                const p = visiblePhotos.find((x) => x.id === pv?.id) || pv;
-                // L entete de la visionneuse a besoin de l event : ici les
-                // photos viennent de plusieurs events a la fois, on le
-                // retrouve par son code.
-                // L event vient d abord de la reponse /personal-gallery
-                // (toujours juste), sinon de la liste publique en memoire.
-                const ev = events.find((e) => e.code === p?.eventCode)
-                  || evResolus[p?.eventCode]
-                  || null;
-                const nom = p?.eventName || ev?.name || null;
-                const dateBrute = p?.eventDate || ev?.event_date || null;
-                const dateFin = p?.eventDateEnd || ev?.event_date_end || null;
-                const type = p?.eventType || ev?.event_type || null;
-                if (!nom && p?.eventCode) resoudreEvent(p.eventCode);
-                onOpenPhoto?.(p, visiblePhotos, {
-                  origin,
-                  photosForSale: !!p?.paid,
-                  eventCode: p?.eventCode || null,
-                  eventTitle: nom,
-                  eventDate: dateBrute ? formatDateLong(dateBrute, dateFin) : null,
-                  eventType: type,
-                });
-              }}
-              photoFavoritesSet={photoFavoritesSet}
-              onToggleFavorite={onTogglePhotoFavorite}
-              selectionMode={selectionMode}
-              selectedIds={selectedIds}
-              onTogglePhotoSelect={togglePhotoSelect}
-            />
+            /* Une section par course : en-tete aux couleurs du type
+               (filet, nom, date, compteur, badge nouvelles) puis la grille
+               de la course. vignettes : la grille affiche p.uri, donc on
+               lui passe la miniature et non l originale. */
+            sections.map((sct) => {
+              const p0 = sct.photos[0];
+              const evSct = events.find((e) => e.code === sct.code) || evResolus[sct.code] || null;
+              const nomSct = p0?.eventName || evSct?.name || sct.code;
+              const dateSct = p0?.eventDate || evSct?.event_date || null;
+              const dateFinSct = p0?.eventDateEnd || evSct?.event_date_end || null;
+              const teinte = sct.tint || C.primary;
+              return (
+                <View key={sct.code} style={{ marginBottom: 16 }}>
+                  {/* En-tete minimal : le nom de la course, AVEstiana, a la
+                      couleur du type. Trait retire (decision user 2026-08-31). */}
+                  <View style={{ marginBottom: 8, marginTop: 2, paddingHorizontal: 2 }}>
+                    <Text style={{ fontSize: 19, fontFamily: 'AVEstiana', fontStyle: 'normal', color: teinte }} numberOfLines={1}>{nomSct}</Text>
+                  </View>
+                  <PhotoGrid
+                    photos={sct.photos}
+                    numColumns={Math.max(1, Math.min(sct.photos.length, 4))}
+                    onPress={(pv, _i, _photos, origin) => {
+                      // pv porte l URL de la vignette : on rouvre la
+                      // visionneuse sur la photo d origine, pleine
+                      // resolution — et sur la liste COMPLETE du filtre,
+                      // pour que le balayage traverse les courses.
+                      const p = visiblePhotos.find((x) => x.id === pv?.id) || pv;
+                      const ev = events.find((e) => e.code === p?.eventCode)
+                        || evResolus[p?.eventCode]
+                        || null;
+                      const nom = p?.eventName || ev?.name || null;
+                      const dateBrute = p?.eventDate || ev?.event_date || null;
+                      const dateFin = p?.eventDateEnd || ev?.event_date_end || null;
+                      const type = p?.eventType || ev?.event_type || null;
+                      if (!nom && p?.eventCode) resoudreEvent(p.eventCode);
+                      onOpenPhoto?.(p, visiblePhotos, {
+                        origin,
+                        photosForSale: !!p?.paid,
+                        eventCode: p?.eventCode || null,
+                        eventTitle: nom,
+                        eventDate: dateBrute ? formatDateLong(dateBrute, dateFin) : null,
+                        eventType: type,
+                      });
+                    }}
+                    photoFavoritesSet={photoFavoritesSet}
+                    onToggleFavorite={onTogglePhotoFavorite}
+                    selectionMode={selectionMode}
+                    selectedIds={selectedIds}
+                    onTogglePhotoSelect={togglePhotoSelect}
+                  />
+                </View>
+              );
+            })
           )}
         </>
       )}

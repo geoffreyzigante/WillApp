@@ -89,7 +89,7 @@ export default function FramingGuide({
               numberOfLines={1}
               style={{
                 position: 'absolute', left: DOT + 6, top: 1, width: 64,
-                color: COLOR, fontSize: 12, fontWeight: '700',
+                color: COLOR, fontSize: 12, fontFamily: 'Montserrat-SemiBold',
                 textShadowColor: 'rgba(0,0,0,0.7)', textShadowRadius: 3,
               }}
             >
@@ -107,7 +107,7 @@ export default function FramingGuide({
             borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12,
           }}
         >
-          <Text style={{ color: '#FFB020', fontSize: 14, fontWeight: '700' }}>
+          <Text style={{ color: '#FFB020', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>
             Incline le téléphone vers le sol
           </Text>
         </View>

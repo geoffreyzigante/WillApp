@@ -29,56 +29,13 @@ import {
   VisionCameraProxy,
 } from 'react-native-vision-camera';
 import { Worklets } from 'react-native-worklets-core';
+import { humanDetectorPlugin, detectHumans, exposureReaderPlugin, readExposure, IOS_FLIP } from './src/services/frameProcessors';
 
-// Frame processor plugin natif (Swift) : detection humaine via Apple Vision
-// VNDetectHumanRectanglesRequest. Enregistre par le config plugin
-// with-human-detector au build EAS. Retourne { count: number }.
-const humanDetectorPlugin = VisionCameraProxy.initFrameProcessorPlugin('detectHumans', {});
-function detectHumans(frame, options) {
-  'worklet';
-  if (humanDetectorPlugin == null) {
-    throw new Error('detectHumans plugin not loaded — rebuild required');
-  }
-  return humanDetectorPlugin.call(frame, options);
-}
-
-// Frame processor plugin natif (Swift) : lit l'ISO/shutter/brightness live
-// depuis les attachments EXIF du CMSampleBuffer de preview, en lecture seule
-// (n'altere PAS l'exposition auto). Sert au voyant lumiere dans la vue
-// photographe : actif des l'ouverture de la camera, avant toute capture.
-// Enregistre par le config plugin with-exposure-reader au build EAS.
-// Retourne { iso, shutter, brightness } ou null.
-const exposureReaderPlugin = VisionCameraProxy.initFrameProcessorPlugin('readExposure', {});
-
-// Capture par le worklet frameProcessor : la correction d orientation 180
-// ne s applique qu au plugin iOS (cf commentaire dans le worklet).
-const IOS_FLIP = Platform.OS === 'ios';
-
-// Publie l'etat des deux frame processors vers capabilities.js. On reutilise
-// la detection ci-dessus : pas de second initFrameProcessorPlugin.
+// Frame processors natifs : instances partagees, cf.
+// src/services/frameProcessors.js (l ecran selfie consomme les memes).
 reportFrameProcessor('detectHumans', humanDetectorPlugin != null);
 reportFrameProcessor('readExposure', exposureReaderPlugin != null);
 console.log(describeCapabilities());
-function readExposure(frame, options) {
-  'worklet';
-  // Plugin absent : on rend null, on ne leve pas.
-  //
-  // Sur iOS, son absence signalait un build rate et l erreur etait le bon
-  // reflexe. Sur Android il n existe pas encore de portage : lever ici
-  // ferait planter le frame processor UNE FOIS PAR SECONDE, donc la vue
-  // photographe entiere, pour une capacite que capabilities.js declare
-  // explicitement degradable — sans elle, le voyant lumiere et le cap
-  // shutter sont inertes, la capture fonctionne.
-  //
-  // detectHumans, lui, garde son throw : sans detection il n y a pas de
-  // produit, et le portage Android existe (ML Kit).
-  if (exposureReaderPlugin == null) return null;
-  // options optionnel : { setCapSeconds, brightnessLabel } -> le plugin
-  // applique device.activeMaxExposureDuration via WillShutterController.
-  return options
-    ? exposureReaderPlugin.call(frame, options)
-    : exposureReaderPlugin.call(frame);
-}
 
 // Format shutter EXIF (secondes -> fraction lisible) pour debug overlay.
 // Sur preview iOS, le shutter est cape par l'intervalle frame (1/30s a
@@ -110,6 +67,8 @@ import * as Battery from 'expo-battery';
 installerJournal();
 
 import { API_URL, PRICE_PER_PHOTO_EUR } from './src/constants/api';
+import { completionOf } from './src/utils/eventCompletion';
+import { BoutonApple } from './src/components/BoutonApple';
 import {
   UPLOAD_QUEUE_KEY,
   LAST_CAPTURE_KEY,
@@ -130,6 +89,20 @@ import { scorePhotoSafely } from './src/services/qualityScorer';
 import { caps, reportFrameProcessor, describeCapabilities } from './src/services/capabilities';
 // Declenchement par lignes (cf. CONCEPTION_LIGNES_NOTE.md).
 import { createLineTrigger } from './src/services/lineTrigger';
+
+// EXIF reduit a ce qui sert au diagnostic d un flou : temps de pose, ISO,
+// ouverture, focale. Envoye au worker en X-Will-Exif (le JPEG livre a perdu
+// son EXIF a l encodage). null si rien d exploitable.
+function exifCompactDepuis(ex) {
+  if (!ex || typeof ex !== 'object') return null;
+  const iso = Array.isArray(ex.ISOSpeedRatings) ? ex.ISOSpeedRatings[0] : ex.ISOSpeedRatings;
+  const compact = {};
+  if (Number(ex.ExposureTime) > 0) compact.t = Number(ex.ExposureTime);
+  if (Number(iso) > 0) compact.iso = Number(iso);
+  if (Number(ex.FNumber) > 0) compact.f = Number(ex.FNumber);
+  if (Number(ex.FocalLength) > 0) compact.fl = Number(ex.FocalLength);
+  return Object.keys(compact).length ? compact : null;
+}
 import { createStepTrigger } from './src/services/stepTrigger';
 import {
   installerJournal, lignesJournal, journalVersTexte, viderJournal, statsJournal,
@@ -164,6 +137,7 @@ import {
   displayEventType,
   EVENT_TYPES,
   cityLabel,
+  isoJourLocal,
 } from './src/utils/format';
 import {
   generateItemId,
@@ -243,6 +217,7 @@ import {
   RefreshableScrollView,
 } from './src/components/loaders';
 import { GridErrorBoundary } from './src/components/GridErrorBoundary';
+import { BoundaryRacine } from './src/components/BoundaryRacine';
 import { SelfieIllustration } from './src/components/SelfieIllustration';
 import { PhotosStepRow } from './src/components/PhotosStepRow';
 import { FavStar } from './src/components/FavStar';
@@ -251,7 +226,6 @@ import { InfoRow } from './src/components/InfoRow';
 import { SelfieBlock } from './src/components/SelfieBlock';
 import { EventCard } from './src/components/EventCard';
 import { ConsentRenewBanner } from './src/components/ConsentRenewBanner';
-import { PhotosEmptyState } from './src/components/PhotosEmptyState';
 import {
   WHEEL_ITEM_W,
   WHEEL_H,
@@ -293,7 +267,6 @@ import { ProfileMenuModal } from './src/components/modals/ProfileMenuModal';
 import { BurgerMenuModal } from './src/components/modals/BurgerMenuModal';
 import { OrganizerProfileMenuModal } from './src/components/modals/OrganizerProfileMenuModal';
 import { AuthRunnerModal } from './src/components/modals/AuthRunnerModal';
-import { AuthOrganizerModal } from './src/components/modals/AuthOrganizerModal';
 import { passwordStrength } from './src/utils/passwordStrength';
 import { useDismissibleSheet } from './src/hooks/useDismissibleSheet';
 import { useCart } from './src/hooks/useCart';
@@ -448,7 +421,7 @@ function RangeeValeur({ libelle, valeur, onPress }) {
         >
           {valeur}
         </Text>
-        <Text style={{ color: P.label, fontSize: 17, marginLeft: 6 }}>›</Text>
+        <Text style={{ fontFamily: 'Montserrat', color: P.label, fontSize: 17, marginLeft: 6 }}>›</Text>
       </View>
     </TouchableOpacity>
   );
@@ -553,6 +526,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // aussi le % dans le header (utile au benevole sur le terrain).
   const [batteryLevel, setBatteryLevel] = useState(1);
   const [batteryState, setBatteryState] = useState(Battery.BatteryState.UNKNOWN);
+  // Miroirs en ref : drainQueue vit dans une closure du premier rendu (cf
+  // eventConfigRef) et lirait sinon un niveau de batterie fige a 100 %.
+  const batteryLevelRef = useRef(1);
+  const batteryStateRef = useRef(Battery.BatteryState.UNKNOWN);
+  useEffect(() => { batteryLevelRef.current = batteryLevel; }, [batteryLevel]);
+  useEffect(() => { batteryStateRef.current = batteryState; }, [batteryState]);
   const { hasPermission, requestPermission } = useCameraPermission();
   // Audit B13 : si iOS a deja denied une fois, requestPermission() devient
   // inerte. On bascule le bouton vers Linking.openSettings() quand on
@@ -769,10 +748,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       ? binned
       : fmts4_3.filter(f => f.photoWidth === maxPhotoW);
 
-    // Disambig : max video buffer dans le pool -> meilleure preview +
-    // meilleure detection face sur le frame processor.
-    return pool.reduce((best, f) =>
-      !best || (f.videoWidth * f.videoHeight) > (best.videoWidth * best.videoHeight)
+    // Flux video : le PLUS PETIT buffer dont le petit cote fait au moins
+    // 1080 px. Avant : le plus grand du pool, souvent le 4:3 plein capteur
+    // (4032x3024) — douze megapixels analyses par Vision dix fois par
+    // seconde, pour une preview que personne ne regarde en detail. La
+    // detection n a besoin que d un visage >= ~20 px ; a 1080 px de petit
+    // cote un coureur a 15 m en fait encore 40. La photo, elle, garde ses
+    // 12 Mpx : le format photo ne change pas, seul le flux d analyse maigrit.
+    const assezGrand = pool.filter(f => Math.min(f.videoWidth, f.videoHeight) >= 1080);
+    const candidats = assezGrand.length > 0 ? assezGrand : pool;
+    return candidats.reduce((best, f) =>
+      !best || (f.videoWidth * f.videoHeight) < (best.videoWidth * best.videoHeight)
         ? f
         : best
     , null);
@@ -814,11 +800,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // propre stab interne ISP) ni sur la detection face (Vision est insensible
   // au micro-jitter de preview). 'standard' suffit largement pour la preview
   // ; fallback 'off' si non supporte (tous les iPhones modernes ont 'standard').
-  const videoStabilizationMode = useMemo(() => {
-    const modes = format?.videoStabilizationModes || [];
-    if (modes.includes('standard')) return 'standard';
-    return 'off';
-  }, [format]);
+  // Stabilisation coupee : c est un traitement d image continu sur le flux
+  // video, paye en batterie pour un apercu que le benevole ne regarde pas.
+  // La photo n en depend pas (telephone sur support, obturateur <= 1/500).
+  const videoStabilizationMode = 'off';
 
   // Compensation d'exposition : VisionCamera 4.x expose la prop `exposure` (number)
   // dans l'intervalle device.minExposure..device.maxExposure (EV bias). On clamp
@@ -863,6 +848,26 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
   const [isShooting, setIsShooting] = useState(false);
   const [isAutoArmed, setIsAutoArmed] = useState(false);
+  // Apercu attenue : arme et sans toucher depuis 10 s, on couvre la preview
+  // d un voile noir. La camera et la detection tournent, l ecran OLED cesse
+  // d eclairer un flux que le benevole ne regarde pas. Un toucher le releve.
+  const [apercuAttenue, setApercuAttenue] = useState(false);
+  const attenuationTimerRef = useRef(null);
+  const reveillerApercu = useCallback(() => {
+    setApercuAttenue(false);
+    if (attenuationTimerRef.current) clearTimeout(attenuationTimerRef.current);
+    attenuationTimerRef.current = setTimeout(() => setApercuAttenue(true), 10000);
+  }, []);
+  useEffect(() => {
+    if (!isAutoArmed) {
+      if (attenuationTimerRef.current) clearTimeout(attenuationTimerRef.current);
+      attenuationTimerRef.current = null;
+      setApercuAttenue(false);
+      return undefined;
+    }
+    reveillerApercu();
+    return () => { if (attenuationTimerRef.current) clearTimeout(attenuationTimerRef.current); };
+  }, [isAutoArmed, reveillerApercu]);
   const [isDetectionEnabled, setIsDetectionEnabled] = useState(false);
   // Toast auto-armement au mount du screen photographe. Timestamp du dernier
   // auto-arm : le toast s affiche 3s puis se cache. Reset a chaque nouvel
@@ -1098,6 +1103,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // marge pour ne pas rater un coureur isole qui arrive apres une accalmie.
   const IDLE_AFTER_MS = 30000;
   const idleTimeoutRef = useRef(null);
+  // Voile d economie d ecran : pose par le MEME timeout que la cadence
+  // Vision reduite (30 s sans detection), leve a la premiere silhouette ou
+  // au tap. L ecran est le premier poste de batterie restant ; sur OLED un
+  // pixel noir est un pixel eteint. La detection et la capture continuent.
+  const [veilleEcran, setVeilleEcran] = useState(false);
+  const veilleEcranRef = useRef(false);
 
   // ── GARDE ANTI-SCENE-STATIQUE ────────────────────────────────────────────
   // Probleme corrige : MAX_BURST_SHOTS borne UNE rafale, rien ne bornait leur
@@ -1236,6 +1247,21 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   };
   const stepTriggerRef = useRef(null);
   if (stepTriggerRef.current === null) stepTriggerRef.current = createStepTrigger();
+  // ── Reperes par discipline ──────────────────────────────────────────────
+  // Velo & co : sujet 2 a 3x plus rapide — on garde la bande large (0.50)
+  // pour que l ecart TEMPOREL entre deux reperes reste au-dessus du cooldown
+  // (180 ms) ; resserrer ferait sauter la photo du milieu. Autres sports :
+  // bande resserree (0.375), les trois photos tombent plus au centre.
+  // Meme regex que le plancher d obturateur par discipline (E5).
+  const estEventVelo = /v[ée]lo|cyclo|cyclis|vtt|gravel|bike|triathlon|duathlon/.test(String(session?.event?.event_type || '').toLowerCase());
+  const bandeReperesActive = estEventVelo ? 0.50 : 0.375;
+  const bandeReperesRef = useRef(0.375);
+  useEffect(() => {
+    if (bandeReperesRef.current === bandeReperesActive) return;
+    bandeReperesRef.current = bandeReperesActive;
+    stepTriggerRef.current = createStepTrigger({ bandeReperes: bandeReperesActive });
+    console.log(`[pas] reperes ${estEventVelo ? 'larges 0.50 (velo)' : 'resserres 0.375'}`);
+  }, [bandeReperesActive, estEventVelo]);
   // ── Mode de rendu ───────────────────────────────────────────────────────
   // 'rapide'  = comportement historique. Priorite vitesse cote AVFoundation :
   //             obturateur qui rend la main en 80-200 ms, mais Deep Fusion et
@@ -1465,10 +1491,20 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           idleTimeoutRef.current = null;
         }
         if (idleModeSV.value !== 0) idleModeSV.value = 0;
+        if (veilleEcranRef.current) {
+          veilleEcranRef.current = false;
+          setVeilleEcran(false);
+        }
       } else if (!idleTimeoutRef.current && idleModeSV.value === 0) {
         idleTimeoutRef.current = setTimeout(() => {
           idleTimeoutRef.current = null;
           idleModeSV.value = 1;
+          // Voile seulement si la capture est armee : pendant l installation
+          // (cadrage, reglages), assombrir l ecran serait un contresens.
+          if (isAutoArmedRef.current && !veilleEcranRef.current) {
+            veilleEcranRef.current = true;
+            setVeilleEcran(true);
+          }
         }, IDLE_AFTER_MS);
       }
       if (!isAutoArmedRef.current) return;
@@ -2015,10 +2051,27 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // la correction 180 ci-dessous vaut pour les deux. Build ancien :
     // result.humans absent -> visages, comportement inchange.
     const humansArr = result?.humans;
-    const faces = (humansArr && humansArr.length > 0) ? humansArr : result?.faces;
+    const useHumans = !!(humansArr && humansArr.length > 0);
+    const faces = useHumans ? humansArr : result?.faces;
+    // Validation d orientation (mode instant) : une silhouette est detectee
+    // de dos comme de face — les visages, non. On note pour chaque
+    // silhouette si un visage tombe dans sa boite ; le tracker exige d en
+    // avoir vu un au moins une fois avant d autoriser un tir.
+    let vfx = null, vfy = null;
+    if (useHumans) {
+      const rawF = result?.faces;
+      if (rawF && rawF.length > 0) {
+        vfx = []; vfy = [];
+        for (let k = 0; k < rawF.length; k++) {
+          const g = rawF[k];
+          vfx.push(IOS_FLIP ? 1 - g.cx : g.cx);
+          vfy.push(IOS_FLIP ? 1 - g.cy : g.cy);
+        }
+      }
+    }
     if (faces && faces.length > 0) {
       const CAP = 8;
-      const ax = [], ay = [], aw = [], ah = [], aa = [];
+      const ax = [], ay = [], aw = [], ah = [], aa = [], af = [];
       for (let i = 0; i < faces.length; i++) {
         const f0 = faces[i];
         const f = IOS_FLIP
@@ -2026,16 +2079,30 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           : { cx: f0.cx, cy: f0.cy, w: f0.w, h: f0.h };
         const a = f.w * f.h;
         if (a > ba) { ba = a; bx = f.cx; by = f.cy; }
+        let fv = 1;
+        if (useHumans) {
+          fv = 0;
+          if (vfx) {
+            for (let k = 0; k < vfx.length; k++) {
+              if (Math.abs(vfx[k] - f.cx) <= f.w * 0.5 && Math.abs(vfy[k] - f.cy) <= f.h * 0.6) { fv = 1; break; }
+            }
+          }
+        }
         let pos = aa.length;
         while (pos > 0 && aa[pos - 1] < a) pos--;
         if (pos >= CAP) continue;
         aa.splice(pos, 0, a); ax.splice(pos, 0, f.cx); ay.splice(pos, 0, f.cy);
-        aw.splice(pos, 0, f.w); ah.splice(pos, 0, f.h);
-        if (aa.length > CAP) { aa.pop(); ax.pop(); ay.pop(); aw.pop(); ah.pop(); }
+        aw.splice(pos, 0, f.w); ah.splice(pos, 0, f.h); af.splice(pos, 0, fv);
+        if (aa.length > CAP) { aa.pop(); ax.pop(); ay.pop(); aw.pop(); ah.pop(); af.pop(); }
       }
       flat = [result?.ts || 0, aa.length];
       for (let i = 0; i < aa.length; i++) {
         flat.push(ax[i], ay[i], aw[i], ah[i]);
+      }
+      // Drapeaux visage EN QUEUE de tableau : les consommateurs qui lisent
+      // n x 4 valeurs (lineTrigger, anciens builds) ignorent le surplus.
+      for (let i = 0; i < aa.length; i++) {
+        flat.push(af[i]);
       }
     }
     onHumansDetectedJS(count, bx, by, ba, flat);
@@ -2684,11 +2751,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // Sequentiel et non parallele : deux redimensionnements simultanes sur un
   // telephone en pleine rafale, c est de la memoire prise a la capture.
   async function televerserVignettes(srcUri, key, token) {
-    if (!srcUri || !key || !token) return;
+    if (!srcUri || !key || !token) return false;
     const variantes = [
       { entete: 'thumb', largeur: 400, qualite: 0.7 },
       { entete: 'thumb_md', largeur: 800, qualite: 0.78 },
     ];
+    let okTout = true;
     for (const v of variantes) {
       let uri = null;
       try {
@@ -2708,12 +2776,18 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         if (!rep.ok) throw new Error(`HTTP ${rep.status}`);
       } catch (e) {
         // Sans vignette, le serveur sert les octets d origine : plus lourd,
-        // mais visible. On ne bloque donc rien, on trace.
+        // mais visible. On ne bloque donc rien, on trace — et on le DIT a
+        // l appelant, qui garde le fichier local pour reessayer au prochain
+        // drain (fiabilisation 2026-08-31 : les depots silencieusement
+        // perdus pendant la saturation reseau etaient la cause racine de la
+        // galerie qui servait 197 originaux pleins).
+        okTout = false;
         addDebugLog(`[vignette:${v.entete}] echec ${key}: ${e?.message || e}`);
       } finally {
         if (uri) { try { new File(uri).delete(); } catch {} }
       }
     }
+    return okTout;
   }
 
   // setTimeout id pour le re-trigger de drain apres un cooldown de backoff.
@@ -3041,11 +3115,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               if (cible.exists) { try { cible.delete(); } catch {} }
               srcJpeg.move(cible);
               try { new File(item.localUri).delete(); } catch {}
+              // L EXIF part avec le sidecar : on en garde l essentiel sur
+              // l item, c est ce que drainQueue enverra en X-Will-Exif.
+              const exifCompact = exifCompactDepuis(readSidecar(item.id)?.exif);
               deleteSidecar(item.id);
               const apresNatif = queueRef.current.map(it =>
                 it.id === item.id
                   ? { ...it, processed: true, status: 'pending', retries: 0, nextAttemptAt: null,
-                      localUri: cible.uri, key: String(item.key).replace(/\.heic$/i, '.jpg'), isJpeg: true }
+                      localUri: cible.uri, key: String(item.key).replace(/\.heic$/i, '.jpg'), isJpeg: true,
+                      ...(exifCompact ? { exifCompact } : {}) }
                   : it
               );
               await commitQueue(apresNatif);
@@ -3195,11 +3273,15 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // (le compteur d'upload repart de zero), localUri pointe sur le
           // fichier reellement envoye.
           try { new File(item.localUri).delete(); } catch {}
+          // `exif` vient du sidecar lu plus haut : on en garde l essentiel
+          // sur l item pour le header X-Will-Exif au moment de l upload.
+          const exifCompact = exifCompactDepuis(exif);
           deleteSidecar(item.id);
           const afterProcess = queueRef.current.map(it =>
             it.id === item.id
               ? { ...it, processed: true, status: 'pending', retries: 0, nextAttemptAt: null,
-                  localUri: fichierFinal, key: cleFinale, isJpeg: jpegPersiste }
+                  localUri: fichierFinal, key: cleFinale, isJpeg: jpegPersiste,
+                  ...(exifCompact ? { exifCompact } : {}) }
               : it
           );
           await commitQueue(afterProcess);
@@ -3301,11 +3383,32 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         drainingRef.current = false;
         return;
       }
+      // Lots : la radio ne se reveille que tous les `batchSize` items OU
+      // toutes les `batchMaxWaitMs` — sinon le dernier coureur d une vague
+      // attendrait le suivant indefiniment. Sous `lowBatteryPercent`, on
+      // espace davantage (batchLowBatteryWaitMs) : la capture garde la
+      // priorite, les photos partiront quand meme, juste par plus gros lots.
       if (uploadMode === 'batch' && uploadable.length < batchSize) {
-        if (verbose) console.log(`[upload] mode=batch, ${uploadable.length}/${batchSize} pending`);
-        drainingRef.current = false;
-        return;
+        const up = eventConfigRef.current.upload || {};
+        const seuilBas = (Number(up.lowBatteryPercent) || 20) / 100;
+        const enBasse = batteryLevelRef.current <= seuilBas
+          && batteryStateRef.current !== Battery.BatteryState.CHARGING
+          && batteryStateRef.current !== Battery.BatteryState.FULL;
+        const attenteMax = enBasse
+          ? (Number(up.batchLowBatteryWaitMs) || 120000)
+          : (Number(up.batchMaxWaitMs) || 30000);
+        const plusAncien = Math.min(...uploadable.map(({ it }) => Number(it.burstTs) || now));
+        if (now - plusAncien < attenteMax) {
+          if (verbose) console.log(`[upload] mode=batch, ${uploadable.length}/${batchSize} pending, attente ${Math.round((now - plusAncien) / 1000)}s/${attenteMax / 1000}s`);
+          drainingRef.current = false;
+          scheduleRetryTick();
+          return;
+        }
       }
+      // Recentes d abord : les coureurs qui viennent de passer regardent
+      // leur telephone maintenant ; ceux d il y a vingt minutes attendront
+      // trois secondes de plus sans s en apercevoir.
+      uploadable.sort((a, b) => (Number(b.it.burstTs) || 0) - (Number(a.it.burstTs) || 0));
 
       if (verbose) {
         const m = `[upload] drain ${uploadable.length} items (online=${online})`;
@@ -3441,6 +3544,25 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             arr[i] = null;
             continue;
           }
+          // Rattrapage vignettes : l original est DEJA sur R2, seules les
+          // vignettes manquent. On ne retente qu elles ; au bout de 8 echecs
+          // on abandonne (le serveur servira l original — etat d avant, en
+          // pire lourd mais visible) pour ne pas retenir le fichier local.
+          if (item.vignettesPending === true) {
+            try {
+              const ok = await televerserVignettes(item.localUri, item.key, session.token);
+              if (ok || (item.retries ?? 0) + 1 >= 8) {
+                if (!ok) addDebugLog(`[vignette] abandon ${item.id} apres 8 essais`);
+                try { new File(item.localUri).delete(); } catch {}
+                arr[i] = null;
+              } else {
+                arr[i] = { ...item, status: 'pending', retries: (item.retries ?? 0) + 1, nextAttemptAt: Date.now() + Math.min(60000, 4000 * (2 ** (item.retries ?? 0))) };
+              }
+            } catch (e) {
+              arr[i] = { ...item, status: 'pending', retries: (item.retries ?? 0) + 1, nextAttemptAt: Date.now() + 8000 };
+            }
+            continue;
+          }
           // Fichier temporaire a nettoyer quoi qu il arrive (copie legere).
           // Declare HORS du try pour rester visible du finally.
           let cleanupUri = null;
@@ -3511,6 +3633,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             if (tierHeader) headers['X-Will-Tier'] = tierHeader;
             if (item.race) headers['X-Will-Race'] = String(item.race);
             if (item.km) headers['X-Will-Km'] = String(item.km);
+            // EXIF en clair : le JPEG livre l a perdu (thumbnail ImageIO).
+            // Temps de pose, ISO, ouverture, modele — ce qu il faut pour
+            // diagnostiquer un flou sans redecoder la photo cote serveur.
+            try {
+              const compact = item.exifCompact || exifCompactDepuis(readSidecar(item.id)?.exif);
+              if (compact) headers['X-Will-Exif'] = JSON.stringify({ ...compact, m: item.captureMode || undefined });
+            } catch {}
             const uploadUrl = `${API_URL}/${item.key}`;
 
             // Voie native iOS si dispo : streaming depuis fichier (zero blob
@@ -3570,13 +3699,26 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               //
               // Best effort : un echec ici ne remet pas l original en
               // question, il est deja sur R2.
-              await televerserVignettes(srcUri, item.key, session.token);
-              // succès → delete fichier local + drop item + bump "Uploadees"
-              // (verite R2 cote app : on n'incremente QUE sur PUT 200 OK).
-              try { new File(item.localUri).delete(); } catch {}
-              arr[i] = null;
+              // deviceDerivatives=false : le worker fabrique lui-meme les
+              // vignettes a reception (decodeur WASM). Deux decodages et deux
+              // uploads de moins par photo sur le telephone.
+              const vignettesOk = eventConfigRef.current.upload?.deviceDerivatives === false
+                ? true
+                : await televerserVignettes(srcUri, item.key, session.token);
+              // succès → bump "Uploadees" (verite R2 cote app : on
+              // n'incremente QUE sur PUT 200 OK). Le fichier local n est
+              // supprime que si les vignettes sont AUSSI deposees ; sinon
+              // l item reste en file marque vignettesPending et le prochain
+              // drain ne retente que les vignettes.
               uploadedCountRef.current += 1;
               if (isMountedRef.current) setUploadedCount(uploadedCountRef.current);
+              if (vignettesOk) {
+                try { new File(item.localUri).delete(); } catch {}
+                arr[i] = null;
+              } else {
+                arr[i] = { ...item, status: 'pending', vignettesPending: true, retries: 0, nextAttemptAt: Date.now() + 4000 };
+                addDebugLog(`[vignette] a refaire ${item.id}`);
+              }
               // Tri qualite (sous-etape D) : un kept du burst vient d'etre
               // confirme sur R2. On note le burstTs pour declencher le
               // cleanup des freres upload_skipped APRES le merge-commit
@@ -4246,7 +4388,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   if (!hasPermission) {
     return (
       <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
-        <Text style={{ color: C.text, textAlign: 'center', marginBottom: 16 }}>
+        <Text style={{ fontFamily: 'Montserrat', color: C.text, textAlign: 'center', marginBottom: 16 }}>
           {cameraPermissionDenied
             ? "L'accès à la caméra a été refusé. Ouvre les réglages pour l'autoriser."
             : 'Permission caméra requise'}
@@ -4268,7 +4410,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     return (
       <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
         <ActivityIndicator color={C.primary} />
-        <Text style={{ color: C.textSoft, marginTop: 12, fontSize: 13 }}>Préparation de la caméra…</Text>
+        <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, marginTop: 12, fontSize: 13 }}>Préparation de la caméra…</Text>
       </View>
     );
   }
@@ -4276,7 +4418,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   if (!device) {
     return (
       <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
-        <Text style={{ color: C.text, textAlign: 'center' }}>Caméra arrière indisponible</Text>
+        <Text style={{ fontFamily: 'Montserrat', color: C.text, textAlign: 'center' }}>Caméra arrière indisponible</Text>
       </View>
     );
   }
@@ -4441,7 +4583,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const unPanneauOuvert = menuOpen || raceOpen || kmOpen;
 
   return (
-    <View style={{ flex: 1, backgroundColor: P.appBg }}>
+    <View style={{ flex: 1, backgroundColor: P.appBg }} onTouchStart={isAutoArmed ? reveillerApercu : undefined}>
 
       {/* Fond tap-pour-fermer au niveau ECRAN. Le fond du Panneau ne couvre
           que le cadre camera (absoluteFill relatif a son parent) : taper
@@ -4478,12 +4620,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             marginRight: 16,
           }}
         >
-          <Text style={{ color: P.brand, fontSize: 19 }}>←</Text>
+          <Text style={{ fontFamily: 'Montserrat', color: P.brand, fontSize: 19 }}>←</Text>
         </TouchableOpacity>
         <Text
           numberOfLines={1}
           style={{
-            flex: 1, color: P.brand, fontSize: 26, fontWeight: '600',
+            flex: 1, color: P.brand, fontSize: 26, 
             fontFamily: 'AVEstiana', letterSpacing: -0.26,
           }}
         >
@@ -4524,14 +4666,19 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // DEJA exposee a l instant du franchissement, donc coureur centre
           // et latence de declenchement quasi nulle. HDR coupe : son
           // bracketing fantome sur un sujet en mouvement.
-          photoQualityBalance={modeCapture === 'instant' || modeQualite === 'qualite' ? 'balanced' : 'speed'}
-          photoHdr={modeCapture === 'instant' ? false : (modeQualite === 'qualite' ? false : !!format?.supportsPhotoHdr)}
+          // 'balanced' partout : c est ce qui garde Deep Fusion, seul vrai
+          // traitement du bruit a haut ISO. 'speed' le coupait en mode rapide.
+          photoQualityBalance="balanced"
+          photoHdr={false}
           // videoHdr coupe : il ne sert qu au rendu de l apercu, la detection
           // travaille sur le buffer brut. Sur un flux permanent de plusieurs
           // heures, c est du traitement d image continu paye en batterie pour
           // une image que personne ne regarde en detail.
           videoHdr={false}
-          lowLightBoost={!!device?.supportsLowLightBoost}
+          // lowLightBoost coupe : il allonge l exposition du flux video en
+          // basse lumiere — inutile a la detection, et la frame ZSL servie
+          // comme photo en heriterait (flou de mouvement).
+          lowLightBoost={false}
           frameProcessor={frameProcessor}
           pixelFormat="yuv"
           zoom={device.minZoom}
@@ -4540,6 +4687,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           exposure={cameraExposure}
           enableLocation={false}
         />
+
+        {apercuAttenue && (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.88)', alignItems: 'center', justifyContent: 'center' }]}>
+            <Text style={{ fontFamily: 'Montserrat-Medium', color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>Capture en cours · touche pour voir</Text>
+          </View>
+        )}
 
         {/* ─── Croix de cadrage, commune aux deux modes ──────────────────
             Deux traits inclines a 12°, partant des bords gauche et droit du
@@ -4632,9 +4785,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 s allument un par un au passage : deux allumes au lieu de
                 trois = trop pres de la route. */}
             {[0, 1, 2].map((i) => {
-              // Memes positions que stepTrigger.js : bande centrale de 50 %,
-              // repere au centre de chaque tiers -> 33,3 %, 50 %, 66,7 %.
-              const pct = (0.25 + (0.5 * (i + 0.5)) / 3) * 100;
+              // Memes positions que stepTrigger.js : bandeReperes par
+              // discipline (0.375, ou 0.50 sur une epreuve velo).
+              const pct = ((0.5 - bandeReperesActive / 2) + (bandeReperesActive * (i + 0.5)) / 3) * 100;
               const anim = reperesAnim[i];
               const commun = {
                 position: 'absolute', left: `${pct}%`, width: 2, height: 9,
@@ -4767,7 +4920,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
             <RangeePanneau
               libelle="Voir mes photos"
-              droite={<Text style={{ color: P.label, fontSize: 17 }}>›</Text>}
+              droite={<Text style={{ fontFamily: 'Montserrat', color: P.label, fontSize: 17 }}>›</Text>}
               onPress={() => { fermerPanneaux(); setGalleryOpen(true); }}
             />
             <RangeePanneau
@@ -4994,7 +5147,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             }}
           >
             <Text style={{ color: P.brand, fontSize: 17, fontFamily: 'Montserrat-SemiBold' }}>Infos</Text>
-            <Text style={{ color: P.label, fontSize: 17 }}>›</Text>
+            <Text style={{ fontFamily: 'Montserrat', color: P.label, fontSize: 17 }}>›</Text>
           </TouchableOpacity>
 
           {/* Le libelle suit l etat reel : la capture s arme toute seule au
@@ -5083,7 +5236,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <Text style={{ color: '#fff', fontSize: 17 }}>×</Text>
+              <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 17 }}>×</Text>
             </TouchableOpacity>
             <TextInput
               value={journalFiltre}
@@ -5092,7 +5245,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               placeholderTextColor="rgba(255,255,255,0.35)"
               autoCapitalize="none"
               autoCorrect={false}
-              style={{
+              style={{ fontFamily: 'Montserrat',
                 flex: 1, height: 32, borderRadius: 8, paddingHorizontal: 10,
                 backgroundColor: 'rgba(255,255,255,0.10)', color: '#fff', fontSize: 13,
               }}
@@ -5118,7 +5271,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             windowSize={7}
             removeClippedSubviews
             ListEmptyComponent={
-              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
+              <Text style={{ fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.4)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
                 Aucune ligne{journalFiltre ? ' pour ce filtre' : ''}.
               </Text>
             }
@@ -5133,10 +5286,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                   borderBottomWidth: StyleSheet.hairlineWidth,
                   borderBottomColor: 'rgba(255,255,255,0.06)',
                 }}>
-                  <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, width: 74 }}>
+                  <Text style={{ fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.35)', fontSize: 10, width: 74 }}>
                     {hhmmss}
                   </Text>
-                  <Text selectable style={{ color: couleur, fontSize: 11, flex: 1 }}>
+                  <Text selectable style={{ fontFamily: 'Montserrat', color: couleur, fontSize: 11, flex: 1 }}>
                     {item.texte}
                   </Text>
                 </View>
@@ -5191,70 +5344,63 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         presentationStyle="pageSheet"
         onRequestClose={() => setGalleryOpen(false)}
       >
-        <View style={{ flex: 1, backgroundColor: '#0A0A0A' }}>
-          <View style={{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12,
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: 'rgba(255,255,255,0.12)',
-          }}>
-            <TouchableOpacity
-              onPress={() => setGalleryOpen(false)}
-              hitSlop={10}
-              style={{
-                width: 32, height: 32, borderRadius: 16,
-                backgroundColor: 'rgba(255,255,255,0.12)',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-              accessibilityLabel="Fermer"
-            >
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path d="M6 6l12 12M18 6L6 18" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
-              </Svg>
-            </TouchableOpacity>
+        <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+          {/* Meme gabarit que les pages de connexion : croix carree arrondie
+              en haut a gauche, action a droite, puis grand titre AVEstiana
+              violet centre (uniformisation 2026-08-31). */}
+          <View style={{ paddingHorizontal: 28, paddingTop: 20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+              <TouchableOpacity
+                onPress={() => setGalleryOpen(false)}
+                hitSlop={10}
+                style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: '#ece9f4', alignItems: 'center', justifyContent: 'center' }}
+                accessibilityLabel="Fermer"
+              >
+                <Text style={{ fontFamily: 'Montserrat', color: '#4a4458', fontSize: 22, lineHeight: 24 }}>✕</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={fetchMyPhotos}
+                disabled={myPhotosLoading}
+                hitSlop={10}
+                style={{
+                  width: 38, height: 38, borderRadius: 12, backgroundColor: '#ece9f4',
+                  alignItems: 'center', justifyContent: 'center',
+                  opacity: myPhotosLoading ? 0.5 : 1,
+                }}
+                accessibilityLabel="Rafraîchir"
+              >
+                <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                  <Path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" stroke="#4a4458" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </TouchableOpacity>
+            </View>
             <Text style={{
-              color: '#fff', fontSize: 16, fontWeight: '700',
-              fontFamily: 'AVEstiana',
+              fontFamily: 'AVEstiana', fontStyle: 'normal',
+              fontSize: 30, color: '#7B2FFF', textAlign: 'center', marginBottom: 16,
             }}>
               Mes photos{myPhotos.length > 0 ? ` (${myPhotos.length})` : ''}
             </Text>
-            <TouchableOpacity
-              onPress={fetchMyPhotos}
-              disabled={myPhotosLoading}
-              hitSlop={10}
-              style={{
-                width: 32, height: 32, borderRadius: 16,
-                backgroundColor: 'rgba(255,255,255,0.12)',
-                alignItems: 'center', justifyContent: 'center',
-                opacity: myPhotosLoading ? 0.5 : 1,
-              }}
-              accessibilityLabel="Rafraîchir"
-            >
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            </TouchableOpacity>
           </View>
 
           {myPhotosLoading && myPhotos.length === 0 ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color="#7B2FFF" />
             </View>
           ) : myPhotosError && myPhotos.length === 0 ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, textAlign: 'center', marginBottom: 14 }}>
+              <Text style={{ fontFamily: 'Montserrat', color: '#5a5468', fontSize: 14, textAlign: 'center', marginBottom: 14 }}>
                 Impossible de charger tes photos pour l'instant.
               </Text>
               <TouchableOpacity
                 onPress={fetchMyPhotos}
-                style={{ backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 }}
+                style={{ backgroundColor: '#7B2FFF', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 }}
               >
-                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Réessayer</Text>
+                <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Réessayer</Text>
               </TouchableOpacity>
             </View>
           ) : myPhotos.length === 0 ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+              <Text style={{ fontFamily: 'Montserrat', color: '#5a5468', fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
                 Aucune photo encore.{'\n'}Les photos que tu prends apparaissent ici dès qu'elles sont sauvegardées.
               </Text>
             </View>
@@ -5269,7 +5415,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                   activeOpacity={0.85}
                   style={{ width: '33.333%', aspectRatio: 1, padding: 2 }}
                 >
-                  <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1a1a1a' }}>
+                  <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#F5F3FA' }}>
                     <ExpoImage
                       source={{ uri: item.thumb_url }}
                       style={StyleSheet.absoluteFillObject}
@@ -5286,7 +5432,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 <RefreshControl
                   refreshing={myPhotosLoading}
                   onRefresh={fetchMyPhotos}
-                  tintColor="#fff"
+                  tintColor="#7B2FFF"
                 />
               }
               contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
@@ -5318,6 +5464,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             {galleryViewerPhoto && (
               <ExpoImage
                 source={{ uri: galleryViewerPhoto.url }}
+                // Le 1200 px WebP (~120 Ko, deja en cache CDN) s affiche
+                // tout de suite ; le 2400 px prend le relais quand il arrive.
+                // Sur 4G le plein ecran s ouvre en < 1 s au lieu de 3-5.
+                placeholder={galleryViewerPhoto.thumb_lg_url
+                  ? { uri: galleryViewerPhoto.thumb_lg_url }
+                  : (galleryViewerPhoto.thumb_md_url ? { uri: galleryViewerPhoto.thumb_md_url } : undefined)}
+                placeholderContentFit="contain"
                 style={{ width: '100%', height: '100%' }}
                 contentFit="contain"
                 cachePolicy="memory-disk"
@@ -5378,13 +5531,29 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             zIndex: 9998,
           }}
         >
-          <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', textAlign: 'center' }}>
+          <Text style={{ color: '#fff', fontSize: 17, fontFamily: 'Montserrat-SemiBold', textAlign: 'center' }}>
             Capture démarrée automatiquement
           </Text>
-          <Text style={{ color: '#fff', fontSize: 13, marginTop: 4, textAlign: 'center', opacity: 0.92 }}>
+          <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 13, marginTop: 4, textAlign: 'center', opacity: 0.92 }}>
             Tape « Stop » quand la course est finie.
           </Text>
         </View>
+      ) : null}
+
+      {/* ─── Voile d economie d ecran ─── noir plein (OLED : pixels
+          eteints). La capture tourne toujours dessous ; premiere
+          silhouette detectee ou tap -> il tombe instantanement. */}
+      {veilleEcran ? (
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => { veilleEcranRef.current = false; setVeilleEcran(false); }}
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000', zIndex: 9999, alignItems: 'center', justifyContent: 'center' }]}
+        >
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Économie d'écran</Text>
+          <Text style={{ fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.35)', fontSize: 13, marginTop: 6, textAlign: 'center' }}>
+            La capture reste active{'\n'}Toucher pour afficher
+          </Text>
+        </TouchableOpacity>
       ) : null}
 
     </View>
@@ -5407,7 +5576,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 // PIN helpers + PinInputRow + PinDisplay -> src/utils/pin.js, src/components/Pin*
 
 
-function CreateEventModal({ visible, onClose, onCreated, organizerSession, organizerApiFetch, editEvent }) {
+function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, organizerSession, organizerApiFetch, editEvent, demanderCompte }) {
   const isEdit = !!editEvent;
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
@@ -5456,6 +5625,131 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   const [cropAsset, setCropAsset] = useState(null); // asset {uri,width,height} → ouvre CropImageModal
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState(1);
+  // Deux versions, comme sur le site : la rapide ne demande que l essentiel
+  // et laisse le reste a l espace orga ; la complete envoie un event pret.
+  // Event parti : on remplace l alerte systeme par un ecran qui dit ce qui
+  // va se passer et rend le PIN photographe, qu on ne peut plus retrouver
+  // ailleurs sans aller le chercher.
+  // Le bouton reste en bas, mais la liste doit pouvoir defiler au-dessus du
+  // clavier : on ajoute sa hauteur au bas du contenu plutot que de remonter
+  // tout l ecran.
+  const [hauteurClavier, setHauteurClavier] = useState(0);
+  const listeRef = useRef(null);
+  // La liste de villes s ouvre sous le champ : sans ca le clavier la couvre
+  // entierement. On note le defilement courant pour pouvoir remonter juste
+  // ce qu il faut, comme le fait un autocomplete natif.
+  const decalageScrollRef = useRef(0);
+  const blocVilleRef = useRef(null);
+  // Le compte vient apres l event, et seulement si l orga coche : on ne
+  // demande d engagement qu a quelqu un qui a deja rempli quelque chose.
+  const [gateCompte, setGateCompte] = useState(false);
+  // 'inconnu' tant que l email n a pas parle : on ne demande pas un mot de
+  // passe avant de savoir s il faut le creer ou le retrouver.
+  const [modeCompte, setModeCompte] = useState('inconnu'); // 'inconnu' | 'new' | 'existing'
+  const [cPrenomConnu, setCPrenomConnu] = useState('');
+  const [cPrenom, setCPrenom] = useState('');
+  const [cNom, setCNom] = useState('');
+  const [cEmail, setCEmail] = useState('');
+  const [cMdp, setCMdp] = useState('');
+  const [cMdp2, setCMdp2] = useState('');
+  const [cCgu, setCCgu] = useState(false);
+  const [cErreur, setCErreur] = useState('');
+  const [cVoirMdp, setCVoirMdp] = useState(false);
+  // Apple depuis le formulaire : le worker cree ou complete le compte et rend
+  // un jeton organisateur. Aucune date de naissance pour ce role.
+  const connecterAvecApple = async ({ identityToken, prenom, nom }) => {
+    setCErreur('');
+    setBusy(true);
+    try {
+      const r = await fetch(`${API_URL}/auth/oauth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'apple',
+          id_token: identityToken,
+          role: 'organizer',
+          first_name: prenom,
+          last_name: nom,
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.token) {
+        setCErreur(data.error || 'Connexion Apple refusée.');
+        setBusy(false);
+        return;
+      }
+      // Le compte est ouvert : le bloc compte disparait, le CTA envoie
+      // l event avec ce jeton. On ne soumet pas dans la foulee — l orga
+      // n a pas encore appuye sur le bouton.
+      onCompteApple?.({ token: data.token, profile: data.profile });
+      setBusy(false);
+    } catch (e) {
+      setCErreur('Connexion impossible. Vérifie ton réseau.');
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (visible) return;
+    setGateCompte(false); setModeCompte('inconnu'); setCPrenomConnu('');
+    setCPrenom(''); setCNom(''); setCEmail(''); setCMdp(''); setCMdp2('');
+    setCCgu(false); setCErreur(''); setCVoirMdp(false);
+  }, [visible]);
+  // L email dit s il faut creer ou se connecter : l orga n a pas a choisir
+  // dans un menu ce que le serveur sait deja.
+  useEffect(() => {
+    const mail = (cEmail || '').trim().toLowerCase();
+    if (!gateCompte) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) { setModeCompte('inconnu'); setCPrenomConnu(''); return; }
+    const ctl = new AbortController();
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`${API_URL}/auth/check-email-exists`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: mail }),
+          signal: ctl.signal,
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) {
+          setModeCompte(data?.exists ? 'existing' : 'new');
+          setCPrenomConnu(data?.exists ? (data?.firstName || '') : '');
+          setCErreur(e => (e === 'On vérifie ton email, une seconde…' ? '' : e));
+        }
+      } catch (e) {
+        // Reseau indisponible : rester en 'inconnu' bloquait l ecran sur
+        // « On vérifie ton email » sans jamais en sortir. On part sur une
+        // creation — le worker fusionnera si le compte existe deja.
+        setModeCompte('new');
+        setCErreur(e2 => (e2 === 'On vérifie ton email, une seconde…' ? '' : e2));
+      }
+    }, 400);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [cEmail, gateCompte]);
+  useEffect(() => {
+    if (!visible || !citySuggestions.length || city) return;
+    const t = setTimeout(() => {
+      const noeud = blocVilleRef.current;
+      if (!noeud || !listeRef.current) return;
+      noeud.measureInWindow?.((x, y, w, h) => {
+        if (!h) return;
+        const limite = Dimensions.get('window').height - hauteurClavier - 16;
+        const debord = (y + h) - limite;
+        if (debord > 0) {
+          listeRef.current?.scrollTo({ y: decalageScrollRef.current + debord, animated: true });
+        }
+      });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [visible, citySuggestions, city, hauteurClavier]);
+  useEffect(() => {
+    if (!visible) { setHauteurClavier(0); return; }
+    const nomOuvre = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const nomFerme = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const o = Keyboard.addListener(nomOuvre, e => setHauteurClavier(e?.endCoordinates?.height || 0));
+    const f = Keyboard.addListener(nomFerme, () => setHauteurClavier(0));
+    return () => { o.remove(); f.remove(); };
+  }, [visible]);
   const [sheetW, setSheetW] = useState(0);
   const slideX = useRef(new Animated.Value(0)).current;
   const [userEditedCode, setUserEditedCode] = useState(false);
@@ -5464,6 +5758,49 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   // tap sur une row ouvre une sous-modale dediee avec save par section
   // (PUT partiel via la whitelist worker).
   const [editingField, setEditingField] = useState(null);
+  // Les sous-modales d edition ecrivent directement dans l etat du
+  // formulaire. Fermer par la croix laissait donc la valeur tapee en place :
+  // l ecran precedent affichait une modification qui n avait jamais ete
+  // enregistree, et un ✕ ne pouvait pas la reprendre. On photographie l etat
+  // a l ouverture, on le restitue a l annulation.
+  const instantaneRef = useRef(null);
+  const ouvrirChamp = useCallback((nom) => {
+    instantaneRef.current = {
+      name, code, contact, contactAdmin, phone, website, address, message,
+      estimatedParticipants, listed, distances, password, startTime, eventType,
+      city, postalCode, eventDate, eventDateEnd, dateTbd,
+    };
+    setEditingField(nom);
+  }, [name, code, contact, contactAdmin, phone, website, address, message,
+      estimatedParticipants, listed, distances, password, startTime, eventType,
+      city, postalCode, eventDate, eventDateEnd, dateTbd]);
+
+  const annulerChamp = useCallback(() => {
+    const v = instantaneRef.current;
+    if (v) {
+      setName(v.name); setCode(v.code); setContact(v.contact);
+      setContactAdmin(v.contactAdmin); setPhone(v.phone); setWebsite(v.website);
+      setAddress(v.address); setMessage(v.message);
+      setEstimatedParticipants(v.estimatedParticipants); setListed(v.listed);
+      setDistances(v.distances); setPassword(v.password);
+      setStartTime(v.startTime); setEventType(v.eventType);
+      setCity(v.city); setPostalCode(v.postalCode);
+      setEventDate(v.eventDate); setEventDateEnd(v.eventDateEnd);
+      setDateTbd(v.dateTbd);
+    }
+    instantaneRef.current = null;
+    setEditingField(null);
+  }, []);
+
+  // Enregistrement reussi : la valeur saisie devient la reference.
+  const validerChamp = useCallback(() => {
+    instantaneRef.current = null;
+    setEditingField(null);
+  }, []);
+
+  // Ce que la roulette montre, meme si l orga n y a pas touche : par defaut
+  // le picker affiche 08:00, il faut donc que 08:00 soit enregistrable.
+  const heureAffichee = /^\d{1,2}:\d{2}$/.test(String(startTime || '')) ? startTime : '08:00';
   const [partialBusy, setPartialBusy] = useState(false);
   // Hauteur du clavier pour ajuster les sub-modales d'edition (Lieu, Distances)
   // ou KeyboardAvoidingView n'est pas fiable sur iOS avec une Modal RN.
@@ -5533,7 +5870,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         setCoverImage(editEvent.cover_image || null);
         setPendingCoverLocal(null);
       } else {
-        setName(''); setCode(''); setPassword('');
+        setName(''); setCode(''); setPassword(generateRandomPin());
         setEventDate(null); setEventDateEnd(null); setDateTbd(false);
         setStartTime(''); setPhotographerPwd(''); setRevealPwd(false);
         setPostalCode(''); setCity(''); setCitySuggestions([]);
@@ -5606,6 +5943,15 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   }, [postalCode]);
 
   const addDistance = () => setDistances(d => [...d, { label: eventType || '', label_only: false, km: '', time: '', elevation: '' }]);
+  const typePrecedentRef = useRef(eventType);
+  useEffect(() => {
+    const avant = typePrecedentRef.current;
+    typePrecedentRef.current = eventType;
+    if (!eventType || avant === eventType) return;
+    setDistances(d => d.map(it => (
+      it.label_only || (it.label && it.label !== avant) ? it : { ...it, label: eventType }
+    )));
+  }, [eventType]);
   const setDistanceMode = (idx, labelOnly) => {
     setDistances(d => d.map((it, i) => {
       if (i !== idx) return it;
@@ -5699,32 +6045,131 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   // Step 5 (cover) est toujours valide — la cover est optionnelle, le bouton
   // "Ajouter plus tard" passe directement à la soumission sans upload.
   const step5Ok = true;
-  const canSubmit = step1Ok && step2Ok && step3Ok && step4Ok && step5Ok && !busy;
+  // Les memes regles que trySubmit, sinon le bouton valide et submit()
+  // ressort en silence : c est ce qui empechait la version rapide d envoyer
+  // quoi que ce soit.
+  // Publier demande un compte. La coche l ouvre ; l email dit ensuite si
+  // c est une creation ou une connexion.
+  const besoinCompte = !isEdit && !organizerSession?.token;
+  const cEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((cEmail || '').trim());
+  const compteOk = !besoinCompte || (gateCompte && (
+    modeCompte === 'inconnu' ? cEmailOk
+    : modeCompte === 'existing'
+      ? (cEmailOk && cMdp.length > 0)
+      : (!!cPrenom.trim() && !!cNom.trim() && cEmailOk && cMdp.length >= 8 && cMdp === cMdp2 && cCgu)));
 
-  const TOTAL_STEPS = isEdit ? 4 : 5;
-  const goStep = (n) => {
-    if (n < 1 || n > TOTAL_STEPS || !sheetW) { setStep(n); return; }
-    setStep(n);
-    Animated.timing(slideX, {
-      toValue: -(n - 1) * sheetW,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
+  // Memes 8 champs que le worker : le formulaire ne decide plus s il soumet,
+  // il annonce seulement ce qui va se passer. Le worker tranche.
+  const evPourCompletude = {
+    // Les contacts manquaient a cet objet : la regle exige contact_admin ou
+    // organizer_email, absents pendant une creation avec inscription, donc
+    // « il manque l email administratif » s affichait meme rempli, et
+    // « Envoyer mon event » etait inatteignable.
+    contact_admin: contactAdmin,
+    contact,
+    organizer_email: organizerSession?.profile?.email || '',
+    event_date: dateTbd ? '' : isoJourLocal(eventDate),
+    start_time: startTime || '',
+    distances: distances.filter(d => d.km),
+    estimated_participants: estimatedParticipants,
+    message,
+    phone,
+    website,
+    cover_image: pendingCoverLocal || editEvent?.cover_image || '',
   };
-  const tryNext = () => {
-    if (step === 1) { if (!step1Ok) { setShowErr(e => ({ ...e, 1: true })); return; } goStep(2); return; }
-    if (step === 2) { if (!step2Ok) { setShowErr(e => ({ ...e, 2: true })); return; } goStep(3); return; }
-    if (step === 3) { if (!step3Ok) { setShowErr(e => ({ ...e, 3: true })); return; } goStep(4); return; }
-    if (step === 4) { if (!step4Ok) { setShowErr(e => ({ ...e, 4: true })); return; } goStep(5); return; }
-  };
+  const { missing: manquantsForm, isComplete: eventComplet } =
+    completionOf(evPourCompletude, organizerSession?.profile);
+
+  // Le minimum pour qu un event existe : de quoi le nommer, le situer et le
+  // dater. Tout le reste est facultatif a la creation — c est la completude
+  // qui decidera s il part en validation ou attend dans l espace de l orga.
+  // Le formulaire n a plus de « version » : demander a l organisateur de
+  // choisir entre rapide et complete, c etait lui faire trancher une question
+  // dont il n avait pas les elements, et maintenir deux formulaires jumeaux.
+  // step4Ok (PIN 4 chiffres) etait teste dans la seule branche isEdit, qui
+  // ne s execute jamais ici : un PIN a 3 chiffres partait, et le photographe
+  // ne pouvait plus se connecter le jour J.
+  const canSubmit = !busy && compteOk && (isEdit
+    ? (step1Ok && step2Ok && step3Ok && step4Ok)
+    : (step1Ok && locationOk && !!code?.trim() && distancesOk && isValidPin(password)));
+
+  // Le wizard a cede la place a une page unique : goStep, tryNext et la
+  // glissiere n avaient plus de raison d etre.
+
+  // Ce qui est rempli sur ce que la version courante demande. La version
+  // complete compte plus de champs, donc le meme event y affiche un
+  // pourcentage plus bas — c est exactement ce qu on veut dire.
+  const champsVersion = [
+    !!name?.trim(), !!eventType, dateOk, /^\d{5}$/.test(postalCode), !!city?.trim(),
+    distances.length > 0, !!address?.trim(), !!(coverImage || pendingCoverLocal),
+    !!website?.trim(), !!phone?.trim(), isValidPin(password),
+    !!estimatedParticipants, !!message?.trim(),
+  ];
+  const pourcentageRempli = Math.round(
+    (champsVersion.filter(Boolean).length / champsVersion.length) * 100,
+  );
+
   const trySubmit = () => {
-    if (!step1Ok) { setShowErr(e => ({ ...e, 1: true })); goStep(1); return; }
-    if (!step2Ok) { setShowErr(e => ({ ...e, 2: true })); goStep(2); return; }
-    if (!step3Ok) { setShowErr(e => ({ ...e, 3: true })); goStep(3); return; }
-    if (!step4Ok) { setShowErr(e => ({ ...e, 4: true })); goStep(4); return; }
+    // Version rapide : seuls le nom, le type, la date et le lieu sont
+    // exiges. Le PIN est deja genere, les contacts viennent du compte —
+    // controler des champs qu on n affiche pas bloquerait sans rien dire.
+    const manque = !step1Ok
+      || !locationOk
+      || !distancesOk
+      || !isValidPin(password)
+      // Le code de l event derive du nom : un nom sans aucun caractere
+      // latin donnait un slug vide et un bouton qui ne faisait rien.
+      || !code?.trim();
+    if (manque) {
+      setShowErr({ 1: true, 2: true, 3: true, 4: true });
+      // Un slug vide n a aucun champ ou s afficher : sans ce message, le
+      // bouton restait muet.
+      if (!code?.trim()) {
+        Alert.alert(
+          'Nom impossible à transformer en adresse',
+          "Ajoute quelques lettres latines au nom de ton event : elles servent à fabriquer son adresse web.",
+        );
+      }
+      return;
+    }
+    if (besoinCompte && gateCompte && modeCompte === 'inconnu' && cEmailOk) {
+      // L email est valide mais la reponse du serveur n est pas encore la.
+      // On le dit, au lieu d un bouton qui ne fait rien.
+      setCErreur('On vérifie ton email, une seconde…');
+      return;
+    }
+    if (!compteOk) {
+      setShowErr(e => ({ ...e, 5: true }));
+      if (!gateCompte) setCErreur('Coche cette case pour publier ton event');
+      else setCErreur(modeCompte === 'existing'
+        ? 'Renseigne ton email et ton mot de passe Will'
+        : 'Complete les champs du compte pour continuer');
+      return;
+    }
+    setCErreur('');
     submit();
   };
   const errStyle = { color: C.error, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 };
+
+  // Le retour Android (et la croix) fermaient le formulaire et effacaient
+  // tout le remplissage a la reouverture, sans un mot. On ne demande
+  // confirmation que s il y a quelque chose a perdre.
+  const fermerAvecGarde = useCallback(() => {
+    const commence = !isEdit && (
+      !!name?.trim() || !!postalCode?.trim() || !!city?.trim() || !!eventType
+      || distances.length > 0 || !!address?.trim() || !!message?.trim()
+      || !!pendingCoverLocal || !!estimatedParticipants || !!website?.trim() || !!phone?.trim()
+    );
+    if (!commence) { onClose(); return; }
+    Alert.alert(
+      'Abandonner cet event ?',
+      'Ce que tu as rempli sera perdu.',
+      [
+        { text: 'Continuer à remplir', style: 'cancel' },
+        { text: 'Abandonner', style: 'destructive', onPress: onClose },
+      ],
+    );
+  }, [isEdit, name, postalCode, city, eventType, distances, address, message, pendingCoverLocal, estimatedParticipants, website, phone, onClose]);
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -5732,10 +6177,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     try {
       const url = isEdit ? `/organizer/event/${editEvent.code}` : `/auth/submit-event`;
       const method = isEdit ? 'PUT' : 'POST';
+      const emailCompte = (organizerSession?.profile?.email || '').trim().toLowerCase();
       const payload = {
+        // Version rapide : l event nait dans l espace de l orga, pas dans la
+        // file admin. Envoyer en validation un event sans courses, adresse ni
+        // contacts n avait rien a valider. L orga complete puis soumet.
         name,
-        contact,
-        contact_admin: contactAdmin.trim().toLowerCase(), // UI-12
+        contact: contact || emailCompte,
+        contact_admin: (contactAdmin || emailCompte).trim().toLowerCase(), // UI-12
         phone: phone.trim(),
         event_date: isoJourLocal(eventDate),
         event_date_end: isoJourLocal(eventDateEnd),
@@ -5768,15 +6217,51 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       // Audit B14b — O2 : /auth/submit-event peut etre appele sans organizerSession
       // (cf handlePickRole role='create'). apiFetch direct sans onAuthFailure,
       // Bearer conditionnel. Le 401 propage comme erreur HTTP normale.
-      const r = await apiFetch(url, {
+      // Creation sans compte : on ne demande l inscription qu ici, une fois
+      // l event rempli. Demander avant, c est exiger un engagement de
+      // quelqu un qui n a encore rien investi — et se retrouver avec des
+      // comptes vides. Le formulaire est garde, la soumission est rejouee
+      // apres l inscription.
+      if (!isEdit && !organizerSession?.token && demanderCompte) {
+        // On NE remet PAS busy a false ici : demanderCompte enchaine la
+        // creation du compte, l envoi de l event, l upload de la couverture
+        // et la soumission. Rendre le bouton cliquable entre-temps creait un
+        // second event, sans le moindre signe a l ecran.
+        const msg = await demanderCompte({
+          payload,
+          coverLocal: pendingCoverLocal || null,
+          identifiants: gateCompte ? {
+            mode: modeCompte,
+            email: cEmail.trim().toLowerCase(),
+            password: cMdp,
+            firstName: cPrenom.trim(),
+            lastName: cNom.trim(),
+          } : null,
+        });
+        if (msg) {
+          if (msg.basculerExistant) { setModeCompte('existing'); setCMdp(''); setCMdp2(''); }
+          setCErreur(msg.erreur || String(msg));
+          setBusy(false);
+        }
+        return;
+      }
+      // Le code de l event est derive du nom : deux « Trail des Violettes »
+      // se marchent dessus. Plutot que de renvoyer l orga corriger un champ
+      // qu il n a jamais vu en version rapide, on suffixe et on retente.
+      const envoyer = (corps) => apiFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
           ...(organizerSession?.token ? { Authorization: `Bearer ${organizerSession.token}` } : {}),
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(corps),
       });
+      // Le worker suffixe lui-meme un code deja pris (jusqu a -50) et
+      // renvoie le code retenu : la boucle de retry client, plafonnee a -5,
+      // n a plus lieu d etre — et elle divergeait de ce que fait le site.
+      const r = await envoyer(payload);
       const data = await r.json();
+      const codeFinal = data?.code || payload.code;
       if (!r.ok) {
         Alert.alert('Erreur', data.error || 'Échec');
       } else {
@@ -5785,7 +6270,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
         // les 404 "event introuvable".
         let coverFailed = false;
         if (!isEdit && pendingCoverLocal) {
-          const slug = code.toLowerCase().replace(/\s+/g, '-');
+          const slug = String(codeFinal || code).toLowerCase().replace(/\s+/g, '-');
           console.log('[create-event] starting cover upload', { slug, uri: pendingCoverLocal });
           try {
             const res = await fetch(pendingCoverLocal);
@@ -5813,19 +6298,41 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
             coverFailed = true;
           }
         }
-        const successTitle = isEdit ? 'Modifications enregistrées' : 'Demande envoyée';
-        const successMsg = isEdit ? '' : 'Ton événement sera validé sous peu.';
-        if (coverFailed) {
-          Alert.alert(
-            successTitle,
-            (successMsg ? successMsg + '\n\n' : '') +
-              "L'image de couverture n'a pas pu être envoyée. Tu pourras la recharger depuis l'édition de l'événement."
-          );
-        } else {
-          Alert.alert(successTitle, successMsg);
+        // Creer n est pas soumettre : on frappe la porte unique, et c est le
+        // worker qui verifie la completude. S il refuse, l event reste un
+        // brouillon dans l espace de l orga, avec la liste de ce qui manque.
+        let brouillon = true;
+        let manquants = Array.isArray(data?.manquants) ? data.manquants : [];
+        if (!isEdit) {
+          try {
+            const sub = await apiFetch(`/organizer/event/${codeFinal}/submit`, {
+              method: 'POST',
+              headers: {
+                ...(organizerSession?.token ? { Authorization: `Bearer ${organizerSession.token}` } : {}),
+              },
+            });
+            const dSub = await sub.json().catch(() => ({}));
+            if (sub.ok) { brouillon = false; manquants = []; }
+            else if (Array.isArray(dSub?.manquants)) manquants = dSub.manquants;
+          } catch (e) {
+            console.warn('[create-event] soumission :', e?.message || e);
+          }
         }
-        onCreated?.();
-        onClose();
+        if (isEdit) {
+          Alert.alert('Modifications enregistrées', coverFailed
+            ? "L'image de couverture n'a pas pu être envoyée. Tu pourras la recharger depuis l'édition de l'événement."
+            : '');
+          onCreated?.();
+          onClose();
+        } else {
+          // L ecran de confirmation racontait ce que la page de l event
+          // raconte deja — succes, ce qui manque, le PIN. On y atterrit
+          // directement, avec un bandeau. Un ecran de moins, et surtout la
+          // meme destination que le parcours « compte cree au passage », qui
+          // finissait lui sur une simple alerte systeme.
+          onCreated?.();
+          onCree?.({ code: codeFinal, pin: password, brouillon, manquants, coverFailed });
+        }
       }
     } catch (e) {
       Alert.alert('Erreur', e.message);
@@ -5850,10 +6357,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       <Modal visible={timePickerIdx !== null} transparent animationType="slide" onRequestClose={() => setTimePickerIdx(null)}>
         <TouchableOpacity activeOpacity={1} onPress={() => setTimePickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
-            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>Heure de départ</Text>
+            <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold', textAlign: 'center', marginBottom: 12 }}>Heure de départ</Text>
             <View style={{ flexDirection: 'row', paddingHorizontal: 20, gap: 12 }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>HEURES</Text>
+                <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>HEURES</Text>
                 <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
                   {Array.from({ length: 24 }).map((_, h) => {
                     const cur = distances[timePickerIdx]?.time || '';
@@ -5871,14 +6378,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                         }}
                         style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                       >
-                        <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{h}h</Text>
+                        <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{h}h</Text>
                       </TouchableOpacity>
                     );
                   })}
                 </ScrollView>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>MINUTES</Text>
+                <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>MINUTES</Text>
                 <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
                   {Array.from({ length: 12 }).map((_, i) => {
                     const min = i * 5;
@@ -5897,7 +6404,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                         }}
                         style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                       >
-                        <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{String(min).padStart(2, '0')}</Text>
+                        <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{String(min).padStart(2, '0')}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -5905,7 +6412,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               </View>
             </View>
             <TouchableOpacity onPress={() => setTimePickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '700' }}>OK</Text>
+              <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -5915,8 +6422,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       <Modal visible={elevPickerIdx !== null} transparent animationType="slide" onRequestClose={() => setElevPickerIdx(null)}>
         <TouchableOpacity activeOpacity={1} onPress={() => setElevPickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
-            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>Dénivelé positif</Text>
-            <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>Par incréments de 10 m</Text>
+            <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold', textAlign: 'center', marginBottom: 4 }}>Dénivelé positif</Text>
+            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>Par incréments de 10 m</Text>
             <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
               {Array.from({ length: 301 }).map((_, i) => {
                 const m = i * 10;
@@ -5929,13 +6436,13 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     onPress={() => updateDistance(elevPickerIdx, 'elevation', `${m}m D+`)}
                     style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                   >
-                    <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{m} m</Text>
+                    <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{m} m</Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
             <TouchableOpacity onPress={() => setElevPickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '700' }}>OK</Text>
+              <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -5945,8 +6452,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       <Modal visible={kmPickerIdx !== null} transparent animationType="slide" onRequestClose={() => setKmPickerIdx(null)}>
         <TouchableOpacity activeOpacity={1} onPress={() => setKmPickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
-            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>Distance</Text>
-            <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>De 1 à 200 km</Text>
+            <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold', textAlign: 'center', marginBottom: 4 }}>Distance</Text>
+            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>De 1 à 200 km</Text>
             <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
               {Array.from({ length: 200 }).map((_, i) => {
                 const km = i + 1;
@@ -5959,13 +6466,13 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     onPress={() => updateDistance(kmPickerIdx, 'km', String(km))}
                     style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                   >
-                    <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{km} km</Text>
+                    <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{km} km</Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
             <TouchableOpacity onPress={() => setKmPickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '700' }}>OK</Text>
+              <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -5990,7 +6497,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   // via PUT /organizer/event/:slug (whitelist worker existante).
   if (isEdit) {
     const sectionHeaderStyle = {
-      color: 'rgba(26,10,62,0.45)', fontSize: 12, fontWeight: '700',
+      color: 'rgba(26,10,62,0.45)', fontSize: 12, fontFamily: 'Montserrat-SemiBold',
       letterSpacing: 0.6, textTransform: 'uppercase',
       marginBottom: 8, marginLeft: 32, marginTop: 24,
     };
@@ -6058,14 +6565,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
     const SettingsRow = ({ label, value, onPress }) => {
       return (
         <TouchableOpacity onPress={onPress} activeOpacity={0.6} style={rowStyle}>
-          <Text style={{ color: '#1a0a3e', fontSize: 15, fontWeight: '600' }}>{label}</Text>
+          <Text style={{ color: '#1a0a3e', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>{label}</Text>
           <Text
-            style={{ flex: 1, textAlign: 'right', color: 'rgba(26,10,62,0.55)', fontSize: 15, marginRight: 8, marginLeft: 12 }}
+            style={{ fontFamily: 'Montserrat', flex: 1, textAlign: 'right', color: 'rgba(26,10,62,0.55)', fontSize: 15, marginRight: 8, marginLeft: 12 }}
             numberOfLines={1}
           >
             {value || '—'}
           </Text>
-          <Text style={{ color: 'rgba(26,10,62,0.3)', fontSize: 18, fontWeight: '300' }}>›</Text>
+          <Text style={{ color: 'rgba(26,10,62,0.3)', fontSize: 18, fontFamily: 'Montserrat' }}>›</Text>
         </TouchableOpacity>
       );
     };
@@ -6081,11 +6588,11 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               backgroundColor: '#F2F2F7',
             }}>
               <View style={{ width: 32 }} />
-              <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>
+              <Text style={{ color: C.text, fontSize: 17, fontFamily: 'Montserrat-SemiBold' }}>
                 Modifier l'événement
               </Text>
               <TouchableOpacity onPress={onClose} hitSlop={12} style={{ width: 32, alignItems: 'flex-end' }}>
-                <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+                <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 22 }}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -6108,12 +6615,12 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                   ) : (coverImage || pendingCoverLocal) ? (
                     <ExpoImage source={{ uri: pendingCoverLocal || coverImage }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                   ) : (
-                    <Text style={{ color: C.textSoft, fontSize: 13 }}>+ Ajouter une image de couverture</Text>
+                    <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 13 }}>+ Ajouter une image de couverture</Text>
                   )}
                 </TouchableOpacity>
                 {(coverImage || pendingCoverLocal) && !coverBusy && (
                   <TouchableOpacity onPress={pickAndUploadCover} style={{ marginTop: 6 }}>
-                    <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
+                    <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold', textAlign: 'right' }}>
                       Changer l'image
                     </Text>
                   </TouchableOpacity>
@@ -6123,46 +6630,46 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               {/* ───── GÉNÉRAL ───── */}
               <Text style={sectionHeaderStyle}>GÉNÉRAL</Text>
               <View style={sectionCardStyle}>
-                <SettingsRow label="Nom" value={name} onPress={() => setEditingField('name')} />
+                <SettingsRow label="Nom" value={name} onPress={() => ouvrirChamp('name')} />
                 <View style={rowSeparatorStyle} />
-                <SettingsRow label="Type d'épreuve" value={eventType ? displayEventType(eventType) : ''} onPress={() => setEditingField('type')} />
+                <SettingsRow label="Type d'épreuve" value={eventType ? displayEventType(eventType) : ''} onPress={() => ouvrirChamp('type')} />
                 <View style={rowSeparatorStyle} />
-                <SettingsRow label="Date" value={previewDate} onPress={() => setEditingField('date')} />
+                <SettingsRow label="Date" value={previewDate} onPress={() => ouvrirChamp('date')} />
                 <View style={rowSeparatorStyle} />
-                <SettingsRow label="Heure de départ" value={startTime || ''} onPress={() => setEditingField('start_time')} />
+                <SettingsRow label="Heure de départ" value={startTime || ''} onPress={() => ouvrirChamp('start_time')} />
               </View>
 
               {/* ───── LIEU & CONTACT ───── */}
               <Text style={sectionHeaderStyle}>LIEU & CONTACT</Text>
               <View style={sectionCardStyle}>
-                <SettingsRow label="Lieu" value={previewLocation} onPress={() => setEditingField('location')} />
+                <SettingsRow label="Lieu" value={previewLocation} onPress={() => ouvrirChamp('location')} />
                 <View style={rowSeparatorStyle} />
-                <SettingsRow label="Adresse précise" value={address || 'Non renseignée'} onPress={() => setEditingField('address')} />
+                <SettingsRow label="Adresse précise" value={address || 'Non renseignée'} onPress={() => ouvrirChamp('address')} />
                 <View style={rowSeparatorStyle} />
-                <SettingsRow label="Téléphone" value={phone} onPress={() => setEditingField('phone')} />
+                <SettingsRow label="Téléphone" value={phone} onPress={() => ouvrirChamp('phone')} />
                 <View style={rowSeparatorStyle} />
-                <SettingsRow label="Email contact" value={contact} onPress={() => setEditingField('email')} />
+                <SettingsRow label="Email contact" value={contact} onPress={() => ouvrirChamp('email')} />
                 <View style={rowSeparatorStyle} />
-                <SettingsRow label="Site web" value={website} onPress={() => setEditingField('website')} />
+                <SettingsRow label="Site web" value={website} onPress={() => ouvrirChamp('website')} />
                 <View style={rowSeparatorStyle} />
-                <SettingsRow label="Visibilité" value={listed ? 'Listé' : 'Non listé'} onPress={() => setEditingField('listed')} />
+                <SettingsRow label="Visibilité" value={listed ? 'Listé' : 'Non listé'} onPress={() => ouvrirChamp('listed')} />
                 <View style={rowSeparatorStyle} />
-                <SettingsRow label="Participants estimés" value={estimatedParticipants || 'Non renseigné'} onPress={() => setEditingField('estimated_participants')} />
+                <SettingsRow label="Participants estimés" value={estimatedParticipants || 'Non renseigné'} onPress={() => ouvrirChamp('estimated_participants')} />
                 <View style={rowSeparatorStyle} />
-                <SettingsRow label="Description" value={message ? `${message.slice(0, 30)}${message.length > 30 ? '…' : ''}` : 'Non renseignée'} onPress={() => setEditingField('message')} />
+                <SettingsRow label="Description" value={message ? `${message.slice(0, 30)}${message.length > 30 ? '…' : ''}` : 'Non renseignée'} onPress={() => ouvrirChamp('message')} />
               </View>
 
               {/* ───── DISTANCES ───── */}
               <Text style={sectionHeaderStyle}>DISTANCES</Text>
               <View style={sectionCardStyle}>
-                <SettingsRow label="Distances proposées" value={previewDistances} onPress={() => setEditingField('distances')} />
+                <SettingsRow label="Distances proposées" value={previewDistances} onPress={() => ouvrirChamp('distances')} />
               </View>
 
               {/* ───── CODE PIN PHOTOGRAPHE ───── */}
               {isEdit && (
                 <>
                   <Text style={sectionHeaderStyle}>CODE PIN PHOTOGRAPHE</Text>
-                  <Text style={{ paddingHorizontal: 28, marginBottom: 6, fontSize: 12, color: C.textSoft }}>
+                  <Text style={{ fontFamily: 'Montserrat', paddingHorizontal: 28, marginBottom: 6, fontSize: 12, color: C.textSoft }}>
                     À transmettre à tes photographes le jour J
                   </Text>
                   <View style={sectionCardStyle}>
@@ -6172,22 +6679,25 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     <View style={rowSeparatorStyle} />
                     <View style={[rowStyle, { gap: 0 }]}>
                       <TouchableOpacity onPress={() => setRevealPwd(v => !v)} disabled={!isValidPin(photographerPwd)} style={{ flex: 1, alignItems: 'center', paddingVertical: 4, opacity: isValidPin(photographerPwd) ? 1 : 0.4 }}>
-                        <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>{revealPwd ? 'Masquer' : 'Afficher'}</Text>
+                        <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>{revealPwd ? 'Masquer' : 'Afficher'}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={async () => {
                           if (!isValidPin(photographerPwd)) return;
                           // Pas de Clipboard natif (expo-clipboard pas installé) — on
                           // passe par Share qui propose Copier dans la share-sheet iOS.
-                          try { await Share.share({ message: photographerPwd }); } catch {}
+                          try { await Share.share({ message: photographerPwd }); }
+                          catch (e) { console.warn('[event] partage PIN :', e?.message || e); }
                         }}
                         disabled={!isValidPin(photographerPwd)}
-                        style={{ flex: 1, alignItems: 'center', paddingVertical: 4, opacity: isValidPin(photographerPwd) ? 1 : 0.4 }}
+                        style={{ flex: 1, alignItems: 'center', paddingVertical: 10, opacity: isValidPin(photographerPwd) ? 1 : 0.4 }}
                       >
-                        <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Copier</Text>
+                        {/* Le bouton disait « Copier » alors qu il ouvre une
+                            feuille de partage. */}
+                        <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Partager</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => setEditingField('photographer_password')} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
-                        <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>{isValidPin(photographerPwd) ? 'Modifier' : 'Définir'}</Text>
+                      <TouchableOpacity onPress={() => ouvrirChamp('photographer_password')} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
+                        <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>{isValidPin(photographerPwd) ? 'Modifier' : 'Définir'}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -6196,7 +6706,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                   <Text style={sectionHeaderStyle}>FACTURATION</Text>
                   <View style={sectionCardStyle}>
                     <View style={rowStyle}>
-                      <Text style={{ color: C.text, fontSize: 16, fontWeight: '500', flex: 1 }}>
+                      <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-Medium', flex: 1 }}>
                         Offre partenaire gratuite
                       </Text>
                     </View>
@@ -6214,23 +6724,23 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
             value={name}
             onChangeText={setName}
             placeholder="Ex : Trail des Violettes"
-            onClose={() => setEditingField(null)}
+            onClose={annulerChamp}
             onSave={async () => {
               if (!name?.trim()) { Alert.alert('Nom requis'); return; }
               const ok = await savePartial({ name: name.trim() });
-              if (ok) setEditingField(null);
+              if (ok) validerChamp();
             }}
             busy={partialBusy}
           />
 
           {/* ─── Sub-modal: Type d'épreuve (save immediat sur tap) ─── */}
-          <Modal visible={editingField === 'type'} animationType="slide" onRequestClose={() => setEditingField(null)} presentationStyle="formSheet">
+          <Modal visible={editingField === 'type'} animationType="slide" onRequestClose={annulerChamp} presentationStyle="formSheet">
             <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
               <View style={subModalHeader}>
                 <View style={{ width: 60 }} />
-                <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>Type d'épreuve</Text>
-                <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
-                  <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+                <Text style={{ color: C.text, fontSize: 17, fontFamily: 'Montserrat-SemiBold' }}>Type d'épreuve</Text>
+                <TouchableOpacity onPress={annulerChamp} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
+                  <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 22 }}>✕</Text>
                 </TouchableOpacity>
               </View>
               <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12, paddingBottom: 32 }}>
@@ -6243,16 +6753,16 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                           onPress={async () => {
                             setEventType(t);
                             const ok = await savePartial({ event_type: t });
-                            if (ok) setEditingField(null);
+                            if (ok) validerChamp();
                           }}
                           disabled={partialBusy}
                           style={[rowStyle, { paddingVertical: 16 }]}
                         >
-                          <Text style={{ color: active ? C.primary : C.text, fontSize: 16, fontWeight: '500', flex: 1 }}>
+                          <Text style={{ color: active ? C.primary : C.text, fontSize: 16, fontFamily: 'Montserrat-Medium', flex: 1 }}>
                             {displayEventType(t)}
                           </Text>
                           {active && (
-                            <Text style={{ color: C.primary, fontSize: 18, fontWeight: '700' }}>✓</Text>
+                            <Text style={{ color: C.primary, fontSize: 18, fontFamily: 'Montserrat-SemiBold' }}>✓</Text>
                           )}
                         </TouchableOpacity>
                         {idx < types.length - 1 && <View style={rowSeparatorStyle} />}
@@ -6271,7 +6781,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               à la confirmation (PUT { event_date, event_date_end }). */}
           <CalendarRangeModal
             visible={editingField === 'date'}
-            onClose={() => setEditingField(null)}
+            onClose={annulerChamp}
             initialStart={eventDate}
             initialEnd={eventDateEnd}
             minDate={null}
@@ -6291,22 +6801,21 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
           />
 
           {/* ─── Sub-modal: Heure de départ (time picker) ─── */}
-          <Modal visible={editingField === 'start_time'} animationType="slide" onRequestClose={() => setEditingField(null)} presentationStyle="formSheet">
+          <Modal visible={editingField === 'start_time'} animationType="slide" onRequestClose={annulerChamp} presentationStyle="formSheet">
             <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
               <View style={subModalHeader}>
                 <View style={{ width: 60 }} />
-                <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>Heure de départ</Text>
-                <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
-                  <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+                <Text style={{ color: C.text, fontSize: 17, fontFamily: 'Montserrat-SemiBold' }}>Heure de départ</Text>
+                <TouchableOpacity onPress={annulerChamp} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
+                  <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 22 }}>✕</Text>
                 </TouchableOpacity>
               </View>
               <View style={{ flex: 1, alignItems: 'center', paddingTop: 16 }}>
                 <DateTimePicker
                   value={(() => {
-                    const m = String(startTime || '').match(/^(\d{1,2}):(\d{2})$/);
+                    const m = String(heureAffichee).match(/^(\d{1,2}):(\d{2})$/);
                     const d = new Date();
                     if (m) { d.setHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0); }
-                    else { d.setHours(8, 0, 0, 0); }
                     return d;
                   })()}
                   mode="time"
@@ -6324,25 +6833,30 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               </View>
               <TouchableOpacity
                 onPress={async () => {
-                  if (!/^\d{1,2}:\d{2}$/.test(startTime)) { Alert.alert('Format invalide', 'Heure attendue HH:MM'); return; }
-                  const ok = await savePartial({ start_time: startTime });
-                  if (ok) setEditingField(null);
+                  // On enregistre ce que la roulette montre. Avant, ne pas y
+                  // toucher laissait startTime vide alors que 08:00 etait
+                  // affiche : « Format invalide » sur une heure lisible a
+                  // l ecran.
+                  const heure = heureAffichee;
+                  if (!/^\d{1,2}:\d{2}$/.test(heure)) { Alert.alert('Format invalide', 'Heure attendue HH:MM'); return; }
+                  const ok = await savePartial({ start_time: heure });
+                  if (ok) { setStartTime(heure); validerChamp(); }
                 }}
                 disabled={partialBusy}
                 style={[saveBtnStyle, { opacity: partialBusy ? 0.6 : 1 }]}
               >
-                {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
+                {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Enregistrer</Text>}
               </TouchableOpacity>
             </View>
           </Modal>
 
           {/* ─── Sub-modal: Code PIN photographe (4 chiffres) ─── */}
-          <Modal visible={editingField === 'photographer_password'} animationType="slide" transparent onRequestClose={() => setEditingField(null)}>
+          <Modal visible={editingField === 'photographer_password'} animationType="slide" transparent onRequestClose={annulerChamp}>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-              <TouchableOpacity activeOpacity={1} onPress={() => setEditingField(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 24 }}>
+              <TouchableOpacity activeOpacity={1} onPress={annulerChamp} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 24 }}>
                 <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderRadius: 18, padding: 24 }}>
-                  <Text style={{ fontSize: 18, fontWeight: '700', color: C.text, marginBottom: 4 }}>Code PIN photographe</Text>
-                  <Text style={{ fontSize: 13, color: C.textSoft, marginBottom: 22, lineHeight: 18 }}>
+                  <Text style={{ fontSize: 18, fontFamily: 'Montserrat-SemiBold', color: C.text, marginBottom: 4 }}>Code PIN photographe</Text>
+                  <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: C.textSoft, marginBottom: 22, lineHeight: 18 }}>
                     4 chiffres à transmettre à tes photographes le jour J.
                   </Text>
                   <PinInputRow
@@ -6354,20 +6868,20 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     onPress={() => setPhotographerPwd(generateRandomPin())}
                     style={{ alignSelf: 'center', marginTop: 18, paddingVertical: 8 }}
                   >
-                    <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Générer aléatoirement</Text>
+                    <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Générer aléatoirement</Text>
                   </TouchableOpacity>
                   <View style={{ flexDirection: 'row', gap: 10, marginTop: 22 }}>
                     <TouchableOpacity
-                      onPress={() => setEditingField(null)}
+                      onPress={annulerChamp}
                       style={{ flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: '#f5f3ff' }}
                     >
-                      <Text style={{ color: C.primary, fontSize: 14, fontWeight: '700' }}>Annuler</Text>
+                      <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={async () => {
                         if (!isValidPin(photographerPwd)) { Alert.alert('Code PIN', 'Le code PIN doit être composé de 4 chiffres.'); return; }
                         const ok = await savePartial({ photographer_password: photographerPwd });
-                        if (ok) { setEditingField(null); setRevealPwd(false); }
+                        if (ok) { validerChamp(); setRevealPwd(false); }
                       }}
                       disabled={!isValidPin(photographerPwd) || partialBusy}
                       style={{
@@ -6376,7 +6890,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                         opacity: partialBusy ? 0.6 : 1,
                       }}
                     >
-                      {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: isValidPin(photographerPwd) ? '#fff' : C.textSoft, fontSize: 14, fontWeight: '700' }}>Confirmer</Text>}
+                      {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: isValidPin(photographerPwd) ? '#fff' : '#A89CB8', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Confirmer</Text>}
                     </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
@@ -6385,13 +6899,13 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
           </Modal>
 
           {/* ─── Sub-modal: Lieu (postalCode + city) ─── */}
-          <Modal visible={editingField === 'location'} animationType="slide" onRequestClose={() => setEditingField(null)}>
+          <Modal visible={editingField === 'location'} animationType="slide" onRequestClose={annulerChamp}>
             <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
               <View style={[subModalHeader, { paddingTop: 56 }]}>
                 <View style={{ width: 60 }} />
-                <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>Lieu</Text>
-                <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
-                  <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+                <Text style={{ color: C.text, fontSize: 17, fontFamily: 'Montserrat-SemiBold' }}>Lieu</Text>
+                <TouchableOpacity onPress={annulerChamp} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
+                  <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 22 }}>✕</Text>
                 </TouchableOpacity>
               </View>
               <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
@@ -6404,12 +6918,12 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     maxLength={5}
                     placeholder="75001"
                     placeholderTextColor="#9CA3AF"
-                    style={{ paddingVertical: 14, paddingHorizontal: 16, fontSize: 16, color: C.text }}
+                    style={{ fontFamily: 'Montserrat', paddingVertical: 14, paddingHorizontal: 16, fontSize: 16, color: C.text }}
                   />
                 </View>
                 <Text style={sectionHeaderStyle}>VILLE</Text>
                 {cityFetchFailed && (
-                  <Text style={{ color: C.textSoft, fontSize: 12, marginHorizontal: 32, marginBottom: 6 }}>
+                  <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginHorizontal: 32, marginBottom: 6 }}>
                     Recherche de villes indisponible. Saisis ta ville manuellement.
                   </Text>
                 )}
@@ -6419,7 +6933,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     onChangeText={setCity}
                     placeholder="Paris"
                     placeholderTextColor="#9CA3AF"
-                    style={{ paddingVertical: 14, paddingHorizontal: 16, fontSize: 16, color: C.text }}
+                    style={{ fontFamily: 'Montserrat', paddingVertical: 14, paddingHorizontal: 16, fontSize: 16, color: C.text }}
                   />
                 </View>
                 {citySuggestions.length > 0 && !city && (
@@ -6427,15 +6941,15 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     {citySuggestions.slice(0, 6).map((c, idx, arr) => (
                       <React.Fragment key={c}>
                         <TouchableOpacity onPress={() => { setCity(c); setCitySuggestions([]); }} style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
-                          <Text style={{ color: C.primary, fontSize: 15 }}>{c}</Text>
+                          <Text style={{ fontFamily: 'Montserrat', color: C.primary, fontSize: 15 }}>{c}</Text>
                         </TouchableOpacity>
                         {idx < arr.length - 1 && <View style={rowSeparatorStyle} />}
                       </React.Fragment>
                     ))}
                   </View>
                 )}
-                <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 12, marginHorizontal: 32 }}>
-                  Format suggéré : Ville (Département)
+                <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 12, marginHorizontal: 32 }}>
+                  Format enregistré : Ville (Code postal)
                 </Text>
               </ScrollView>
               <View style={{ paddingBottom: editKbHeight }}>
@@ -6444,12 +6958,12 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     if (!city?.trim()) { Alert.alert('Ville requise'); return; }
                     const loc = postalCode ? `${city} (${postalCode})` : city;
                     const ok = await savePartial({ location: loc });
-                    if (ok) setEditingField(null);
+                    if (ok) validerChamp();
                   }}
                   disabled={partialBusy}
                   style={[saveBtnStyle, { marginBottom: editKbHeight > 0 ? 12 : 28, opacity: partialBusy ? 0.6 : 1 }]}
                 >
-                  {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
+                  {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Enregistrer</Text>}
                 </TouchableOpacity>
               </View>
             </View>
@@ -6463,7 +6977,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
             onChangeText={setPhone}
             keyboardType="phone-pad"
             placeholder="06 12 34 56 78"
-            onClose={() => setEditingField(null)}
+            onClose={annulerChamp}
             onSave={async () => {
               const v = (phone || '').trim();
               if (v) {
@@ -6474,7 +6988,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                 }
               }
               const ok = await savePartial({ phone: v });
-              if (ok) setEditingField(null);
+              if (ok) validerChamp();
             }}
             busy={partialBusy}
           />
@@ -6488,11 +7002,11 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
             keyboardType="email-address"
             autoCapitalize="none"
             placeholder="contact@event.com"
-            onClose={() => setEditingField(null)}
+            onClose={annulerChamp}
             onSave={async () => {
               if (!emailOk) { Alert.alert('Email invalide'); return; }
               const ok = await savePartial({ contact: contact.trim() });
-              if (ok) setEditingField(null);
+              if (ok) validerChamp();
             }}
             busy={partialBusy}
           />
@@ -6505,24 +7019,24 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
             onChangeText={setAddress}
             autoCapitalize="sentences"
             placeholder="12 Rue de la Paix, 27400 Louviers"
-            onClose={() => setEditingField(null)}
+            onClose={annulerChamp}
             onSave={async () => {
               const v = (address || '').trim();
               const ok = await savePartial({ address: v });
               if (ok) {
                 setAddress(v);
-                setEditingField(null);
+                validerChamp();
               }
             }}
             busy={partialBusy}
           />
 
           {/* ─── Sub-modal: Visibilite (listed toggle) ─── */}
-          <Modal visible={editingField === 'listed'} animationType="slide" transparent onRequestClose={() => setEditingField(null)}>
+          <Modal visible={editingField === 'listed'} animationType="slide" transparent onRequestClose={annulerChamp}>
             <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
               <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 }}>
-                <Text style={{ fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Visibilité publique</Text>
-                <Text style={{ fontSize: 13, color: C.textSoft, marginBottom: 20, lineHeight: 18 }}>
+                <Text style={{ fontSize: 18, fontFamily: 'Montserrat-SemiBold', marginBottom: 8 }}>Visibilité publique</Text>
+                <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: C.textSoft, marginBottom: 20, lineHeight: 18 }}>
                   Si non listé, ton event est masqué de la liste publique Will mais reste accessible par lien direct et tes coureurs déjà inscrits voient toujours leurs photos.
                 </Text>
                 {[true, false].map((val) => (
@@ -6532,7 +7046,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                       const ok = await savePartial({ listed: val });
                       if (ok) {
                         setListed(val);
-                        setEditingField(null);
+                        validerChamp();
                       }
                     }}
                     style={{
@@ -6545,19 +7059,19 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                       marginBottom: 10,
                     }}
                   >
-                    <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: C.text }}>
+                    <Text style={{ flex: 1, fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: C.text }}>
                       {val ? 'Listé' : 'Non listé'}
                     </Text>
                     {listed === val ? (
-                      <Text style={{ color: '#7B2FFF', fontWeight: '700', fontSize: 18 }}>✓</Text>
+                      <Text style={{ color: '#7B2FFF', fontFamily: 'Montserrat-SemiBold', fontSize: 18 }}>✓</Text>
                     ) : null}
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
-                  onPress={() => setEditingField(null)}
+                  onPress={annulerChamp}
                   style={{ marginTop: 8, padding: 14, alignItems: 'center' }}
                 >
-                  <Text style={{ color: C.textSoft, fontSize: 15 }}>Annuler</Text>
+                  <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 15 }}>Annuler</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -6571,10 +7085,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
             onChangeText={(v) => setEstimatedParticipants(String(v).replace(/[^\d]/g, ''))}
             keyboardType="number-pad"
             placeholder="500"
-            onClose={() => setEditingField(null)}
+            onClose={annulerChamp}
             onSave={async () => {
               const ok = await savePartial({ estimated_participants: estimatedParticipants ? Number(estimatedParticipants) : null });
-              if (ok) setEditingField(null);
+              if (ok) validerChamp();
             }}
             busy={partialBusy}
           />
@@ -6588,10 +7102,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
             multiline
             maxLength={500}
             placeholder="Parcours, ambiance, ravitaillements, ce qu'il faut savoir avant de venir…"
-            onClose={() => setEditingField(null)}
+            onClose={annulerChamp}
             onSave={async () => {
               const ok = await savePartial({ message: message.trim() });
-              if (ok) setEditingField(null);
+              if (ok) validerChamp();
             }}
             busy={partialBusy}
           />
@@ -6605,27 +7119,27 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
             keyboardType="url"
             autoCapitalize="none"
             placeholder="traildesviolettes.fr"
-            onClose={() => setEditingField(null)}
+            onClose={annulerChamp}
             onSave={async () => {
               let v = (website || '').trim();
               if (v && !/^https?:\/\//.test(v)) v = `https://${v}`;
               const ok = await savePartial({ website: v });
               if (ok) {
                 setWebsite(v);
-                setEditingField(null);
+                validerChamp();
               }
             }}
             busy={partialBusy}
           />
 
           {/* ─── Sub-modal: Distances ─── */}
-          <Modal visible={editingField === 'distances'} animationType="slide" onRequestClose={() => setEditingField(null)}>
+          <Modal visible={editingField === 'distances'} animationType="slide" onRequestClose={annulerChamp}>
             <View style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
               <View style={[subModalHeader, { paddingTop: 56 }]}>
                 <View style={{ width: 60 }} />
-                <Text style={{ color: C.text, fontSize: 17, fontWeight: '700' }}>Distances</Text>
-                <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
-                  <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
+                <Text style={{ color: C.text, fontSize: 17, fontFamily: 'Montserrat-SemiBold' }}>Distances</Text>
+                <TouchableOpacity onPress={annulerChamp} hitSlop={12} style={{ width: 60, alignItems: 'flex-end' }}>
+                  <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 22 }}>✕</Text>
                 </TouchableOpacity>
               </View>
               <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingTop: 12, paddingBottom: 32, paddingHorizontal: 16 }} keyboardShouldPersistTaps="handled">
@@ -6640,43 +7154,43 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                       </TouchableOpacity>
                     </View>
                     <View style={{ marginBottom: 8 }}>
-                      <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>{d.label_only ? 'NOM' : 'TYPE'}</Text>
+                      <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4 }}>{d.label_only ? 'NOM' : 'TYPE'}</Text>
                       <TextInput
                         value={d.label}
                         onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
                         placeholder={d.label_only ? 'Nom de la course' : (eventType || 'Type')}
                         placeholderTextColor="rgba(26,10,62,0.35)"
                         maxLength={40}
-                        style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', paddingHorizontal: 12, color: C.text, fontSize: 14 }}
+                        style={{ fontFamily: 'Montserrat', height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', paddingHorizontal: 12, color: C.text, fontSize: 14 }}
                       />
                     </View>
                     <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-end' }}>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DISTANCE</Text>
+                        <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4 }}>DISTANCE</Text>
                         <TouchableOpacity onPress={() => setKmPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: d.km ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.km ? `${d.km} km` : '—'}</Text>
+                          <Text style={{ fontFamily: 'Montserrat', color: d.km ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.km ? `${d.km} km` : '—'}</Text>
                         </TouchableOpacity>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉPART</Text>
+                        <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4 }}>DÉPART</Text>
                         <TouchableOpacity onPress={() => setTimePickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: d.time ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.time || '—'}</Text>
+                          <Text style={{ fontFamily: 'Montserrat', color: d.time ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.time || '—'}</Text>
                         </TouchableOpacity>
                       </View>
                       <View style={{ flex: 1.2 }}>
-                        <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 }}>DÉNIVELÉ</Text>
+                        <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4 }}>DÉNIVELÉ</Text>
                         <TouchableOpacity onPress={() => setElevPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: d.elevation ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.elevation || '—'}</Text>
+                          <Text style={{ fontFamily: 'Montserrat', color: d.elevation ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.elevation || '—'}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
-                    <TouchableOpacity onPress={() => removeDistance(idx)} style={{ alignSelf: 'flex-end', marginTop: 8 }}>
-                      <Text style={{ color: C.error, fontSize: 12, fontWeight: '600' }}>Supprimer</Text>
+                    <TouchableOpacity onPress={() => removeDistance(idx)} hitSlop={12} style={{ alignSelf: 'flex-end', marginTop: 8, paddingVertical: 8, paddingHorizontal: 6 }}>
+                      <Text style={{ color: C.error, fontSize: 12, fontFamily: 'Montserrat-SemiBold' }}>Supprimer</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
                 <TouchableOpacity onPress={addDistance} style={{ paddingVertical: 14, alignItems: 'center', borderRadius: 14, backgroundColor: '#fff', marginTop: 4 }}>
-                  <Text style={{ color: C.primary, fontWeight: '600', fontSize: 15 }}>+ Ajouter une distance</Text>
+                  <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 15 }}>+ Ajouter une distance</Text>
                 </TouchableOpacity>
               </ScrollView>
               <View style={{ paddingBottom: editKbHeight }}>
@@ -6697,12 +7211,12 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     if (cleaned.length === 0) { Alert.alert('Au moins une distance requise'); return; }
                     if (!cleaned.every(d => d.km > 0)) { Alert.alert('Distance > 0 requise pour chaque course'); return; }
                     const ok = await savePartial({ distances: cleaned });
-                    if (ok) setEditingField(null);
+                    if (ok) validerChamp();
                   }}
                   disabled={partialBusy}
                   style={[saveBtnStyle, { marginBottom: editKbHeight > 0 ? 12 : 28, opacity: partialBusy ? 0.6 : 1 }]}
                 >
-                  {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Enregistrer</Text>}
+                  {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Enregistrer</Text>}
                 </TouchableOpacity>
               </View>
             </View>
@@ -6716,65 +7230,92 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <TouchableOpacity activeOpacity={1} style={s.modalBackdrop} onPress={onClose}>
-          <TouchableOpacity activeOpacity={1} style={[s.modalSheet, { maxHeight: '90%' }]} onPress={() => {}}>
-            <TouchableOpacity onPress={onClose} hitSlop={20}>
-              <View style={s.modalHandle} />
-            </TouchableOpacity>
-            {/* Header : titre + étape */}
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.modalTitle}>{isEdit ? 'Modifier l\'événement' : 'Créer un événement'}</Text>
-                <Text style={{ color: C.textSoft, fontSize: 12, marginTop: 2 }}>Étape {step} sur {TOTAL_STEPS}</Text>
-              </View>
-              <TouchableOpacity onPress={onClose} hitSlop={12} style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
-                <Text style={{ color: C.textSoft, fontSize: 22 }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Barre de progression */}
-            <View style={{ height: 4, backgroundColor: '#e9e4f9', borderRadius: 2, marginBottom: 14 }}>
-              <View style={{ height: 4, width: `${(step / TOTAL_STEPS) * 100}%`, backgroundColor: C.primary, borderRadius: 2 }} />
-            </View>
-
-            {/* Wizard slide */}
-            <View
-              style={{ overflow: 'hidden' }}
-              onLayout={(e) => {
-                const w = e.nativeEvent.layout.width;
-                if (w && w !== sheetW) {
-                  setSheetW(w);
-                  slideX.setValue(-(step - 1) * w);
-                }
-              }}
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={fermerAvecGarde}>
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+        <View style={{ flex: 1 }}>
+            <ScrollView
+              ref={listeRef}
+              style={{ flex: 1 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              automaticallyAdjustKeyboardInsets
+              onScroll={(e) => { decalageScrollRef.current = e.nativeEvent.contentOffset.y; }}
+              scrollEventThrottle={16}
+              contentContainerStyle={{ paddingBottom: 22 + (Platform.OS === 'ios' ? 0 : hauteurClavier) }}
             >
-              <Animated.View style={{ flexDirection: 'row', width: sheetW * TOTAL_STEPS, transform: [{ translateX: slideX }] }}>
+          {/* Meme entete degradee que les ecrans Connexion / Inscription :
+              c est le meme moment du parcours — on entre quelque part. */}
+          <LinearGradient
+            colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ paddingHorizontal: 22, paddingTop: 74, paddingBottom: 22 }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity
+                onPress={fermerAvecGarde}
+                hitSlop={14}
+                style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: 18 }}>✕</Text>
+              </TouchableOpacity>
+              {/* La fusee se pose juste au-dessus du titre, en rose : elle
+                  signe l action plutot que de flotter seule en haut. */}
+              <View style={{ flex: 1, alignItems: 'center', marginRight: 30, marginBottom: 2 }}>
+                <Icon.Fusee size={24} color={C.pinkPill} />
+              </View>
+            </View>
+            <Text style={{ fontFamily: 'AVEstiana', fontSize: 30, color: '#fff', textAlign: 'center' }}>
+              Lancer mon event
+            </Text>
+            {/* La promesse tenait un ecran entier avant le formulaire. Elle
+                tient en deux lignes ici, et l orga commence a remplir tout
+                de suite. */}
+            <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, lineHeight: 21, color: 'rgba(255,255,255,0.92)', textAlign: 'center', marginTop: 10 }}>
+              Rends tes photos accessibles{'\n'}à tous les participants
+            </Text>
+          </LinearGradient>
 
-                {/* ===== STEP 1 : Identité ===== */}
-                <View style={{ width: sheetW }}>
-                  <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
-                    <Text style={formSectionStyle.heading}>Nom de l'événement *</Text>
-                    <TextInput placeholder="Ex : Trail des Violettes" placeholderTextColor={C.textSoft} value={name} onChangeText={setName} style={formSectionStyle.input} />
+              <View style={{ paddingHorizontal: 22, paddingTop: 22 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: C.text }}>L'essentiel</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: '#efeaf8' }} />
+              </View>
+              <Text style={formSectionStyle.heading}>Nom de l'event *</Text>
+                    <TextInput placeholder="Ex : Trail des Violettes" placeholderTextColor="#A89CB8" value={name} onChangeText={setName} style={formSectionStyle.input} />
                     {showErr[1] && !name?.trim() && <Text style={errStyle}>Champ requis</Text>}
 
                     <Text style={formSectionStyle.heading}>Type d'épreuve *</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                       {types.map(t => (
-                        <TouchableOpacity key={t} onPress={() => setEventType(t)} style={[s.typePill, eventType === t && { backgroundColor: colorForType(t) }]}>
-                          <Text style={[s.typePillText, eventType === t && { color: '#fff' }]}>{displayEventType(t)}</Text>
+                        <TouchableOpacity
+                          key={t}
+                          onPress={() => setEventType(t)}
+                          activeOpacity={0.85}
+                          style={{
+                            backgroundColor: eventType === t ? colorForType(t) : '#F5F3FA',
+                            borderRadius: 999, paddingVertical: 9, paddingHorizontal: 16, marginBottom: 6,
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 13,
+                            fontFamily: eventType === t ? 'Montserrat-SemiBold' : 'Montserrat',
+                            color: eventType === t ? '#fff' : '#4a4458',
+                          }}>
+                            {displayEventType(t)}
+                          </Text>
                         </TouchableOpacity>
                       ))}
                     </View>
                     {showErr[1] && !eventType && <Text style={errStyle}>Sélectionne un type</Text>}
 
-                    <Text style={formSectionStyle.heading}>Date(s) de l'événement *</Text>
+                    <Text style={formSectionStyle.heading}>Date(s) *</Text>
                     <TouchableOpacity
                       onPress={() => setShowCalendar(true)}
-                      style={[formSectionStyle.input, { justifyContent: 'center' }]}
+                      style={[formSectionStyle.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
                     >
-                      <Text style={{ color: (eventDate || dateTbd) ? C.text : C.textSoft, fontSize: 15 }}>
+                      <Text style={{ fontFamily: 'Montserrat', color: (eventDate || dateTbd) ? C.text : '#A89CB8', fontSize: 15 }}>
                         {eventDate
                           ? formatDateForForm(
                               isoJourLocal(eventDate),
@@ -6782,37 +7323,86 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                             )
                           : (dateTbd ? 'Date à venir' : 'Choisir une date (ou une plage)')}
                       </Text>
+                      <Svg width={19} height={19} viewBox="0 0 24 24" fill="none">
+                        <Path d="M3 8a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8Z" stroke={C.primary} strokeWidth={2} strokeLinecap="round" />
+                        <Path d="M8 3v4M16 3v4M3 10h18" stroke={C.primary} strokeWidth={2} strokeLinecap="round" />
+                      </Svg>
                     </TouchableOpacity>
-                    <Text style={{ color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
-                      Tape 2 fois la même date pour un événement sur 1 jour.
+                    <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
+                      Un seul jour ? Tape deux fois la même date.
                     </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const suivant = !dateTbd;
+                        setDateTbd(suivant);
+                        if (suivant) { setEventDate(null); setEventDateEnd(null); }
+                      }}
+                      activeOpacity={0.8}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, marginLeft: 2 }}
+                    >
+                      <View style={{
+                        width: 20, height: 20, borderRadius: 6,
+                        borderWidth: 2, borderColor: dateTbd ? C.primary : '#d9cef4',
+                        backgroundColor: dateTbd ? C.primary : '#fff',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {dateTbd ? (
+                          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                            <Path d="M20 6 9 17l-5-5" stroke="#fff" strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" />
+                          </Svg>
+                        ) : null}
+                      </View>
+                      <Text style={{ fontFamily: 'Montserrat', fontSize: 14, color: C.text }}>Date pas encore fixée</Text>
+                    </TouchableOpacity>
+                    {dateTbd && (
+                      <Text style={{ fontFamily: 'Montserrat', fontSize: 12, lineHeight: 17, color: C.textSoft, marginTop: -4, marginBottom: 10, marginLeft: 4 }}>
+                        Sans date, ton event reste dans ton espace : tu l'enverras en validation quand elle sera fixée.
+                      </Text>
+                    )}
                     {showErr[1] && !dateOk && <Text style={errStyle}>Choisis une date, ou « Date à venir » si elle n'est pas fixée</Text>}
-                  </ScrollView>
-                </View>
-
-                {/* ===== STEP 2 : Lieu + Courses ===== */}
-                <View style={{ width: sheetW }}>
-                  <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
-                    <Text style={formSectionStyle.heading}>Lieu</Text>
-                    <TextInput
-                      placeholder="Code postal *"
-                      placeholderTextColor={C.textSoft}
-                      value={postalCode}
-                      onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
-                      keyboardType="number-pad"
-                      maxLength={5}
-                      style={formSectionStyle.input}
-                    />
+                  
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={formSectionStyle.heading}>Code postal *</Text>
+                        <TextInput
+                          placeholder="27400"
+                          placeholderTextColor="#A89CB8"
+                          value={postalCode}
+                          onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
+                          keyboardType="number-pad"
+                          maxLength={5}
+                          style={formSectionStyle.input}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={formSectionStyle.heading}>Ville *</Text>
+                        {/* Le champ etait un bouton : quand la recherche de
+                            communes tombait, le message invitait a saisir la
+                            ville a la main alors que rien n etait saisissable
+                            — et l event devenait impossible a creer. C est un
+                            vrai champ, la liste ne fait que le remplir. */}
+                        <TextInput
+                          placeholder="Louviers"
+                          placeholderTextColor="#A89CB8"
+                          value={city}
+                          onChangeText={setCity}
+                          autoCapitalize="words"
+                          style={formSectionStyle.input}
+                        />
+                      </View>
+                    </View>
                     {showErr[2] && !/^\d{5}$/.test(postalCode) && <Text style={errStyle}>5 chiffres requis</Text>}
                     {cityFetchFailed && !city && (
-                      <Text style={{ color: C.textSoft, fontSize: 12, marginBottom: 8, marginLeft: 4 }}>
-                        Recherche de villes indisponible. Saisis ta ville manuellement.
+                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginBottom: 8, marginLeft: 4 }}>
+                        Recherche de villes indisponible. Saisis ta ville à la main.
                       </Text>
                     )}
                     {citySuggestions.length > 0 && !city && (
                       <ScrollView
+                        ref={blocVilleRef}
                         style={{ maxHeight: 140, marginBottom: 8, borderRadius: 12, backgroundColor: '#f5f3ff' }}
                         keyboardShouldPersistTaps="handled"
+                        nestedScrollEnabled
                       >
                         {citySuggestions.map((c) => (
                           <TouchableOpacity
@@ -6820,23 +7410,34 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                             onPress={() => { setCity(c); setCitySuggestions([]); }}
                             style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
                           >
-                            <Text style={{ color: C.text, fontSize: 14 }}>{c}</Text>
+                            <Text style={{ fontFamily: 'Montserrat', color: C.text, fontSize: 14 }}>{c}</Text>
                           </TouchableOpacity>
                         ))}
                       </ScrollView>
                     )}
-                    {city ? (
-                      <TouchableOpacity
-                        onPress={() => setCity('')}
-                        style={[formSectionStyle.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
-                      >
-                        <Text style={{ color: C.text, fontSize: 15 }}>{city}</Text>
-                        <Text style={{ color: C.textSoft, fontSize: 12 }}>Modifier</Text>
-                      </TouchableOpacity>
-                    ) : null}
                     {showErr[2] && !city?.trim() && <Text style={errStyle}>Ville requise</Text>}
 
-                    <Text style={formSectionStyle.heading}>Courses</Text>
+                    <Text style={formSectionStyle.heading}>Participants estimés</Text>
+                    <TextInput
+                      placeholder="500"
+                      placeholderTextColor="#A89CB8"
+                      value={estimatedParticipants}
+                      onChangeText={(v) => setEstimatedParticipants(v.replace(/\D/g, '').slice(0, 6))}
+                      keyboardType="number-pad"
+                      style={formSectionStyle.input}
+                    />
+
+                    
+              {/* Tout ce que l espace orga sait porter est saisissable ici.
+                  Rien n est obligatoire : ce qui manque se complete plus tard
+                  depuis l event, et decide seulement s il part en validation
+                  maintenant ou apres. */}
+              <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 12 }}>
+                <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: C.text }}>Les courses</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: '#efeaf8' }} />
+              </View>
+<Text style={formSectionStyle.heading}>Courses</Text>
                     {distances.map((d, idx) => (
                       <View key={idx} style={{ backgroundColor: '#faf9ff', borderRadius: 12, padding: 10, marginBottom: 8 }}>
                         <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
@@ -6848,38 +7449,38 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                           </TouchableOpacity>
                         </View>
                         <View style={{ marginBottom: 8 }}>
-                          <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>{d.label_only ? 'NOM' : 'TYPE'}</Text>
+                          <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>{d.label_only ? 'NOM' : 'TYPE'}</Text>
                           <TextInput
                             value={d.label}
                             onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
                             placeholder={d.label_only ? 'Nom de la course' : (eventType || 'Type')}
-                            placeholderTextColor={C.textSoft}
+                            placeholderTextColor="#A89CB8"
                             maxLength={40}
                             style={[formSectionStyle.input, { marginBottom: 0 }]}
                           />
                         </View>
                         <View style={{ flexDirection: 'row', gap: 6 }}>
                           <View style={{ flex: 1 }}>
-                            <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DISTANCE</Text>
+                            <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DISTANCE</Text>
                             <TouchableOpacity onPress={() => setKmPickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
-                              <Text style={{ color: d.km ? C.text : C.textSoft, fontSize: 15 }}>{d.km ? `${d.km} km` : '—'}</Text>
+                              <Text style={{ fontFamily: 'Montserrat', color: d.km ? C.text : '#A89CB8', fontSize: 15 }}>{d.km ? `${d.km} km` : '—'}</Text>
                             </TouchableOpacity>
                           </View>
                           <View style={{ flex: 1 }}>
-                            <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉPART</Text>
+                            <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉPART</Text>
                             <TouchableOpacity onPress={() => setTimePickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
-                              <Text style={{ color: d.time ? C.text : C.textSoft, fontSize: 15 }}>{d.time || '—'}</Text>
+                              <Text style={{ fontFamily: 'Montserrat', color: d.time ? C.text : '#A89CB8', fontSize: 15 }}>{d.time || '—'}</Text>
                             </TouchableOpacity>
                           </View>
                           <View style={{ flex: 1.2 }}>
-                            <Text style={{ color: C.textSoft, fontSize: 9, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉNIVELÉ</Text>
+                            <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉNIVELÉ</Text>
                             <TouchableOpacity onPress={() => setElevPickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
-                              <Text style={{ color: d.elevation ? C.text : C.textSoft, fontSize: 15 }}>{d.elevation || '—'}</Text>
+                              <Text style={{ fontFamily: 'Montserrat', color: d.elevation ? C.text : '#A89CB8', fontSize: 15 }}>{d.elevation || '—'}</Text>
                             </TouchableOpacity>
                           </View>
                         </View>
-                        <TouchableOpacity onPress={() => removeDistance(idx)} style={{ alignSelf: 'flex-end', marginTop: 6 }}>
-                          <Text style={{ color: C.error, fontSize: 12, fontWeight: '600' }}>Supprimer</Text>
+                        <TouchableOpacity onPress={() => removeDistance(idx)} hitSlop={12} style={{ alignSelf: 'flex-end', marginTop: 6, paddingVertical: 8, paddingHorizontal: 6 }}>
+                          <Text style={{ color: C.error, fontSize: 12, fontFamily: 'Montserrat-SemiBold' }}>Supprimer</Text>
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -6887,72 +7488,64 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                       onPress={addDistance}
                       style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 12, backgroundColor: '#f5f3ff', marginBottom: 8 }}
                     >
-                      <Text style={{ color: C.primary, fontWeight: '600', fontSize: 14 }}>+ Ajouter une course</Text>
+                      <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>+ Ajouter une course</Text>
                     </TouchableOpacity>
                     {showErr[2] && distances.length > 0 && !distances.every(d => parseFloat(d.km) > 0) && (
                       <Text style={errStyle}>Distance &gt; 0 requise pour chaque course</Text>
                     )}
-                  </ScrollView>
-                </View>
-
-                {/* ===== STEP 3 : Contact (UI-12 : 2 sections admin/public) ===== */}
-                <View style={{ width: sheetW }}>
-                  <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
+                  
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 12 }}>
+                <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: C.text }}>Les contacts</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: '#efeaf8' }} />
+              </View>
                     <Text style={formSectionStyle.heading}>Contact administratif</Text>
                     <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -8, marginBottom: 8, marginLeft: 4, lineHeight: 16 }]}>
                       Email interne pour la validation de ton event et les messages d'admin Will. NON affiché publiquement.
                     </Text>
-                    <TextInput placeholder="Email administratif *" placeholderTextColor={C.textSoft} value={contactAdmin} onChangeText={setContactAdmin} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
+                    <TextInput placeholder="Email administratif *" placeholderTextColor="#A89CB8" value={contactAdmin} onChangeText={setContactAdmin} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
                     {showErr[3] && !emailAdminFormat && <Text style={errStyle}>Email administratif invalide</Text>}
 
                     <Text style={[formSectionStyle.heading, { marginTop: 12 }]}>Contact public</Text>
                     <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -8, marginBottom: 8, marginLeft: 4, lineHeight: 16 }]}>
                       Au moins UNE info parmi email, téléphone et site web. Affichées sur la page publique de ton événement.
                     </Text>
-                    <TextInput placeholder="Email de contact public" placeholderTextColor={C.textSoft} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
+                    <TextInput placeholder="Email de contact public" placeholderTextColor="#A89CB8" value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
                     {showErr[3] && contact?.trim() && !emailPublicFormat && <Text style={errStyle}>Email public invalide</Text>}
-                    <TextInput placeholder="Téléphone" placeholderTextColor={C.textSoft} value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
-                    <TextInput placeholder="Site web" placeholderTextColor={C.textSoft} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
+                    <TextInput placeholder="Téléphone" placeholderTextColor="#A89CB8" value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
+                    <TextInput placeholder="Site web" placeholderTextColor="#A89CB8" value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
                     {showErr[3] && !hasPublicContact && <Text style={errStyle}>Renseigne au moins une info de contact public.</Text>}
-                  </ScrollView>
-                </View>
+                  
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 12 }}>
+                <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: C.text }}>La page de ton event</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: '#efeaf8' }} />
+              </View>
+                    <Text style={formSectionStyle.heading}>Adresse de départ</Text>
+                    <TextInput
+                      placeholder="Place Ernest Thorel, Louviers"
+                      placeholderTextColor="#A89CB8"
+                      value={address}
+                      onChangeText={setAddress}
+                      style={formSectionStyle.input}
+                    />
 
-                {/* ===== STEP 4 : Code PIN photographe ===== */}
-                <View style={{ width: sheetW }}>
-                  <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
-                    <Text style={formSectionStyle.heading}>Code PIN photographe</Text>
-                    <Text style={[formSectionStyle.subheading, { fontSize: 13, marginBottom: 22, marginLeft: 4, lineHeight: 18 }]}>
-                      4 chiffres à transmettre à tes photographes le jour J. Ils l'utiliseront pour se connecter à ton event sur l'app Will.
+                    <Text style={formSectionStyle.heading}>Description</Text>
+                    <TextInput
+                      placeholder="Parcours, ambiance, ravitaillements, ce qu'il faut savoir avant de venir…"
+                      placeholderTextColor="#A89CB8"
+                      value={message}
+                      onChangeText={setMessage}
+                      multiline
+                      style={[formSectionStyle.input, { height: 96, paddingTop: 12, textAlignVertical: 'top' }]}
+                    />
+                    <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
+                      {message.trim().length
+                        ? `${message.trim().length} caractère${message.trim().length > 1 ? 's' : ''}`
+                        : 'Ce que le coureur doit savoir avant de venir.'}
                     </Text>
-                    {!isEdit && (
-                      <>
-                        <PinInputRow
-                          value={password}
-                          onChange={setPassword}
-                          autoFocus={false}
-                          focusTrigger={step === 4 ? 1 : 0}
-                          error={showErr[4] && !isValidPin(password)}
-                        />
-                        <TouchableOpacity
-                          onPress={() => setPassword(generateRandomPin())}
-                          style={{ alignSelf: 'center', marginTop: 18, paddingVertical: 8, paddingHorizontal: 14 }}
-                        >
-                          <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600' }}>Générer aléatoirement</Text>
-                        </TouchableOpacity>
-                        {showErr[4] && !isValidPin(password) && (
-                          <Text style={[errStyle, { textAlign: 'center', marginTop: 6 }]}>Le code PIN doit être composé de 4 chiffres</Text>
-                        )}
-                      </>
-                    )}
-                  </ScrollView>
-                </View>
 
-                {/* ===== STEP 5 : Cover image (skippable) ===== */}
-                <View style={{ width: sheetW }}>
-                  <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={true} persistentScrollbar={true}>
                     <Text style={formSectionStyle.heading}>Image de couverture</Text>
-                    <Text style={{ color: C.textSoft, fontSize: 12, marginBottom: 10, marginLeft: 4, lineHeight: 17 }}>
-                      Cette image sera affichée sur la page de ton event et dans l'app coureur. Format paysage 16:9 recommandé.
+                    <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginBottom: 10, marginLeft: 4, lineHeight: 17 }}>
+                      Cette image sera affichée sur la page de ton event et dans l'app coureur. Format paysage 2:1 — tu la cadreras à l'étape suivante.
                     </Text>
                     <TouchableOpacity
                       onPress={pickAndUploadCover}
@@ -6969,63 +7562,284 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                         <ExpoImage source={{ uri: pendingCoverLocal || coverImage }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
                       ) : (
                         <>
-                          <Text style={{ color: C.primary, fontSize: 14, fontWeight: '600', marginBottom: 4 }}>+ Choisir une image</Text>
-                          <Text style={{ color: C.textSoft, fontSize: 11 }}>Depuis ta galerie</Text>
+                          <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold', marginBottom: 4 }}>+ Choisir une image</Text>
+                          <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11 }}>Depuis ta galerie</Text>
                         </>
                       )}
                     </TouchableOpacity>
                     {(coverImage || pendingCoverLocal) && !coverBusy && (
-                      <TouchableOpacity onPress={pickAndUploadCover} style={{ alignSelf: 'flex-end', marginTop: -4, marginBottom: 8 }}>
-                        <Text style={{ color: C.primary, fontSize: 12, fontWeight: '600' }}>Changer l'image</Text>
+                      <TouchableOpacity onPress={pickAndUploadCover} hitSlop={12} style={{ alignSelf: 'flex-end', marginTop: -4, marginBottom: 8, paddingVertical: 8, paddingHorizontal: 6 }}>
+                        <Text style={{ color: C.primary, fontSize: 12, fontFamily: 'Montserrat-SemiBold' }}>Changer l'image</Text>
                       </TouchableOpacity>
                     )}
                     {!(coverImage || pendingCoverLocal) && (
-                      <Text style={{ color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 8, lineHeight: 17 }}>
+                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 8, lineHeight: 17 }}>
                         Pas de visuel sous la main ? Tu peux ajouter l'image plus tard depuis l'édition de ton event.
                       </Text>
                     )}
-                  </ScrollView>
-                </View>
-
-              </Animated.View>
-            </View>
-
-            {/* Bottom nav : Précédent / Suivant ou Soumettre / Ajouter plus tard */}
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
-              {step > 1 && (
-                <TouchableOpacity
-                  onPress={() => goStep(step - 1)}
-                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: '#f5f3ff' }}
-                >
-                  <Text style={{ color: C.primary, fontSize: 15, fontWeight: '700' }}>Précédent</Text>
-                </TouchableOpacity>
-              )}
-              {step < TOTAL_STEPS ? (
-                <TouchableOpacity
-                  onPress={tryNext}
-                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.pinkPill }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Suivant</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  onPress={trySubmit}
-                  disabled={busy}
-                  style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.pinkPill, opacity: busy ? 0.6 : 1 }}
-                >
-                  {busy ? <ActivityIndicator color="#fff" /> : (
-                    <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
-                      {isEdit
-                        ? 'Enregistrer'
-                        : (coverImage || pendingCoverLocal) ? 'Soumettre' : 'Ajouter plus tard'}
+                  
+                    <Text style={formSectionStyle.heading}>Code PIN photographe</Text>
+                    <Text style={[formSectionStyle.subheading, { fontSize: 13, marginBottom: 22, marginLeft: 4, lineHeight: 18 }]}>
+                      4 chiffres à transmettre à tes photographes le jour J. Ils l'utiliseront pour se connecter à ton event sur l'app Will.
                     </Text>
+                    {!isEdit && (
+                      <>
+                        <PinInputRow
+                          value={password}
+                          onChange={setPassword}
+                          autoFocus={false}
+                          focusTrigger={0}
+                          error={showErr[4] && !isValidPin(password)}
+                        />
+                        <TouchableOpacity
+                          onPress={() => setPassword(generateRandomPin())}
+                          style={{ alignSelf: 'center', marginTop: 18, paddingVertical: 8, paddingHorizontal: 14 }}
+                        >
+                          <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Générer aléatoirement</Text>
+                        </TouchableOpacity>
+                        {showErr[4] && !isValidPin(password) && (
+                          <Text style={[errStyle, { textAlign: 'center', marginTop: 6 }]}>Le code PIN doit être composé de 4 chiffres</Text>
+                        )}
+                      </>
+                    )}
+                  
+                </>
+
+              {/* Le compte arrive apres l event, et seulement si l orga
+                  coche : meme ordre que sur le site. */}
+              {besoinCompte && (
+                <>
+                  <TouchableOpacity
+                    onPress={() => { setGateCompte(v => !v); setCErreur(''); }}
+                    activeOpacity={0.8}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 12,
+                      marginTop: 18, paddingHorizontal: 14, paddingVertical: 14,
+                      borderRadius: 12, backgroundColor: C.champFond || '#F5F3FA',
+                    }}
+                  >
+                    <View style={{
+                      width: 20, height: 20, borderRadius: 6, borderWidth: 2,
+                      borderColor: gateCompte ? C.primary : '#d9cef4',
+                      backgroundColor: gateCompte ? C.primary : '#fff',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {gateCompte ? (
+                        <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                          <Path d="M20 6 9 17l-5-5" stroke="#fff" strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" />
+                        </Svg>
+                      ) : null}
+                    </View>
+                    <Text style={{ flex: 1, fontFamily: 'Montserrat', fontSize: 14, lineHeight: 20, color: C.text }}>
+                      Je crée mon compte Will, ou je me connecte, pour publier cet event.
+                    </Text>
+                  </TouchableOpacity>
+
+                  {gateCompte && (
+                    <View style={{ marginTop: 16 }}>
+                      <Text style={formSectionStyle.sectionTitle || { fontFamily: 'AVEstiana', fontSize: 17, color: C.text, marginBottom: 10 }}>
+                        Ton compte Will
+                      </Text>
+                      {/* Apple d abord : c est le chemin le plus court, et
+                          il evite d avoir a inventer un mot de passe de plus.
+                          Meme place que sur les ecrans coureur. */}
+                      <BoutonApple onJeton={connecterAvecApple} onErreur={setCErreur} style={{ marginBottom: 14 }} />
+                      {/* Une ligne dit ce qui se passe, au lieu de demander
+                          a l orga de choisir entre creer et se connecter :
+                          le serveur sait deja, lui. */}
+                      <Text style={{ fontFamily: 'Montserrat', fontSize: 13, lineHeight: 19, color: modeCompte === 'existing' ? C.primary : C.textSoft, marginTop: -4, marginBottom: 12 }}>
+                        {modeCompte === 'existing'
+                          ? (cPrenomConnu
+                              ? `Content de te revoir, ${cPrenomConnu} ! Entre ton mot de passe Will.`
+                              : 'Tu as déjà un compte Will avec cet email. Entre ton mot de passe.')
+                          : modeCompte === 'new'
+                            ? "Pas encore de compte Will avec cet email : on le crée maintenant."
+                            : "Renseigne ton email : on te dira si tu as déjà un compte Will."}
+                      </Text>
+                      {modeCompte === 'new' && (
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={formSectionStyle.heading}>Prénom *</Text>
+                            <TextInput
+                              value={cPrenom}
+                              onChangeText={setCPrenom}
+                              placeholder="Camille"
+                              placeholderTextColor="#A89CB8"
+                              autoCapitalize="words"
+                              textContentType="givenName"
+                              style={formSectionStyle.input}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={formSectionStyle.heading}>Nom *</Text>
+                            <TextInput
+                              value={cNom}
+                              onChangeText={setCNom}
+                              placeholder="Durand"
+                              placeholderTextColor="#A89CB8"
+                              autoCapitalize="words"
+                              textContentType="familyName"
+                              style={formSectionStyle.input}
+                            />
+                          </View>
+                        </View>
+                      )}
+                      <Text style={formSectionStyle.heading}>Email *</Text>
+                      <TextInput
+                        value={cEmail}
+                        onChangeText={setCEmail}
+                        placeholder="camille@monclub.fr"
+                        placeholderTextColor="#A89CB8"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        textContentType="emailAddress"
+                        style={formSectionStyle.input}
+                      />
+                      {modeCompte !== 'inconnu' && (
+                      <>
+                      <Text style={formSectionStyle.heading}>Mot de passe *</Text>
+                      <View style={{ position: 'relative' }}>
+                        <TextInput
+                          value={cMdp}
+                          onChangeText={setCMdp}
+                          placeholder={modeCompte === 'existing' ? 'Ton mot de passe Will' : '8 caractères minimum'}
+                          placeholderTextColor="#A89CB8"
+                          secureTextEntry={!cVoirMdp}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          textContentType={modeCompte === 'existing' ? 'password' : 'newPassword'}
+                          style={[formSectionStyle.input, { paddingRight: 48 }]}
+                        />
+                        <TouchableOpacity
+                          onPress={() => setCVoirMdp(v => !v)}
+                          hitSlop={12}
+                          style={{ position: 'absolute', right: 14, top: 15 }}
+                        >
+                          <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.primary, fontSize: 12 }}>
+                            {cVoirMdp ? 'Masquer' : 'Voir'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                      {/* Sans ca, un orga qui a un compte mais a oublie son
+                          mot de passe etait bloque net dans le formulaire.
+                          Le site avait le lien, pas l app. */}
+                      {modeCompte === 'existing' && (
+                        <TouchableOpacity
+                          onPress={() => Linking.openURL('https://will-app.com/runner/reset/').catch(() => {})}
+                          hitSlop={8}
+                          style={{ alignSelf: 'flex-start', paddingVertical: 6, marginTop: -4, marginBottom: 8, marginLeft: 4 }}
+                        >
+                          <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.primary, fontSize: 13 }}>
+                            Mot de passe oublié ?
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                      {modeCompte === 'new' && (
+                        <>
+                          <Text style={formSectionStyle.heading}>Confirmation du mot de passe *</Text>
+                          <TextInput
+                            value={cMdp2}
+                            onChangeText={setCMdp2}
+                            placeholder="Retape ton mot de passe"
+                            placeholderTextColor="#A89CB8"
+                            secureTextEntry={!cVoirMdp}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                            textContentType="newPassword"
+                            style={formSectionStyle.input}
+                          />
+                          {!!cMdp2 && cMdp !== cMdp2 && (
+                            <Text style={errStyle}>Les deux mots de passe ne correspondent pas</Text>
+                          )}
+                          <TouchableOpacity
+                            onPress={() => setCCgu(v => !v)}
+                            activeOpacity={0.8}
+                            style={{
+                              flexDirection: 'row', alignItems: 'center', gap: 12,
+                              paddingHorizontal: 14, paddingVertical: 14, marginTop: 4,
+                              borderRadius: 12, backgroundColor: C.champFond || '#F5F3FA',
+                            }}
+                          >
+                            <View style={{
+                              width: 20, height: 20, borderRadius: 6, borderWidth: 2,
+                              borderColor: cCgu ? C.primary : '#d9cef4',
+                              backgroundColor: cCgu ? C.primary : '#fff',
+                              alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              {cCgu ? (
+                                <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                                  <Path d="M20 6 9 17l-5-5" stroke="#fff" strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" />
+                                </Svg>
+                              ) : null}
+                            </View>
+                            <Text style={{ flex: 1, fontFamily: 'Montserrat', fontSize: 13, lineHeight: 19, color: C.text }}>
+                              J'accepte les CGU, les CGV et la politique de confidentialité.
+                            </Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                      </>
+                      )}
+                    </View>
                   )}
-                </TouchableOpacity>
+                  {!!cErreur && (
+                    <Text style={[errStyle, { marginTop: 10, marginBottom: 0 }]}>{cErreur}</Text>
+                  )}
+                </>
               )}
+              </View>
+            </ScrollView>
+
+
+            {/* Un seul geste, en bas, sur son propre socle : sans filet, la
+                derniere ligne du formulaire passait sous le bouton. */}
+            <View style={{ borderTopWidth: 1, borderTopColor: '#efeaf8', paddingTop: 14, paddingHorizontal: 22, paddingBottom: 22 }}>
+            {/* Avancement du remplissage, plutot qu un numero d etape : ce
+                qui compte est ce qui manque, pas ou l on se trouve. */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <View style={{ flex: 1, height: 4, backgroundColor: '#e9e4f9', borderRadius: 2 }}>
+                <View style={{ height: 4, width: `${pourcentageRempli}%`, backgroundColor: C.primary, borderRadius: 2 }} />
+              </View>
+              <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.textSoft, fontSize: 12 }}>{pourcentageRempli} %</Text>
             </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </KeyboardAvoidingView>
+
+            {/* Une seule page, comme le modal du site : on voit tout ce
+                qu on doit remplir, et le pouce fait le reste. */}
+
+            <TouchableOpacity
+              onPress={trySubmit}
+              disabled={busy}
+              style={{ marginTop: 14, paddingVertical: 15, borderRadius: 14, alignItems: 'center', backgroundColor: C.primary, opacity: busy ? 0.6 : 1 }}
+            >
+              {busy ? <ActivityIndicator color="#fff" /> : (
+                <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>
+                  {besoinCompte && gateCompte
+                    ? (modeCompte === 'existing'
+                        ? (eventComplet ? 'Me connecter et envoyer' : 'Me connecter et créer mon event')
+                        : modeCompte === 'new'
+                          ? (eventComplet ? 'Créer mon compte et envoyer' : 'Créer mon compte et mon event')
+                          : 'Continuer')
+                    : (eventComplet ? 'Envoyer mon event' : 'Créer mon event')}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginTop: 8, lineHeight: 16 }}>
+              {eventComplet
+                ? "L'équipe Will valide ton event sous 24 h."
+                : (manquantsForm.length <= 3
+                    ? `Il manque ${manquantsForm.map(m => m.label.toLowerCase()).join(', ')} pour l'envoyer en validation.`
+                    : `Il manque ${manquantsForm.length} infos pour l'envoyer en validation.`)
+                  + ' Tu les complètes ensuite depuis ton espace.'}{'\n'}
+              En continuant, tu acceptes les{' '}
+              <Text
+                style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold' }}
+                onPress={() => Linking.openURL('https://will-app.com/cgv').catch(() => {})}
+              >CGV organisateur</Text>.
+            </Text>
+            </View>
+        </View>
+      </View>
 
       {/* Calendrier custom (range) — remplace le DateTimePicker natif iOS */}
       <CalendarRangeModal
@@ -7047,10 +7861,10 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       <Modal visible={timePickerIdx !== null} transparent animationType="slide" onRequestClose={() => setTimePickerIdx(null)}>
         <TouchableOpacity activeOpacity={1} onPress={() => setTimePickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
-            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>Heure de départ</Text>
+            <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold', textAlign: 'center', marginBottom: 12 }}>Heure de départ</Text>
             <View style={{ flexDirection: 'row', paddingHorizontal: 20, gap: 12 }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>HEURES</Text>
+                <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>HEURES</Text>
                 <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
                   {Array.from({ length: 24 }).map((_, h) => {
                     const cur = distances[timePickerIdx]?.time || '';
@@ -7068,14 +7882,14 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                         }}
                         style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                       >
-                        <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{h}h</Text>
+                        <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{h}h</Text>
                       </TouchableOpacity>
                     );
                   })}
                 </ScrollView>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>MINUTES</Text>
+                <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 6 }}>MINUTES</Text>
                 <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
                   {Array.from({ length: 12 }).map((_, i) => {
                     const min = i * 5;
@@ -7094,7 +7908,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                         }}
                         style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                       >
-                        <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{String(min).padStart(2, '0')}</Text>
+                        <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{String(min).padStart(2, '0')}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -7102,7 +7916,7 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
               </View>
             </View>
             <TouchableOpacity onPress={() => setTimePickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '700' }}>OK</Text>
+              <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -7112,8 +7926,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       <Modal visible={elevPickerIdx !== null} transparent animationType="slide" onRequestClose={() => setElevPickerIdx(null)}>
         <TouchableOpacity activeOpacity={1} onPress={() => setElevPickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
-            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>Dénivelé positif</Text>
-            <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>Par incréments de 10 m</Text>
+            <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold', textAlign: 'center', marginBottom: 4 }}>Dénivelé positif</Text>
+            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>Par incréments de 10 m</Text>
             <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
               {Array.from({ length: 301 }).map((_, i) => {
                 const m = i * 10;
@@ -7128,13 +7942,13 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     }}
                     style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                   >
-                    <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{m} m</Text>
+                    <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{m} m</Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
             <TouchableOpacity onPress={() => setElevPickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '700' }}>OK</Text>
+              <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -7144,8 +7958,8 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
       <Modal visible={kmPickerIdx !== null} transparent animationType="slide" onRequestClose={() => setKmPickerIdx(null)}>
         <TouchableOpacity activeOpacity={1} onPress={() => setKmPickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
-            <Text style={{ color: C.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>Distance</Text>
-            <Text style={{ color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>De 1 à 200 km</Text>
+            <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold', textAlign: 'center', marginBottom: 4 }}>Distance</Text>
+            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>De 1 à 200 km</Text>
             <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
               {Array.from({ length: 200 }).map((_, i) => {
                 const km = i + 1;
@@ -7160,13 +7974,13 @@ function CreateEventModal({ visible, onClose, onCreated, organizerSession, organ
                     }}
                     style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                   >
-                    <Text style={{ color: active ? '#fff' : C.text, fontWeight: '600', fontSize: 16 }}>{km} km</Text>
+                    <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{km} km</Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
             <TouchableOpacity onPress={() => setKmPickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '700' }}>OK</Text>
+              <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -7232,7 +8046,7 @@ try { SplashScreen?.preventAutoHideAsync?.(); } catch {}
 
 
 
-export default function App() {
+function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [tab, setTab] = useState('upcoming');
   const [bottomTab, setBottomTab] = useState('home');
@@ -7258,6 +8072,12 @@ export default function App() {
   const [selfieModal, setSelfieModal] = useState(false);
   const [searchModal, setSearchModal] = useState(false);
   const [createEventModal, setCreateEventModal] = useState(false);
+  // Feuille « Créer un event » proposee au coureur connecte qui n a pas
+  // encore d espace organisateur. Elle explique, puis ouvre l espace en un
+  // appel — la session prouve deja l identite.
+  // Event rempli par un visiteur sans compte, en attente de son inscription.
+  const [eventEnAttente, setEventEnAttente] = useState(null);
+  const [ouvertureOrgaEnCours, setOuvertureOrgaEnCours] = useState(false);
   const [editEventTarget, setEditEventTarget] = useState(null);
   const [orgRefreshKey, setOrgRefreshKey] = useState(0);
   const [loginRole, setLoginRole] = useState(null);
@@ -7284,10 +8104,12 @@ export default function App() {
   const [userId, setUserId] = useState(null);
   const [runnerSession, setRunnerSession] = useState(null); // { token, profile }
   const [organizerSession, setOrganizerSession] = useState(null); // { token, profile }
-  const [organizerAuthVisible, setOrganizerAuthVisible] = useState(false);
   const [organizerProfileMenu, setOrganizerProfileMenu] = useState(false);
   const [organizerEventPhotosTarget, setOrganizerEventPhotosTarget] = useState(null);
   const [organizerEventDetailTarget, setOrganizerEventDetailTarget] = useState(null);
+  // Bandeau « ton event est cree » pose sur la page de l event juste apres
+  // la creation. Efface des qu on quitte la page.
+  const [succesEvent, setSuccesEvent] = useState(null);
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState('login'); // mode d'ouverture par defaut du modal auth
   // Etape 2 du signup : selfie. Quand true, SelfieModal s'ouvre en mode "wizard"
@@ -7372,16 +8194,14 @@ export default function App() {
     // UNE FAMILLE PAR GRAISSE, et non une variable + fontWeight.
     //
     // Sur iOS, CoreText sait piloter l axe de graisse d une police variable :
-    // `fontFamily: 'Montserrat'` + `fontWeight: '600'` rendait bien du
-    // semi-gras. Android, lui, ne pilote pas cet axe depuis React Native. Il
+    // `fontFamily: 'Montserrat'` + ` lui, ne pilote pas cet axe depuis React Native. Il
     // affiche l instance PAR DEFAUT du fichier — et celle de Montserrat-VF
     // est... Thin (100). D ou une interface entierement trop fine sur
     // Android, alors qu elle etait juste sur iPhone.
     //
     // Les quatre fichiers ci-dessous sont des instances statiques extraites
     // de la variable (fontTools, axe wght fige). Les styles referencent
-    // desormais la famille exacte et ne posent plus de fontWeight : plus
-    // aucune interpretation laissee au systeme, le rendu est identique sur
+    // desormais la famille exacte et ne posent plus de  le rendu est identique sur
     // les deux plateformes.
     //
     // AV Estiana n a qu une graisse (Bold) et pas d axe variable : un seul
@@ -7627,8 +8447,16 @@ export default function App() {
       if (!r?.ok) return;
       const data = await r.json().catch(() => ({}));
       const remote = Array.isArray(data?.keys) ? data.keys : [];
-      setPhotoFavorites(remote);
-      AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(remote)).catch(() => {});
+      let fusion = remote;
+      if (favorisEnVolRef.current.size > 0) {
+        const set = new Set(remote);
+        for (const [id, sens] of favorisEnVolRef.current) {
+          if (sens === 'ajout') set.add(id); else set.delete(id);
+        }
+        fusion = [...set];
+      }
+      setPhotoFavorites(fusion);
+      AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(fusion)).catch(() => {});
     } catch {}
   }, [userId, runnerSession, runnerApiFetch]);
 
@@ -7682,20 +8510,34 @@ export default function App() {
   }, [runnerSession?.profile?.userId, runnerApiFetch]);
 
   const handleAuthSuccess = useCallback((session) => {
-    const { isNewSignup, ...stored } = session || {};
+    const { isNewSignup, roles, organizerProfile, ...stored } = session || {};
     setRunnerSession(stored);
     Secure.setItem('@will_runner', JSON.stringify(stored)).catch(() => {});
-    setAuthModalVisible(false);
+    // Compte multi-roles : le jeton renvoye est unifie et vaut aussi pour
+    // l espace organisateur. On ouvre donc les deux d un coup — sans ca,
+    // l utilisateur devait se reconnecter pour retrouver ses events.
+    if (organizerProfile && Array.isArray(roles) && roles.includes('organizer')) {
+      const sessionOrga = { token: stored.token, profile: organizerProfile };
+      setOrganizerSession(sessionOrga);
+      Secure.setItem('@will_organizer', JSON.stringify(sessionOrga)).catch(() => {});
+    }
     // Etape 2 du wizard d'inscription : si c'est un nouveau compte sans selfie,
     // on enchaine sur SelfieModal en mode "signup step". Bouton "Plus tard"
     // ferme l'etape et marque @will_selfie_skipped pour renforcer la carte
     // d'accueil. Sinon, comportement legacy : action en attente (login flow).
     if (isNewSignup) {
+      // Option A (2026-08-31) : l ecran d inscription reste OUVERT et
+      // bascule lui-meme sur l etape selfie + notifications. Plus aucune
+      // presentation de modale soeur a orchestrer d ici.
       AsyncStorage.removeItem('@will_selfie_skipped').catch(() => {});
       setSelfieSkipped(false);
-      setTimeout(() => { setSignupSelfieStep(true); setSelfieModal(true); }, 300);
+      // Atterrissage sur l Accueil : un compte tout neuf ne suit aucun event,
+      // l onglet Photos ne lui montrerait qu un ecran vide. L Accueil, lui,
+      // liste les events a suivre — la suite logique de l inscription.
+      setBottomTab('home');
       return;
     }
+    setAuthModalVisible(false);
     if (pendingActionRef.current) {
       const a = pendingActionRef.current;
       pendingActionRef.current = null;
@@ -7860,14 +8702,160 @@ export default function App() {
     // Legacy global @will_follows : on supprime au cas ou il traine d une
     // version pre-scoping.
     AsyncStorage.removeItem('@will_follows').catch(() => {});
+    // Un compte, une sortie : l espace organisateur ouvert depuis cette
+    // session part avec elle. Sinon il resterait ouvert derriere un compte
+    // deconnecte, et se rouvrirait tout seul au prochain login.
+    setOrganizerSession(null);
+    Secure.removeItem('@will_organizer').catch(() => {});
+    // L onglet Events disparait avec la session orga : y rester afficherait
+    // un ecran vide.
+    setOrganizerEventDetailTarget(null);
+    setSuccesEvent(null);
+    setBottomTab('home');
   }, [runnerSession]);
 
-  const handleOrganizerAuthSuccess = useCallback((session) => {
+  // enAttenteDirect : l appelant qui vient de poser l event en attente dans
+  // le meme tour de boucle passe l objet lui-meme — l etat React n est pas
+  // encore relu ici, et l event serait perdu en silence.
+  // Une seule destination apres la creation d un event, quel que soit le
+  // chemin : la page de l event, avec un bandeau de succes. Avant, le parcours
+  // « deja connecte » finissait sur un ecran de confirmation dedie et le
+  // parcours « compte cree au passage » sur une alerte systeme — deux
+  // histoires differentes pour le meme evenement.
+  const atterrirSurEvent = useCallback(async (session, etat) => {
+    setCreateEventModal(false);
+    setEventEnAttente(null);
+    setOrgRefreshKey(k => k + 1);
+    setBottomTab('events');
+    if (!etat?.code || !session?.token) return;
+    try {
+      const r = await fetch(`${API_URL}/organizer/me`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+      const d = await r.json().catch(() => ({}));
+      const ev = (d.events || []).find(e => e.code === etat.code);
+      if (ev) {
+        setSuccesEvent(etat);
+        setOrganizerEventDetailTarget(ev);
+      }
+    } catch (e) {
+      // La liste est deja rafraichie : l orga voit son event, sans bandeau.
+    }
+  }, []);
+
+  const handleOrganizerAuthSuccess = useCallback(async (session, enAttenteDirect) => {
     setOrganizerSession(session);
     Secure.setItem('@will_organizer', JSON.stringify(session)).catch(() => {});
-    setOrganizerAuthVisible(false);
+    // Un event attendait ce compte : on le soumet maintenant, sans faire
+    // ressaisir quoi que ce soit.
+    const enAttente = enAttenteDirect || eventEnAttente;
+    if (enAttente) {
+      const { payload, coverLocal } = enAttente;
+      setEventEnAttente(null);
+      try {
+        const r = await fetch(`${API_URL}/auth/submit-event`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          Alert.alert('Erreur', data.error || "L'event n'a pas pu être envoyé.");
+        } else {
+          const codeFinal = data.code || payload.code;
+          // Le statut de la reponse n etait jamais lu : une couverture
+          // refusee par le serveur passait pour envoyee, et l orga ne
+          // l apprenait nulle part.
+          let coverFailed = false;
+          if (coverLocal) {
+            try {
+              const slug = String(codeFinal || '').toLowerCase().replace(/\s+/g, '-');
+              const blob = await (await fetch(coverLocal)).blob();
+              const up = await fetch(`${API_URL}/organizer/cover/${slug}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'image/jpeg', Authorization: `Bearer ${session.token}` },
+                body: blob,
+              });
+              if (!up.ok) coverFailed = true;
+            } catch (e) {
+              coverFailed = true;
+              console.warn('[create-event] cover apres inscription :', e?.message || e);
+            }
+          }
+          // Creer n est pas soumettre : on frappe la porte unique, le worker
+          // verifie la completude.
+          let brouillon = true;
+          let manquants = Array.isArray(data.manquants) ? data.manquants : [];
+          try {
+            const sub = await fetch(`${API_URL}/organizer/event/${codeFinal}/submit`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${session.token}` },
+            });
+            const dSub = await sub.json().catch(() => ({}));
+            if (sub.ok) { brouillon = false; manquants = []; }
+            else if (Array.isArray(dSub?.manquants)) manquants = dSub.manquants;
+          } catch (e) {
+            console.warn('[create-event] soumission apres inscription :', e?.message || e);
+          }
+          // Meme atterrissage que le parcours « deja connecte » : la page de
+          // l event, avec le bandeau. Plus d alerte systeme a part.
+          await atterrirSurEvent(session, {
+            code: codeFinal,
+            pin: payload.password,
+            brouillon,
+            manquants,
+            coverFailed,
+          });
+          return;
+        }
+      } catch (e) {
+        Alert.alert('Erreur', 'Connexion impossible. Vérifie ton réseau.');
+      }
+    }
     setBottomTab('events');
-  }, []);
+  }, [eventEnAttente, atterrirSurEvent]);
+
+  // Organisateur = un role de plus sur le compte, pas un espace a part. Le
+  // coureur connecte a deja prouve son identite : on ajoute le role sans lui
+  // redemander un mot de passe. Retourne la session orga, ou null si le
+  // serveur refuse (on retombe alors sur l ecran d authentification).
+  // Lecture seule : rend la session organisateur si le compte porte deja le
+  // role, et rien sinon. Sert aux entrees qui ne font que regarder — on
+  // n inscrit personne comme organisateur parce qu il a clique sur un menu.
+  const sessionOrgaDepuisCoureur = useCallback(async () => {
+    if (!runnerSession?.token) return null;
+    try {
+      const r = await runnerApiFetch('/runner/profile');
+      if (!r.ok) return null;
+      const d = await r.json().catch(() => ({}));
+      if (!d?.organizer_token || !d?.organizer_profile) return null;
+      return { token: d.organizer_token, profile: d.organizer_profile };
+    } catch (e) {
+      return null;
+    }
+  }, [runnerSession?.token, runnerApiFetch]);
+
+  // Ajoute vraiment le role. Reserve au moment ou l orga publie son premier
+  // event : c est la qu il devient organisateur, pas avant.
+  const ouvrirRoleOrganisateur = useCallback(async () => {
+    if (!runnerSession?.token) return null;
+    try {
+      const r = await fetch(`${API_URL}/auth/add-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${runnerSession.token}` },
+        body: JSON.stringify({ role: 'organizer', additional_data: {} }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) return null;
+      return {
+        token: data.token || runnerSession.token,
+        profile: data.organizer_profile || data.profile || null,
+      };
+    } catch (e) {
+      console.warn('[auth] add-role organisateur :', e?.message || e);
+      return null;
+    }
+  }, [runnerSession]);
 
   const logoutOrganizer = useCallback(() => {
     const lastEmail = organizerSession?.profile?.email;
@@ -7876,6 +8864,12 @@ export default function App() {
     Secure.removeItem('@will_organizer').catch(() => {});
     setBottomTab('home');
   }, [organizerSession]);
+
+  // Le meme compte porte les deux espaces : la sortie de l espace
+  // organisateur n a alors plus de sens isolee (elle se rouvrirait seule au
+  // rafraichissement du profil). L UI la masque dans ce cas, cf.
+  // OrganizerProfileMenuModal / BurgerMenuModal.
+  const compteUnifie = !!runnerSession && !!organizerSession;
 
   // Audit B14 — Factor logoutPhotographer pour qu il puisse etre appele depuis
   // handlePhotographerAuthFailure (parite avec logoutRunner / logoutOrganizer).
@@ -8084,6 +9078,11 @@ export default function App() {
               const startedKeys = allKeys.filter(k => k.startsWith('@will_follow_started_'));
               if (startedKeys.length > 0) await AsyncStorage.multiRemove(startedKeys);
             } catch {}
+            // L alerte affirmait « Ton consentement biometrique est retire »
+            // sans jamais effacer la cle : l ecran RGPD n etait plus
+            // represente au depot suivant. C est ce que fait deja la
+            // suppression du selfie, quelques lignes plus bas.
+            await Secure.removeItem(BIOMETRIC_CONSENT_KEY).catch(() => {});
             setProfileMenu(false);
             Alert.alert('Données faciales supprimées', 'Ton consentement biométrique est retiré et ton selfie est supprimé de nos serveurs. Tu peux redéposer un selfie quand tu veux.');
           } else {
@@ -8153,6 +9152,30 @@ export default function App() {
       ]
     );
   }, [organizerSession]);
+
+  // Espace organisateur ouvert tout seul quand le compte du coureur connecte
+  // le porte aussi. Le titulaire du jeton coureur EST le titulaire du compte :
+  // lui redemander ses identifiants pour son propre espace n avait pas de
+  // sens. Une seule requete, uniquement s il n y a pas deja une session orga.
+  useEffect(() => {
+    if (!runnerSession?.token || organizerSession) return;
+    let annule = false;
+    (async () => {
+      try {
+        const r = await runnerApiFetch('/runner/profile');
+        if (!r.ok) return;
+        const data = await r.json();
+        if (annule || !data?.organizer_token || !data?.organizer_profile) return;
+        const sessionOrga = { token: data.organizer_token, profile: data.organizer_profile };
+        setOrganizerSession(sessionOrga);
+        Secure.setItem('@will_organizer', JSON.stringify(sessionOrga)).catch(() => {});
+        console.log('[auth] espace organisateur ouvert depuis la session coureur');
+      } catch (e) {
+        // Silencieux : c est un confort, pas un chemin critique.
+      }
+    })();
+    return () => { annule = true; };
+  }, [runnerSession?.token, organizerSession]);
 
   const updateRunnerProfile = useCallback(async (changes) => {
     if (!runnerSession?.token) return;
@@ -8297,14 +9320,23 @@ export default function App() {
   }, []);
 
   const photoFavoritesSet = useMemo(() => new Set(photoFavorites), [photoFavorites]);
+  // Taps pas encore confirmes par le serveur : 'ajout' ou 'retrait' par photo.
+  // Le rafraichissement les rejoue par-dessus la reponse serveur, sinon un
+  // aller-retour d onglet juste apres un tap ramenait l ancien etat.
+  const favorisEnVolRef = useRef(new Map());
   const togglePhotoFavorite = useCallback((photoId) => {
     // Garde-fou : seul un runner connecte peut likeer une photo. Le caller
     // doit deja wrapper avec requireAuth pour ouvrir le modal de login si non.
     if (!photoId || !userId || !runnerSession) return;
-    let wasFav = false;
+    // L etat AVANT le tap doit etre lu ici, pas dans l updater : React
+    // n execute pas l updater au moment de l appel mais au rendu suivant.
+    // `wasFav` restait donc toujours faux et la requete partait toujours en
+    // POST — retirer un favori le supprimait a l ecran, jamais sur le
+    // serveur, et le prochain rafraichissement le faisait reapparaitre.
+    const wasFav = photoFavoritesSet.has(photoId);
     setPhotoFavorites(prev => {
-      wasFav = prev.includes(photoId);
-      const next = wasFav ? prev.filter(k => k !== photoId) : [...prev, photoId];
+      const dedans = prev.includes(photoId);
+      const next = dedans ? prev.filter(k => k !== photoId) : [...prev, photoId];
       AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(next)).catch(() => {});
       return next;
     });
@@ -8312,11 +9344,13 @@ export default function App() {
     // deja a jour : l UI reagit immediatement. Si le server refuse, on
     // restaure l etat anterieur et on re-ecrit AsyncStorage.
     const method = wasFav ? 'DELETE' : 'POST';
+    favorisEnVolRef.current.set(photoId, wasFav ? 'retrait' : 'ajout');
     runnerApiFetch('/runner/photo-favorite', {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key: photoId }),
     }).then(r => {
+      favorisEnVolRef.current.delete(photoId);
       if (r && !r.ok) {
         setPhotoFavorites(prev => {
           const restored = wasFav ? [...prev, photoId] : prev.filter(k => k !== photoId);
@@ -8325,13 +9359,14 @@ export default function App() {
         });
       }
     }).catch(() => {
+      favorisEnVolRef.current.delete(photoId);
       setPhotoFavorites(prev => {
         const restored = wasFav ? [...prev, photoId] : prev.filter(k => k !== photoId);
         AsyncStorage.setItem(`@will_photo_favorites_${userId}`, JSON.stringify(restored)).catch(() => {});
         return restored;
       });
     });
-  }, [userId, runnerSession, runnerApiFetch]);
+  }, [userId, runnerSession, runnerApiFetch, photoFavoritesSet]);
 
   // Audit B15 — Upload R2 traque via selfieUploadState. Appele par onSaved
   // (nouveau selfie) et par retrySelfieUpload (tap pastille rouge / bouton
@@ -8389,17 +9424,25 @@ export default function App() {
     ]);
   }, [runnerSession]);
 
-  const handlePickRole = (role) => {
+  const handlePickRole = async (role) => {
     setOrgModal(false);
     if (role === 'organizer') {
-      if (organizerSession) {
-        setBottomTab('events');
-      } else {
-        setOrganizerAuthVisible(true);
-      }
+      if (organizerSession) { setBottomTab('events'); return; }
+      // Le compte porte deja le role : on ouvre son espace, sans lui
+      // redemander un mot de passe pour son propre compte.
+      const sessionOrga = await sessionOrgaDepuisCoureur();
+      if (sessionOrga) { handleOrganizerAuthSuccess(sessionOrga); return; }
+      // Sinon il n est pas encore organisateur : un espace vide n a rien a
+      // lui montrer, on l emmene lancer son event. Le role s ajoutera la.
+      setCreateEventModal(true);
       return;
     }
     if (role === 'create') {
+      // Une seule entree, quel que soit l etat de connexion : le formulaire.
+      // Il porte son propre bloc compte et sait ajouter le role a un compte
+      // existant. L ecran d intro (Go! / Plus tard) tenait une page pour trois
+      // phrases : la promesse est passee en tete du formulaire, et l orga
+      // commence a remplir tout de suite.
       setCreateEventModal(true);
       return;
     }
@@ -8688,10 +9731,7 @@ export default function App() {
                     onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
-                    onOpenProfile={() => {
-                      if (runnerSession) setBurgerMenu(true);
-                      else { setAuthInitialMode('login'); setAuthModalVisible(true); }
-                    }}
+                    onOpenProfile={() => setBurgerMenu(true)}
                     onOpenPhoto={(photo, list, opts) => setOpenedPhoto({ photo, photos: list, ...(opts || {}) })}
                     isFollowing={follows.includes(eventInPanel.code)}
                     onToggleFollow={() => requireAuth(() => toggleFollowStable(eventInPanel.code))}
@@ -8847,7 +9887,8 @@ export default function App() {
           session={organizerSession}
           organizerApiFetch={organizerApiFetch}
           event={organizerEventDetailTarget}
-          onClose={() => setOrganizerEventDetailTarget(null)}
+          succes={succesEvent}
+          onClose={() => { setOrganizerEventDetailTarget(null); setSuccesEvent(null); }}
           onEdit={() => {
             const e = organizerEventDetailTarget;
             setOrganizerEventDetailTarget(null);
@@ -8895,7 +9936,7 @@ export default function App() {
           <View style={s.navIconWrap}>
             <Icon.Home size={22} filled={bottomTab === 'home'} color={bottomTab === 'home' ? C.primary : C.text} />
           </View>
-          <Text style={[s.navLabel, bottomTab === 'home' && { color: C.primary, fontWeight: '700' }]}>Accueil</Text>
+          <Text style={[s.navLabel, bottomTab === 'home' && { color: C.primary, fontFamily: 'Montserrat-SemiBold' }]}>Accueil</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.navBtn} onPress={() => { setBottomTab('photos'); setOpenedEvent(null); setOrganizerEventPhotosTarget(null); }}>
           <View style={s.navIconWrap}>
@@ -8911,13 +9952,13 @@ export default function App() {
                 alignItems: 'center', justifyContent: 'center',
                 borderWidth: 1.5, borderColor: C.bg,
               }}>
-                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700', lineHeight: 11 }}>
+                <Text style={{ color: '#fff', fontSize: 10, fontFamily: 'Montserrat-SemiBold', lineHeight: 11 }}>
                   {photosUnread > 99 ? '99+' : photosUnread}
                 </Text>
               </View>
             )}
           </View>
-          <Text style={[s.navLabel, bottomTab === 'photos' && { color: C.primary, fontWeight: '700' }]}>Photos</Text>
+          <Text style={[s.navLabel, bottomTab === 'photos' && { color: C.primary, fontFamily: 'Montserrat-SemiBold' }]}>Photos</Text>
         </TouchableOpacity>
 
         {/* Troisieme onglet reserve aux organisateurs : l espace existe deja
@@ -8928,7 +9969,7 @@ export default function App() {
             <View style={s.navIconWrap}>
               <Icon.GearOrg size={22} color={bottomTab === 'events' ? C.primary : C.text} />
             </View>
-            <Text style={[s.navLabel, bottomTab === 'events' && { color: C.primary, fontWeight: '700' }]}>Mes events</Text>
+            <Text style={[s.navLabel, bottomTab === 'events' && { color: C.primary, fontFamily: 'Montserrat-SemiBold' }]}>Mes events</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -9032,7 +10073,7 @@ export default function App() {
                 keyboardType="number-pad"
                 returnKeyType="default"
                 maxLength={5}
-                style={{ flex: 1, fontSize: 13.5, color: C.primary, fontWeight: '600', padding: 0, paddingVertical: 2 }}
+                style={{ flex: 1, fontSize: 13.5, color: C.primary, fontFamily: 'Montserrat-SemiBold', padding: 0, paddingVertical: 2 }}
               />
             </BlurView>
           </View>
@@ -9148,10 +10189,91 @@ export default function App() {
         }}
       />
 
+
       <CreateEventModal
         visible={createEventModal}
         onClose={() => setCreateEventModal(false)}
+        onCree={(etat) => atterrirSurEvent(organizerSession, etat)}
+        onCompteApple={(session) => handleOrganizerAuthSuccess(session)}
         organizerSession={organizerSession}
+        demanderCompte={async (enAttente) => {
+          setEventEnAttente(enAttente);
+          // Coureur deja connecte : le role s ajoute a son compte.
+          const sessionOrga = await ouvrirRoleOrganisateur();
+          if (sessionOrga) { handleOrganizerAuthSuccess(sessionOrga, enAttente); return null; }
+          // Identifiants saisis dans le formulaire : on cree ou on ouvre le
+          // compte ici meme, sans deuxieme ecran.
+          const ids = enAttente?.identifiants;
+          if (ids) {
+            try {
+              if (ids.mode === 'existing') {
+                // Compte Will existant : connexion generique puis ajout du
+                // role. /organizer/login refuserait un compte qui n a pour
+                // l instant que le role coureur.
+                const rl = await fetch(`${API_URL}/auth/login`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ email: ids.email, password: ids.password }),
+                });
+                const dl = await rl.json().catch(() => ({}));
+                if (!rl.ok || !dl.token) {
+                  setEventEnAttente(null);
+                  return { erreur: dl.error || 'Email ou mot de passe incorrect.' };
+                }
+                let jeton = dl.token;
+                let profil = dl.account || null;
+                const roles = Array.isArray(dl.roles) ? dl.roles : [];
+                if (!roles.includes('organizer')) {
+                  const ra = await fetch(`${API_URL}/auth/add-role`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}` },
+                    body: JSON.stringify({ role: 'organizer', additional_data: {} }),
+                  });
+                  const da = await ra.json().catch(() => ({}));
+                  if (!ra.ok) {
+                    setEventEnAttente(null);
+                    return { erreur: da.error || "Impossible d'ajouter le rôle organisateur." };
+                  }
+                  jeton = da.token || jeton;
+                  profil = da.organizer_profile || da.profile || profil;
+                }
+                handleOrganizerAuthSuccess({ token: jeton, profile: profil }, enAttente);
+                return null;
+              }
+              const r = await fetch(`${API_URL}/organizer/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email: ids.email, password: ids.password,
+                  firstName: ids.firstName, lastName: ids.lastName,
+                }),
+              });
+              const data = await r.json().catch(() => ({}));
+              if (r.ok && data.token) {
+                handleOrganizerAuthSuccess({ token: data.token, profile: data.profile }, enAttente);
+                return null;
+              }
+              setEventEnAttente(null);
+              // Course entre la verification d email et l envoi : le compte
+              // existe finalement. On bascule le bloc en connexion plutot que
+              // d afficher une impasse.
+              const existeDeja = r.status === 409 || data.code === 'ACCOUNT_EXISTS_OTHER_ROLE';
+              return {
+                erreur: existeDeja
+                  ? 'Un compte Will existe déjà avec cet email. Saisis ton mot de passe.'
+                  : (data.error || "Le compte n'a pas pu être créé."),
+                basculerExistant: existeDeja,
+              };
+            } catch (e) {
+              setEventEnAttente(null);
+              return { erreur: 'Connexion impossible. Vérifie ton réseau.' };
+            }
+          }
+          // Aucun repli vers un ecran de connexion separe : le formulaire
+          // porte deja son bloc compte, et un quatrieme formulaire
+          // d identifiants que personne n atteint ne pouvait qu etre faux.
+          return { erreur: "Coche la case pour créer ton compte, ou connecte-toi." };
+        }}
         organizerApiFetch={organizerApiFetch}
         onCreated={() => setOrgRefreshKey(k => k + 1)}
       />
@@ -9190,6 +10312,16 @@ export default function App() {
             sont donc des ENFANTS du menu. C est ce qui permet a la carte de
             se poser par-dessus sans que le menu se ferme. */}
         <ProfileMenuModal
+          onTokenRenouvele={(token) => {
+            // Le mot de passe vient de changer : le serveur a coupe les autres
+            // appareils et renvoie un jeton a jour pour celui-ci.
+            setRunnerSession((prev) => {
+              if (!prev) return prev;
+              const next = { ...prev, token };
+              Secure.setItem('@will_runner', JSON.stringify(next)).catch(() => {});
+              return next;
+            });
+          }}
           visible={profileMenu}
           onBack={() => setProfileMenu(false)}
           onClose={() => { setProfileMenu(false); setBurgerMenu(false); }}
@@ -9238,11 +10370,20 @@ export default function App() {
         />
 
         <OrganizerProfileMenuModal
+          onTokenRenouvele={(token) => {
+            setOrganizerSession((prev) => {
+              if (!prev) return prev;
+              const next = { ...prev, token };
+              Secure.setItem('@will_organizer', JSON.stringify(next)).catch(() => {});
+              return next;
+            });
+          }}
           visible={organizerProfileMenu}
           onBack={() => setOrganizerProfileMenu(false)}
           onClose={() => { setOrganizerProfileMenu(false); setBurgerMenu(false); }}
           organizerSession={organizerSession}
           organizerApiFetch={organizerApiFetch}
+          compteUnifie={compteUnifie}
           onLogout={logoutOrganizer}
           onUpdate={updateOrganizerProfile}
           onDeleteAccount={() => { setOrganizerProfileMenu(false); setBurgerMenu(false); deleteOrganizerAccount(); }}
@@ -9304,13 +10445,40 @@ export default function App() {
         visible={authModalVisible}
         onClose={() => setAuthModalVisible(false)}
         onSuccess={handleAuthSuccess}
+        onSelfieSaved={async (uri, creds) => {
+          setSelfieUri(uri);
+          AsyncStorage.removeItem('@will_selfie_skipped').catch(() => {});
+          setSelfieSkipped(false);
+          // Identifiants passes EXPLICITEMENT par l ecran d inscription :
+          // le compte vient d etre cree dans le meme tick, les closures
+          // (runnerSession, runSelfieUpload) datent d avant la creation et
+          // n ont pas encore le token.
+          const userId = creds?.userId || runnerSession?.profile?.userId;
+          const token = creds?.token || runnerSession?.token;
+          if (!userId || !token) return;
+          setSelfieUploadState('uploading');
+          try {
+            await uploadSelfieToR2(uri, userId, token);
+            setSelfieUploadState('ok');
+          } catch (e) {
+            console.warn('selfie upload R2 (inscription)', e?.message || e);
+            setSelfieUploadState('failed');
+            if (e?.code === 'face_too_small') {
+              setSelfieUri(null);
+              AsyncStorage.removeItem('@will_selfie').catch(() => {});
+              Alert.alert('Visage trop petit', e.userMessage || "Approche-toi de la caméra pour remplir l'ovale.");
+            }
+          }
+        }}
+        onAskNotifications={async (jetonRecu) => {
+          const jeton = jetonRecu || runnerSession?.token;
+          if (jeton) await ensurePushRegistered(jeton, { ask: true });
+        }}
+        onSkipSelfie={() => {
+          AsyncStorage.setItem('@will_selfie_skipped', '1').catch(() => {});
+          setSelfieSkipped(true);
+        }}
         initialMode={authInitialMode}
-      />
-
-      <AuthOrganizerModal
-        visible={organizerAuthVisible}
-        onClose={() => setOrganizerAuthVisible(false)}
-        onSuccess={handleOrganizerAuthSuccess}
       />
 
 
@@ -9385,3 +10553,13 @@ export default function App() {
 }
 
 // ---------- STYLES ----------
+
+// La racine est enveloppee : si le premier rendu casse, on lit l erreur au
+// lieu de voir l app se fermer.
+export default function Racine() {
+  return (
+    <BoundaryRacine>
+      <App />
+    </BoundaryRacine>
+  );
+}

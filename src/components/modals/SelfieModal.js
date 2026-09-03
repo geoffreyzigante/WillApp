@@ -96,7 +96,7 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
               <Text style={[s.modalTitle, selfie.titre]}>Reconnaissance faciale</Text>
               <Text style={[s.modalSub, selfie.texte, { textAlign: 'left' }]}>
                 Pour t'envoyer automatiquement tes photos d'event, Will utilise ton selfie comme référence biométrique. L'image et l'empreinte faciale générée par AWS Rekognition sont chiffrées, stockées sur des serveurs européens (eu-west-1 Francfort).{'\n\n'}
-                Ton consentement est valable <Text style={{ fontWeight: '700' }}>12 mois renouvelables</Text>. Tu recevras un rappel à J-30 et J-7 avant l'échéance. Sans renouvellement, ton selfie est automatiquement supprimé.{'\n\n'}
+                Ton consentement est valable <Text style={{ fontFamily: 'Montserrat-SemiBold' }}>12 mois renouvelables</Text>. Tu recevras un rappel à J-30 et J-7 avant l'échéance. Sans renouvellement, ton selfie est automatiquement supprimé.{'\n\n'}
                 Tu peux retirer ton consentement à tout moment depuis ton profil.
               </Text>
               <TouchableOpacity
@@ -104,7 +104,7 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
                 style={{ marginBottom: 16, alignSelf: 'flex-start' }}
                 hitSlop={10}
               >
-                <Text style={{ color: C.primary, fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' }}>
+                <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold', textDecorationLine: 'underline' }}>
                   Lire la Politique de confidentialité
                 </Text>
               </TouchableOpacity>
@@ -125,7 +125,7 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
                     </Svg>
                   ) : null}
                 </View>
-                <Text style={{ flex: 1, color: C.text, fontSize: 14, lineHeight: 19 }}>
+                <Text style={{ fontFamily: 'Montserrat', flex: 1, color: C.text, fontSize: 14, lineHeight: 19 }}>
                   J'accepte le traitement biométrique de mon image (RGPD art. 9) pour la reconnaissance faciale sur les events Will, pendant 12 mois renouvelables.
                 </Text>
               </TouchableOpacity>
@@ -141,7 +141,7 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
           ) : (
             <>
               {signupMode && (
-                <Text style={{ color: C.textSoft, fontSize: 12, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 6 }}>
+                <Text style={{ color: C.textSoft, fontSize: 12, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 6 }}>
                   Étape 2 sur 2
                 </Text>
               )}
@@ -207,8 +207,8 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
 // gris lisible (il etait en violet pale, presque efface), actions en
 // pastilles plates et CTA violet plein h50 — comme la connexion.
 const selfie = StyleSheet.create({
-  titre: { color: C.primary, fontSize: 26, marginBottom: 8 },
-  texte: {
+  titre: { fontFamily: 'Montserrat', color: C.primary, fontSize: 26, marginBottom: 8 },
+  texte: { fontFamily: 'Montserrat',
     color: 'rgba(26,10,62,0.55)',
     fontSize: 13.5,
     lineHeight: 19,
@@ -221,7 +221,7 @@ const selfie = StyleSheet.create({
     backgroundColor: '#F3EFFE',
     alignItems: 'center', justifyContent: 'center',
   },
-  pastilleTexte: { color: C.primary, fontWeight: '600', fontSize: 14 },
+  pastilleTexte: { color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 },
   cta: {
     height: 50,
     borderRadius: 12,
@@ -229,7 +229,7 @@ const selfie = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginTop: 14,
   },
-  ctaTexte: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  ctaTexte: { color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 },
   fermer: { paddingVertical: 14, alignItems: 'center', marginTop: 6 },
-  fermerTexte: { color: 'rgba(26,10,62,0.45)', fontWeight: '600', fontSize: 14 },
+  fermerTexte: { color: 'rgba(26,10,62,0.45)', fontFamily: 'Montserrat-SemiBold', fontSize: 14 },
 });

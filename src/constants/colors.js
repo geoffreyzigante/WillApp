@@ -15,16 +15,22 @@
 // largement que #EF4444 dans le code). Toute reference success/error/
 // warning doit utiliser ces tokens, pas les hex bruts.
 
+// Charte partagee avec le site : WILL/charte/tokens.json.
+import { T } from './tokens';
+
 export const C = {
   bg: '#FFFFFF',
-  primary: '#7B2FFF',
+  primary: T.couleur.primaire,
   primaryDark: '#5A1FCC',
-  primaryLight: '#E8DEFF',
+  primaryLight: T.couleur.primaireClair,
   text: '#0A0A0A',
-  textSoft: 'rgba(123,47,255,0.3)',
+  // Etait rgba(123,47,255,0.3) — un violet a 30 % illisible sur blanc,
+  // constate sur tous les ecrans (2026-08-31). Regle : texte secondaire en
+  // gris moyen ; les placeholders et etats vides utilisent #A89CB8 en dur.
+  textSoft: '#5a5468',
   white: '#FFFFFF',
   pillBg: '#EFE7FF',
-  pinkPill: '#f4a6ff',
+  pinkPill: T.couleur.rose,
   pinkPillText: '#FFFFFF',
   pinkPillBg: '#FDECFF',
   pinkPillActive: '#f4a6ff',
@@ -33,7 +39,7 @@ export const C = {
   pinkPillFg: '#FFF5FF',
   violetAccent: '#7C3AED',
   card: '#FFFFFF',
-  shadow: 'rgba(123, 47, 255, 0.08)',
+  shadow: 'rgba(123,47,255, 0.08)',
   success: '#10B981',
   error: '#DC2626',
   warning: '#F59E0B',

@@ -147,6 +147,40 @@ console.log('\n[TEST 7bis] Un clignotement DANS coastMs ne cree pas un second co
   assert(actions.length === 0, `clignotement -> aucun tir en double (got ${actions.length})`);
 }
 
+console.log('\n[TEST 8] Un visage LOINTAIN qui naît dans la bande tire des la 1re image');
+{
+  // Le cas qui coutait le premier repere sur le terrain. Un coureur detecte
+  // pour la premiere fois deja dans la bande, avec un petit visage : sa
+  // deuxieme detection arrivera trop tard pour que le premier repere soit
+  // encore devant lui.
+  const trig = createStepTrigger();
+  const actions = trig.ingest([100.0, 1, 0.66, 0.5, 0.018, 0.024]); // aire 0.00043
+  assert(actions.length === 1, `tir des la premiere detection (got ${actions.length})`);
+  assert(actions[0]?.reason === 'apparu-loin', `raison apparu-loin (got ${actions[0]?.reason})`);
+  assert(actions[0]?.repere === 2, `repere le plus proche de 0.66 = index 2 (got ${actions[0]?.repere})`);
+}
+
+console.log('\n[TEST 8bis] Un visage PROCHE garde la double confirmation');
+{
+  // La prudence reste justifiee de pres : la deuxieme detection arrive a
+  // l image suivante, et un faux positif y est bien plus probable (visage
+  // sur un dossard, spectateur au bord).
+  const trig = createStepTrigger();
+  const a1 = trig.ingest([200.0, 1, 0.66, 0.5, 0.17, 0.17]); // aire 0.0289
+  assert(a1.length === 0, `pas de tir a la premiere image (got ${a1.length})`);
+  const a2 = trig.ingest([200.1, 1, 0.66, 0.5, 0.17, 0.17]);
+  assert(a2.length === 1, `tir a la deuxieme (got ${a2.length})`);
+}
+
+console.log('\n[TEST 8ter] Naître HORS bande ne consomme rien');
+{
+  // Hors bande il n y a pas de repere a consommer : le coureur entrera par
+  // franchissement, chemin nominal. Sinon on lui volerait un tir au bord.
+  const trig = createStepTrigger();
+  const actions = trig.ingest([300.0, 1, 0.92, 0.5, 0.018, 0.024]);
+  assert(actions.length === 0, `aucun tir hors bande (got ${actions.length})`);
+}
+
 console.log('\n[TEST 4bis] Coureurs de front : 3 photos pour tout le monde');
 {
   // Le seul cas ou le credit partage joue a PLEIN est le groupe assez etroit

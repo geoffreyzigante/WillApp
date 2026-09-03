@@ -51,6 +51,23 @@ function MenuRow({ icon, label, badge, onPress, dernier, inactif }) {
   );
 }
 
+// Sous-entree d un espace : meme gabarit qu une ligne de menu, decalee
+// sous le libelle du groupe (icone 26 + gap 14 = 40).
+function SousRow({ label, onPress, dernier }) {
+  return (
+    <TouchableOpacity
+      style={[styles.menuRow, !dernier && styles.menuRowSepare]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.menuRowInner, { paddingLeft: 40 }]}>
+        <Text style={styles.sousLabel}>{label}</Text>
+        <Text style={styles.menuChevron}>›</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export function BurgerMenuModal({
   visible,
   onClose,
@@ -152,7 +169,13 @@ export function BurgerMenuModal({
   const fire = (cb) => () => {
     onClose && onClose();
     if (typeof cb !== 'function') return;
-    setTimeout(cb, 120);
+    // 300 ms et pas 120 : les destinations plein ecran (AuthOrganizerModal,
+    // AuthRunnerModal, LoginModal) sont des <Modal presentationStyle=
+    // "fullScreen">. iOS refuse de presenter un Modal pendant que celui du
+    // menu se ferme encore (~220 ms d animation) : le contenu se posait
+    // alors PAR-DESSUS le menu, sans fond (Audit UI-04, meme pattern que
+    // les setTimeout 300 ms de App.js).
+    setTimeout(cb, 300);
   };
 
   // Destinations qui se posent PAR-DESSUS le menu (les tiroirs "Mon compte")
@@ -194,9 +217,9 @@ export function BurgerMenuModal({
                     desormais — avant il flottait a droite de deux lignes de
                     texte sans appartenir a l une ni a l autre. */}
                 <LinearGradient
-                  colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                  colors={['#D67CF8', '#9E5BFF', '#7B2FFF']}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0, y: 1 }}
                   style={styles.hero}
                   onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}
                 >
@@ -257,28 +280,42 @@ export function BurgerMenuModal({
                   />
                 ) : null}
 
+                <View style={styles.spacer} />
                 <Text style={styles.secLabel}>Autres espaces</Text>
-                <MenuRow
-                  icon={<Icon.GearOrg size={19} color={C.primary} />}
-                  label="Espace organisateur"
-                  onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))}
-                />
+                {hasOrganizer ? (
+                  <>
+                    {/* Organisateur connecte : l espace devient un groupe,
+                        avec ses deux destinations. "Mon compte organisateur"
+                        pose au meme niveau que les espaces n etait pas
+                        comprehensible (decision user 2026-08-31). */}
+                    <View style={[styles.menuRow, styles.menuRowSepare]}>
+                      <View style={styles.menuRowInner}>
+                        <View style={styles.menuIcon}><Icon.GearOrg size={19} color={C.primary} /></View>
+                        <Text style={styles.menuLabel}>Espace organisateur</Text>
+                      </View>
+                    </View>
+                    <SousRow label="Mes events" onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))} />
+                    <SousRow label="Mon compte" onPress={empiler(onOpenOrganizerAccount)} />
+                  </>
+                ) : (
+                  /* Sans espace organisateur, « Espace organisateur » ne
+                     voulait rien dire et menait a un formulaire de connexion
+                     pour quelqu un de deja connecte. On nomme ce que la
+                     personne vient chercher : creer un event. L espace se
+                     cree en chemin. */
+                  <MenuRow
+                    icon={<Icon.Fusee size={19} color={C.primary} />}
+                    label="Lancer mon event"
+                    onPress={fire(() => onOpenOrgRole && onOpenOrgRole('create'))}
+                  />
+                )}
                 <MenuRow
                   icon={<Icon.CamOrg size={19} color={C.primary} />}
                   label="Espace photographe"
                   onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}
-                  dernier={!hasOrganizer}
+                  dernier
                 />
-                {hasOrganizer && (
-                  <MenuRow
-                    icon={<Icon.User size={19} color={C.primary} />}
-                    label="Mon compte organisateur"
-                    onPress={empiler(onOpenOrganizerAccount)}
-                    dernier
-                  />
-                )}
 
-                <View style={styles.spacer} />
                 <View style={styles.rule} />
                 <TouchableOpacity style={styles.link} onPress={fire(onLogout)}>
                   <Text style={styles.linkMutedText}>Se déconnecter</Text>
@@ -290,10 +327,11 @@ export function BurgerMenuModal({
                 {/* Meme bandeau qu en connecte : il porte la promesse au lieu
                     d un logo pose sur du vide. */}
                 <LinearGradient
-                  colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
+                  colors={['#D67CF8', '#9E5BFF', '#7B2FFF']}
+                  start={{ x: 1, y: 0 }}
+                  end={{ x: 0, y: 1 }}
                   style={styles.hero}
+                  onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}
                 >
                   <View style={{ marginBottom: 16 }}>
                     <Icon.Logo width={62} color="#FFFFFF" />
@@ -303,27 +341,51 @@ export function BurgerMenuModal({
                   <Text style={styles.heroStatus}>L'application photo des événements sportifs</Text>
                 </LinearGradient>
 
+                <Animated.View style={{ flex: 1, opacity: contenuOpacity, transform: [{ translateX: contenuX }] }}>
                 <View style={styles.authSection}>
                   <TouchableOpacity style={styles.ctaPrimary} onPress={fire(onOpenAuthLogin)}>
-                    <Text style={styles.ctaPrimaryText}>Se connecter</Text>
+                    <Text style={styles.ctaPrimaryText}>Connexion</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.ctaSecondary} onPress={fire(onOpenAuthSignup)}>
-                    <Text style={styles.ctaSecondaryText}>S'inscrire</Text>
+                    <Text style={styles.ctaSecondaryText}>Inscription</Text>
                   </TouchableOpacity>
                 </View>
 
                 <Text style={[styles.secLabel, styles.secLabelApresCta]}>Autres espaces</Text>
-                <MenuRow
-                  icon={<Icon.GearOrg size={19} color={C.primary} />}
-                  label="Espace organisateur"
-                  onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))}
-                />
+                {hasOrganizer ? (
+                  <>
+                    {/* Organisateur connecte : l espace devient un groupe,
+                        avec ses deux destinations. "Mon compte organisateur"
+                        pose au meme niveau que les espaces n etait pas
+                        comprehensible (decision user 2026-08-31). */}
+                    <View style={[styles.menuRow, styles.menuRowSepare]}>
+                      <View style={styles.menuRowInner}>
+                        <View style={styles.menuIcon}><Icon.GearOrg size={19} color={C.primary} /></View>
+                        <Text style={styles.menuLabel}>Espace organisateur</Text>
+                      </View>
+                    </View>
+                    <SousRow label="Mes events" onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))} />
+                    <SousRow label="Mon compte" onPress={empiler(onOpenOrganizerAccount)} />
+                  </>
+                ) : (
+                  /* Sans espace organisateur, « Espace organisateur » ne
+                     voulait rien dire et menait a un formulaire de connexion
+                     pour quelqu un de deja connecte. On nomme ce que la
+                     personne vient chercher : creer un event. L espace se
+                     cree en chemin. */
+                  <MenuRow
+                    icon={<Icon.Fusee size={19} color={C.primary} />}
+                    label="Lancer mon event"
+                    onPress={fire(() => onOpenOrgRole && onOpenOrgRole('create'))}
+                  />
+                )}
                 <MenuRow
                   icon={<Icon.CamOrg size={19} color={C.primary} />}
                   label="Espace photographe"
                   onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}
                   dernier
                 />
+                </Animated.View>
               </>
             )}
           </ScrollView>
@@ -375,7 +437,7 @@ const styles = StyleSheet.create({
   linkMutedText: {
     color: '#6c5b8c',
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: 'Montserrat-SemiBold',
   },
   authSection: { gap: 10, paddingTop: 16 },
 
@@ -408,7 +470,7 @@ const styles = StyleSheet.create({
     fontFamily: 'AVEstiana',
     fontSize: 24, color: '#FFFFFF', lineHeight: 27,
   },
-  heroStatus: {
+  heroStatus: { fontFamily: 'Montserrat',
     fontSize: 12.5, color: 'rgba(255,255,255,0.88)', marginTop: 4, lineHeight: 17,
   },
 
@@ -430,24 +492,25 @@ const styles = StyleSheet.create({
     width: 26,
     alignItems: 'center', justifyContent: 'center',
   },
-  menuLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1a0a3e' },
-  menuChevron: { fontSize: 18, color: 'rgba(26,10,62,0.35)' },
+  menuLabel: { flex: 1, fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: '#1a0a3e' },
+  sousLabel: { flex: 1, fontSize: 14.5, fontFamily: 'Montserrat-Medium', color: '#1a0a3e' },
+  menuChevron: { fontFamily: 'Montserrat', fontSize: 18, color: 'rgba(26,10,62,0.35)' },
   menuBadge: {
     minWidth: 22, height: 22, paddingHorizontal: 7, borderRadius: 11,
     backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center',
   },
-  menuBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  menuBadgeText: { color: '#fff', fontSize: 12, fontFamily: 'Montserrat-SemiBold' },
   menuSoon: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 0.6,
+    fontSize: 11, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.6,
     textTransform: 'uppercase', color: 'rgba(26,10,62,0.4)',
   },
 
   secLabel: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 1.1,
+    fontSize: 11, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.1,
     textTransform: 'uppercase', color: 'rgba(26,10,62,0.4)',
     marginTop: 20, marginBottom: 2,
   },
-  secLabelApresCta: { marginTop: 26 },
+  secLabelApresCta: { fontFamily: 'Montserrat', marginTop: 26 },
   spacer: { flex: 1, minHeight: 24 },
   rule: { height: 1, backgroundColor: 'rgba(26,10,62,0.08)', marginBottom: 4 },
   ctaPrimary: {
@@ -456,12 +519,12 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
     alignItems: 'center',
   },
-  ctaPrimaryText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  ctaPrimaryText: { color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' },
   ctaSecondary: {
     paddingVertical: 13,
     borderRadius: 14,
     backgroundColor: 'rgba(123,47,255,0.08)',
     alignItems: 'center',
   },
-  ctaSecondaryText: { color: C.primary, fontSize: 15, fontWeight: '700' },
+  ctaSecondaryText: { color: C.primary, fontSize: 15, fontFamily: 'Montserrat-SemiBold' },
 });

@@ -28,7 +28,7 @@ export function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, upl
             <>
               <Text style={[s.selfieDoneTitle, { color: C.error }]}>Envoi du selfie échoué</Text>
               <TouchableOpacity onPress={onRetryUpload} hitSlop={6}>
-                <Text style={[s.selfieDoneSub, { color: C.error, fontWeight: '700' }]}>
+                <Text style={[s.selfieDoneSub, { color: C.error, fontFamily: 'Montserrat-SemiBold' }]}>
                   Réessayer l'envoi (ou supprimer pour reprendre)
                 </Text>
               </TouchableOpacity>
@@ -69,7 +69,7 @@ export function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, upl
               <Icon.User size={32} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: '#FFD89B', fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 }}>
+              <Text style={{ color: '#FFD89B', fontSize: 11, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 4 }}>
                 Selfie manquant
               </Text>
               <Text style={[s.selfieSub, { marginTop: 0, fontSize: 13, lineHeight: 17 }]}>
@@ -78,7 +78,7 @@ export function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, upl
             </View>
           </View>
           <View style={{ marginTop: 12, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}>
-            <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>Faire mon selfie maintenant</Text>
+            <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>Faire mon selfie maintenant</Text>
           </View>
         </LinearGradient>
       </TouchableOpacity>
