@@ -1255,13 +1255,22 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // Meme regex que le plancher d obturateur par discipline (E5).
   const estEventVelo = /v[ée]lo|cyclo|cyclis|vtt|gravel|bike|triathlon|duathlon/.test(String(session?.event?.event_type || '').toLowerCase());
   const bandeReperesActive = estEventVelo ? 0.50 : 0.375;
-  const bandeReperesRef = useRef(0.375);
+  // Nombre de reperes = photos par passage. Pilote par /config
+  // (camera.stepPhotosParPassage) : 1 = une ligne au centre, une photo, plus
+  // rien a trier ; 3 = comportement historique. Le ZSL sert la frame du
+  // franchissement, donc un seul repere suffit a centrer le coureur.
+  const photosParPassage = (() => {
+    const n = parseInt(eventConfig.camera?.stepPhotosParPassage, 10);
+    return Number.isFinite(n) && n >= 1 && n <= 3 ? n : 3;
+  })();
+  const reperesSigRef = useRef('');
   useEffect(() => {
-    if (bandeReperesRef.current === bandeReperesActive) return;
-    bandeReperesRef.current = bandeReperesActive;
-    stepTriggerRef.current = createStepTrigger({ bandeReperes: bandeReperesActive });
-    console.log(`[pas] reperes ${estEventVelo ? 'larges 0.50 (velo)' : 'resserres 0.375'}`);
-  }, [bandeReperesActive, estEventVelo]);
+    const sig = `${bandeReperesActive}|${photosParPassage}`;
+    if (reperesSigRef.current === sig) return;
+    reperesSigRef.current = sig;
+    stepTriggerRef.current = createStepTrigger({ bandeReperes: bandeReperesActive, photosParPassage });
+    console.log(`[pas] ${photosParPassage} repere(s), bande ${estEventVelo ? 'large 0.50 (velo)' : 'resserree 0.375'}`);
+  }, [bandeReperesActive, estEventVelo, photosParPassage]);
   // ── Mode de rendu ───────────────────────────────────────────────────────
   // 'rapide'  = comportement historique. Priorite vitesse cote AVFoundation :
   //             obturateur qui rend la main en 80-200 ms, mais Deep Fusion et
@@ -4784,10 +4793,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             {/* Trois reperes fixes, en haut et en bas du cadre. Ils
                 s allument un par un au passage : deux allumes au lieu de
                 trois = trop pres de la route. */}
-            {[0, 1, 2].map((i) => {
+            {Array.from({ length: photosParPassage }, (_, i) => i).map((i) => {
               // Memes positions que stepTrigger.js : bandeReperes par
-              // discipline (0.375, ou 0.50 sur une epreuve velo).
-              const pct = ((0.5 - bandeReperesActive / 2) + (bandeReperesActive * (i + 0.5)) / 3) * 100;
+              // discipline (0.375, ou 0.50 sur une epreuve velo), repartis
+              // regulierement — un seul repere tombe pile au centre.
+              const pct = ((0.5 - bandeReperesActive / 2) + (bandeReperesActive * (i + 0.5)) / photosParPassage) * 100;
               const anim = reperesAnim[i];
               const commun = {
                 position: 'absolute', left: `${pct}%`, width: 2, height: 9,
