@@ -28,6 +28,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { Icon } from '../components/Icon';
 import { SelfieBlock } from '../components/SelfieBlock';
 import { ConsentRenewBanner } from '../components/ConsentRenewBanner';
+import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
 import { PhotoGrid } from '../components/PhotoGrid';
 import { EtatVideWill } from '../components/EtatVideWill';
 import { SpinningLoader, RefreshableScrollView } from '../components/loaders';
@@ -712,6 +713,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
 
       <View style={{ height: 14 }} />
       <ConsentRenewBanner runnerApiFetch={runnerApiFetch} isAuthed={!!runnerUserId} />
+      <VerifyEmailBanner runnerApiFetch={runnerApiFetch} isAuthed={!!runnerUserId} />
 
       {!selfieUri && (
         <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
