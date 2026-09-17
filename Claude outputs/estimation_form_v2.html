@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Étape estimation v2</title>
+<style>
+  :root{--violet:#7B2FFF;--violet900:#4C0FB3;--rose:#F4A6FF;--bg:#F5F3FF;--card:#fff;--ink:#1A1426;--ink2:#5A5468;--line:#E4E0EC;--ok:#1a9d5a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:760px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:21px;margin:0 0 4px}
+  .lead{font-size:13px;color:var(--ink2);margin:0 0 18px}
+  .mock{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 8px 30px rgba(76,15,179,.08)}
+  .q{font-size:14px;font-weight:800;margin:0 0 9px}
+  .q span{font-weight:600;color:var(--ink2);font-size:12px}
+  .ranges{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:22px}
+  .r{border:1.5px solid var(--line);border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700;background:#fff;color:var(--ink2)}
+  .r.on{border-color:var(--violet);background:var(--violet);color:#fff}
+  .steppers{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+  .sp{flex:1;min-width:200px;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px}
+  .sp .lbl{font-size:12.5px;font-weight:700;color:var(--ink)}
+  .sp .lbl small{display:block;color:var(--ink2);font-weight:500;font-size:11px}
+  .ctrl{display:flex;align-items:center;gap:14px;margin-top:8px}
+  .btn{width:30px;height:30px;border-radius:8px;border:1.5px solid var(--violet);color:var(--violet);background:#fff;font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .val{font-size:20px;font-weight:900;color:var(--violet900);min-width:22px;text-align:center}
+  .result{background:linear-gradient(135deg,#f4efff,#fff);border:2px solid var(--violet);border-radius:14px;padding:16px;text-align:center}
+  .result .lab{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2);font-weight:700}
+  .result .tier{font-size:15px;font-weight:800;margin-top:2px}
+  .result .price{font-size:30px;font-weight:900;color:var(--violet);margin:2px 0}
+  .result .calc{font-size:12px;color:var(--ink2)}
+  .edit{font-size:12px;color:var(--violet900);margin-top:8px;font-weight:700}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:16px 0 0;font-size:13px}
+</style></head>
+<body><div class="wrap">
+<h1>Ce qu'on demande à l'orga</h1>
+<p class="lead">Une plage de participants + la couverture photo. Estimation, le réel ajuste à la clôture.</p>
+
+<div class="mock">
+  <p class="q">1. Combien de participants ? <span>(une fourchette)</span></p>
+  <div class="ranges">
+    <div class="r">&lt; 100</div>
+    <div class="r">100–300</div>
+    <div class="r on">300–750</div>
+    <div class="r">750–1500</div>
+    <div class="r">1500+</div>
+  </div>
+
+  <p class="q">2. Couverture photo</p>
+  <div class="steppers">
+    <div class="sp"><div class="lbl">Postes couverts par Will <small>points de capture Will</small></div>
+      <div class="ctrl"><div class="btn">−</div><div class="val">2</div><div class="btn">+</div></div></div>
+    <div class="sp"><div class="lbl">Photographes externes <small>qui alimentent aussi Will</small></div>
+      <div class="ctrl"><div class="btn">−</div><div class="val">1</div><div class="btn">+</div></div></div>
+  </div>
+
+  <div class="result">
+    <div class="lab">Palier proposé</div>
+    <div class="tier">Base</div>
+    <div class="price">79 €</div>
+    <div class="calc">≈ 500 participants × 3 points (2 Will + 1 externe) ≈ 1500 photos · plafond 3000</div>
+    <div class="edit">↕ Modifier le palier si tu préfères</div>
+  </div>
+</div>
+
+<div class="box"><b>Le calcul :</b> participants (milieu de plage) × (postes Will + photographes externes) ≈ photos → palier. Simple à saisir, honnête sur l'imprécision, et le prélèvement du delta corrige à la clôture.</div>
+</div></body></html>

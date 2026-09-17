@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
   StatusBar, Platform, KeyboardAvoidingView, Animated, Keyboard, Linking,
-  AppState, Share, NativeModules, PanResponder, LayoutAnimation, BackHandler,
+  AppState, Share, NativeModules, PanResponder, LayoutAnimation, BackHandler, Settings,
 } from 'react-native';
 // SafeAreaView de react-native ne fait RIEN sur Android : c est un composant
 // iOS, la doc le dit, et sur Android il rend un View nu. Avec
@@ -705,6 +705,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // namespace pilote (drop_enabled kill switch) n a pas ce conflit.
           const { quality: _ignoredServerQuality, ...rest } = cfg;
           setEventConfig(prev => ({ ...prev, ...rest }));
+          // En mode HEIC, le plugin natif ne doit PAS encoder le JPEG 2400
+          // (on l envoie plus, il serait jete) : on l economise via un flag
+          // UserDefaults lu par PhotoCaptureDelegate. iOS-only (Settings).
+          try { Settings.set({ will_skip_jpeg: rest?.upload?.sendHeic === true ? 1 : 0 }); } catch {}
         })
         .catch(() => {});
     };
@@ -947,6 +951,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const ISO_SAMPLE_SIZE = 4;
   const liveExposureRef = useRef([]);
   const [liveExposureSamples, setLiveExposureSamples] = useState([]);
+  // Regime de qualite photo pilote par la vitesse du sujet (switcher Deep
+  // Fusion). 'balanced' = Deep Fusion actif (sujet lent -> qualite Apple, +bruit
+  // propre, latence ~640ms) ; 'speed' = pas de Deep Fusion (sujet rapide ->
+  // figeage + centrage ZSL, ~150ms). Etat React car pilote un prop du <Camera>.
+  const [balanceRegime, setBalanceRegime] = useState('speed');
+  const balanceRegimeRef = useRef('speed');
+  const balancePendingSinceRef = useRef(0);
   function pushLiveExposureSample(sample) {
     if (!sample) return;
     const iso = Number(sample.iso);
@@ -1006,7 +1017,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // des SILHOUETTES (VNDetectHumanRectangles) en plus des visages. Sur un
   // build ancien le plugin ignore l argument et ne renvoie pas de champ
   // humans — le worklet retombe sur les visages, rien ne casse.
-  const modeInstantSV = useMemo(() => Worklets.createSharedValue(0), []);
+  const modeInstantSV = useMemo(() => Worklets.createSharedValue(1), []);
   useEffect(() => { isAutoArmedSV.value = isAutoArmed; }, [isAutoArmed, isAutoArmedSV]);
   useEffect(() => { isDetectionEnabledSV.value = isDetectionEnabled; }, [isDetectionEnabled, isDetectionEnabledSV]);
 
@@ -1214,8 +1225,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // La bascule vit dans une REF autant que dans un etat : onHumansDetectedJS
   // est memoise avec des dependances vides, sa closure est donc figee au
   // premier rendu. Lire l etat directement donnerait eternellement 'rafale'.
-  const [modeCapture, setModeCapture] = useState('rafale');
-  const modeCaptureRef = useRef('rafale');
+  const [modeCapture, setModeCapture] = useState('instant');
+  const modeCaptureRef = useRef('instant');
   // Relecture au montage. Asynchrone, donc l ecran s ouvre sur les defauts
   // puis bascule — c est sans consequence, aucune capture n a lieu dans cet
   // intervalle (l auto-armement demande 900 ms).
@@ -1225,11 +1236,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       .then(brut => {
         if (annule || !brut) return;
         const m = JSON.parse(brut);
-        if (m?.capture === 'pas' || m?.capture === 'rafale' || m?.capture === 'instant') {
-          modeCaptureRef.current = m.capture;
-          setModeCapture(m.capture);
-          modeInstantSV.value = m.capture === 'instant' ? 1 : 0;
-        }
+        // Mode capture verrouille sur 'instant' (2026-09, rafale/pas retires).
+        // On ne restaure plus l ancienne valeur : un 'rafale'/'pas' sauvegarde
+        // par une session anterieure ressusciterait un mode supprime.
         if (m?.qualite === 'qualite' || m?.qualite === 'rapide') {
           modeQualiteRef.current = m.qualite;
           setModeQualite(m.qualite);
@@ -1263,14 +1272,37 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     const n = parseInt(eventConfig.camera?.stepPhotosParPassage, 10);
     return Number.isFinite(n) && n >= 1 && n <= 3 ? n : 3;
   })();
+  // Fenetre de tir immediat sur apparition (demi-largeur autour du repere).
+  // /config camera.stepFenetreApparition. Defaut 0.10 = fenetre 0.40-0.60 pour
+  // un repere central. Plus grand = rattrape plus large mais moins centre ;
+  // plus petit = plus centre mais rate les apparitions decalees.
+  const fenetreApparition = (() => {
+    const v = parseFloat(eventConfig.camera?.stepFenetreApparition);
+    return Number.isFinite(v) && v > 0 && v <= 0.5 ? v : 0.10;
+  })();
+  // Centrage anti-latence (« avance apprise ») : le repere est decale dans le
+  // sens de course d une valeur apprise du terrain (mediane des vitesses
+  // recentes x latence), pour que l athlete tombe centre malgre la latence
+  // d obturateur. Sens appris du 1er coureur, magnitude auto-calee, calcul au
+  // tir (pas par frame). Tunable en live via /config (camera.stepAvance*),
+  // effet au prochain build.
+  const avanceEnabled = eventConfig.camera?.stepAvanceEnabled !== false;
+  const avanceLatenceMs = (() => {
+    const v = parseFloat(eventConfig.camera?.stepAvanceLatenceMs);
+    return Number.isFinite(v) && v >= 0 && v <= 400 ? v : 135;
+  })();
+  const avanceMax = (() => {
+    const v = parseFloat(eventConfig.camera?.stepAvanceMax);
+    return Number.isFinite(v) && v >= 0 && v <= 0.3 ? v : 0.10;
+  })();
   const reperesSigRef = useRef('');
   useEffect(() => {
-    const sig = `${bandeReperesActive}|${photosParPassage}`;
+    const sig = `${bandeReperesActive}|${photosParPassage}|${fenetreApparition}|${avanceEnabled}|${avanceLatenceMs}|${avanceMax}`;
     if (reperesSigRef.current === sig) return;
     reperesSigRef.current = sig;
-    stepTriggerRef.current = createStepTrigger({ bandeReperes: bandeReperesActive, photosParPassage });
-    console.log(`[pas] ${photosParPassage} repere(s), bande ${estEventVelo ? 'large 0.50 (velo)' : 'resserree 0.375'}`);
-  }, [bandeReperesActive, estEventVelo, photosParPassage]);
+    stepTriggerRef.current = createStepTrigger({ bandeReperes: bandeReperesActive, photosParPassage, fenetreApparition, avanceEnabled, avanceLatenceMs, avanceMax });
+    console.log(`[pas] ${photosParPassage} repere(s), bande ${estEventVelo ? 'large 0.50 (velo)' : 'resserree 0.375'}, fenetre appari ±${fenetreApparition}, avance ${avanceEnabled ? `±${avanceMax}@${avanceLatenceMs}ms` : 'off'}`);
+  }, [bandeReperesActive, estEventVelo, photosParPassage, fenetreApparition, avanceEnabled, avanceLatenceMs, avanceMax]);
   // ── Mode de rendu ───────────────────────────────────────────────────────
   // 'rapide'  = comportement historique. Priorite vitesse cote AVFoundation :
   //             obturateur qui rend la main en 80-200 ms, mais Deep Fusion et
@@ -1295,39 +1327,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // doit rester EGALE au width de compressForAnalysis cote worker et a
   // LIGHT_MAX_WIDTH. Etait a 2160, soit 10 % sous le plancher.
   const QUALITE_MAX_WIDTH = 2400;
-  const [modeQualite, setModeQualite] = useState('rapide');
-  const modeQualiteRef = useRef('rapide');
-  const basculerModeQualite = () => {
-    try {
-      const suivant = modeQualiteRef.current === 'qualite' ? 'rapide' : 'qualite';
-      modeQualiteRef.current = suivant;
-      setModeQualite(suivant);
-      enregistrerModes();
-      console.log(`[mode] rendu = ${suivant}`);
-    } catch (e) {
-      console.warn('[mode] bascule rendu impossible —', e?.message || String(e));
-    }
-  };
+  const [modeQualite, setModeQualite] = useState('qualite');
+  const modeQualiteRef = useRef('qualite');
+  // basculerModeQualite retire (2026-09) : Fusion verrouille, plus de bascule.
 
-  const basculerModeCapture = () => {
-    try {
-      // Cycle a trois : rafale -> pas -> instant -> rafale.
-      // 'instant' = le declenchement du pas + le tampon d obturation
-      // instantanee (zero-shutter-lag) + aucun filtre destructeur local.
-      const ordre = ['rafale', 'pas', 'instant'];
-      const suivant = ordre[(ordre.indexOf(modeCaptureRef.current) + 1) % ordre.length];
-      modeCaptureRef.current = suivant;
-      setModeCapture(suivant);
-      modeInstantSV.value = suivant === 'instant' ? 1 : 0;
-      // Le tracker repart propre : les reperes deja consommes par un passage
-      // en cours n auraient aucun sens dans l autre mode.
-      stepTriggerRef.current?.reset();
-      enregistrerModes();
-      console.log(`[mode] capture = ${suivant}`);
-    } catch (e) {
-      console.warn('[mode] bascule impossible —', e?.message || String(e));
-    }
-  };
+  // basculerModeCapture retire (2026-09) : le mode capture est verrouille sur
+  // 'instant'. Seul reste le switch A/B rendu (basculerModeQualite).
   // Signature JSON des seuils /config appliques au tracker. Sert a ne le
   // recreer QUE quand un seuil change reellement (le refetch /config toutes
   // les 5 min recree l'objet camera sans changer les valeurs).
@@ -1928,24 +1933,51 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // poussee au natif via readExposure args. Cap = 1.0s = pas de plafond
   // effectif (la native clampe a activeFormat.maxExposureDuration ~= 1s).
   useEffect(() => {
+    const camCfg = eventConfig?.camera || {};
     const shutters = liveExposureSamples
       .map(s => s.shutter)
       .filter(v => Number.isFinite(v) && v > 0);
-    if (shutters.length === 0) return;
     const sorted = [...shutters].sort((a, b) => a - b);
-    const mid = sorted[Math.floor(sorted.length / 2)];
-    const camCfg = eventConfig?.camera || {};
+    const mid = sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
+
+    // ── Plafond d obturateur PILOTE PAR LA VITESSE du sujet (opt-in) ─────────
+    // Lent -> 1/500 (ISO bas, propre) ; rapide -> 1/2000 (fige net). Interpole
+    // sur la vitesse mediane des coureurs suivis (largeurs/s, cf stepTrigger).
+    // Plafond ISO : si figer plus fort ferait grimper l ISO au-dela du plafond,
+    // on relache l obturateur juste ce qu il faut (jamais sous le plancher lent).
+    // Priorite nettete > bruit : une photo nette-sombre se recupere, pas un flou.
+    if (camCfg.shutterVitesse === true) {
+      const v = stepTriggerRef.current?.vitesseMediane?.() || 0;
+      const vLent = Number(camCfg.vSeuilLent) || 0.15;
+      const vRapide = Number(camCfg.vSeuilRapide) || 0.60;
+      const dLent = Number(camCfg.shutterLent) || 500;
+      const dRapide = Number(camCfg.shutterRapide) || 2000;
+      const frac = Math.max(0, Math.min(1, (v - vLent) / Math.max(1e-6, vRapide - vLent)));
+      let denom = dLent + frac * (dRapide - dLent);
+      // Plafond ISO : l ISO monte ~proportionnellement a l acceleration de
+      // l obturateur. On borne pour ne pas exploser le grain.
+      const isos = liveExposureSamples.map(s => s.iso).filter(x => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
+      const isoNow = isos.length ? isos[Math.floor(isos.length / 2)] : null;
+      const isoPlafond = Number(camCfg.isoPlafond) || 3200;
+      if (isoNow && mid && mid > 0) {
+        const denomNow = 1.0 / mid;
+        const denomMaxISO = denomNow * (isoPlafond / isoNow);
+        denom = Math.min(denom, Math.max(dLent, denomMaxISO));
+      }
+      denom = Math.max(250, Math.min(4000, denom));
+      capSecondsSV.value = 1.0 / denom;
+      brightnessLabelSV.value = 'vitesse';
+      return;
+    }
+
+    // ── Voie historique : plafond pilote par la LUMIERE ─────────────────────
+    if (!mid) return;
     const denBright = Number(camCfg.shutterSpeedMaxBright) || 0; // 0 = no cap (defaut)
     let denDim = Number(camCfg.shutterSpeedMaxDim) || 500;
     // ── Plancher par discipline ─────────────────────────────────────────
-    // Le plancher d obturateur depend de la vitesse du sujet, et l app sait
-    // a quel event elle est connectee. Un cycliste a 35 km/h laisse ~40 mm
-    // de file a 1/250 — visible sur un visage — la ou un coureur a 12 km/h
-    // en laisse 13, imperceptibles. Regle : sur une epreuve velo, jamais
-    // plus lent que 1/500, quel que soit le reglage global. Monotone : la
-    // configuration peut durcir (Dim=1000 s applique), jamais ramollir en
-    // dessous de 1/500 pour le velo. Detection par le type d event declare
-    // par l organisateur ; inconnu = comportement inchange.
+    // Sur une epreuve velo, jamais plus lent que 1/500 (un cycliste a 35 km/h
+    // laisse ~40 mm de file a 1/250 — visible sur un visage). Detection par le
+    // type d event declare par l organisateur ; inconnu = comportement inchange.
     try {
       const type = String(session?.event?.event_type || '').toLowerCase();
       const velo = /v[ée]lo|cyclo|cyclis|vtt|gravel|bike|triathlon|duathlon/.test(type);
@@ -1964,7 +1996,71 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     }
     capSecondsSV.value = cap;
     brightnessLabelSV.value = label;
-  }, [liveExposureSamples, eventConfig?.camera?.shutterSpeedMaxBright, eventConfig?.camera?.shutterSpeedMaxDim, capSecondsSV, brightnessLabelSV]);
+  }, [liveExposureSamples, eventConfig?.camera?.shutterSpeedMaxBright, eventConfig?.camera?.shutterSpeedMaxDim, eventConfig?.camera?.shutterVitesse, eventConfig?.camera?.shutterLent, eventConfig?.camera?.shutterRapide, eventConfig?.camera?.vSeuilLent, eventConfig?.camera?.vSeuilRapide, eventConfig?.camera?.isoPlafond, capSecondsSV, brightnessLabelSV]);
+
+  // ── Switcher Deep Fusion PILOTE PAR LA VITESSE (opt-in captureBalanceAuto) ──
+  // Sujet lent -> 'balanced' (Deep Fusion : debruitage multi-frame Apple, la
+  // vraie qualite iPhone ; latence ~640ms, ok car le sujet bouge peu). Sujet
+  // rapide -> 'speed' (pas de Fusion : frame ZSL deja exposee au franchissement,
+  // coureur fige et centre, ~150ms). Hysteresis + debounce : on ne reconfigure
+  // la camera (couteux, ~coupure breve du flux) que si la vitesse reste d un
+  // cote du seuil pendant `captureBalanceDebounceMs`. Deux seuils distincts
+  // (entree/sortie) evitent le flottement autour d une valeur unique.
+  useEffect(() => {
+    const camCfg = eventConfig?.camera || {};
+    // ── Garde-fou : en mode instant / pas, le switcher est NEUTRALISE ──────
+    // Ces modes reposent sur le ZSL (la photo servie EST la frame du
+    // franchissement) et sur l avance apprise calee dessus. Passer en
+    // 'balanced' couperait le ZSL -> sujet decentre + latence 640ms, et
+    // l avance deviendrait fausse. Deep Fusion et centrage anti-latence
+    // s excluent : en instant/pas on reste TOUJOURS en 'speed'.
+    if (modeCapture === 'instant' || modeCapture === 'pas') {
+      if (balanceRegimeRef.current !== 'speed') {
+        balanceRegimeRef.current = 'speed';
+        setBalanceRegime('speed');
+      }
+      return undefined;
+    }
+    if (camCfg.captureBalanceAuto !== true) {
+      // Manuel : le regime suit captureBalance fige, pas la vitesse.
+      const fixe = camCfg.captureBalance === 'balanced' ? 'balanced' : 'speed';
+      if (balanceRegimeRef.current !== fixe) {
+        balanceRegimeRef.current = fixe;
+        setBalanceRegime(fixe);
+      }
+      return undefined;
+    }
+    // Seuils en largeurs/s (meme unite que vitesseMediane). Au-dessus de
+    // vHaut -> speed ; en dessous de vBas -> balanced. Entre les deux : on
+    // garde le regime courant (bande morte anti-flottement).
+    const vHaut = Number(camCfg.captureBalanceVHaut) || 0.35;
+    const vBas = Number(camCfg.captureBalanceVBas) || 0.20;
+    const debounceMs = Number(camCfg.captureBalanceDebounceMs) || 1800;
+    const tick = () => {
+      const v = stepTriggerRef.current?.vitesseMediane?.() || 0;
+      let cible = balanceRegimeRef.current;
+      if (v >= vHaut) cible = 'speed';
+      else if (v <= vBas) cible = 'balanced';
+      if (cible === balanceRegimeRef.current) {
+        balancePendingSinceRef.current = 0; // stable, rien a faire
+        return;
+      }
+      // Changement candidat : demarrer / poursuivre le debounce.
+      const now = Date.now();
+      if (balancePendingSinceRef.current === 0) {
+        balancePendingSinceRef.current = now;
+        return;
+      }
+      if (now - balancePendingSinceRef.current >= debounceMs) {
+        balanceRegimeRef.current = cible;
+        balancePendingSinceRef.current = 0;
+        setBalanceRegime(cible);
+        console.log('[balance] switch ->', cible, 'v=', v.toFixed(3));
+      }
+    };
+    const id = setInterval(tick, 400);
+    return () => clearInterval(id);
+  }, [modeCapture, eventConfig?.camera?.captureBalanceAuto, eventConfig?.camera?.captureBalance, eventConfig?.camera?.captureBalanceVHaut, eventConfig?.camera?.captureBalanceVBas, eventConfig?.camera?.captureBalanceDebounceMs]);
 
   // Frame processor : ~30 fps appel worklet, throttle 1/3 -> ~10 fps d'analyse
   // Vision (economie batterie + thermal). Apple Vision tourne sur la queue
@@ -3115,6 +3211,33 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         // du gain thermique d Instant v2. Build ancien : champ absent,
         // voie classique ci-dessous, rien ne change.
         // La notation (au-dessus) a deja eu lieu sur le HEIC brut.
+
+        // ─── Envoi HEIC brut (gated /config upload.sendHeic) ──────────────
+        // Le serveur (Lambda) decode le HEIC et fabrique master + reko + WebP.
+        // Le telephone n'a plus rien a convertir : on envoie le HEIC tel quel,
+        // un seul fichier. Defaut OFF -> voie JPEG historique ci-dessous.
+        // Bascule a chaud par /config, repli instantane sans rebuild.
+        if (eventConfigRef.current.upload?.sendHeic === true) {
+          // Le JPEG 2400 encode par le plugin natif ne sert plus : on le jette.
+          if (item.willJpegPath) { try { new File(item.willJpegPath).delete(); } catch {} }
+          const exifCompact = exifCompactDepuis(readSidecar(item.id)?.exif);
+          deleteSidecar(item.id);
+          const apresHeic = queueRef.current.map(it =>
+            it.id === item.id
+              ? { ...it, processed: true, status: 'pending', retries: 0, nextAttemptAt: null,
+                  localUri: item.localUri, key: String(item.key).replace(/\.heic$/i, '.jpg'),
+                  isJpeg: false, heic: true,
+                  ...(exifCompact ? { exifCompact } : {}) }
+              : it
+          );
+          await commitQueue(apresHeic);
+          try {
+            const octets = new File(item.localUri).size;
+            if (Number.isFinite(octets) && octets > 0) console.log(`[poids] heic brut -> ${Math.round(octets / 1024)} Ko`);
+          } catch {}
+          continue;
+        }
+
         if (item.willJpegPath) {
           let voieNativeOk = false;
           try {
@@ -3448,7 +3571,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // sautent la voie legere. lightSkipped = voie legere abandonnee pour
       // cet item (gain nul, ou echecs repetes) -> il part directement full.
       const besoinLeger = twoTier
-        ? uploadable.filter(({ it }) => !it.isRaw && it.lightDone !== true)
+        ? uploadable.filter(({ it }) => !it.isRaw && !it.heic && it.lightDone !== true)
         : [];
       const phase = besoinLeger.length > 0 ? 'light' : 'full';
       phaseLegereFaite = phase === 'light';
@@ -3577,7 +3700,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           let cleanupUri = null;
           try {
             let srcUri = item.localUri;
-            let contentType = item.isRaw
+            let contentType = item.heic
+              ? 'image/heic'
+              : item.isRaw
               ? 'image/x-adobe-dng'
               : (item.isJpeg || /\.jpe?g$/i.test(item.key || '') ? 'image/jpeg' : 'image/heic');
             let tierHeader = null;
@@ -4486,17 +4611,19 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // d arriere-plan, qui survit a la fermeture de la fenetre : les compter ici
   // ferait rester le benevole devant son ecran sans aucune raison.
   function confirmLeaveWithPending(proceed) {
-    const enAttente = queueStats?.pending || 0;
-    if (enAttente === 0) { proceed(); return; }
-    Alert.alert(
-      `${enAttente} photo${enAttente > 1 ? 's' : ''} pas encore partie${enAttente > 1 ? 's' : ''}`,
-      'Reste quelques secondes, ou elles repartiront à ta prochaine ouverture.',
-      [
-        { text: 'Rester', style: 'cancel' },
-        { text: 'Quitter', onPress: proceed },
-      ],
-      { cancelable: true },
-    );
+    // Plus d alerte : Retour declenche le MEME flush que la mise en fond —
+    // on pousse tout ce qui reste vers la session d arriere-plan (qui finit
+    // meme app fermee), sans bloquer l ecran. Fire-and-forget, on quitte tout
+    // de suite. Rien n est perdu : la file est persistante.
+    if ((queueStats?.pending || 0) > 0) {
+      (async () => {
+        try { await BackgroundUploaderModule?.beginProtectedWindow?.(); } catch {}
+        try { await processQueue(); } catch {}
+        try { await drainQueue(); } catch {}
+        try { await BackgroundUploaderModule?.endProtectedWindow?.(); } catch {}
+      })();
+    }
+    proceed();
   }
 
   // ─── GEOMETRIE DU CADRE ────────────────────────────────────────────────
@@ -4677,7 +4804,14 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           // bracketing fantome sur un sujet en mouvement.
           // 'balanced' partout : c est ce qui garde Deep Fusion, seul vrai
           // traitement du bruit a haut ISO. 'speed' le coupait en mode rapide.
-          photoQualityBalance="balanced"
+          // Pilote par /config camera.captureBalance. Defaut "speed" : coupe
+          // Deep Fusion -> capture ~150 ms au lieu de ~640 ms, le coureur en
+          // mouvement reste centre/net. "balanced" (Fusion) = plus propre en
+          // basse lumiere mais latence 640 ms. Bascule a chaud, sans rebuild.
+          // captureBalanceAuto=true -> switcher par vitesse (balanceRegime).
+          // Sinon captureBalance fige. balanceRegime est deja aligne sur le
+          // fige quand l auto est off (cf effet switcher).
+          photoQualityBalance={eventConfig?.camera?.captureBalanceAuto === true ? balanceRegime : (eventConfig?.camera?.captureBalance === 'balanced' ? 'balanced' : 'speed')}
           photoHdr={false}
           // videoHdr coupe : il ne sert qu au rendu de l apercu, la detection
           // travaille sur le buffer brut. Sur un flux permanent de plusieurs
@@ -5195,28 +5329,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           onPress={() => ouvrirPanneau('km')}
         />
 
-        {/* Bascules : quoi declencher, et comment rendre. Deux reglages
-            independants — on peut vouloir le pas de distance en rendu rapide,
-            ou la rafale en rendu qualite. */}
-        <View style={{
-          height: SWITCH_H, flexDirection: 'row', alignItems: 'flex-end',
-          justifyContent: 'center',
-        }}>
-          <Bascule
-            libelles={['Rafale', 'Pas', 'Instant']}
-            actifIdx={modeCapture === 'rafale' ? 0 : modeCapture === 'pas' ? 1 : 2}
-            onPress={basculerModeCapture}
-            accessibilityLabel={`Declenchement : ${modeCapture}. Toucher pour changer.`}
-          />
-          <View style={{ width: 10 }} />
-          <Bascule
-            gaucheLibelle="Rapide"
-            droiteLibelle="Qualité"
-            aDroite={modeQualite === 'qualite'}
-            onPress={basculerModeQualite}
-            accessibilityLabel={`Rendu : ${modeQualite === 'qualite' ? 'qualite' : 'rapide'}. Toucher pour changer.`}
-          />
-        </View>
+        {/* A/B tranche (2026-09) : Fusion l emporte -> balanced verrouille en
+            dur, plus de switch. Un seul mode : instant qualite. */}
       </View>
 
       {/* ─── Journal embarque ───────────────────────────────────────────
@@ -5426,13 +5540,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                   style={{ width: '33.333%', aspectRatio: 1, padding: 2 }}
                 >
                   <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#F5F3FA' }}>
-                    <ExpoImage
-                      source={{ uri: item.thumb_url }}
+                    <ThumbImage
+                      uri={item.thumb_url}
                       style={StyleSheet.absoluteFillObject}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                      priority="low"
-                      transition={100}
                       recyclingKey={item.key}
                     />
                   </View>
@@ -8054,7 +8164,37 @@ try { SplashScreen?.preventAutoHideAsync?.(); } catch {}
 // bandeau coloré + statut + actions + identifiants + facturation + lien delete.
 // ─────────────────────────────────────────────────────────────────────────────
 
-
+// Vignette galerie avec re-tentative sur 202 (dérivé pas encore prêt). Sans
+// ça, la route peut répondre 202 (Accepted, pas d'image) et ExpoImage laisse
+// une tuile blanche jamais rechargée jusqu'au prochain foreground. Ici : sur
+// onError, on relance avec un cache-buster après un délai croissant (3/6/10/15s),
+// puis on abandonne. Le recyclingKey/uri reset les compteurs quand la cellule
+// FlatList est recyclée sur une autre photo.
+function ThumbImage({ uri, style, recyclingKey }) {
+  const [essai, setEssai] = useState(0);
+  const [bust, setBust] = useState('');
+  const timerRef = useRef(null);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  useEffect(() => { setEssai(0); setBust(''); if (timerRef.current) clearTimeout(timerRef.current); }, [uri]);
+  const src = bust ? `${uri}${uri.includes('?') ? '&' : '?'}r=${bust}` : uri;
+  const delais = [3000, 6000, 10000, 15000];
+  return (
+    <ExpoImage
+      source={{ uri: src }}
+      style={style}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      priority="low"
+      transition={100}
+      recyclingKey={recyclingKey}
+      onError={() => {
+        if (essai >= delais.length) return;
+        const d = delais[essai];
+        timerRef.current = setTimeout(() => { setEssai((n) => n + 1); setBust(String(Date.now())); }, d);
+      }}
+    />
+  );
+}
 
 function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);

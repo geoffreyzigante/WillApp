@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prélèvement automatique</title>
+<style>
+  :root{--violet:#7B2FFF;--violet900:#4C0FB3;--rose:#F4A6FF;--bg:#F5F3FF;--card:#fff;--ink:#1A1426;--ink2:#5A5468;--line:#E4E0EC;--ok:#1a9d5a;--warn:#b45309}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:900px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:22px;margin:0 0 4px}
+  .lead{font-size:13.5px;color:var(--ink2);margin:0 0 18px}
+  .steps{display:flex;flex-direction:column;gap:10px}
+  .step{display:flex;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .num{flex:none;width:28px;height:28px;border-radius:50%;background:var(--violet);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px}
+  .step .t{font-size:14px;font-weight:800}
+  .step .d{font-size:13px;color:var(--ink2);margin-top:2px}
+  .code{background:#f2effb;border-radius:5px;padding:1px 5px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--violet900)}
+  .when{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--violet900);background:#efe7ff;border-radius:6px;padding:1px 7px;margin-left:auto;align-self:flex-start;white-space:nowrap}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:18px 0 0;font-size:13.5px}
+  .fail{background:#fff8e6;border-left-color:#f5b800}
+  b.amt{color:var(--violet)}
+</style></head>
+<body><div class="wrap">
+<h1>Prélèvement automatique du dépassement</h1>
+<p class="lead">Carte enregistrée + mandat à l'activation → prélèvement off-session après l'event. <b>Aucune facture à courir après.</b></p>
+
+<div class="steps">
+  <div class="step"><div class="num">1</div><div><div class="t">Activation — carte enregistrée <span class="when">jour de l'achat</span></div><div class="d">Le Checkout Stripe encaisse le palier estimé <b>et</b> enregistre la carte pour usage futur (<span class="code">setup_future_usage: off_session</span>). L'orga coche « j'autorise le prélèvement d'un éventuel dépassement » (mandat).</div></div></div>
+  <div class="step"><div class="num">2</div><div><div class="t">Event terminé — décompte réel <span class="when">clôture</span></div><div class="d">Le worker compte les photos réellement traitées et compare au palier payé.</div></div></div>
+  <div class="step"><div class="num">3</div><div><div class="t">Prélèvement auto du delta <span class="when">off-session</span></div><div class="d">Si dépassement : <span class="code">PaymentIntent off_session</span> sur la carte enregistrée, du montant du delta (ex. <b class="amt">+50 €</b>). Zéro action de l'orga, encaissement immédiat.</div></div></div>
+  <div class="step"><div class="num">4</div><div><div class="t">Reçu automatique <span class="when">confirmation</span></div><div class="d">Email de reçu Stripe. Le palier de l'event est mis à jour.</div></div></div>
+</div>
+
+<div class="box"><b>Pourquoi ça tient :</b> le mandat pris à l'activation en fait une transaction commerçant (MIT) autorisée à l'avance. Montant petit + carte connue → prélèvement accepté dans la quasi-totalité des cas, sans nouvelle authentification.</div>
+
+<div class="box fail"><b>Le seul cas d'échec (rare) :</b> la banque exige une ré-authentification (3DS) ou la carte a expiré. Filet : Stripe retente automatiquement (<span class="code">smart retries</span>) et envoie un lien 1-clic à l'orga. On ne « laisse pas filer » : c'est relancé jusqu'à encaissement. Pour un risque nul absolu → prépaiement du palier +1 avec avoir, mais c'est plus friction à l'achat.</div>
+</div></body></html>

@@ -60,7 +60,12 @@ const DELEGATE_REPLACEMENT = `      // ${MARKER} JPEG de livraison 2400 px, enco
       // octets encore en memoire. CreateThumbnailWithTransform applique
       // l orientation EXIF : les pixels sortent a l endroit.
       var willJpegPath: String? = nil
-      if let willData = photo.fileDataRepresentation(),
+      // will_skip_jpeg (UserDefaults, pilote par la config sendHeic cote JS) :
+      // en mode HEIC on n encode PAS ce JPEG (il serait jete) -> CPU/thermique
+      // /disque economises a chaque capture. Absent/false -> comportement
+      // historique (voie JPEG).
+      if !UserDefaults.standard.bool(forKey: "will_skip_jpeg"),
+         let willData = photo.fileDataRepresentation(),
          let willSrc = CGImageSourceCreateWithData(willData as CFData, nil) {
         let willProps = CGImageSourceCopyPropertiesAtIndex(willSrc, 0, nil) as? [CFString: Any]
         let willW = (willProps?[kCGImagePropertyPixelWidth] as? Int) ?? 0
@@ -81,15 +86,15 @@ const DELEGATE_REPLACEMENT = `      // ${MARKER} JPEG de livraison 2400 px, enco
           if let willThumb = CGImageSourceCreateThumbnailAtIndex(willSrc, 0, willOpts as CFDictionary) {
             let willURL = path.deletingPathExtension().appendingPathExtension("will.jpg")
             if let willDest = CGImageDestinationCreateWithURL(willURL as CFURL, "public.jpeg" as CFString, 1, nil) {
-              // Qualite 0.75 : 0.5 laissait des artefacts visibles (grain de
-              // compression pris pour du bruit capteur). ~500 Ko en 2400 px.
+              // Qualite 0.85 : 0.75 laissait encore des artefacts de compression
+              // visibles sur les aplats pour une photo vendue. ~800 Ko en 2400 px.
               // Progressif : l image se precise au chargement au lieu
               // d apparaitre d un bloc — percu 2x plus rapide sur 4G.
               // EXIF + TIFF recopies de l original (le thumbnail ImageIO les
               // jette) ; orientation remise a 1 puisque les pixels ont ete
               // redresses par la transform.
               var willEnc: [CFString: Any] = [
-                kCGImageDestinationLossyCompressionQuality: 0.75,
+                kCGImageDestinationLossyCompressionQuality: 0.85,
                 kCGImagePropertyJFIFDictionary: [kCGImagePropertyJFIFIsProgressive: true] as CFDictionary,
                 kCGImagePropertyOrientation: 1,
               ]

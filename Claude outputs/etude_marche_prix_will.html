@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Étude marché prix Will</title>
+<style>
+  :root{
+    --violet:#7B2FFF; --violet900:#4C0FB3; --rose:#F4A6FF;
+    --bg:#F5F3FF; --card:#fff; --ink:#1A1426; --ink2:#5A5468; --line:#E4E0EC;
+    --ok:#1a9d5a; --warn:#b45309; --bad:#b91c1c; --code:#f2effb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:1000px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:25px;margin:0 0 4px}
+  h2{font-size:18px;margin:34px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+  .meta{color:var(--ink2);font-size:13px;margin-bottom:6px}
+  .lead{font-size:14px;color:var(--ink2)}
+  .code{background:var(--code);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--violet900)}
+  .amt{font-weight:800;color:var(--violet)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:#faf8ff;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink2)}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:14px 0;font-size:13.5px}
+  .box.rose{border-left-color:var(--rose);background:#fff6fd}
+  .box.ok{border-left-color:var(--ok);background:#f0fbf4}
+  .tiers{display:grid;grid-template-columns:1fr;gap:12px;margin:14px 0}
+  @media(min-width:760px){.tiers{grid-template-columns:repeat(4,1fr)}}
+  .tier{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;text-align:center}
+  .tier.hero{border:2px solid var(--violet);box-shadow:0 6px 22px rgba(123,47,255,.12)}
+  .tier .name{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2)}
+  .tier .price{font-size:30px;font-weight:900;color:var(--violet);margin:6px 0 2px}
+  .tier .cap{font-size:13px;color:var(--ink)}
+  .tier .sub{font-size:12px;color:var(--ink2);margin-top:6px}
+  .pill{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:999px;background:#efe7ff;color:var(--violet900);margin-bottom:6px}
+  .kpi{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0}
+  .k{flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .k .n{font-size:20px;font-weight:800;color:var(--violet)}
+  .k .l{font-size:12px;color:var(--ink2)}
+  ul{margin:8px 0;padding-left:20px}li{margin:5px 0;font-size:13.5px}
+  .src{font-size:11.5px;color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Prix Will — benchmark marché & grille par paliers</h1>
+  <p class="meta">Concurrents relevés en sept. 2026 (prix publics constatés). Objectif : une grille dès 100 participants, calée sur le marché.</p>
+
+  <h2>1. Ce que fait le marché</h2>
+  <p class="lead">La photo sportive automatisée est dominée par un modèle unique : <b>gratuit pour l'organisateur, payant pour le coureur</b>. Le prestataire se rémunère en vendant les photos aux participants.</p>
+  <table>
+    <thead><tr><th>Acteur</th><th>Ce que paie le coureur</th><th>Ce que paie l'orga</th><th>Modèle</th></tr></thead>
+    <tbody>
+      <tr><td><b>Sportograf</b> (leader EU)</td><td>≈ <b>29-35 €</b> le pack (15+ photos) — £25 préco / £30 jour J / ~$35 après</td><td>0 € (gratuit)</td><td>B2C, gros events</td></tr>
+      <tr><td><b>FinisherPix</b></td><td>Pack ≈ <b>40-70 $</b> (préco -40 %), via RunSignUp</td><td>0 €</td><td>B2C, marathons/tri</td></tr>
+      <tr><td><b>MarathonFoto</b></td><td><b>16-30 $</b> la photo, packs jusqu'à <b>90 $</b> (NYC)</td><td>0 €</td><td>B2C premium, réputé cher</td></tr>
+      <tr><td><b>Will</b></td><td><b>0 €</b> (offert) — ou 1 €/photo en option</td><td><b>forfait bas</b> (79 € base)</td><td>B2B « cadeau »</td></tr>
+    </tbody>
+  </table>
+  <p class="src">Sources : Sportograf (Threshold Trail Series, HYROX APAC), FinisherPix (Delmo Sports / RunSignUp), MarathonFoto (forum LetsRun). Prix constatés, indicatifs, TTC variables selon event.</p>
+
+  <h2>2. L'insight : Will n'est pas sur le même terrain</h2>
+  <div class="box">
+    Le marché fait payer <b>le coureur cher</b> (25-90 €) et mise sur un faible taux d'achat (la plupart ne prennent pas). L'orga ne gagne rien et n'a pas la main. <b>Will inverse</b> : l'orga paie <b>peu</b>, et <b>tous</b> ses coureurs récupèrent leurs photos gratuitement. Ce n'est pas un concurrent de Sportograf sur les gros marathons — c'est l'outil des <b>petites et moyennes courses françaises</b> que Sportograf ne couvre pas, positionné comme un <b>cadeau aux participants</b>, pas comme une boutique.
+  </div>
+  <div class="box ok">
+    <b>Deux atouts qui justifient un prix bas et des paliers larges :</b>
+    <ul style="margin-top:4px">
+      <li><b>Coût quasi nul</b> : ~0,003 €/photo → une course de 750 coureurs (~3000 photos) coûte ~10-15 € à Will. À 79 €, la marge est énorme même en bas de gamme.</li>
+      <li><b>Conformité RGPD</b> : plusieurs courses FR ont été épinglées pour reconnaissance faciale <b>illégale</b> (≈300 000 sportifs scannés sans consentement). Will a un flux de consentement → argument commercial fort auprès des orgas prudents.</li>
+    </ul>
+  </div>
+
+  <h2>3. Grille recommandée — par paliers, dès 100 participants</h2>
+  <p class="lead">Prix pilotés par le <b>plafond de photos</b> (le vrai coût), affichés à l'orga en <b>participants</b> (ce qu'il connaît). Ratio de calage : ~4-6 photos gardées / coureur — <b>à confirmer</b> sur tes vrais events.</p>
+  <div class="tiers">
+    <div class="tier">
+      <div class="name">Découverte</div>
+      <div class="price">39 €</div>
+      <div class="cap">≤ 1000 photos</div>
+      <div class="sub">≈ 100-250 coureurs<br>petites courses locales</div>
+    </div>
+    <div class="tier hero">
+      <div class="pill">Base</div>
+      <div class="name">Base</div>
+      <div class="price">79 €</div>
+      <div class="cap">≤ 3000 photos</div>
+      <div class="sub">≈ 300-750 coureurs<br><i>repère : trail-des-violettes = 2993</i></div>
+    </div>
+    <div class="tier">
+      <div class="name">Grand</div>
+      <div class="price">129 €</div>
+      <div class="cap">≤ 6000 photos</div>
+      <div class="sub">≈ 750-1500 coureurs</div>
+    </div>
+    <div class="tier">
+      <div class="name">XL</div>
+      <div class="price">199 €</div>
+      <div class="cap">≤ 12 000 photos</div>
+      <div class="sub">≈ 1500-3000 coureurs</div>
+    </div>
+  </div>
+  <p class="lead">Au-delà de 12 000 photos : <b>+49 € par tranche de 3000</b>, ou sur devis. Option « photos payantes » (1 €/photo, asso touche 50 %) activable sur <b>n'importe quel palier</b>, sans changer le prix du forfait.</p>
+
+  <div class="kpi">
+    <div class="k"><div class="n">~0,10 €</div><div class="l">coût Will par coureur au palier Base (79 € / 750)</div></div>
+    <div class="k"><div class="n">÷ 8</div><div class="l">le pack Sportograf (≈30 €) = 1 seul coureur ; Will = tout l'event</div></div>
+    <div class="k"><div class="n">&gt; 85 %</div><div class="l">marge à chaque palier (coût réel très bas)</div></div>
+  </div>
+
+  <div class="box rose">
+    <b>À trancher / calibrer :</b>
+    <ul style="margin-top:4px">
+      <li>Le <b>ratio photos/coureur</b> réel (mesure sur 3-4 events passés) — il fixe les bornes en participants.</li>
+      <li>Les <b>montants</b> : 39/79/129/199 sont un point de départ cohérent marché ; le 79 € Base est déjà validé par toi.</li>
+      <li>Faut-il un palier « asso / gratuit » à 0 € pour les tout petits events partenaires (déjà géré par « Offre partenaire gratuite ») ?</li>
+      <li>Dépassement en direct : reco = <b>soft</b> (jamais de photo perdue, palier de rattrapage facturé après).</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

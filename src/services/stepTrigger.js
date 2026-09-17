@@ -132,6 +132,38 @@ export const STEP_TRIGGER_DEFAULTS = {
   // ou le risque de faux positif est reel. Le limiteur global et la bande
   // centrale bornent le reste.
   aireApparitionDirecte: 0.0020,
+  // Demi-largeur autour d un repere ou un tir IMMEDIAT sur apparition (sans
+  // franchissement) est autorise. Hors de cette fenetre, on attend le vrai
+  // franchissement du repere -> coureur centre. Ne concerne QUE le rattrapage
+  // d apparition ; le franchissement tire pile sur le repere par construction.
+  // Reglable en direct via /config (camera.stepFenetreApparition), sans build.
+  fenetreApparition: 0.10,
+
+  // ── Centrage anti-latence : « avance apprise » ──────────────────────────
+  // Le tir sur franchissement se fait a la position REELLE du visage. Or
+  // l obturateur a une latence (~135 ms) : pendant ce temps le coureur avance
+  // dans son sens, et la photo le montre decale. On decale donc le repere en
+  // AMONT du sens de course, d une avance = vitesse x latence, pour qu il
+  // tombe centre a l instant reel de la photo.
+  //
+  // La cle : le SENS est constant a un poste donne (le 1er coureur le donne
+  // pour tous). On n a donc pas besoin d un calcul par frame : on apprend UNE
+  // avance (mediane des vitesses recentes x latence), plafonnee, mise a jour
+  // au tir. Elle sert a TOUS les tirs, franchissement comme apparition — et
+  // couvre le cas ou la piste vient de naitre (vx encore inconnu), justement
+  // la ou une compensation par-visage serait impossible.
+  avanceEnabled: true,
+  // Latence obturateur supposee (ms) servant a dimensionner l avance. Peut
+  // etre affinee en live via /config (camera.stepAvanceLatenceMs).
+  avanceLatenceMs: 135,
+  // Plafond de l avance (fraction de largeur), garde-fou si une vitesse part
+  // en vrille. ±0.10 = au plus 10 % du cadre. /config camera.stepAvanceMax.
+  avanceMax: 0.10,
+  // Nombre de vitesses recentes gardees pour la mediane (une par tir).
+  avanceEchantillons: 8,
+  // Vitesse minimale (|vx|, largeurs/s) pour qu un tir alimente l apprentissage.
+  // Sous ce seuil le signe du deplacement est trop bruite pour etre fiable.
+  avanceVxMin: 0.05,
 };
 
 export function createStepTrigger(options = {}) {
@@ -159,6 +191,31 @@ export function createStepTrigger(options = {}) {
   // consultation : contrairement a lineTrigger, aucun chemin ne contourne le
   // limiteur, donc le tableau ne peut pas croitre sans borne.
   let fireTimes = [];
+
+  // ── Centrage anti-latence : etat appris ─────────────────────────────────
+  // `avance` = decalage signe (fraction de largeur) applique au repere, dans
+  // le sens de course. Appris de la mediane des vitesses recentes x latence,
+  // plafonne. Mis a jour au tir seulement (pas par frame). 0 tant qu aucun
+  // echantillon fiable n est vu -> premier coureur non compense, puis cale.
+  let avance = 0;
+  let vxSamples = [];
+  const latenceSec = Math.max(0, Number(cfg.avanceLatenceMs) || 0) / 1000;
+  const avanceCap = Math.max(0, Number(cfg.avanceMax) || 0);
+  function majAvance(vx) {
+    if (!cfg.avanceEnabled) return;
+    if (!isFinite(vx) || Math.abs(vx) < cfg.avanceVxMin) return;
+    vxSamples.push(vx);
+    if (vxSamples.length > cfg.avanceEchantillons) vxSamples.shift();
+    const tri = [...vxSamples].sort((a, b) => a - b);
+    const med = tri[Math.floor(tri.length / 2)];
+    const a = med * latenceSec;
+    avance = Math.max(-avanceCap, Math.min(avanceCap, a));
+  }
+  // Decalage courant applique aux tests de geometrie (0 si desactive). On teste
+  // le franchissement / la proximite sur la position PREDITE a l instant photo
+  // (x + avance) : le tir part quand cette position atteint le repere, donc le
+  // coureur est centre quand l obturateur s ouvre vraiment.
+  const dec = () => (cfg.avanceEnabled ? avance : 0);
 
   const dansLaBande = (x) => x >= bornes.min && x <= bornes.max;
 
@@ -191,6 +248,12 @@ export function createStepTrigger(options = {}) {
       if (d < bd) { bd = d; best = i; }
     }
     return best;
+  }
+
+  // Le visage apparait-il DEJA assez pres d un repere pour un tir immediat ?
+  function presDunRepere(x) {
+    const i = repereLePlusProche(x);
+    return Math.abs(x - reperes[i]) <= cfg.fenetreApparition;
   }
 
   function ingest(flat) {
@@ -251,7 +314,7 @@ export function createStepTrigger(options = {}) {
       // suivi ensuite.
       if (det.faceVu) tr.faceVu = true;
 
-      const cr = franchis(tr, prevX, det.x);
+      const cr = franchis(tr, prevX + dec(), det.x + dec());
       if (cr.length) {
         candidats.push({ tr, indices: cr, reason: 'repere-franchi' });
       } else if (
@@ -263,13 +326,14 @@ export function createStepTrigger(options = {}) {
         // paragraphe 2, la ou la piste naît vraiment.
         tr.obs === cfg.minObsPourApparition
         && tr.consumed.size === 0
-        && dansLaBande(det.x)
+        && dansLaBande(det.x + dec())
+        && presDunRepere(det.x + dec())
       ) {
         // Visage repere tard — contre-jour, sortie de virage — deja dans la
         // bande a sa premiere detection. Sans ce cas il ne declencherait que
         // s il lui reste un repere devant lui, et jamais s il est apparu
         // apres le dernier.
-        candidats.push({ tr, indices: [repereLePlusProche(det.x)], reason: 'apparu-dans-bande' });
+        candidats.push({ tr, indices: [repereLePlusProche(det.x + dec())], reason: 'apparu-dans-bande' });
       }
     }
 
@@ -312,8 +376,13 @@ export function createStepTrigger(options = {}) {
       // bande centrale. Une photo de trop coute infiniment moins qu un
       // coureur qui n a que deux photos sur trois.
       const aireNaissance = (det.w || 0) * (det.h || 0);
-      if (dansLaBande(det.x) && aireNaissance < cfg.aireApparitionDirecte) {
-        candidats.push({ tr, indices: [repereLePlusProche(det.x)], reason: 'apparu-loin' });
+      // NB : PAS de fenetre serree ici. Un coureur LOINTAIN clignote et
+      // n aura jamais de franchissement propre : on le tire des qu il apparait
+      // dans la bande large, ou on le perd. La fenetre serree (presDunRepere)
+      // ne s applique qu au rattrapage des visages PROCHES (apparu-dans-bande),
+      // ou le centrage compte et ou la 2e detection arrive vite.
+      if (dansLaBande(det.x + dec()) && aireNaissance < cfg.aireApparitionDirecte) {
+        candidats.push({ tr, indices: [repereLePlusProche(det.x + dec())], reason: 'apparu-loin' });
       }
     }
 
@@ -359,13 +428,22 @@ export function createStepTrigger(options = {}) {
 
     lastFireTs = t;
     fireTimes.push(t);
+    // Position PREDITE a l instant photo (ce qu on vise) = position reelle +
+    // avance courante. C est ce qu on remonte comme xPredicted (le calibrateur
+    // et les metadonnees veulent ou l on ATTEND le visage, pas ou il est au
+    // moment du tir). Snapshot AVANT majAvance pour rester coherent avec la
+    // decision qui vient d etre prise.
+    const decNow = dec();
+    // Apprentissage : ce tir alimente l avance des suivants (sens + magnitude
+    // du terrain). Au tir seulement -> calcul espace, pas par frame.
+    majAvance(choisi.tr.vx);
     return [{
       type: 'fire',
       reason: choisi.reason,
       trackId: choisi.tr.id,
       creditedIds: credites,
       repere: idx,
-      x: choisi.tr.x,
+      x: choisi.tr.x + decNow,
     }];
   }
 
@@ -373,6 +451,8 @@ export function createStepTrigger(options = {}) {
     tracks = [];
     lastFireTs = -Infinity;
     fireTimes = [];
+    avance = 0;
+    vxSamples = [];
   }
 
   function debugState() {
@@ -381,8 +461,22 @@ export function createStepTrigger(options = {}) {
       bornes,
       tracks: tracks.map(tr => ({ id: tr.id, x: tr.x, obs: tr.obs, faceVu: !!tr.faceVu, consumed: [...tr.consumed] })),
       tirsDansLaFenetre: fireTimes.length,
+      avance,
+      vxEchantillons: vxSamples.length,
     };
   }
 
-  return { ingest, reset, debugState };
+  // Vitesse mediane des sujets actifs, en largeurs d image / seconde (|vx|).
+  // Sert au plafond d obturateur pilote par la vitesse (App.js) : lent -> 1/500,
+  // rapide -> 1/2000. On ne compte que les pistes vues >=2 fois (vx fiable).
+  function vitesseMediane() {
+    const vs = tracks
+      .filter(tr => tr.obs >= 2 && Number.isFinite(tr.vx))
+      .map(tr => Math.abs(tr.vx))
+      .sort((a, b) => a - b);
+    if (!vs.length) return 0;
+    return vs[Math.floor(vs.length / 2)];
+  }
+
+  return { ingest, reset, debugState, vitesseMediane };
 }

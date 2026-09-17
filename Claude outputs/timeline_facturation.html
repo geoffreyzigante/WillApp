@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Timeline facturation</title>
+<style>
+  :root{--violet:#7B2FFF;--violet900:#4C0FB3;--rose:#F4A6FF;--bg:#F5F3FF;--card:#fff;--ink:#1A1426;--ink2:#5A5468;--line:#E4E0EC;--ok:#1a9d5a;--warn:#b45309}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:880px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:22px;margin:0 0 16px}
+  .tl{position:relative;margin-left:8px}
+  .ev{display:flex;gap:14px;position:relative;padding-bottom:18px}
+  .ev::before{content:"";position:absolute;left:15px;top:32px;bottom:-2px;width:2px;background:var(--line)}
+  .ev:last-child::before{display:none}
+  .marker{flex:none;width:32px;height:32px;border-radius:50%;background:var(--card);border:2px solid var(--violet);color:var(--violet900);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;z-index:1}
+  .marker.hot{background:var(--violet);color:#fff;border-color:var(--violet)}
+  .c .day{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--violet900)}
+  .c .t{font-size:14.5px;font-weight:800;margin-top:1px}
+  .c .d{font-size:13px;color:var(--ink2);margin-top:2px}
+  .win{background:#f4efff;border:1px dashed var(--violet);border-radius:10px;padding:6px 10px;font-size:12px;color:var(--violet900);margin-top:6px;display:inline-block}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:16px 0 0;font-size:13.5px}
+  b.amt{color:var(--violet)}
+</style></head>
+<body><div class="wrap">
+<h1>Quand le prélèvement se déclenche</h1>
+<div class="tl">
+  <div class="ev"><div class="marker">J-x</div><div class="c">
+    <div class="day">Activation</div><div class="t">Paiement tranche estimée + carte enregistrée</div>
+    <div class="d">L'orga paie sa tranche estimée, mandat de dépassement pris.</div></div></div>
+  <div class="ev"><div class="marker hot">J</div><div class="c">
+    <div class="day">Jour de l'event</div><div class="t">Course + capture</div>
+    <div class="d">Photos Will + photographes.</div></div></div>
+  <div class="ev"><div class="marker">J→J+7</div><div class="c">
+    <div class="day">Fenêtre d'upload</div><div class="t">Les photographes chargent leurs photos</div>
+    <div class="d">Jusqu'à 1 semaine après. Le compte de photos <b>n'est pas encore figé</b> ; les galeries coureurs se complètent.</div>
+    <div class="win">⏳ Compteur « non final » pendant 7 jours</div></div></div>
+  <div class="ev"><div class="marker hot">J+7</div><div class="c">
+    <div class="day">Clôture upload</div><div class="t">Décompte final → facturation à la tranche réelle</div>
+    <div class="d">On fige le nombre de photos, on détermine la vraie tranche, puis <b>prélèvement du delta</b> (ou remboursement si sous-utilisé).</div></div></div>
+  <div class="ev"><div class="marker">J+14</div><div class="c">
+    <div class="day">RGPD</div><div class="t">Suppression auto des photos</div>
+    <div class="d">Bien <b>après</b> la facturation → aucun conflit.</div></div></div>
+</div>
+<div class="box"><b>La règle :</b> le prélèvement (ou remboursement) se fait à <b>J+7</b>, à la fermeture de la fenêtre d'upload — jamais avant, pour compter <b>toutes</b> les photos, y compris celles chargées en retard par les photographes.</div>
+</div></body></html>

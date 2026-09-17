@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WILL — marge économique</title>
+<style>
+  :root{--v:#7B2FFF;--v9:#4C0FB3;--ink:#1A1426;--ink2:#5A5468;--bg:#F6F4FB;--card:#fff;--line:#E9E4F5;--green:#1A9D5A;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Montserrat',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;line-height:1.45}
+  .wrap{max-width:860px;margin:0 auto;padding:28px 16px 70px}
+  h1{font-size:21px;margin:0 0 4px}
+  .sub{color:var(--ink2);font-size:13px;margin:0 0 18px}
+  .hyp{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:12.5px;color:var(--ink2);margin-bottom:16px}
+  .hyp b{color:var(--ink)}
+  table{width:100%;border-collapse:collapse;font-size:13px;background:var(--card);border-radius:14px;overflow:hidden}
+  th,td{padding:10px 10px;border-bottom:1px solid var(--line);text-align:right}
+  th{background:#faf8ff;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink2);font-weight:800}
+  th:first-child,td:first-child{text-align:left}
+  td.p{font-weight:800;color:var(--v)}
+  td.m{font-weight:800;color:var(--green)}
+  tr.base td{background:#faf6ff}
+  .note{font-size:12px;color:var(--ink2);margin-top:14px}
+  .k{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f2effb;border-radius:5px;padding:1px 6px;color:var(--v9)}
+</style></head>
+<body><div class="wrap">
+<h1>Marge économique — tarif « au réel »</h1>
+<p class="sub">Prix = <span class="k">39 € (200 photos incluses) + 0,015 €/photo au-delà</span>, arrondi à l'euro.</p>
+
+<div class="hyp">
+  <b>Hypothèses de coût</b> (à valider avec tes vrais chiffres) :
+  traitement Rekognition + stockage R2 ≈ <b>0,002 €/photo</b> · frais Stripe <b>1,5 % + 0,25 €</b> par paiement.
+  Coûts fixes (Workers, emails Resend) considérés négligeables. Option « photos payantes » (1 €/photo aux coureurs, 50 % à l'asso) = revenu séparé, non compté ici.
+</div>
+
+<table>
+  <thead><tr><th>Photos (≈ coureurs)</th><th>Prix facturé</th><th>Coût photos</th><th>Frais Stripe</th><th>Coût total</th><th>Marge €</th><th>Marge %</th></tr></thead>
+  <tbody>
+    <tr class="base"><td>200</td><td class="p">39 €</td><td>0,40 €</td><td>0,83 €</td><td>1,23 €</td><td class="m">37,77 €</td><td>96,8 %</td></tr>
+    <tr><td>500</td><td class="p">43 €</td><td>1,00 €</td><td>0,90 €</td><td>1,90 €</td><td class="m">41,10 €</td><td>95,6 %</td></tr>
+    <tr><td>1 000</td><td class="p">51 €</td><td>2,00 €</td><td>1,02 €</td><td>3,02 €</td><td class="m">47,98 €</td><td>94,1 %</td></tr>
+    <tr><td>2 000</td><td class="p">66 €</td><td>4,00 €</td><td>1,24 €</td><td>5,24 €</td><td class="m">60,76 €</td><td>92,1 %</td></tr>
+    <tr><td>3 000</td><td class="p">81 €</td><td>6,00 €</td><td>1,46 €</td><td>7,46 €</td><td class="m">73,53 €</td><td>90,8 %</td></tr>
+    <tr><td>6 000</td><td class="p">126 €</td><td>12,00 €</td><td>2,14 €</td><td>14,14 €</td><td class="m">111,86 €</td><td>88,8 %</td></tr>
+    <tr><td>12 000</td><td class="p">216 €</td><td>24,00 €</td><td>3,49 €</td><td>27,49 €</td><td class="m">188,51 €</td><td>87,3 %</td></tr>
+  </tbody>
+</table>
+
+<p class="note">Lecture : la marge reste <b>~87–97 %</b> sur toute la plage. Le point bas de rentabilité en € est le petit event (200 photos → 37,77 € de marge), largement positif dès le plancher. La marge % baisse très lentement quand le volume monte, car le coût/photo (0,002 €) est bien inférieur au prix marginal (0,015 €) — chaque photo au-delà de 200 rapporte ~0,013 € net.</p>
+<p class="note">⚠️ Ces chiffres dépendent entièrement de l'hypothèse <b>0,002 €/photo</b>. Donne-moi ton vrai coût unitaire (Rekognition indexation + recherches par coureur + stockage) et je recalcule au plus juste.</p>
+</div></body></html>

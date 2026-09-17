@@ -57,6 +57,22 @@ const HOOK_REPLACE = `    if device.isExposureModeSupported(.continuousAutoExpos
       }
       device.exposureMode = .continuousAutoExposure
     }
+    // [will-focus] Focus continu pointe sur le sujet + suivi de visage.
+    // L expo est deja fixee au centre ci-dessus ; le focus etait laisse en
+    // pleine scene par VisionCamera et pouvait accrocher l arriere-plan entre
+    // deux coureurs. On le pointe au centre (secours) ET on active le
+    // face-driven AF (iOS 15.4+) : le focus verrouille le visage detecte,
+    // ideal pour un sujet qui traverse le cadre. Lock de config deja tenu ici.
+    if device.isFocusModeSupported(.continuousAutoFocus) {
+      if device.isFocusPointOfInterestSupported {
+        device.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
+      }
+      device.focusMode = .continuousAutoFocus
+    }
+    if #available(iOS 15.4, *) {
+      device.automaticallyAdjustsFaceDrivenAutoFocusEnabled = false
+      device.isFaceDrivenAutoFocusEnabled = true
+    }
     // ${HOOK_MARKER} Attache le device au controller WillShutterController.
     // Le mode reste .continuousAutoExposure -> Deep Fusion + Smart HDR
     // preserves. Le cap shutter eventuellement applique apres via

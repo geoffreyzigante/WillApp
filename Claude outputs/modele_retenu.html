@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Modèle prix retenu</title>
+<style>
+  :root{--violet:#7B2FFF;--violet900:#4C0FB3;--rose:#F4A6FF;--bg:#F5F3FF;--card:#fff;--ink:#1A1426;--ink2:#5A5468;--line:#E4E0EC;--ok:#1a9d5a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:900px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:22px;margin:0 0 14px}
+  .flow{display:flex;flex-direction:column;gap:0}
+  .step{display:flex;gap:13px}
+  .rail{display:flex;flex-direction:column;align-items:center}
+  .dot{width:30px;height:30px;border-radius:50%;background:var(--violet);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+  .line{width:2px;flex:1;background:var(--line);min-height:14px}
+  .body{padding-bottom:16px}
+  .body .t{font-size:14.5px;font-weight:800}
+  .body .d{font-size:13px;color:var(--ink2);margin-top:2px}
+  .pill{display:inline-block;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;padding:2px 8px;border-radius:999px;background:#efe7ff;color:var(--violet900);margin-left:6px}
+  .amt{color:var(--violet);font-weight:800}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:8px 0 0;font-size:13.5px}
+</style></head>
+<body><div class="wrap">
+<h1>Le modèle retenu</h1>
+<div class="flow">
+  <div class="step">
+    <div class="rail"><div class="dot">1</div><div class="line"></div></div>
+    <div class="body"><div class="t">Estimation à la création <span class="pill">jauge</span></div>
+      <div class="d">L'orga estime ses coureurs. On propose un palier (39/79/129/199) — <b>estimation, pas calcul exact</b>, les points photo sont libres.</div></div>
+  </div>
+  <div class="step">
+    <div class="rail"><div class="dot">2</div><div class="line"></div></div>
+    <div class="body"><div class="t">Paiement + carte enregistrée <span class="pill">mandat</span></div>
+      <div class="d">Il paie le palier estimé ; la carte + le mandat de dépassement sont pris à ce moment.</div></div>
+  </div>
+  <div class="step">
+    <div class="rail"><div class="dot">3</div><div class="line"></div></div>
+    <div class="body"><div class="t">Pendant l'event <span class="pill">tolérance +15 %</span></div>
+      <div class="d">Compteur live dans le dashboard. On garde <b>toutes</b> les photos ; on ne déclenche rien tant qu'on est sous palier +15 %.</div></div>
+  </div>
+  <div class="step">
+    <div class="rail"><div class="dot">4</div><div class="line"></div></div>
+    <div class="body"><div class="t">Clôture — décompte réel <span class="pill">réconciliation</span></div>
+      <div class="d">Le worker compte les photos réellement traitées → palier réel.</div></div>
+  </div>
+  <div class="step">
+    <div class="rail"><div class="dot" style="background:var(--ok)">✓</div></div>
+    <div class="body"><div class="t">Prélèvement auto du delta</div>
+      <div class="d">Si dépassement au-delà de +15 % : débit off-session du delta (ex. <span class="amt">+50 €</span>) sur la carte. Reçu auto.</div></div>
+  </div>
+</div>
+<div class="box"><b>La bascule clé :</b> à la création on <b>estime</b> (jauge simple), la vérité c'est le <b>compte réel à la clôture</b>. L'estimation n'a pas besoin d'être exacte — le prélèvement auto ajuste. + leviers : palier suggéré depuis l'historique, « photos payantes » qui rembourse le forfait, ancrage marché sur la page prix.</div>
+</div></body></html>

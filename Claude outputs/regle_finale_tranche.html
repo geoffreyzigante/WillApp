@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tu paies ta tranche réelle</title>
+<style>
+  :root{--violet:#7B2FFF;--violet900:#4C0FB3;--rose:#F4A6FF;--bg:#F5F3FF;--card:#fff;--ink:#1A1426;--ink2:#5A5468;--line:#E4E0EC;--ok:#1a9d5a;--warn:#b45309;--blue:#1e63d6}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:900px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:22px;margin:0 0 4px}
+  .lead{font-size:13.5px;color:var(--ink2);margin:0 0 18px}
+  .cases{display:grid;grid-template-columns:1fr;gap:12px}
+  @media(min-width:720px){.cases{grid-template-columns:1fr 1fr 1fr}}
+  .case{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px;text-align:center}
+  .ic{font-size:22px;font-weight:900;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 8px}
+  .up{background:#fff4e0;color:var(--warn)}.eq{background:#eef1f6;color:#475569}.dn{background:#e7f0ff;color:var(--blue)}
+  .case h2{font-size:14px;margin:0 0 4px}
+  .case p{font-size:12.5px;color:var(--ink2);margin:0}
+  .res{margin-top:9px;font-size:13px;font-weight:800}
+  .res.w{color:var(--warn)}.res.b{color:var(--blue)}.res.g{color:#475569}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:16px 0 0;font-size:13.5px}
+  .list{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 6px;margin-top:16px}
+  .li{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;font-size:13px;border-bottom:1px solid var(--line)}
+  .li:last-child{border-bottom:0}
+  .chk{color:var(--ok);font-weight:900}
+</style></head>
+<body><div class="wrap">
+<h1>Règle finale : tu paies ta tranche réelle</h1>
+<p class="lead">À la création tu paies la tranche <b>estimée</b>. À la clôture, on compte les photos réelles et on te met sur la <b>bonne</b> tranche — dans les deux sens.</p>
+
+<div class="cases">
+  <div class="case">
+    <div class="ic up">↑</div>
+    <h2>Tu dépasses</h2>
+    <p>Estimé Base (3000), réel 4200 photos.</p>
+    <div class="res w">Prélèvement auto +50 € → Grand</div>
+  </div>
+  <div class="case">
+    <div class="ic eq">=</div>
+    <h2>Pile dans la tranche</h2>
+    <p>Estimé Base, réel 2600 photos.</p>
+    <div class="res g">Rien à faire · 79 €</div>
+  </div>
+  <div class="case">
+    <div class="ic dn">↓</div>
+    <h2>Tu utilises moins</h2>
+    <p>Estimé Grand (6000), réel 2600 photos.</p>
+    <div class="res b">Remboursé −50 € → Base</div>
+  </div>
+</div>
+
+<div class="box"><b>Le message à l'orga :</b> « Estime large sans crainte — tu ne paies que la tranche que tu utilises vraiment. Trop ? remboursé. Pas assez ? ajusté. »</div>
+
+<div class="list">
+  <div class="li"><span class="chk">✓</span><div><b>On parle en photos</b> — le plafond (ex. 3000) est affiché, pas caché.</div></div>
+  <div class="li"><span class="chk">✓</span><div><b>Pré-rempli depuis l'édition passée</b> quand l'event revient.</div></div>
+  <div class="li"><span class="chk">✓</span><div><b>Photographes externes pondérés</b> (~0,6) pour ne pas surestimer.</div></div>
+  <div class="li"><span class="chk">✓</span><div><b>Facturation à la tranche réelle</b>, haut <i>et</i> bas (remboursement si sous-utilisé).</div></div>
+  <div class="li"><span class="chk">✓</span><div><b>« Je ne sais pas »</b> → défaut Base, le réel ajuste.</div></div>
+</div>
+</div></body></html>

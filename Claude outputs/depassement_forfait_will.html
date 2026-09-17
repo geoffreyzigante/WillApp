@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Forfait & dépassement Will</title>
+<style>
+  :root{
+    --violet:#7B2FFF; --violet900:#4C0FB3; --rose:#F4A6FF;
+    --bg:#F5F3FF; --card:#fff; --ink:#1A1426; --ink2:#5A5468; --line:#E4E0EC;
+    --ok:#1a9d5a; --warn:#b45309; --bad:#b91c1c; --code:#f2effb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:1000px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:25px;margin:0 0 4px}
+  h2{font-size:18px;margin:32px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+  .meta{color:var(--ink2);font-size:13px;margin-bottom:6px}
+  .lead{font-size:14px;color:var(--ink2)}
+  .code{background:var(--code);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--violet900)}
+  .amt{font-weight:800;color:var(--violet)}
+  /* anchor bar */
+  .anchor{display:flex;flex-wrap:wrap;gap:14px;margin:14px 0}
+  .stat{flex:1;min-width:160px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .stat .n{font-size:22px;font-weight:800;color:var(--violet)}
+  .stat .l{font-size:12.5px;color:var(--ink2);margin-top:2px}
+  /* options */
+  .opts{display:grid;grid-template-columns:1fr;gap:14px;margin:14px 0}
+  @media(min-width:720px){.opts{grid-template-columns:1fr 1fr 1fr}}
+  .opt{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column}
+  .opt.reco{border:2px solid var(--violet);box-shadow:0 6px 22px rgba(123,47,255,.12)}
+  .opt h3{margin:0 0 2px;font-size:15px}
+  .badge{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-bottom:8px;width:max-content}
+  .b-reco{background:#efe7ff;color:var(--violet900)} .b-alt{background:#eef1f6;color:#475569}
+  .opt .how{font-size:13px;color:var(--ink2);margin:6px 0 10px}
+  .pc{font-size:12.5px;margin:3px 0;padding-left:18px;position:relative}
+  .pc::before{position:absolute;left:0;top:0}
+  .pro::before{content:"✓";color:var(--ok);font-weight:800}
+  .con::before{content:"✕";color:var(--bad);font-weight:800}
+  /* viz steps */
+  .steps{display:flex;align-items:flex-end;gap:6px;height:90px;margin:10px 0 4px}
+  .step{flex:1;background:linear-gradient(180deg,var(--violet),#9a5cff);border-radius:6px 6px 0 0;position:relative;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:flex-start;justify-content:center;padding-top:4px}
+  .step small{position:absolute;bottom:-18px;left:0;right:0;text-align:center;color:var(--ink2);font-size:10.5px;font-weight:600}
+  .axis{font-size:10.5px;color:var(--ink2);margin-top:22px}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:14px 0;font-size:13.5px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+  th{background:#faf8ff;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink2)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+  .t-ok{background:#e7fbef;color:var(--ok)} .t-warn{background:#fff4e0;color:var(--warn)} .t-bad{background:#fde7e7;color:var(--bad)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Forfait de base & dépassement</h1>
+  <p class="meta">Cadre : <span class="amt">79 €</span> = plan de base, plafond <b>3000 photos</b>. Deux décisions à prendre : <b>comment on facture au-delà</b> et <b>ce qui se passe techniquement</b> au dépassement.</p>
+
+  <h2>Le coût réel (pour calibrer la marge)</h2>
+  <div class="anchor">
+    <div class="stat"><div class="n">~0,003 €</div><div class="l">coût par photo (Rekognition, poste dominant ; R2 quasi nul, egress gratuit)</div></div>
+    <div class="stat"><div class="n">~10-15 €</div><div class="l">coût réel de 3000 photos → le 79 € a une très grosse marge</div></div>
+    <div class="stat"><div class="n">~3-5 €</div><div class="l">coût de 1000 photos supplémentaires → un dépassement se facture avec beaucoup de latitude</div></div>
+  </div>
+  <p class="lead">Autrement dit : le plafond de 3000 n'est pas une contrainte de coût, c'est un curseur commercial. Tu peux être généreux sur le dépassement sans jamais perdre d'argent.</p>
+
+  <h2>Décision 1 — Comment on facture le dépassement</h2>
+  <div class="opts">
+    <div class="opt reco">
+      <span class="badge b-reco">Recommandé</span>
+      <h3>Paliers de volume</h3>
+      <div class="steps">
+        <div class="step" style="height:55%">79€<small>3000</small></div>
+        <div class="step" style="height:72%">+29€<small>6000</small></div>
+        <div class="step" style="height:89%">+29€<small>9000</small></div>
+        <div class="step" style="height:100%">…<small>+3000</small></div>
+      </div>
+      <div class="axis">Prix par palier de +3000 photos</div>
+      <div class="how">Base 79 € jusqu'à 3000. Chaque tranche de +3000 photos = +29 € (chiffre à caler). L'orga choisit son palier à l'activation selon ses participants estimés.</div>
+      <div class="pc pro">Prix connu d'avance, prévisible</div>
+      <div class="pc pro">Simple à expliquer et à afficher</div>
+      <div class="pc pro">Un seul paiement Stripe à l'activation</div>
+      <div class="pc con">Si l'estimation est fausse, cf. Décision 2</div>
+    </div>
+    <div class="opt">
+      <span class="badge b-alt">Alternative</span>
+      <h3>Dépassement à la photo</h3>
+      <div class="steps">
+        <div class="step" style="height:55%">79€<small>3000</small></div>
+        <div class="step" style="height:64%"><small>+</small></div>
+        <div class="step" style="height:74%"><small>+</small></div>
+        <div class="step" style="height:84%"><small>par photo</small></div>
+      </div>
+      <div class="axis">+2 ¢/photo au-delà de 3000</div>
+      <div class="how">79 € inclut 3000, puis +2 ¢/photo au-delà, facturé après l'event sur le compte réel.</div>
+      <div class="pc pro">Le plus juste (on paie l'usage réel)</div>
+      <div class="pc pro">Zéro friction à l'activation</div>
+      <div class="pc con">Facture ouverte, montant inconnu d'avance (anxiogène)</div>
+      <div class="pc con">2ᵉ encaissement après l'event à gérer</div>
+    </div>
+    <div class="opt">
+      <span class="badge b-alt">Alternative</span>
+      <h3>Prix unique généreux</h3>
+      <div class="steps">
+        <div class="step" style="height:70%">79€<small>illimité*</small></div>
+        <div class="step" style="height:70%;opacity:.35"><small></small></div>
+        <div class="step" style="height:70%;opacity:.35"><small></small></div>
+        <div class="step" style="height:70%;opacity:.35"><small></small></div>
+      </div>
+      <div class="axis">*plafond « mou » très haut (ex. 8000)</div>
+      <div class="how">79 € tout compris, plafond fixé assez haut pour couvrir 99 % des events. Pas de dépassement facturé en pratique.</div>
+      <div class="pc pro">Le plus simple pour le client (aucune notion de dépassement)</div>
+      <div class="pc pro">Marge suffisante (coût 8000 photos ≈ 25-40 €)</div>
+      <div class="pc con">Un très gros event mange la marge</div>
+      <div class="pc con">Pas de revenu additionnel sur les gros events</div>
+    </div>
+  </div>
+
+  <h2>Décision 2 — Ce qui se passe quand on dépasse (en direct, pendant l'event)</h2>
+  <table>
+    <thead><tr><th>Comportement</th><th>Ce qui se passe</th><th>Risque</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="tag t-ok">Soft — reco</span></td>
+        <td>On <b>garde et traite toutes les photos</b>, jamais de perte. Le dépassement est signalé à l'orga et facturé après (palier de rattrapage ou à la photo).</td>
+        <td>Encaisser le complément après l'event.</td>
+      </tr>
+      <tr>
+        <td><span class="tag t-warn">Alerte + stop upload</span></td>
+        <td>À 3000, on prévient l'orga/le photographe ; au-delà les photos sont capturées mais <b>pas envoyées</b> tant que le palier n'est pas payé.</td>
+        <td>Coupure en plein event = mauvaise expérience.</td>
+      </tr>
+      <tr>
+        <td><span class="tag t-bad">Hard cap</span></td>
+        <td>Au-delà de 3000, on <b>arrête de traiter</b> : photos perdues.</td>
+        <td>Casse la promesse « tes coureurs récupèrent leurs photos ». À éviter.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="box">
+    <b>Ma reco :</b> <b>Paliers de volume</b> (Décision 1) + comportement <b>Soft</b> (Décision 2). Concrètement : l'orga choisit à l'activation un palier basé sur ses participants estimés (ex. 79 € jusqu'à 3000, +29 € par +3000). Pendant l'event, on ne perd <b>jamais</b> une photo ; si ça dépasse le palier payé, on garde tout, on alerte, et on facture un palier de rattrapage après. Le coût réel étant ~3-5 €/1000 photos, un éventuel dépassement non facturé ne coûte quasi rien — la promesse produit prime.
+  </div>
+
+  <div class="box" style="border-left-color:var(--rose);background:#fff6fd">
+    <b>À caler (chiffres) :</b> le prix du palier (+29 € ? +19 €/1000 ?), le pas du palier (+3000 ? +1500 ?), et la conversion <b>participants → photos</b> à afficher à l'orga (il raisonne en coureurs, pas en photos — ex. « ~3 photos gardées / coureur → 3000 photos ≈ 1000 coureurs »). À valider sur les vrais events (trail-des-violettes = 2993 photos, un bon repère : c'est pile 1 palier).
+  </div>
+</div>
+</body>
+</html>

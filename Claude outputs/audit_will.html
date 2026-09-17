@@ -1,0 +1,228 @@
+<title>Audit Go/No-Go WILL</title>
+<style>
+  :root{
+    --bg:#f6f5fb; --card:#ffffff; --ink:#1a1426; --ink2:#5a5468; --ink3:#918ba0;
+    --line:#e7e3f0; --violet:#7b2fff; --violet-050:#f5f3ff;
+    --blocker:#e5484d; --high:#f2760c; --medium:#e0ac0c; --low:#8a8398; --ok:#12a150;
+    --blocker-bg:#fdeeee; --high-bg:#fdf1e7; --medium-bg:#fbf6e6; --low-bg:#f2f1f5; --ok-bg:#e9f7ee;
+    --fix:#12a150; --defer:#f2760c; --cfg:#2e7df6; --dec:#7b2fff;
+    --fix-bg:#e9f7ee; --defer-bg:#fdf1e7; --cfg-bg:#e8f1fe; --dec-bg:#f1ebff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#141019; --card:#1e1826; --ink:#f3f0f7; --ink2:#b8b0c6; --ink3:#8a8398;
+      --line:#2e2738; --violet:#a883ff; --violet-050:#241d30;
+      --blocker-bg:#3a1f22; --high-bg:#3a2a1a; --medium-bg:#332d18; --low-bg:#262130; --ok-bg:#18301f;
+      --fix-bg:#16301f; --defer-bg:#3a2a1a; --cfg-bg:#152534; --dec-bg:#241a38;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#141019; --card:#1e1826; --ink:#f3f0f7; --ink2:#b8b0c6; --ink3:#8a8398;
+    --line:#2e2738; --violet:#a883ff; --violet-050:#241d30;
+    --blocker-bg:#3a1f22; --high-bg:#3a2a1a; --medium-bg:#332d18; --low-bg:#262130; --ok-bg:#18301f;
+    --fix-bg:#16301f; --defer-bg:#3a2a1a; --cfg-bg:#152534; --dec-bg:#241a38;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:'Montserrat',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.55;margin:0}
+  .wrap{max-width:940px;margin:0 auto;padding-block:32px;padding-inline:20px}
+  h1{font-size:clamp(24px,4vw,34px);letter-spacing:-.02em;margin:0 0 6px}
+  h2{font-size:19px;letter-spacing:-.01em;margin:38px 0 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .sub{color:var(--ink2);font-size:14px;margin:0 0 4px}
+  .meta{color:var(--ink3);font-size:12.5px;margin:0}
+  .hero{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px;margin-top:20px;border-left:6px solid var(--ok)}
+  .verdict{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .pill{display:inline-block;font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;padding:5px 11px;border-radius:100px;color:#fff}
+  .pill.cond{background:var(--high)} .pill.go{background:var(--ok)}
+  .hero p{margin:12px 0 0;color:var(--ink2);font-size:14.5px}
+  .statusbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .stat{flex:1 1 130px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .stat .n{font-size:22px;font-weight:800;line-height:1}
+  .stat .l{font-size:11.5px;color:var(--ink2);margin-top:4px}
+  .stat.fix .n{color:var(--fix)} .stat.defer .n{color:var(--defer)} .stat.dec .n{color:var(--dec)} .stat.cfg .n{color:var(--cfg)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0 0;font-size:12.5px;color:var(--ink2)}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .pivot{background:var(--violet-050);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-top:16px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr}}
+  .opt{border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:var(--card)}
+  .opt .t{font-weight:700;font-size:14px;margin-bottom:4px}
+  .opt.free{border-color:var(--ok)} .opt.paid{opacity:.6}
+  .opt .t.free{color:var(--ok)} .opt .t.paid{color:var(--ink3)}
+  .opt p{margin:0;font-size:13px;color:var(--ink2)}
+  .sev-badge{display:inline-block;font-weight:700;font-size:10.5px;letter-spacing:.05em;padding:3px 8px;border-radius:6px;color:#fff;vertical-align:middle}
+  .b-blocker{background:var(--blocker)} .b-high{background:var(--high)} .b-medium{background:var(--medium);color:#3a2f00} .b-low{background:var(--low)} .b-ok{background:var(--ok)}
+  .chip{display:inline-flex;align-items:center;gap:4px;font-weight:700;font-size:10.5px;padding:2px 8px;border-radius:100px;white-space:nowrap}
+  .c-fix{background:var(--fix-bg);color:var(--fix)} .c-defer{background:var(--defer-bg);color:var(--defer)} .c-cfg{background:var(--cfg-bg);color:var(--cfg)} .c-dec{background:var(--dec-bg);color:var(--dec)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .row{padding:15px 18px;border-top:1px solid var(--line)}
+  .row:first-child{border-top:none}
+  .row.done{opacity:.82}
+  .row .h{font-weight:700;font-size:14.5px;margin:0 0 4px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+  .row .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--ink3);background:rgba(120,110,140,.12);padding:1px 6px;border-radius:5px}
+  .row p{margin:5px 0 0;font-size:13.3px;color:var(--ink2)}
+  .row .fix{margin-top:6px;font-size:13px}
+  .row .fix b{color:var(--violet)}
+  .row .did{margin-top:6px;font-size:13px;color:var(--fix);font-weight:600}
+  ul.clean{list-style:none;padding:4px 18px;margin:0}
+  ul.clean li{padding:9px 0 9px 26px;position:relative;border-top:1px solid var(--line);font-size:13.6px;color:var(--ink2)}
+  ul.clean li:first-child{border-top:none}
+  ul.clean li::before{content:"✓";position:absolute;left:2px;top:9px;color:var(--ok);font-weight:800}
+  ul.todo li::before{content:"○";color:var(--defer)}
+  .dom{display:grid;grid-template-columns:1fr;gap:10px}
+  .domrow{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+  .domrow .txt{font-size:13.3px;color:var(--ink2)}
+  .domrow .txt b{color:var(--ink);font-size:14px}
+  .foot{margin-top:34px;color:var(--ink3);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+  .count{color:var(--ink3);font-size:13px;font-weight:600}
+</style>
+
+<div class="wrap">
+  <h1>Audit Go / No-Go — Premier event WILL</h1>
+  <p class="sub">Statut mis à jour après la passe de corrections. Décision produit : <b>premier event en mode gratuit</b>.</p>
+  <p class="meta">Périmètre : parcours complet (orga → photographe → inscription → selfie → reconnaissance faciale → livraison → panier/paiement → emails), Worker/API, site web, pipeline photos. · Audit + corrections sur <span class="code" style="font-size:11px">worker/index.js</span>, <span class="code" style="font-size:11px">website/</span>. · Mis à jour le 11 sept. 2026.</p>
+
+  <div class="hero">
+    <div class="verdict">
+      <span class="pill go">Go conditionnel — event gratuit</span>
+    </div>
+    <p>Les <b>2 bloquants sécurité sont corrigés</b>, ainsi que la plupart des risques élevés. En mode gratuit, il n'y a plus de dépendance au flux de paiement B2C (non implémenté). <b>Il reste</b> : vérifier la config prod (secrets), <b>1 décision</b> produit (seuil de reconnaissance), et <b>2 chantiers différés</b> non bloquants pour un event gratuit contrôlé (fermeture de l'accès R2 public + faux positifs à tester sur le terrain).</p>
+    <div class="statusbar">
+      <div class="stat fix"><div class="n">10</div><div class="l">Corrigés</div></div>
+      <div class="stat dec"><div class="n">1</div><div class="l">Décision produit</div></div>
+      <div class="stat cfg"><div class="n">8</div><div class="l">Config à vérifier</div></div>
+      <div class="stat defer"><div class="n">9</div><div class="l">Différés (non bloquants gratuit)</div></div>
+    </div>
+    <div class="legend">
+      <span><span class="chip c-fix">✓ Corrigé</span> déployé dans le code</span>
+      <span><span class="chip c-dec">◆ Décision</span> à trancher par toi</span>
+      <span><span class="chip c-cfg">⚙ Config</span> à vérifier en prod</span>
+      <span><span class="chip c-defer">○ Différé</span> chantier ultérieur</span>
+    </div>
+  </div>
+
+  <div class="pivot">
+    <div style="font-weight:700;margin-bottom:2px">Décision prise : mode gratuit ✓</div>
+    <p style="margin:0;font-size:13.5px;color:var(--ink2)">L'organisateur paie le forfait d'activation (Stripe, câblé et robuste) ; les photos sont offertes aux coureurs. Aucune vente B2C requise pour ce premier event.</p>
+    <div class="grid2">
+      <div class="opt free"><div class="t free">✓ Mode gratuit — retenu</div><p>Le seul paiement en jeu (activation organisateur) est câblé, montant serveur, webhook idempotent + anti-rejeu. Chemin de revenu B2C non nécessaire.</p></div>
+      <div class="opt paid"><div class="t paid">Mode payant — reporté</div><p>Le flux « coureur paie ses photos » reste à construire (checkout, écriture des achats, livraison HD protégée). À traiter avant d'activer un event payant.</p></div>
+    </div>
+  </div>
+
+  <h2><span class="sev-badge b-blocker">BLOCKER</span> Bloquants <span class="chip c-fix">✓ 2/2 corrigés</span></h2>
+  <div class="card">
+    <div class="row done">
+      <p class="h"><span class="chip c-fix">✓ Corrigé</span> Auth photographe brute-forçable <span class="code">index.js:handleLoginEvent</span></p>
+      <p>PIN 4 chiffres sans rate-limit → brute-force → token photographe 10 ans, puis sabotage.</p>
+      <p class="did">✓ Rate-limit réactivé sur <span class="code">/auth/login</span> et <span class="code">/auth/login-event</span> (IP + slug, 20 essais / 10 min — tolérant pour un WiFi de site, bloque le brute-force des 10 000 PIN). Timing-safe conservé.</p>
+    </div>
+    <div class="row done">
+      <p class="h"><span class="chip c-fix">✓ Corrigé</span> IDOR : suppression des photos d'autrui <span class="code">photographer/delete-photo</span></p>
+      <p>Le contrôle ne portait que sur l'event, pas la propriété → un photographe supprimait les photos des autres.</p>
+      <p class="did">✓ Suppression restreinte à ses propres uploads (ou une photo Will claimée) ; une photo au chemin d'un autre photographe est refusée (403).</p>
+    </div>
+  </div>
+
+  <h2><span class="sev-badge b-high">HIGH</span> Risques élevés <span class="chip c-fix">✓ 4</span> <span class="chip c-defer">○ 1</span> <span class="chip c-dec">◆ 1</span></h2>
+  <div class="card">
+    <div class="row">
+      <p class="h"><span class="chip c-defer">○ Différé</span> Photos & selfies exposés (bucket R2 public) <span class="code">r2PublicBase · /runner/selfie</span></p>
+      <p>Bucket R2 public, HD sans watermark serveur (<span class="code">?nowm=1</span>), selfies servis via URL publique. Fuite RGPD même en gratuit — mais les clés/userIds sont des UUID non énumérables (le bucket r2.dev n'autorise pas le listing), le risque pratique est borné.</p>
+      <p class="fix"><b>Pourquoi différé :</b> la fermeture propre demande une migration coordonnée worker + app + site (un <span class="code">&lt;img&gt;</span> ne peut pas envoyer le Bearer ; l'endpoint tokenisé <span class="code">/runner/selfie/image</span> existe déjà). Chantier « phase 2 », à ne pas patcher à l'aveugle sur l'app.</p>
+    </div>
+    <div class="row done">
+      <p class="h"><span class="chip c-fix">✓ Corrigé</span> Coûts Rekognition non bornés</p>
+      <p>Le compteur ne faisait que compter, aucun frein.</p>
+      <p class="did">✓ Kill-switch d'urgence <span class="code">REKOGNITION_ENABLED="false"</span> au point de passage unique (<span class="code">callRekognition</span>) : coupe tous les coûts AWS d'un coup. <span style="color:var(--defer)">○ Budget automatique par event : amélioration ultérieure.</span> Pense à une <b>alarme budget AWS</b>.</p>
+    </div>
+    <div class="row">
+      <p class="h"><span class="chip c-dec">◆ Décision</span> Faux positifs : seuil de matching à 70 <span class="code">faceMatchThreshold:70</span></p>
+      <p>Seuil 70 (AWS reco 80) + rattachement de rafale sans revérif → un coureur peut recevoir des photos où il n'apparaît pas.</p>
+      <p class="fix"><b>Pourquoi pas touché :</b> le 70 est un <b>choix délibéré</b> (commentaire du code : photos d'action / vélo extérieur souvent &lt;80). Le monter à 80 réduit les faux positifs mais fait perdre de vrais matches. <b>À trancher</b> et surtout à <b>tester sur le terrain</b> lors du premier event.</p>
+    </div>
+    <div class="row done">
+      <p class="h"><span class="chip c-fix">✓ Corrigé</span> Suppression automatique irréversible des photos</p>
+      <p>Le scoring gardait le top-3 et supprimait le reste 24 h après.</p>
+      <p class="did">✓ Délai de suppression porté de 24 h à <b>14 jours</b> : marge de récupération pour un premier event. (Le filtrage top-3 à l'affichage reste un choix produit, inchangé.)</p>
+    </div>
+    <div class="row done">
+      <p class="h"><span class="chip c-fix">✓ Corrigé</span> Date d'event passée → auto-purge</p>
+      <p>Une date mal saisie déclenchait la purge de l'event + photos.</p>
+      <p class="did">✓ Garde-fou : un event créé/activé récemment n'est plus jamais purgé, même si sa <span class="code">event_date</span> est ancienne (basé sur <span class="code">activated_at</span>/<span class="code">submitted_at</span>).</p>
+    </div>
+    <div class="row done">
+      <p class="h"><span class="chip c-fix">✓ Corrigé</span> Activation gratuite si Stripe non configuré</p>
+      <p>Sans clé Stripe, l'event s'activait gratuitement (chemin legacy).</p>
+      <p class="did">✓ En prod, <span class="code">/organizer/pay-event</span> renvoie 503 si <span class="code">STRIPE_SECRET_KEY</span> manque (flip direct réservé au dev via <span class="code">ALLOW_LEGACY_ACTIVATION="true"</span>).</p>
+    </div>
+  </div>
+
+  <h2><span class="sev-badge b-medium">MEDIUM</span> Risques moyens <span class="chip c-fix">✓ 2</span> <span class="chip c-defer">○ 5</span></h2>
+  <div class="card">
+    <div class="row done"><p class="h"><span class="chip c-fix">✓ Corrigé</span> Webhook Stripe — anti-rejeu</p><p class="did">✓ Fenêtre de tolérance 5 min sur le timestamp signé (rejette les webhooks trop anciens/futurs).</p></div>
+    <div class="row done"><p class="h"><span class="chip c-fix">✓ Déjà géré</span> Selfie raté à l'inscription</p><p class="did">✓ Le front alerte et rouvre la modale selfie si l'upload échoue (déjà en place). Amélioration possible : rappel auto au prochain login.</p></div>
+    <div class="row"><p class="h"><span class="chip c-defer">○ Différé</span> Pas de gestion remboursement / litige Stripe</p><p>Le webhook ne traite que <span class="code">checkout.session.completed</span>. Peu d'impact en gratuit (peu de transactions). À logguer/alerter avant tout volume payant.</p></div>
+    <div class="row"><p class="h"><span class="chip c-defer">○ Différé</span> Résidu RGPD <span class="code">matched_user_ids</span></p><p>La suppression de compte n'efface le userId que des events suivis. À étendre à tous les events.</p></div>
+    <div class="row"><p class="h"><span class="chip c-defer">○ Différé</span> Écritures R2 non atomiques (races)</p><p>Création de slug / indexation comptes / <span class="code">markPassageProcessed</span> en last-write-wins. Impact faible à faible volume ; à durcir par PUT conditionnels.</p></div>
+    <div class="row"><p class="h"><span class="chip c-defer">○ Différé</span> Trois flags de monétisation divergents</p><p>Moins critique en gratuit. À unifier (source de vérité unique à l'activation) avant le payant.</p></div>
+    <div class="row"><p class="h"><span class="chip c-defer">○ Différé</span> Lambda HEIC en panne → photos HEIC invisibles</p><p>Pas de reprise automatique. À doubler d'un cron de rattrapage. Vérifier que la Lambda est bien déployée avant l'event.</p></div>
+  </div>
+
+  <h2><span class="sev-badge b-low">LOW</span> Points mineurs <span class="chip c-fix">✓ 3</span> <span class="chip c-defer">○ 3</span></h2>
+  <div class="card">
+    <div class="row done"><p class="h"><span class="chip c-fix">✓ Corrigé</span> Fichiers junk dans <span class="code">website/</span></p><p class="did">✓ <span class="code">.gitignore</span> durci (*.bak, .fuse_hidden…). Reste à exécuter le <span class="code">git rm --cached</span> fourni pour retirer les 24 fichiers déjà trackés.</p></div>
+    <div class="row done"><p class="h"><span class="chip c-fix">✓ Corrigé</span> Emails vers <span class="code">org_name</span></p><p class="did">✓ 6 destinataires corrigés : plus jamais un nom de société comme email (→ <span class="code">organizer_email</span> / <span class="code">contact_admin</span> / <span class="code">admin@will-app.com</span>).</p></div>
+    <div class="row done"><p class="h"><span class="chip c-fix">✓ Corrigé</span> Admin non timing-safe</p><p class="did">✓ <span class="code">isAdmin</span> en comparaison timing-safe + refus si <span class="code">ADMIN_SECRET</span> vide.</p></div>
+    <div class="row"><p class="h"><span class="chip c-defer">○ Différé</span> Rate-limiter Rekognition fail-open</p><p>Si le DO global est injoignable 8 s, les appels passent sans throttle. À passer en fail-closed / sharding.</p></div>
+    <div class="row"><p class="h"><span class="chip c-defer">○ Différé</span> Secret R2 en clair dans <span class="code">lambda-heic/env.json</span></p><p>Gitignored (non commité) mais présent sur disque. Rotation recommandée.</p></div>
+    <div class="row"><p class="h"><span class="chip c-defer">○ Différé</span> Traçabilité <span class="code">mark-paid</span></p><p>Flip manuel admin sans référence de virement. Ajouter une trace.</p></div>
+  </div>
+
+  <h2><span class="sev-badge b-ok">SOLIDE</span> Ce qui était déjà bien fait</h2>
+  <div class="card">
+    <ul class="clean">
+      <li><b>Câblage site ↔ API : 100 % cohérent.</b> Aucun endpoint manquant ou cassé, robustesse réseau réelle (timeout, retry, rollback, 401, offline).</li>
+      <li><b>Sessions</b> : tokens HMAC scopés par rôle, non forgeables sans <span class="code">ADMIN_SECRET</span>, révocation via <span class="code">tokenVersion</span>.</li>
+      <li><b>OAuth Google/Apple</b> : vérification réelle (RS256 + audience + email vérifié). <b>Mots de passe</b> : PBKDF2 100k + sel + timing-safe.</li>
+      <li><b>Activation organisateur</b> : montant serveur, webhook signé + idempotent + (désormais) anti-rejeu.</li>
+      <li><b>Emails « photos prêtes »</b> : kill switch, DRY-RUN fail-safe, allowlist, anti-doublon atomique, cap, opt-out.</li>
+      <li><b>Upload</b> : aucun token photographe tant que l'event n'est pas actif ; pagination R2 correcte ; original protégé par PUT conditionnel etag. <b>Validation selfie</b> (0/multi/trop petit).</li>
+    </ul>
+  </div>
+
+  <h2>Checklist avant lancement</h2>
+  <p class="sub" style="margin-bottom:10px"><span class="chip c-cfg">⚙ Config</span> Secrets prod à confirmer (un secret manquant casse silencieusement une brique) :</p>
+  <div class="card">
+    <ul class="clean todo">
+      <li><b>STRIPE_SECRET_KEY</b> (live) — désormais <b>obligatoire</b> : sans elle, l'activation renvoie 503. Vérifier <span class="code">npx wrangler secret list</span> + <span class="code">GET /admin/stripe-mode</span> = live.</li>
+      <li><b>ADMIN_SECRET</b> — critique : absent, l'accès admin est coupé (nouveau garde-fou) et les tokens seraient forgeables.</li>
+      <li><b>GOOGLE_CLIENT_IDS</b> / <b>APPLE_CLIENT_IDS</b> — sinon OAuth 503.</li>
+      <li><b>AWS_ACCESS_KEY_ID / SECRET / REGION</b> + collection Rekognition + quota relevé + <b>alarme budget AWS</b>.</li>
+      <li><b>RESEND_API_KEY</b> + domaine vérifié · <b>STRIPE_WEBHOOK_SECRET</b> + webhook configuré.</li>
+      <li><b>IP_HASH_SALT</b>, <b>HEIC_LAMBDA_NAME</b> (Lambda déployée), <b>R2_PUBLIC_URL</b>.</li>
+    </ul>
+  </div>
+  <p class="sub" style="margin:16px 0 10px">Actions restantes :</p>
+  <div class="card">
+    <ul class="clean todo">
+      <li>Déployer le worker : <span class="code">cd ~/WILL/worker && npx wrangler deploy</span>.</li>
+      <li>Nettoyer le site : <span class="code">git rm --cached</span> des 24 fichiers junk + push (commande fournie).</li>
+      <li>Créer l'event de test en <b>mode gratuit</b> et le valider de bout en bout (inscription → selfie → match → galerie).</li>
+      <li><b>Tester le matching sur le terrain</b> (décision seuil 70) et surveiller <span class="code">npx wrangler tail</span> pendant l'event.</li>
+      <li>Mise en route emails : d'abord DRY-RUN, <span class="code">ALLOWLIST_SLUGS</span> = slug du 1er event, puis réel.</li>
+    </ul>
+  </div>
+
+  <h2>Verdict par domaine</h2>
+  <div class="dom">
+    <div class="domrow"><span class="sev-badge b-ok">GO</span><div class="txt"><b>Site web ↔ API (câblage)</b><br>Sain, robuste. En gratuit, le bouton « Commander » désactivé est sans impact.</div></div>
+    <div class="domrow"><span class="sev-badge b-ok">GO</span><div class="txt"><b>Sécurité d'accès</b><br>Les 2 bloquants (brute-force PIN, IDOR delete) sont corrigés. Socle sessions/OAuth/mots de passe déjà solide.</div></div>
+    <div class="domrow"><span class="sev-badge b-ok">GO</span><div class="txt"><b>Cycle de vie event + données R2</b><br>Suppression auto sécurisée (14 j), garde-fou date, activation legacy verrouillée. Cohérence des flags de monétisation à revoir avant le payant.</div></div>
+    <div class="domrow"><span class="sev-badge b-high">GO surveillé</span><div class="txt"><b>Pipeline photos + reconnaissance</b><br>Kill-switch coût en place. À surveiller le premier jour : faux positifs (seuil 70) et exposition R2 (chantier phase 2).</div></div>
+    <div class="domrow"><span class="sev-badge b-ok">GO (gratuit)</span><div class="txt"><b>Paiement + emails</b><br>Activation organisateur + emails robustes (anti-rejeu ajouté). La vente B2C reste à construire pour un futur event payant.</div></div>
+  </div>
+
+  <div class="foot">
+    Statut au 11 sept. 2026 après passe de corrections (worker + site), syntaxe validée. Corrections non encore déployées tant que <span class="code" style="font-size:10.5px">npx wrangler deploy</span> (worker) et le push (site) ne sont pas exécutés. Vérifications « live » des endpoints prod non exécutées (approbation du domaine requise).
+  </div>
+</div>

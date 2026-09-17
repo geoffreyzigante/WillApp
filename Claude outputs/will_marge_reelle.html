@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WILL — marge réelle</title>
+<style>
+  :root{--v:#7B2FFF;--v9:#4C0FB3;--ink:#1A1426;--ink2:#5A5468;--bg:#F6F4FB;--card:#fff;--line:#E9E4F5;--green:#1A9D5A;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Montserrat',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;line-height:1.45}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 16px 70px}
+  h1{font-size:21px;margin:0 0 4px}
+  h2{font-size:15px;margin:24px 0 8px}
+  .sub{color:var(--ink2);font-size:13px;margin:0 0 16px}
+  .k{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f2effb;border-radius:5px;padding:1px 6px;color:var(--v9)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--card);border-radius:14px;overflow:hidden;margin-bottom:8px}
+  th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:right}
+  th{background:#faf8ff;font-size:10.5px;text-transform:uppercase;letter-spacing:.02em;color:var(--ink2);font-weight:800}
+  th:first-child,td:first-child{text-align:left}
+  td.p{font-weight:800;color:var(--v)}
+  td.m{font-weight:800;color:var(--green)}
+  tr.base td{background:#faf6ff}
+  .cost{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:12.5px;color:var(--ink2)}
+  .cost b{color:var(--ink)}
+  .cost li{margin:3px 0}
+  .big{font-size:15px;color:var(--v);font-weight:800}
+  .note{font-size:12px;color:var(--ink2);margin-top:12px}
+  .src{font-size:11px;color:var(--ink2);margin-top:18px}
+  .src a{color:var(--v9)}
+</style></head>
+<body><div class="wrap">
+<h1>Marge réelle — tarif « au réel »</h1>
+<p class="sub">Prix = <span class="k">39 € (200 photos incluses) + 0,015 €/photo au-delà</span>. Coûts calculés aux tarifs officiels AWS / Cloudflare / Stripe (sept. 2026).</p>
+
+<h2>Coût variable par photo (dérivation)</h2>
+<div class="cost">
+  <ul>
+    <li><b>Rekognition — indexation</b> (IndexFaces) : 0,0010 $/photo</li>
+    <li><b>Rekognition — modération</b> (DetectModerationLabels) : 0,0010 $/photo</li>
+    <li><b>Rekognition — recherche</b> (SearchFacesByImage) : 0,0010 $ / <i>coureur</i> (1 selfie = 1 recherche)</li>
+    <li><b>Stockage R2 + opérations</b> (~1 Mo × 14 j, écritures/lectures) : ≈ 0,00015 €/photo</li>
+    <li>Egress Cloudflare R2 : <b>gratuit</b> · Workers/emails : négligeable</li>
+  </ul>
+  Conversion 1 $ ≈ 0,92 €. En prenant <b>1 poste</b> (cas le plus coûteux : autant de recherches que de photos) →
+  <span class="big">≈ 2,9 m€ / photo</span> (0,0029 €). Avec 2–3 postes, ça baisse (moins de recherches par photo).
+</div>
+
+<h2>Marge par taille d'event (1 poste)</h2>
+<table>
+  <thead><tr><th>Photos (≈ coureurs)</th><th>Prix</th><th>Rek. index+modér.</th><th>Rek. recherche</th><th>Stock+ops</th><th>Stripe</th><th>Coût total</th><th>Marge €</th><th>Marge %</th></tr></thead>
+  <tbody>
+    <tr class="base"><td>200</td><td class="p">39 €</td><td>0,37 €</td><td>0,18 €</td><td>0,03 €</td><td>0,83 €</td><td>1,42 €</td><td class="m">37,58 €</td><td>96,4 %</td></tr>
+    <tr><td>500</td><td class="p">43 €</td><td>0,92 €</td><td>0,46 €</td><td>0,07 €</td><td>0,90 €</td><td>2,35 €</td><td class="m">40,65 €</td><td>94,5 %</td></tr>
+    <tr><td>1 000</td><td class="p">51 €</td><td>1,84 €</td><td>0,92 €</td><td>0,15 €</td><td>1,02 €</td><td>3,93 €</td><td class="m">47,08 €</td><td>92,3 %</td></tr>
+    <tr><td>2 000</td><td class="p">66 €</td><td>3,68 €</td><td>1,84 €</td><td>0,30 €</td><td>1,24 €</td><td>7,06 €</td><td class="m">58,94 €</td><td>89,3 %</td></tr>
+    <tr><td>3 000</td><td class="p">81 €</td><td>5,52 €</td><td>2,76 €</td><td>0,45 €</td><td>1,46 €</td><td>10,20 €</td><td class="m">70,81 €</td><td>87,4 %</td></tr>
+    <tr><td>6 000</td><td class="p">126 €</td><td>11,04 €</td><td>5,52 €</td><td>0,90 €</td><td>2,14 €</td><td>19,60 €</td><td class="m">106,40 €</td><td>84,4 %</td></tr>
+    <tr><td>12 000</td><td class="p">216 €</td><td>22,08 €</td><td>11,04 €</td><td>1,80 €</td><td>3,49 €</td><td>38,41 €</td><td class="m">177,59 €</td><td>82,2 %</td></tr>
+  </tbody>
+</table>
+
+<h2>Effet des postes (event de 3 000 photos)</h2>
+<table>
+  <thead><tr><th>Config</th><th>Coureurs</th><th>Coût total</th><th>Marge €</th><th>Marge %</th></tr></thead>
+  <tbody>
+    <tr><td>1 poste</td><td>3 000</td><td>10,20 €</td><td class="m">70,81 €</td><td>87,4 %</td></tr>
+    <tr><td>2 postes</td><td>1 500</td><td>8,82 €</td><td class="m">72,19 €</td><td>89,1 %</td></tr>
+    <tr><td>3 postes</td><td>1 000</td><td>8,36 €</td><td class="m">72,64 €</td><td>89,7 %</td></tr>
+  </tbody>
+</table>
+
+<p class="note"><b>Lecture.</b> Marge nette <b>82–96 %</b> sur toute la plage. Le coût est ~90 % Rekognition ; le reste (R2, Workers, egress) est marginal. Le prix marginal (0,015 €/photo) est ~5× le coût marginal (0,0029 €), donc chaque photo au-delà de 200 dégage ~0,012 € net. Plus il y a de <b>postes</b>, meilleure est la marge (moins de recherches par photo).</p>
+<p class="note"><b>Non compté :</b> une 2ᵉ commission Stripe si régularisation avec dépassement (≈ 0,25 € + 1,5 % du delta) ; l'option « photos payantes » (revenu additionnel : 0,50 € net/photo vendue côté WILL après reversement 50 % à l'asso). Modération désactivable → −0,00092 €/photo.</p>
+
+<p class="src"><b>Sources tarifs :</b>
+<a href="https://aws.amazon.com/rekognition/pricing/">AWS Rekognition</a> (0,0010 $/image face, 0,0010–0,0012 $ modération, 1er million/mois) ·
+<a href="https://saask.fr/softwares/stripe/prix/">Stripe France</a> (1,5 % + 0,25 € carte EEE) ·
+R2 : 0,015 $/Go-mois, egress gratuit.</p>
+</div></body></html>

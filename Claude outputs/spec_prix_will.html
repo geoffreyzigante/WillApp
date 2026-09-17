@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spec prix Will</title>
+<style>
+  :root{--violet:#7B2FFF;--violet900:#4C0FB3;--rose:#F4A6FF;--bg:#F5F3FF;--card:#fff;--ink:#1A1426;--ink2:#5A5468;--line:#E4E0EC;--ok:#1a9d5a;--warn:#b45309;--blue:#1e63d6}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:1000px;margin:0 auto;padding:30px 18px 80px}
+  h1{font-size:25px;margin:0 0 2px}
+  .sub{color:var(--ink2);font-size:13px;margin-bottom:8px}
+  h2{font-size:17px;margin:30px 0 8px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+  .code{background:#f2effb;border-radius:5px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--violet900)}
+  .amt{font-weight:800;color:var(--violet)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0;background:var(--card);border-radius:12px;overflow:hidden}
+  th,td{padding:9px 11px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:#faf8ff;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink2)}
+  td.p{font-weight:900;color:var(--violet);text-align:center}
+  tr.base{background:#faf6ff}
+  .tiers{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:8px 0}
+  @media(min-width:700px){.tiers{grid-template-columns:repeat(4,1fr)}}
+  .ti{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+  .ti.b{border:2px solid var(--violet)}
+  .ti .n{font-size:12px;font-weight:800;text-transform:uppercase;color:var(--ink2)}
+  .ti .pr{font-size:24px;font-weight:900;color:var(--violet)}
+  .ti .c{font-size:12px;color:var(--ink2)}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:11px 14px;margin:10px 0;font-size:13px}
+  ul{margin:6px 0;padding-left:20px}li{margin:4px 0;font-size:13.5px}
+  .flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0;font-size:12px}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:7px 10px}
+  .chip b{color:var(--violet)}
+  .arr{color:var(--violet);font-weight:900}
+  .impl th:first-child{width:90px}
+  .tag{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:999px}
+  .w{background:#efe7ff;color:var(--violet900)}.d{background:#e7f0ff;color:var(--blue)}.a{background:#e7fbef;color:var(--ok)}.s{background:#fff0e7;color:#9a3412}
+</style></head>
+<body><div class="wrap">
+<h1>Spec prix Will — source de vérité</h1>
+<p class="sub">Consolidé le 16 sept. 2026. Toutes les décisions produit validées. Sert de base à l'implémentation.</p>
+
+<h2>1. Modèle en une phrase</h2>
+<div class="box"><b>Un prix d'activation unique par tranche de volume</b> (l'orga paie pour toute sa course), photos <b>offertes</b> aux coureurs par défaut, avec une <b>option « photos payantes »</b> (1 €/photo, l'asso touche 50 %) qui ne change pas le prix. On facture la <b>tranche réellement utilisée</b>, ajustée à la clôture.</p>
+
+<h2>2. La grille (paliers)</h2>
+<div class="tiers">
+  <div class="ti"><div class="n">Découverte</div><div class="pr">39 €</div><div class="c">≤ 1000 photos</div></div>
+  <div class="ti b"><div class="n">Base</div><div class="pr">79 €</div><div class="c">≤ 3000 photos</div></div>
+  <div class="ti"><div class="n">Grand</div><div class="pr">129 €</div><div class="c">≤ 6000 photos</div></div>
+  <div class="ti"><div class="n">XL</div><div class="pr">199 €</div><div class="c">≤ 12 000 photos</div></div>
+</div>
+<p style="font-size:13px;color:var(--ink2)">Au-delà de 12 000 : <b>+49 € / tranche de 3000</b>. Le pilote (coût) est le <b>nombre de photos</b> ; montants à confirmer sur events réels. <b>On parle en photos</b> (plafonds affichés à l'orga).</p>
+
+<h2>3. Estimation à la création</h2>
+<p style="font-size:13.5px">Deux entrées, une estimation (pas un calcul exact) :</p>
+<ul>
+  <li><b>Plage de participants</b> (chips : &lt;100 · 100-300 · 300-750 · 750-1500 · 1500+).</li>
+  <li><b>Couverture photo</b> : nb de <b>postes couverts par Will</b> + nb de <b>photographes externes</b> (pondérés <b>×0,6</b>, ils ne couvrent pas tous les coureurs).</li>
+</ul>
+<p style="font-size:13px;color:var(--ink2)"><b>Estimation photos</b> = participants (milieu de plage) × (postes Will + 0,6 × externes). → propose un palier <b>modifiable</b>.</p>
+<ul>
+  <li><b>Pré-remplissage</b> : si l'event a déjà eu lieu sur Will, proposer directement le vrai palier de l'édition passée.</li>
+  <li><b>« Je ne sais pas »</b> → défaut <b>Base</b>, le réel ajuste.</li>
+</ul>
+
+<h2>4. Option « photos payantes »</h2>
+<ul>
+  <li>Activable sur <b>n'importe quel palier</b>, <b>sans changer le prix</b> d'activation.</li>
+  <li>Coureurs paient <b>1 €/photo</b> ; l'asso touche <b>50 %</b> (virement J+14).</li>
+  <li>Active le <b>filigrane couvrant</b> (overlay client, v10 plein cadre) + le paywall.</li>
+  <li>Techniquement = une seule notion : <span class="code">photos_for_sale</span>. <span class="code">pricing_mode</span> supprimé / dérivé.</li>
+</ul>
+
+<h2>5. Facturation à la tranche réelle (bidirectionnelle)</h2>
+<table>
+  <thead><tr><th>Cas</th><th>Exemple</th><th>Action</th></tr></thead>
+  <tbody>
+    <tr><td><b>Dépasse</b></td><td>Estimé Base, réel 4200</td><td>Prélèvement auto <span class="amt">+50 €</span> → Grand</td></tr>
+    <tr><td><b>Dans la tranche</b></td><td>Estimé Base, réel 2600</td><td>Rien · 79 €</td></tr>
+    <tr><td><b>Sous-utilise</b></td><td>Estimé Grand, réel 2600</td><td>Remboursement <span class="amt">−50 €</span> → Base</td></tr>
+  </tbody>
+</table>
+<p style="font-size:13px;color:var(--ink2)"><b>Pas de marge tampon</b> : on facture la tranche exacte du volume réel, dans les deux sens. Message orga : « estime large, tu ne paies que ce que tu utilises ».</p>
+
+<h2>6. Encaissement — prélèvement automatique</h2>
+<ul>
+  <li>À l'activation : Checkout Stripe encaisse la tranche estimée <b>+ enregistre la carte</b> (<span class="code">setup_future_usage: off_session</span>) + mandat de dépassement.</li>
+  <li>À la clôture : <span class="code">PaymentIntent off_session</span> pour le delta (ou remboursement si sous-utilisé).</li>
+  <li>Filet échec (rare, SCA/carte expirée) : smart retries Stripe + lien 1-clic. <b>Pas de facture ouverte.</b></li>
+  <li><b>Jamais de photo perdue</b> (soft) : on garde tout, on ajuste en argent, jamais en coupure.</li>
+</ul>
+
+<h2>7. Timeline</h2>
+<div class="flow">
+  <div class="chip">Activation <b>paiement + carte</b></div><span class="arr">→</span>
+  <div class="chip">Jour J <b>capture</b></div><span class="arr">→</span>
+  <div class="chip">J→J+7 <b>upload photographes</b></div><span class="arr">→</span>
+  <div class="chip"><b>J+7</b> décompte + prélèvement/remboursement</div><span class="arr">→</span>
+  <div class="chip">J+14 <b>suppression RGPD</b></div>
+</div>
+<p style="font-size:13px;color:var(--ink2)">Le règlement se fait à <b>J+7</b> (fermeture de la fenêtre d'upload), jamais avant — pour compter toutes les photos, y compris celles chargées en retard. Suppression J+14 = après le règlement.</p>
+
+<h2>8. Chantier d'implémentation</h2>
+<table class="impl">
+  <thead><tr><th>Zone</th><th>À faire</th></tr></thead>
+  <tbody>
+    <tr><td><span class="tag w">worker</span></td><td>Grille paliers + <span class="code">/config</span> (montants) · <span class="code">pay-event</span> : montant = palier estimé, carte enregistrée + mandat · endpoint décompte photos à J+7 + settle (delta/refund) via Stripe off-session · <span class="code">photos_for_sale</span> unique (drop <span class="code">pricing_mode</span>) · reversement 50 %.</td></tr>
+    <tr><td><span class="tag d">dashboard</span></td><td>Nouvelle <span class="code">ActivationModal</span> : jauge estimation (plage + postes + externes) → palier · case « photos payantes » · pastille palier · pré-remplissage historique.</td></tr>
+    <tr><td><span class="tag s">site</span></td><td><span class="code">will-pricing.js</span> : grille paliers · pages <span class="code">lancer/*</span> réécrites (paliers + option) · <span class="code">cgv</span> (prix + option + 50 %) · filigrane v10 ✓.</td></tr>
+    <tr><td><span class="tag a">app</span></td><td><span class="code">OrganizerDashboardScreen</span> : estimation + option · <span class="code">PRICE_PER_PHOTO_EUR</span> → <span class="code">/config</span> · filigrane v10 ✓ (build en cours).</td></tr>
+  </tbody>
+</table>
+
+<div class="box"><b>Ordre de build recommandé :</b> worker (grille + config + pay-event + settle) → dashboard (nouvelle modale) → site (pricing.js + lancer + cgv) → app (estimation). Chaque étape déployable indépendamment.</div>
+</div></body></html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inventaire prix Will</title>
+<style>
+  :root{
+    --violet:#7B2FFF; --violet900:#4C0FB3; --violet700:#5E1AD6; --rose:#F4A6FF;
+    --bg:#F5F3FF; --card:#ffffff; --ink:#1A1426; --ink2:#5A5468; --line:#E4E0EC;
+    --ok:#1a9d5a; --warn:#b45309; --defer:#8A7FA6; --code:#f2effb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:26px;margin:0 0 4px}
+  h2{font-size:19px;margin:34px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+  h3{font-size:15px;margin:20px 0 6px;color:var(--violet900)}
+  p{margin:8px 0}
+  .meta{color:var(--ink2);font-size:13px;margin-bottom:8px}
+  .code{background:var(--code);border-radius:5px;padding:1px 6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:var(--violet900)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:12px 0}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#faf8ff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink2)}
+  td.zone{white-space:nowrap;font-weight:700}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+  .p-worker{background:#efe7ff;color:var(--violet900)}
+  .p-dash{background:#e7f0ff;color:#1e40af}
+  .p-app{background:#e7fbef;color:#166534}
+  .p-site{background:#fff0e7;color:#9a3412}
+  .amt{font-weight:800;color:var(--violet);white-space:nowrap}
+  .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;margin-right:4px}
+  .t-keep{background:#e7fbef;color:var(--ok)} .t-change{background:#fff4e0;color:var(--warn)} .t-drop{background:#fde7e7;color:#b91c1c}
+  .lead{font-size:14px;color:var(--ink2)}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:12px 0;font-size:13.5px}
+  ul{margin:8px 0;padding-left:20px} li{margin:4px 0}
+  .scroll{overflow-x:auto}
+  .q{background:#fff8e6;border:1px solid #f5d98a;border-radius:12px;padding:14px 16px;margin:12px 0}
+  .q b{color:#8a5a00}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Notions de prix — inventaire & bascule vers un modèle unique</h1>
+  <p class="meta">Relevé dans le code réel : <span class="code">worker/index.js</span>, <span class="code">dashboard/src</span>, <span class="code">website/</span>, <span class="code">WillApp/src</span>. · 15 sept. 2026.</p>
+
+  <h2>1. Le modèle actuel : deux axes qui se chevauchent</h2>
+  <div class="card">
+    <p>Aujourd'hui, deux notions <b>séparées</b> décident du tarif d'un event, et elles se recoupent :</p>
+    <h3><span class="code">pricing_mode</span> — choisi par l'orga à l'activation (paiement Stripe)</h3>
+    <p class="lead">Deux forfaits, prix d'activation <b>différents</b> :</p>
+    <ul>
+      <li><b>« paid »</b> → activation <span class="amt">49 €</span> (<span class="code">ACTIVATION_PRICE_PAID_CENTS=4900</span>). Les coureurs paient <span class="amt">1 €/photo</span>, l'asso touche <b>50 %</b> (virement J+14).</li>
+      <li><b>« free »</b> → activation <span class="amt">79 €</span> (<span class="code">ACTIVATION_PRICE_FREE_CENTS=7900</span>). Photos offertes aux coureurs, aucun paywall.</li>
+    </ul>
+    <h3><span class="code">photos_for_sale</span> — booléen basculé par l'admin (cockpit)</h3>
+    <p class="lead">Un toggle ON/OFF qui pilote le paywall B2C (watermark couvrant + bouton acheter). En principe aligné sur <span class="code">pricing_mode="paid"</span>, mais c'est une <b>2ᵉ source de vérité indépendante</b> — d'où le risque d'incohérence.</p>
+    <h3>Prix unitaire photo (B2C)</h3>
+    <p class="lead"><span class="code">PHOTO_UNIT_PRICE_CENTS=100</span> = <span class="amt">1 €/photo</span>. Codé en dur aussi côté app (<span class="code">PRICE_PER_PHOTO_EUR=1</span>).</p>
+    <div class="box"><b>En clair :</b> il y a <b>3 prix</b> (49 € / 79 € / 1 €) et <b>2 notions</b> (<span class="code">pricing_mode</span>, <span class="code">photos_for_sale</span>) qui disent presque la même chose. C'est ce que la nouvelle dynamique simplifie.</div>
+  </div>
+
+  <h2>2. Inventaire — où chaque notion vit</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Zone</th><th>Fichier</th><th>Ce que ça fait</th><th>Valeur</th></tr></thead>
+    <tbody>
+      <tr><td class="zone"><span class="pill p-worker">worker</span></td><td><span class="code">index.js</span> · <span class="code">/organizer/pay-event</span></td><td>Crée le Stripe Checkout selon <span class="code">pricing_mode</span> ; webhook flippe <span class="code">active</span>+<span class="code">pricing_mode</span>.</td><td><span class="amt">49 € / 79 €</span></td></tr>
+      <tr><td class="zone"><span class="pill p-worker">worker</span></td><td><span class="code">index.js</span> · <span class="code">/config</span></td><td>Expose <span class="code">photo_unit_price_cents</span>, <span class="code">activation_paid_cents</span>, <span class="code">activation_free_cents</span> à la vitrine.</td><td>100 / 4900 / 7900</td></tr>
+      <tr><td class="zone"><span class="pill p-worker">worker</span></td><td><span class="code">index.js</span> · service photo</td><td><span class="code">photos_for_sale</span> pilote watermark couvrant vs mention seule (<span class="code">/photo-jpeg</span>, <span class="code">/photo-enhanced</span>).</td><td>booléen</td></tr>
+      <tr><td class="zone"><span class="pill p-worker">worker</span></td><td><span class="code">index.js</span> · <span class="code">/admin/event/:code/photos-for-sale</span></td><td>Endpoint admin qui bascule le booléen.</td><td>ON/OFF</td></tr>
+      <tr><td class="zone"><span class="pill p-worker">worker</span></td><td><span class="code">wrangler.toml</span></td><td>Les 3 montants en variables d'env.</td><td>100/4900/7900</td></tr>
+      <tr><td class="zone"><span class="pill p-dash">dashboard</span></td><td><span class="code">orga/modals/ActivationModal.js</span></td><td>2 cards de forfait (49/79), choix <span class="code">selected</span>, CTA « Payer N € ».</td><td><span class="amt">49 € / 79 €</span></td></tr>
+      <tr><td class="zone"><span class="pill p-dash">dashboard</span></td><td><span class="code">orga/pages/EventCard.js</span></td><td>Pastille « Forfait Coureurs paient (49 €) / Photos offertes (79 €) », CTA « Choisir mon forfait ».</td><td>libellés 49/79</td></tr>
+      <tr><td class="zone"><span class="pill p-dash">dashboard</span></td><td><span class="code">pages/EventsPage.js</span></td><td>Toggle admin « Vente : ON/OFF » → <span class="code">photos_for_sale</span>.</td><td>booléen</td></tr>
+      <tr><td class="zone"><span class="pill p-dash">dashboard</span></td><td><span class="code">pages/CockpitPage.js</span></td><td>Compteur d'events avec <span class="code">photos_for_sale=true</span>.</td><td>stat</td></tr>
+      <tr><td class="zone"><span class="pill p-app">app</span></td><td><span class="code">constants/api.js</span></td><td><span class="code">PRICE_PER_PHOTO_EUR = 1</span> en dur (n'utilise pas <span class="code">/config</span>).</td><td><span class="amt">1 €</span></td></tr>
+      <tr><td class="zone"><span class="pill p-app">app</span></td><td><span class="code">screens/PanierScreen.js</span></td><td>Total panier = <span class="code">count × PRICE_PER_PHOTO_EUR</span>.</td><td><span class="amt">1 €/photo</span></td></tr>
+      <tr><td class="zone"><span class="pill p-app">app</span></td><td><span class="code">screens/EventDetailScreen.js</span></td><td><span class="code">photosForSale</span> → affiche/masque le paywall & watermark.</td><td>booléen</td></tr>
+      <tr><td class="zone"><span class="pill p-app">app</span></td><td><span class="code">screens/OrganizerDashboardScreen.js</span></td><td>Paie l'event via <span class="code">pay-event</span> <b>sans mode</b> → défaut « paid ». Pas de choix de forfait.</td><td>49 € (implicite)</td></tr>
+      <tr><td class="zone"><span class="pill p-app">app</span></td><td><span class="code">utils/eventCompletion.js</span></td><td><span class="code">billingLabel()</span> : « Forfait Photos offertes / Coureurs paient ».</td><td>libellé</td></tr>
+      <tr><td class="zone"><span class="pill p-site">site</span></td><td><span class="code">assets/will-pricing.js</span></td><td>Source de vérité vitrine, lit <span class="code">/config</span> ; expose <span class="code">getActivationPaidCents/FreeCents</span>, <span class="code">formatTotal</span>.</td><td>100/4900/7900</td></tr>
+      <tr><td class="zone"><span class="pill p-site">site</span></td><td><span class="code">assets/will-cart.js</span> + <span class="code">will-cart-sheet.js</span></td><td>Panier coureur ; masque le CTA si <span class="code">pricing_mode="free"</span> ; total via <span class="code">WillPricing.formatTotal</span>.</td><td>1 €/photo</td></tr>
+      <tr><td class="zone"><span class="pill p-site">site</span></td><td><span class="code">event/index.html</span>, <span class="code">panier/index.html</span></td><td>Galerie + panier ; watermark couvrant events payants ; bouton « Ajouter au panier ».</td><td>1 €/photo</td></tr>
+      <tr><td class="zone"><span class="pill p-site">site</span></td><td><span class="code">lancer/index.html</span> (marketing orga)</td><td>2 cartes forfait : <b>79 €</b> « tu offres » / forfait réduit « 1 €/photo, asso touche 50 % ». JSON-LD <span class="code">price:"79"</span>.</td><td><span class="amt">79 € / 1 €</span> + 50 %</td></tr>
+      <tr><td class="zone"><span class="pill p-site">site</span></td><td><span class="code">cgv/index.html</span> (légal)</td><td>Forfait Organisateur affiché <b>79 € TTC</b>, par event, sans engagement, remboursement 14 j.</td><td><span class="amt">79 € TTC</span></td></tr>
+      <tr><td class="zone"><span class="pill p-site">site</span></td><td><span class="code">will-cest-quoi/*</span>, <span class="code">lancer/*</span> variantes</td><td>~60 fichiers de <b>maquettes/variantes</b> de design (pas tous en prod) mentionnant prix.</td><td>à trier</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>3. La nouvelle dynamique : un seul prix + option « photos payantes »</h2>
+  <div class="card">
+    <p class="lead">Cible : <b>un prix d'activation unique</b>, et une <b>option</b> (activée ou non) « les photos sont payantes pour les coureurs ». Ce que ça devient, par emplacement :</p>
+    <ul>
+      <li><span class="tag t-change">à changer</span> <b>worker <span class="code">pay-event</span></b> : un seul montant d'activation, plus de branche 49/79 selon le mode. <span class="code">/config</span> n'expose plus qu'un <span class="code">activation_cents</span> + <span class="code">photo_unit_price_cents</span>.</li>
+      <li><span class="tag t-change">à unifier</span> <b><span class="code">pricing_mode</span> ↔ <span class="code">photos_for_sale</span></b> : garder <b>une seule</b> notion. Le plus simple : <span class="code">photos_for_sale</span> devient l'option officielle, <span class="code">pricing_mode</span> est déduit (ou supprimé). Évite les deux sources de vérité.</li>
+      <li><span class="tag t-change">à changer</span> <b>dashboard <span class="code">ActivationModal</span></b> : plus 2 cards de prix, mais <b>1 prix</b> + une <b>case à cocher</b> « rendre les photos payantes ».</li>
+      <li><span class="tag t-change">à changer</span> <b>dashboard <span class="code">EventCard</span></b> : libellé pastille simplifié (« Activé » + « photos payantes : oui/non »).</li>
+      <li><span class="tag t-keep">reste</span> <b>toggle admin <span class="code">EventsPage</span></b> : devient le pilote unique de l'option (ou fusionne avec le choix orga).</li>
+      <li><span class="tag t-change">à changer</span> <b>app <span class="code">OrganizerDashboardScreen</span></b> : idéalement offrir la case « photos payantes » (aujourd'hui il paie en « paid » implicite). <span class="code">PRICE_PER_PHOTO_EUR</span> → lire <span class="code">/config</span> au lieu du dur.</li>
+      <li><span class="tag t-change">à changer</span> <b>site <span class="code">will-pricing.js</span></b> : <span class="code">getActivationPaidCents/FreeCents</span> → un seul <span class="code">getActivationCents</span>.</li>
+      <li><span class="tag t-change">à réécrire</span> <b>marketing <span class="code">lancer/*</span></b> : passer de « deux forfaits » à « un prix + option ».</li>
+      <li><span class="tag t-change">légal</span> <b><span class="code">cgv/index.html</span></b> : mettre le nouveau prix unique + décrire l'option payante (et le reversement 50 % si conservé).</li>
+    </ul>
+  </div>
+
+  <div class="q">
+    <b>3 décisions produit à trancher avant de coder :</b>
+    <ul>
+      <li><b>Quel est le prix unique d'activation ?</b> (79 € actuel « free » ? un autre montant ?)</li>
+      <li><b>Activer l'option « photos payantes » change-t-elle le prix d'activation ?</b> (dans le modèle cible « un seul prix », normalement non — le prix est le même, l'option ajoute juste le paywall + 1 €/photo.)</li>
+      <li><b>On garde le reversement 50 % à l'asso</b> sur les ventes 1 €/photo, ou on simplifie ?</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

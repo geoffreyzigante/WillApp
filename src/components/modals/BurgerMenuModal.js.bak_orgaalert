@@ -11,7 +11,7 @@
 // suivante (modal stacking iOS, cf feedback_rn_modal_stacking).
 
 import React, { useRef, useEffect, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Easing, Alert } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Easing } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -183,20 +183,6 @@ export function BurgerMenuModal({
   // redecouvrir au retour.
   const empiler = (cb) => () => { if (typeof cb === 'function') cb(); };
 
-  // Alerte « role organisateur manquant » (choix user 2026-09-09) : au lieu
-  // d envoyer en silence vers la creation, on explique le role puis on
-  // propose « Continuer » (cree le 1er event, le role s ouvre) / « Quitter ».
-  const showOrgaRoleAlert = () => {
-    Alert.alert(
-      'Rôle organisateur',
-      "Tu n'as pas encore le rôle organisateur. Pour l'obtenir, crée ton premier event — l'espace organisateur s'ouvre en chemin.",
-      [
-        { text: 'Quitter', style: 'cancel' },
-        { text: 'Continuer', onPress: fire(() => onOpenOrgRole && onOpenOrgRole('create')) },
-      ],
-    );
-  };
-
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backdropOpacity }]}>
@@ -318,9 +304,9 @@ export function BurgerMenuModal({
                      personne vient chercher : creer un event. L espace se
                      cree en chemin. */
                   <MenuRow
-                    icon={<Icon.GearOrg size={19} color={C.primary} />}
-                    label="Espace organisateur"
-                    onPress={showOrgaRoleAlert}
+                    icon={<Icon.Fusee size={19} color={C.primary} />}
+                    label="Lancer mon event"
+                    onPress={fire(() => onOpenOrgRole && onOpenOrgRole('create'))}
                   />
                 )}
                 <MenuRow

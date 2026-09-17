@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Filigrane — specs fichier</title>
+<style>
+  :root{--violet:#7B2FFF;--violet900:#4C0FB3;--rose:#F4A6FF;--bg:#F5F3FF;--card:#fff;--ink:#1A1426;--ink2:#5A5468;--line:#E4E0EC;--ok:#1a9d5a;--warn:#b45309}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:840px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:22px;margin:0 0 14px}
+  .top{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  .pick{flex:1;min-width:220px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px}
+  .pick.reco{border:2px solid var(--violet)}
+  .tag{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:999px;margin-bottom:8px}
+  .g{background:#efe7ff;color:var(--violet900)}.n{background:#eef1f6;color:#475569}
+  .pick h2{font-size:16px;margin:0 0 4px}
+  .pick .fmt{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--violet900);font-weight:700}
+  .pick p{font-size:12.5px;color:var(--ink2);margin:6px 0 0}
+  .specs{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px 8px}
+  .sp{display:flex;gap:10px;padding:9px 10px;border-bottom:1px solid var(--line);font-size:13px}
+  .sp:last-child{border-bottom:0}
+  .sp .k{font-weight:800;min-width:130px}
+  .sp .v{color:var(--ink2)}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:16px 0 0;font-size:13px}
+  code{background:#f2effb;border-radius:4px;padding:1px 5px;font-size:12px;color:var(--violet900)}
+</style></head>
+<body><div class="wrap">
+<h1>Filigrane couvrant — quel fichier ?</h1>
+
+<div class="top">
+  <div class="pick reco"><span class="tag g">Idéal</span>
+    <h2>PNG transparent</h2>
+    <div class="fmt">.png · fond alpha</div>
+    <p>Universel : marche partout — web (CSS), mobile (Skia), canvas au téléchargement. C'est le format à me fournir en priorité.</p>
+  </div>
+  <div class="pick"><span class="tag n">Bonus web</span>
+    <h2>+ SVG master</h2>
+    <div class="fmt">.svg · vectoriel</div>
+    <p>Si tu l'as : net à toute taille, ultra léger côté web. Mais pas suffisant seul (Skia/canvas mobile préfèrent le PNG).</p>
+  </div>
+</div>
+
+<div class="specs">
+  <div class="sp"><div class="k">Fond</div><div class="v"><b>Transparent</b> (alpha) — surtout pas de fond blanc/noir plein.</div></div>
+  <div class="sp"><div class="k">Motif</div><div class="v">Idéalement <b>répété en diagonale</b> (texte « WILL » / logo) pour bien couvrir. Sinon une grande marque centrée.</div></div>
+  <div class="sp"><div class="k">Résolution</div><div class="v">Grande : <b>≥ 2000 px</b> de large. OU une <b>tuile répétable</b> ~400-600 px (motif qui se raccorde).</div></div>
+  <div class="sp"><div class="k">Couleur</div><div class="v">Blanc (ou gris clair), léger. L'<b>opacité finale se règle à l'affichage</b> — fournis-le net.</div></div>
+  <div class="sp"><div class="k">Type PNG</div><div class="v">PNG-24 avec canal alpha (pas PNG-8 indexé).</div></div>
+</div>
+
+<div class="box"><b>En une phrase :</b> un <b>PNG transparent haute résolution</b> (motif diagonale répétable), + le <b>SVG</b> si tu l'as. Je m'occupe de l'opacité et du tuilage côté code. Tu peux me le déposer ici.</div>
+</div></body></html>

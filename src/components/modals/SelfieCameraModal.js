@@ -30,7 +30,7 @@ import { Camera as VisionCamera, useCameraPermission, useCameraDevice, useFrameP
 import { Worklets } from 'react-native-worklets-core';
 import { Image as ExpoImage } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import Svg, { Defs, Mask, Rect, Ellipse, Path } from 'react-native-svg';
+import Svg, { Defs, Mask, Rect, Ellipse, Path, Polygon } from 'react-native-svg';
 import { detectHumans } from '../../services/frameProcessors';
 import { s } from '../../constants/styles';
 
@@ -82,6 +82,78 @@ const MESSAGES = {
   profil: 'Regarde bien l’objectif',
   ok: 'Ne bouge plus…',
 };
+
+// Icônes mentions RGPD (mêmes tracés que le site, viewBox 0 0 16.97 15.73).
+function IcoCadena({ size = 14, color = '#fff' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16.97 15.73">
+      <Path fill={color} d="M15.46,4.18h-2.36v-1.25c0-1.62-1.34-2.93-2.99-2.93h-3.26c-1.65,0-2.99,1.31-2.99,2.93v1.25H1.5C.67,4.18,0,4.84,0,5.66v8.6C0,15.07.67,15.73,1.5,15.73h13.96c.83,0,1.5-.66,1.5-1.47V5.66c0-.81-.67-1.47-1.5-1.47ZM5.98,2.99c0-.61.47-1.11,1.06-1.11h2.89c.58,0,1.06.5,1.06,1.11v1.19h-5v-1.19ZM15.08,11.79c0,1.14-.68,2.06-1.52,2.06H3.4c-.84,0-1.52-.92-1.52-2.06v-3.66c0-1.14.68-2.06,1.52-2.06h10.17c.84,0,1.52.92,1.52,2.06v3.66Z" />
+      <Path fill={color} d="M9.85,11.67l-.39-1.3c-.09-.29,0-.6.2-.83.21-.26.34-.59.34-.95,0-.84-.68-1.51-1.51-1.51h0c-.84,0-1.51.68-1.51,1.51,0,.36.13.69.34.95.19.24.28.54.2.83l-.39,1.3c-.16.55.25,1.11.83,1.11h1.07c.58,0,.99-.55.83-1.11Z" />
+    </Svg>
+  );
+}
+function IcoServeur({ size = 14, color = '#fff' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16.97 15.73">
+      <Ellipse fill={color} cx="8.48" cy="7.86" rx="8.48" ry="7.86" />
+      <Ellipse fill="rgba(0,0,0,0.45)" cx="8.48" cy="7.86" rx="6.6" ry="6.12" />
+      <Ellipse fill={color} cx="8.48" cy="7.86" rx="4.75" ry="7.86" />
+      <Ellipse fill="rgba(0,0,0,0.45)" cx="8.48" cy="7.86" rx="2.81" ry="6.12" />
+      <Ellipse fill={color} cx="8.48" cy="7.86" rx="0.92" ry="7.86" />
+      <Rect fill={color} x="0.48" y="6.92" width="16.02" height="1.88" />
+    </Svg>
+  );
+}
+function IcoDuree({ size = 14, color = '#fff' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16.97 15.73">
+      <Ellipse fill={color} cx="8.48" cy="7.86" rx="8.48" ry="7.86" />
+      <Ellipse fill="rgba(0,0,0,0.45)" cx="8.48" cy="7.86" rx="6.6" ry="6.12" />
+      <Polygon fill="rgba(0,0,0,0.45)" points="6.61 3.1 6.91 9.32 8.48 10.58 13.4 10.58 14.01 7.23 12.59 4.23 9.32 2.43 6.61 3.1" />
+      <Path fill={color} d="M9.42,7.78V3.1h-1.88v4.67h0c0,1.04.84,1.88,1.88,1.88h3.06v-1.88h-3.06Z" />
+    </Svg>
+  );
+}
+
+const MENTIONS_SELFIE = [
+  { Ico: IcoCadena, label: 'Chiffré' },
+  { Ico: IcoServeur, label: 'Serveurs européens' },
+  { Ico: IcoDuree, label: '12 mois' },
+];
+
+// Mentions RGPD qui défilent une par une (fade in/out) avec leur icône,
+// posées juste au-dessus de l ovale. Même comportement que le site.
+function MentionsRotator({ topOffset, opacity }) {
+  const [idx, setIdx] = useState(0);
+  const fade = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    let vivant = true;
+    const id = setInterval(() => {
+      Animated.timing(fade, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+        if (!vivant) return;
+        setIdx((i) => (i + 1) % MENTIONS_SELFIE.length);
+        Animated.timing(fade, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      });
+    }, 2000);
+    return () => { vivant = false; clearInterval(id); };
+  }, [fade]);
+  const { Ico, label } = MENTIONS_SELFIE[idx];
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute', top: topOffset, left: 24, right: 24,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        opacity: Animated.multiply(opacity, fade),
+      }}
+    >
+      <Ico size={14} color="rgba(255,255,255,0.9)" />
+      <Text style={{ marginLeft: 6, color: 'rgba(255,255,255,0.9)', fontSize: 12, fontFamily: 'Montserrat-Medium', letterSpacing: 0.2 }}>
+        {label}
+      </Text>
+    </Animated.View>
+  );
+}
 
 export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   const cameraRef = useRef(null);
@@ -383,18 +455,9 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
         )}
 
         {/* Rappel RGPD la ou il compte : au moment ou on pointe une camera
-            sur son visage. */}
-        <Animated.Text
-          pointerEvents="none"
-          style={{
-            position: 'absolute', top: topInset, left: 24, right: 24,
-            textAlign: 'center', color: 'rgba(255,255,255,0.8)',
-            fontSize: 12, fontFamily: 'Montserrat-Medium', letterSpacing: 0.2,
-            opacity: opaciteGuidage,
-          }}
-        >
-          Chiffré · serveurs européens · 12 mois
-        </Animated.Text>
+            sur son visage. Les trois mentions defilent une par une, posees
+            juste au-dessus de l ovale. */}
+        <MentionsRotator topOffset={cy - OVAL_H / 2 - 30} opacity={opaciteGuidage} />
 
         {/* Contenu de la bande : message pendant le guidage, choix a la revue.
             Les deux sont montes en permanence et se croisent en opacite. */}

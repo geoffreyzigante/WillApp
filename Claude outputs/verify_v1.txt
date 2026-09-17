@@ -1,0 +1,11 @@
+Confirme ton compte Will
+
+Une dernière étape : valide ton adresse pour activer ton compte et retrouver tes photos après chaque event.
+
+Valider mon compte : https://will-app.com/verifier?token=EXEMPLE
+
+Ce lien est valable 24 h. Si tu n'es pas à l'origine de cette inscription, ignore simplement cet email — aucun compte ne sera activé.
+
+— L'équipe Will
+Will — Photographie sportive automatisée
+SARL Zigante — 3 Rue du Franc-Fief, 27400 Louviers, France

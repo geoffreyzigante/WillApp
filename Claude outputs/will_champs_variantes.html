@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WILL — variantes champs</title>
+<style>
+  :root{--v:#7B2FFF;--ink:#1A1426;--ink2:#5A5468;--bg:#F6F4FB;--card:#fff;--line:#E9E4F5;
+        --champ:#F3F1F8;--green:#3BB273;--red:#E08A93;--ghost:#9E99AC;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Montserrat',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;line-height:1.4}
+  .wrap{max-width:1080px;margin:0 auto;padding:26px 16px 70px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--ink2);font-size:13px;margin:0 0 22px}
+  .grid{display:grid;gap:16px}
+  @media(min-width:820px){.grid{grid-template-columns:repeat(3,1fr)}}
+  .col-h{display:flex;align-items:baseline;gap:8px;margin:0 2px 10px}
+  .col-h .l{font-size:15px;font-weight:800}
+  .col-h .d{font-size:11.5px;color:var(--ink2)}
+  .card{background:var(--card);border-radius:20px;box-shadow:0 1px 3px rgba(20,20,40,.06);padding:18px 16px;display:flex;flex-direction:column;gap:14px}
+  .f{display:flex;flex-direction:column;gap:6px;position:relative}
+  .lbl{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ink)}
+  .opt{font-size:11px;font-weight:600;color:var(--ghost)}
+  .in{height:44px;border-radius:12px;background:var(--champ);border:1.5px solid transparent;display:flex;align-items:center;padding:0 12px;font-size:14px;color:var(--ink)}
+  .in.ph{color:#B7B2C4}
+  .err-txt{font-size:11.5px;color:#D24857;display:flex;align-items:center;gap:4px}
+  /* coche gauche (B) */
+  .co{flex:none;width:12px;height:12px;border-radius:50%;border:1.5px solid #DAD7E2;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#fff}
+  .co.ok{border-color:var(--green);background:var(--green)}
+  .co.bad{border-color:var(--red);background:var(--red)}
+  /* coche droite dans champ (A) */
+  .in{position:relative}
+  .tick{position:absolute;right:12px;width:16px;height:16px;border-radius:50%;background:var(--green);color:#fff;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center}
+  .in.err{border-color:var(--red);background:#FDECEE}
+  /* C : etat dans le champ */
+  .in.focus{border-color:var(--v);background:#fff;box-shadow:0 0 0 3px rgba(123,47,255,.12)}
+  .in.done{background:#F1FBF5;border-color:#CBEBD8;box-shadow:inset 3px 0 0 var(--green)}
+  .note{font-size:11px;color:var(--ink2);margin-top:2px}
+  .foot{margin-top:26px;font-size:12.5px;color:var(--ink2);text-align:center}
+  .state{font-size:10.5px;color:var(--ghost);letter-spacing:.03em;text-transform:uppercase;margin:2px 0 -4px}
+</style></head>
+<body><div class="wrap">
+<h1>WILL — 3 variantes d'état des champs</h1>
+<p class="sub">Mêmes couleurs/typo que le modal. Chaque colonne montre les 4 états : vide requis · vide optionnel · rempli valide · erreur.</p>
+
+<div class="grid">
+
+  <!-- A -->
+  <div>
+    <div class="col-h"><span class="l">A — Coche à droite (Apple)</span></div>
+    <div class="card">
+      <div class="state">Vide · requis</div>
+      <div class="f"><span class="lbl">Nom de l'event *</span><div class="in ph">Trail des Violettes</div></div>
+      <div class="state">Vide · optionnel</div>
+      <div class="f"><span class="lbl">Site web <span class="opt">· Facultatif</span></span><div class="in ph">www.monevent.fr</div></div>
+      <div class="state">Rempli · valide</div>
+      <div class="f"><span class="lbl">Ville *</span><div class="in">Louviers<span class="tick">✓</span></div></div>
+      <div class="state">Erreur (après envoi)</div>
+      <div class="f"><span class="lbl">Code postal *</span><div class="in err">2740</div><span class="err-txt">⚠ 5 chiffres requis</span></div>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div>
+    <div class="col-h"><span class="l">B — Coche à gauche, sobre</span></div>
+    <div class="card">
+      <div class="state">Vide · requis</div>
+      <div class="f"><span class="lbl"><span class="co"></span>Nom de l'event *</span><div class="in ph">Trail des Violettes</div></div>
+      <div class="state">Vide · optionnel</div>
+      <div class="f"><span class="lbl"><span class="co"></span>Site web <span class="opt">· Facultatif</span></span><div class="in ph">www.monevent.fr</div></div>
+      <div class="state">Rempli · valide</div>
+      <div class="f"><span class="lbl"><span class="co ok">✓</span>Ville *</span><div class="in">Louviers</div></div>
+      <div class="state">Erreur (après envoi)</div>
+      <div class="f"><span class="lbl"><span class="co bad">!</span>Code postal *</span><div class="in err">2740</div><span class="err-txt">⚠ 5 chiffres requis</span></div>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div>
+    <div class="col-h"><span class="l">C — Le champ parle</span></div>
+    <div class="card">
+      <div class="state">Vide · requis</div>
+      <div class="f"><span class="lbl">Nom de l'event *</span><div class="in ph">Trail des Violettes</div></div>
+      <div class="state">Vide · optionnel</div>
+      <div class="f"><span class="lbl">Site web <span class="opt">· Facultatif</span></span><div class="in ph">www.monevent.fr</div></div>
+      <div class="state">Focus (en cours)</div>
+      <div class="f"><span class="lbl">Ville *</span><div class="in focus">Louvi</div></div>
+      <div class="state">Rempli · valide</div>
+      <div class="f"><span class="lbl">Dénivelé <span class="opt">· Facultatif</span></span><div class="in done">450 m D+</div></div>
+      <div class="state">Erreur (après envoi)</div>
+      <div class="f"><span class="lbl">Code postal *</span><div class="in err">2740</div><span class="err-txt">⚠ 5 chiffres requis</span></div>
+    </div>
+  </div>
+
+</div>
+
+<p class="foot">A = le plus épuré (coche verte à droite, uniquement quand valide) · B = ta coche de gauche actuelle en plus sobre · C = aucun badge, l'état vit dans le champ (focus violet, fond vert + barre à gauche une fois rempli).</p>
+</div></body></html>

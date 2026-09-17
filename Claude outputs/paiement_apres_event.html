@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Payer après l'event</title>
+<style>
+  :root{--violet:#7B2FFF;--violet900:#4C0FB3;--rose:#F4A6FF;--bg:#F5F3FF;--card:#fff;--ink:#1A1426;--ink2:#5A5468;--line:#E4E0EC;--ok:#1a9d5a;--warn:#b45309;--bad:#b91c1c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:920px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:22px;margin:0 0 14px}
+  .row{display:grid;grid-template-columns:1fr;gap:12px}
+  @media(min-width:720px){.row{grid-template-columns:1fr 1fr 1fr}}
+  .opt{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px}
+  .opt.reco{border:2px solid var(--violet);box-shadow:0 6px 22px rgba(123,47,255,.12)}
+  .tag{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:999px;margin-bottom:8px}
+  .g{background:#efe7ff;color:var(--violet900)}.n{background:#eef1f6;color:#475569}
+  .opt h2{font-size:15px;margin:0 0 6px}
+  .pc{font-size:12.5px;margin:4px 0;padding-left:18px;position:relative}
+  .pc::before{position:absolute;left:0;font-weight:800}
+  .pro::before{content:"✓";color:var(--ok)}.con::before{content:"✕";color:var(--bad)}
+  .how{font-size:12px;color:var(--ink2);margin-top:8px;border-top:1px dashed var(--line);padding-top:8px}
+  .code{background:#f2effb;border-radius:5px;padding:1px 5px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--violet900)}
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:18px 0 0;font-size:12.5px}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 11px}
+  .chip b{color:var(--violet)}
+  .arr{color:var(--violet);font-weight:900}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:18px 0 0;font-size:13.5px}
+</style></head>
+<body><div class="wrap">
+<h1>Encaisser le dépassement après l'event</h1>
+<div class="row">
+  <div class="opt reco">
+    <span class="tag g">Recommandé</span>
+    <h2>Facture Stripe par email</h2>
+    <div class="pc pro">Aucun paiement anticipé à stocker</div>
+    <div class="pc pro">L'orga clique, s'authentifie (SCA OK)</div>
+    <div class="pc pro">Relances auto Stripe si impayé</div>
+    <div class="pc con">Petit délai d'encaissement</div>
+    <div class="how"><span class="code">stripe.invoices.create</span> après l'event → email auto « +50 € · dépassement palier ». Réutilise ton compte Stripe existant.</div>
+  </div>
+  <div class="opt">
+    <span class="tag n">Alternative</span>
+    <h2>Carte enregistrée + prélèvement auto</h2>
+    <div class="pc pro">Zéro action pour l'orga</div>
+    <div class="pc con">Prélèvement off-session peut être refusé (SCA/3DS UE)</div>
+    <div class="pc con">Il faut stocker un moyen de paiement</div>
+    <div class="how">Checkout activation avec <span class="code">setup_future_usage</span> → <span class="code">PaymentIntent off_session</span> après l'event.</div>
+  </div>
+  <div class="opt">
+    <span class="tag n">Alternative</span>
+    <h2>Prépaiement + avoir</h2>
+    <div class="pc pro">Zéro risque d'impayé (payé d'avance)</div>
+    <div class="pc con">On fait payer le palier du dessus « au cas où »</div>
+    <div class="pc con">Remboursement partiel si pas atteint = friction</div>
+    <div class="how">Active au palier estimé +1, rembourse la différence si non atteint.</div>
+  </div>
+</div>
+
+<div class="flow">
+  <div class="chip">Event terminé</div><span class="arr">→</span>
+  <div class="chip">Worker compte les photos réelles</div><span class="arr">→</span>
+  <div class="chip">Dépasse le palier ?</div><span class="arr">→</span>
+  <div class="chip"><b>Stripe Invoice</b> auto du delta</div><span class="arr">→</span>
+  <div class="chip">Email + relances</div>
+</div>
+
+<div class="box">
+  <b>Ma reco :</b> <b>facture Stripe</b> pour le dépassement. C'est le plus robuste en UE (l'orga s'authentifie lui-même, pas de refus off-session), sans stocker de carte, et Stripe gère les relances. Le worker calcule les photos réelles à la clôture de l'event et crée la facture du delta automatiquement.
+</div>
+</div></body></html>

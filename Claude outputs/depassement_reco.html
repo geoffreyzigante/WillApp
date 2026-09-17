@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dépassement palier</title>
+<style>
+  :root{--violet:#7B2FFF;--violet900:#4C0FB3;--rose:#F4A6FF;--bg:#F5F3FF;--card:#fff;--ink:#1A1426;--ink2:#5A5468;--line:#E4E0EC;--ok:#1a9d5a;--warn:#b45309;--bad:#b91c1c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:900px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:22px;margin:0 0 4px}
+  .lead{font-size:13.5px;color:var(--ink2);margin:0 0 16px}
+  /* flow */
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;margin:8px 0 20px}
+  .node{flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 14px}
+  .node .t{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--violet900)}
+  .node .d{font-size:13px;color:var(--ink2);margin-top:4px}
+  .node.ok{border-color:var(--ok);background:#f0fbf4}
+  .arrow{align-self:center;color:var(--violet);font-weight:900;font-size:20px}
+  .row{display:grid;grid-template-columns:1fr;gap:10px;margin:6px 0}
+  @media(min-width:700px){.row{grid-template-columns:1fr 1fr 1fr}}
+  .opt{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 14px}
+  .opt.reco{border:2px solid var(--violet)}
+  .tag{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:999px;margin-bottom:6px}
+  .g{background:#e7fbef;color:var(--ok)}.o{background:#fff4e0;color:var(--warn)}.r{background:#fde7e7;color:var(--bad)}
+  .opt .h{font-size:14px;font-weight:800;margin-bottom:3px}
+  .opt .d{font-size:12.5px;color:var(--ink2)}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:16px 0 0;font-size:13.5px}
+  b.amt{color:var(--violet)}
+</style></head>
+<body><div class="wrap">
+<h1>L'orga dépasse son palier de photos</h1>
+<p class="lead">Principe non négociable : <b>on ne perd jamais une photo</b> (c'est la promesse produit). Le dépassement se gère en argent, pas en coupure.</p>
+
+<div class="flow">
+  <div class="node"><div class="t">Palier atteint</div><div class="d">Ex. Base 79 € = 3000 photos, l'event en génère 3600.</div></div>
+  <div class="arrow">→</div>
+  <div class="node"><div class="t">On garde tout</div><div class="d">Les 600 en trop sont capturées, uploadées, traitées normalement.</div></div>
+  <div class="arrow">→</div>
+  <div class="node"><div class="t">Alerte orga</div><div class="d">Notif « ton event dépasse le palier Base ».</div></div>
+  <div class="arrow">→</div>
+  <div class="node ok"><div class="t">Rattrapage</div><div class="d">Après l'event : passage auto au palier supérieur, différence facturée.</div></div>
+</div>
+
+<div class="row">
+  <div class="opt reco"><span class="tag g">Reco</span><div class="h">Soft + rattrapage</div><div class="d">Rien perdu. On facture la différence de palier après (ex. Base→Grand = <b class="amt">+50 €</b>). Coût réel des 600 photos ≈ 2 € → aucun risque.</div></div>
+  <div class="opt"><span class="tag o">Option</span><div class="h">Alerte + blocage upload</div><div class="d">Au-delà, les photos ne partent plus tant que le complément n'est pas payé. Coupure en plein event = risqué.</div></div>
+  <div class="opt"><span class="tag r">À éviter</span><div class="h">Hard cap</div><div class="d">On arrête de traiter : photos perdues. Casse la promesse.</div></div>
+</div>
+
+<div class="box">
+  <b>En pratique (hybride paliers) :</b> le dépassement fait juste <b>monter d'un cran</b> sur la grille. L'orga a estimé 2500 coureurs → Base ; l'event en fait 3600 photos → on bascule Grand, on facture <b class="amt">+50 €</b>. Marge intacte, zéro photo perdue, zéro coupure.
+</div>
+</div></body></html>

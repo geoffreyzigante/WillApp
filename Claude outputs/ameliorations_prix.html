@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Améliorer le modèle prix</title>
+<style>
+  :root{--violet:#7B2FFF;--violet900:#4C0FB3;--rose:#F4A6FF;--bg:#F5F3FF;--card:#fff;--ink:#1A1426;--ink2:#5A5468;--line:#E4E0EC;--ok:#1a9d5a;--warn:#b45309}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  .wrap{max-width:940px;margin:0 auto;padding:26px 18px 60px}
+  h1{font-size:22px;margin:0 0 14px}
+  .cards{display:grid;grid-template-columns:1fr;gap:12px}
+  @media(min-width:720px){.cards{grid-template-columns:1fr 1fr}}
+  .c{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px;position:relative}
+  .c.top{border:2px solid var(--violet)}
+  .rank{position:absolute;top:-10px;left:14px;width:26px;height:26px;border-radius:50%;background:var(--violet);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
+  .c h2{font-size:15px;margin:6px 0 4px}
+  .c p{font-size:13px;color:var(--ink2);margin:0}
+  .tags{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap}
+  .t{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;padding:2px 8px;border-radius:999px}
+  .imp{background:#e7fbef;color:var(--ok)}.eff{background:#eef1f6;color:#475569}
+  .box{background:#faf8ff;border-left:3px solid var(--violet);border-radius:0 10px 10px 0;padding:12px 14px;margin:16px 0 0;font-size:13.5px}
+</style></head>
+<body><div class="wrap">
+<h1>Améliorer le modèle — 6 leviers, priorisés</h1>
+<div class="cards">
+  <div class="c top"><div class="rank">1</div>
+    <h2>Jauge à 1 seule saisie</h2>
+    <p>L'orga saisit <b>les coureurs</b>, point. Les points photo viennent de la config event (déjà posés sur la carte) → le système calcule photos & palier tout seul. Moins de friction, moins d'erreurs.</p>
+    <div class="tags"><span class="t imp">Impact fort</span><span class="t eff">Effort moyen</span></div>
+  </div>
+  <div class="c top"><div class="rank">2</div>
+    <h2>Marge de tolérance incluse</h2>
+    <p>Chaque palier inclut <b>+15 %</b> avant de déclencher un dépassement. On ne facture pas un palier au-dessus pour 80 photos de trop. Coût réel négligeable, tension client évitée.</p>
+    <div class="tags"><span class="t imp">Impact fort</span><span class="t eff">Effort faible</span></div>
+  </div>
+  <div class="c"><div class="rank">3</div>
+    <h2>Compteur live dans le dashboard</h2>
+    <p>Barre « 2140 / 3000 photos · palier Base » visible pendant l'event. <b>Zéro surprise</b> à la facture, l'orga voit venir le dépassement.</p>
+    <div class="tags"><span class="t imp">Impact moyen</span><span class="t eff">Effort faible</span></div>
+  </div>
+  <div class="c"><div class="rank">4</div>
+    <h2>Le palier proposé, pas deviné</h2>
+    <p>À la création, on <b>suggère</b> le palier à partir d'events similaires passés (historique réel), pas seulement l'estimation de l'orga. Meilleure prédiction = moins de dépassements.</p>
+    <div class="tags"><span class="t imp">Impact moyen</span><span class="t eff">Effort moyen</span></div>
+  </div>
+  <div class="c"><div class="rank">5</div>
+    <h2>« Photos payantes » = forfait remboursé</h2>
+    <p>Si l'orga active la vente 1 €/photo, ses 50 % peuvent <b>rembourser son forfait</b>. Argument massue : « Will peut te revenir gratuit ». Aligne vos intérêts.</p>
+    <div class="tags"><span class="t imp">Impact fort</span><span class="t eff">Effort moyen</span></div>
+  </div>
+  <div class="c"><div class="rank">6</div>
+    <h2>Ancrage marché sur la page prix</h2>
+    <p>Afficher « 1 photo Sportograf = 30 € pour 1 coureur · Will = tout ton event dès 39 € ». Justifie le prix en une ligne.</p>
+    <div class="tags"><span class="t imp">Impact moyen</span><span class="t eff">Effort faible</span></div>
+  </div>
+</div>
+<div class="box"><b>Si je dois n'en garder que 2 pour lancer :</b> la <b>marge de tolérance +15 %</b> (n°2, quasi gratuit, tue les litiges) et la <b>jauge à 1 saisie</b> (n°1, l'expérience de création). Le reste s'ajoute ensuite.</div>
+</div></body></html>
