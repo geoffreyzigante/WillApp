@@ -9,7 +9,7 @@
 // Countdown : "J-3" avant l event, "GO !" pendant (event_date -> event_date_end),
 // "J+5" apres. End absent -> single-day.
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal, SafeAreaView, View, Text, TouchableOpacity, ScrollView,
   Alert, Share, Switch,
@@ -34,6 +34,27 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
   const dotColor = isReady ? '#34D399' : '#FBBF24';
   const statusLabel = isReady ? 'Prêt à démarrer' : 'En attente';
   const isDraft = event?.is_draft === true;
+
+  // Visibilite publique : /organizer/my-events ne renvoie "listed" que pour
+  // les events sortis du brouillon (branche _auth/<slug>/event.json). Sur un
+  // brouillon ou un event en attente de validation le champ est absent, et
+  // "event?.listed !== false" afficherait alors "Visible" par defaut, c est a
+  // dire une information fausse. La visibilite publique n a de toute facon
+  // aucun sens avant validation : on masque le bloc dans ces cas.
+  const visibiliteConnue = event?.listed !== undefined && event?.listed !== null;
+  const afficheVisibilite = visibiliteConnue
+    && !isDraft
+    && event?.status !== 'pending'
+    && event?.status !== 'rejected';
+
+  // L ecran peut recevoir un event rafraichi apres le PUT : on resynchronise
+  // l etat local sur la valeur serveur, sauf pendant l enregistrement (sinon
+  // on ecraserait la valeur optimiste en cours d envoi).
+  useEffect(() => {
+    if (savingListed) return;
+    if (!visibiliteConnue) return;
+    setListed(event.listed !== false);
+  }, [event?.listed, event?.code]);
 
   const { missing, percent, isComplete } = completionOf(event, session?.profile);
   const facturation = billingLabel(event);
@@ -332,7 +353,9 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
             </View>
           </View>
 
-          {/* Visibilite publique */}
+          {/* Visibilite publique — masquee tant que l event n est pas valide
+              (cf afficheVisibilite plus haut). */}
+          {afficheVisibilite ? (
           <View style={{ marginHorizontal: 16, marginTop: 28 }}>
             <Text style={{ fontSize: 16, fontFamily: 'Montserrat-SemiBold', color: C.text }}>Visibilité</Text>
             <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: 'rgba(10,10,10,0.5)', marginTop: 2 }}>
@@ -350,6 +373,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
               />
             </View>
           </View>
+          ) : null}
 
           {/* Lien Supprimer */}
           <View style={{ marginTop: 36, alignItems: 'center' }}>

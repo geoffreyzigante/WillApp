@@ -11,7 +11,7 @@
 //   rejected -> refuse par admin
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, AppState } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { EventCard } from '../components/EventCard';
 import { RefreshableScrollView } from '../components/loaders';
@@ -22,6 +22,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(null);
+  const [checkoutOuvert, setCheckoutOuvert] = useState(false);
 
   const reload = async () => {
     setLoading(true);
@@ -37,20 +38,79 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
 
   useEffect(() => { reload(); }, [refreshKey]);
 
-  const pay = async (slug) => {
-    setPaying(slug);
+  // Retour de Stripe Checkout : l event n est actif qu une fois le webhook
+  // passe. On recharge donc la liste au retour au premier plan, l etat reel
+  // renvoye par le worker fait foi (aucune promesse cote app).
+  useEffect(() => {
+    if (!checkoutOuvert) return undefined;
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') { setCheckoutOuvert(false); reload(); }
+    });
+    return () => sub?.remove?.();
+  }, [checkoutOuvert]);
+
+  // POST /organizer/pay-event/:code ne debite RIEN et n active RIEN : il cree
+  // une Stripe Checkout Session et renvoie { checkout_url }. C est le webhook
+  // Stripe qui bascule event.active apres reglement reel. On ouvre donc
+  // l URL et on n annonce aucun succes a ce stade.
+  //
+  // estimated_photos : le web calcule coureurs x (postes + photographes
+  // externes). L app mobile n a que estimated_participants — aucun champ
+  // "postes" ni "photographes externes" n existe sur cet ecran. On envoie
+  // donc coureurs x 1 poste, qui est exactement le reglage par defaut du
+  // modal web (postes=1, externes=0). Sans nombre de coureurs on ne devine
+  // pas : un corps vide ferait tomber le worker sur tierForPhotos(0), soit
+  // le plancher 39 EUR, un montant faux sur une vraie carte.
+  const lancerCheckout = async (e, estimatedPhotos) => {
+    setPaying(e.code);
     try {
-      const r = await organizerApiFetch(`/organizer/pay-event/${slug}`, {
+      const r = await organizerApiFetch(`/organizer/pay-event/${e.code}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estimated_photos: estimatedPhotos, photos_payantes: false }),
       });
-      if (r.ok) {
-        Alert.alert('Paiement réussi', 'Ton événement est maintenant en ligne !');
-        reload();
-      } else {
-        const data = await r.json();
-        Alert.alert('Erreur', data.error || 'Échec du paiement');
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        Alert.alert('Erreur', data.error || "Activation impossible pour l'instant");
+        return;
       }
+      if (data.checkout_url) {
+        setCheckoutOuvert(true);
+        try {
+          await Linking.openURL(data.checkout_url);
+        } catch (err) {
+          setCheckoutOuvert(false);
+          Alert.alert('Erreur', "La page de paiement n'a pas pu s'ouvrir. Réessaie, ou active ton event depuis will-app.com/orga.");
+        }
+        return;
+      }
+      // Pas de checkout_url : le worker est en mode legacy (dev sans cle
+      // Stripe). On ne promet rien, on recharge et le statut renvoye fait foi.
+      reload();
+    } catch (err) {
+      Alert.alert('Erreur', err?.message || 'Erreur réseau');
     } finally { setPaying(null); }
+  };
+
+  const pay = (e) => {
+    const coureurs = Number(e?.estimated_participants);
+    if (!Number.isFinite(coureurs) || coureurs <= 0) {
+      Alert.alert(
+        'Estimation manquante',
+        "Le montant dépend du nombre de photos attendues. Renseigne le nombre de coureurs dans « Modifier », ou active ton event depuis will-app.com/orga pour estimer précisément (postes photo, photographes externes).",
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    const photos = Math.round(coureurs);
+    Alert.alert(
+      'Mettre en ligne',
+      `Estimation : ${photos} photos (${photos} coureurs × 1 poste photo). Tu vas être redirigé vers la page de paiement sécurisée, où le montant s'affiche avant validation. Le prix définitif est régularisé après l'event sur le nombre réel de photos.\n\nPlusieurs postes ou des photographes externes ? Estime depuis will-app.com/orga.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Continuer', onPress: () => lancerCheckout(e, photos) },
+      ]
+    );
   };
 
   const deleteEvent = (e) => {
@@ -88,7 +148,8 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
     if (st === 'free') return { label: 'En ligne · gratuit', color: C.success, bg: '#D1FAE5' };
     if (st === 'paid') return { label: 'En ligne', color: C.success, bg: '#D1FAE5' };
     if (st === 'rejected') return { label: 'Refusé', color: C.error, bg: '#FEE2E2' };
-    return { label: st, color: C.textSoft, bg: '#f5f3ff' };
+    // Repli : jamais le slug technique brut dans le badge.
+    return { label: 'En cours', color: C.textSoft, bg: '#f5f3ff' };
   };
 
   return (
@@ -156,7 +217,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                 )}
                 {e.status === 'pending_payment' && (
                   <TouchableOpacity
-                    onPress={() => pay(e.code)}
+                    onPress={() => pay(e)}
                     disabled={paying === e.code}
                     style={{ backgroundColor: C.pinkPill, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 8, opacity: paying === e.code ? 0.6 : 1 }}
                   >
