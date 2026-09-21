@@ -19,7 +19,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, FlatList, Dimensions, Platform,
-  StatusBar, AppState, Alert, ActivityIndicator, StyleSheet,
+  StatusBar, AppState, Alert, ActivityIndicator, StyleSheet, Share,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import * as MediaLibrary from 'expo-media-library';
@@ -442,6 +442,28 @@ export function PhotoViewerModal({
     }
   };
 
+  // Audit coureur 17 -- aucune sortie de partage n existait cote coureur.
+  // Meme geste que l organisateur (OrganizerEventDetailScreen ~100) : on
+  // partage le lien de la course, pas le fichier. Le lien est un lien
+  // universel (cf app.json) : sur un telephone ou Will est installe il ouvre
+  // la fiche event dans l app, sinon le site.
+  //
+  // Pourquoi le lien et pas l image : l URL R2 de la photo est signee et
+  // temporaire, et une photo payante partagee en clair contournerait
+  // l achat. Le lien de la course, lui, est public et durable.
+  const partager = async () => {
+    const lien = eventCode ? `https://will-app.com/event/${encodeURIComponent(eventCode)}` : 'https://will-app.com';
+    const titre = eventTitle ? `Mes photos de ${eventTitle} sur Will` : 'Mes photos sur Will';
+    try {
+      await Share.share(Platform.OS === 'ios'
+        ? { message: titre, url: lien }
+        : { message: `${titre}\n${lien}` });
+    } catch (e) {
+      // L utilisateur a ferme la feuille de partage : rien a dire.
+      console.warn('[viewer] partage', e?.message || e);
+    }
+  };
+
   const deleteCurrent = () => {
     if (!currentPhoto?.id) return;
     Alert.alert(
@@ -752,6 +774,31 @@ export function PhotoViewerModal({
               </ReAnimated.View>
             </GestureDetector>
           </ReAnimated.View>
+
+          {/* Partager haut-gauche (audit coureur 17). Cote organisateur le
+              bouton existe deja ; le coureur, lui, n avait rien. */}
+          {!isOrga && (
+          <ReAnimated.View
+            style={[{
+              position: 'absolute', top: topPad + 4, left: 12, zIndex: 20,
+            }, uiStyle]}
+          >
+            <TouchableOpacity
+              onPress={partager}
+              hitSlop={16}
+              style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
+              accessibilityRole="button"
+              accessibilityLabel="Partager cette course"
+            >
+              <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M12 3v13M12 3L8 7M12 3l4 4M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"
+                  stroke="#000" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"
+                />
+              </Svg>
+            </TouchableOpacity>
+          </ReAnimated.View>
+          )}
 
           {/* X haut-droite */}
           <ReAnimated.View

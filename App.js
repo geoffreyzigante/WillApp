@@ -8218,6 +8218,9 @@ function App() {
   }, [photosUnread]);
   const [events, setEvents] = useState([]);
   const [openedEvent, setOpenedEvent] = useState(null);
+  // Compteur incremente a chaque notification « nouvelles photos » : force un
+  // rafraichissement de l onglet Photos par-dessus la garde de fraicheur.
+  const [photosRefreshSignal, setPhotosRefreshSignal] = useState(0);
   const [orgModal, setOrgModal] = useState(false);
   const [selfieModal, setSelfieModal] = useState(false);
   const [searchModal, setSearchModal] = useState(false);
@@ -8270,6 +8273,10 @@ function App() {
   const [selfieSkipped, setSelfieSkipped] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);  // Phase D reset modal au 1er boot
   const pendingActionRef = useRef(null); // action à exécuter après login
+  // Audit coureur 10 -- meme role, mais pour le parcours inscription : la
+  // modale reste ouverte apres la creation du compte (etape selfie), on ne
+  // peut donc pas rejouer l action tout de suite.
+  const pendingApresInscriptionRef = useRef(null);
   // Recherche par dossard : state lifte au root pour rendre la pill
   // au-dessus du degrade blanc du footer (zIndex 5 root-level). Tant que la
   // pill etait dans EventDetailScreen, elle restait coincee sous le degrade.
@@ -8681,10 +8688,27 @@ function App() {
       // presentation de modale soeur a orchestrer d ici.
       AsyncStorage.removeItem('@will_selfie_skipped').catch(() => {});
       setSelfieSkipped(false);
-      // Atterrissage sur l Accueil : un compte tout neuf ne suit aucun event,
-      // l onglet Photos ne lui montrerait qu un ecran vide. L Accueil, lui,
-      // liste les events a suivre — la suite logique de l inscription.
-      setBottomTab('home');
+      // Audit coureur 10 -- cette branche sortait AVANT la consommation de
+      // l action en attente : le coureur qui tapait « Suivre » sur un event,
+      // se voyait proposer de creer un compte, le creait... et retrouvait
+      // l event non suivi. L action est consommee ici aussi.
+      //
+      // Elle est posee par requireAuth juste avant l ouverture de la modale ;
+      // elle passe par toggleFollowStable, qui resout la derniere version du
+      // toggle — la session vient d etre posee dans le meme tour de boucle.
+      // Le delai laisse l etat React se propager, comme dans l autre branche.
+      // L ecran d inscription reste ouvert apres onSuccess (il enchaine sur
+      // l etape selfie puis notifications). Rejouer l action ICI ouvrirait
+      // une SelfieModal par-dessus l inscription. On la met donc de cote et
+      // on la rejoue a la fermeture de la modale (cf. onClose de
+      // AuthRunnerModal, plus bas).
+      pendingApresInscriptionRef.current = pendingActionRef.current;
+      pendingActionRef.current = null;
+      // Atterrissage : par defaut l Accueil (un compte tout neuf ne suit
+      // aucun event, l onglet Photos ne lui montrerait qu un ecran vide).
+      // Mais si une action attendait, elle porte deja l intention du
+      // coureur — on ne le deplace pas au milieu de son geste.
+      if (!pendingApresInscriptionRef.current) setBottomTab('home');
       return;
     }
     setAuthModalVisible(false);
@@ -8789,12 +8813,21 @@ function App() {
   //  b) Tap sur notif app ouverte/background -> addNotificationResponseReceivedListener
   //     (bascule sur l onglet Photos automatiquement)
   //  c) Cold start via tap notif -> getLastNotificationResponseAsync
+  // Audit coureur 3 + 18 -- la charge utile « new_photos » porte
+  // { type, count, events: { <code>: <nombre> } }. On s en sert pour forcer
+  // un rafraichissement de l onglet Photos : sinon la garde de fraicheur
+  // (120 s) pourrait afficher une liste anterieure a la notification.
+  // Le LIBELLE de la notification, lui, est construit cote worker
+  // (worker/index.js ~14371) et ne nomme pas la course : la charge utile
+  // transporte des CODES d event, pas leurs noms. Corrigeable uniquement
+  // la-bas — cf rapport, non modifie ici.
   useEffect(() => {
     const sub1 = Notifications.addNotificationReceivedListener(notif => {
       const data = notif?.request?.content?.data;
       if (data?.type === 'new_photos') {
         const c = typeof data.count === 'number' ? data.count : 1;
         setPhotosUnread(prev => prev + c);
+        setPhotosRefreshSignal(n => n + 1);
       }
     });
     const sub2 = Notifications.addNotificationResponseReceivedListener(resp => {
@@ -8803,12 +8836,14 @@ function App() {
         setBottomTab('photos');
         setOpenedEvent(null);
         setOrganizerEventPhotosTarget(null);
+        setPhotosRefreshSignal(n => n + 1);
       }
     });
     Notifications.getLastNotificationResponseAsync().then(resp => {
       const data = resp?.notification?.request?.content?.data;
       if (data?.type === 'new_photos') {
         setBottomTab('photos');
+        setPhotosRefreshSignal(n => n + 1);
       }
     }).catch(() => {});
     return () => { sub1.remove(); sub2.remove(); };
@@ -8818,6 +8853,57 @@ function App() {
   useEffect(() => {
     if (bottomTab === 'photos') setPhotosUnread(0);
   }, [bottomTab]);
+
+  // ─── Audit coureur 17 — liens universels ────────────────────────────
+  // L app n avait AUCUNE porte d entree rapide : ni lien profond, ni
+  // partage. Un coureur a qui on envoie sa course devait la retrouver a la
+  // main dans la liste. On ouvre desormais la fiche event depuis
+  //   https://will-app.com/event/{code}   (lien universel iOS / App Link
+  //                                        Android, cf app.json)
+  //   will://event/{code}                 (schema propre, secours)
+  // L event est cherche dans la liste deja chargee ; s il n y est pas
+  // (course passee, non listee), on va chercher sa fiche publique — un seul
+  // appel, celui qui aurait eu lieu a l ouverture de toute facon.
+  const ouvrirEventParCode = useCallback(async (code) => {
+    if (!code) return;
+    const propre = String(code).trim();
+    if (!propre) return;
+    const connu = events.find((e) => e.code === propre);
+    if (connu) { setBottomTab('home'); setOpenedEvent(connu); return; }
+    try {
+      const r = await fetch(`${API_URL}/public-events/${encodeURIComponent(propre)}`);
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d && d.code) { setBottomTab('home'); setOpenedEvent(d); }
+    } catch {}
+  }, [events]);
+
+  const lireLienWill = useCallback((url) => {
+    if (!url) return;
+    // Trois formes possibles, une seule expression :
+    //   https://will-app.com/event/CODE, https://www.will-app.com/event/CODE
+    //   will://event/CODE
+    const m = String(url).match(/(?:will:\/\/|https?:\/\/(?:www\.)?will-app\.com\/)event\/([^/?#]+)/i);
+    if (!m) return;
+    ouvrirEventParCode(decodeURIComponent(m[1]));
+  }, [ouvrirEventParCode]);
+
+  // Le lien d ouverture ne se lit QU UNE FOIS : lireLienWill depend de la
+  // liste des events, qui change au chargement — sans ce garde-fou, la fiche
+  // se rouvrait toute seule apres que le coureur l a fermee.
+  const lienInitialLuRef = useRef(false);
+  const lireLienWillRef = useRef(lireLienWill);
+  lireLienWillRef.current = lireLienWill;
+  useEffect(() => {
+    if (!lienInitialLuRef.current) {
+      lienInitialLuRef.current = true;
+      // Demarrage a froid : l app a ete lancee PAR le lien.
+      Linking.getInitialURL().then((url) => { if (url) lireLienWillRef.current?.(url); }).catch(() => {});
+    }
+    // App deja lancee : le lien arrive en cours de route.
+    const sub = Linking.addEventListener('url', (ev) => lireLienWillRef.current?.(ev?.url));
+    return () => { try { sub?.remove?.(); } catch {} };
+  }, []);
 
   const requireAuth = useCallback((action) => {
     if (runnerSession) {
@@ -8845,6 +8931,13 @@ function App() {
     setPhotoFavorites([]);
     Secure.removeItem('@will_runner').catch(() => {});
     AsyncStorage.removeItem('@will_selfie').catch(() => {});
+    // Audit coureur 6 -- le consentement biometrique appartient au COMPTE,
+    // pas au telephone. La cle etait stockee par appareil et n etait pas
+    // effacee ici, contrairement a la suppression du selfie, a celle des
+    // donnees faciales et a celle du compte : l utilisateur suivant sur ce
+    // telephone sautait l ecran de consentement — pas de texte, pas de case,
+    // pas de lien vers la politique de confidentialite.
+    Secure.removeItem(BIOMETRIC_CONSENT_KEY).catch(() => {});
     // Caches scopes par userId NON vides au logout : @will_photos_cache_<uid>,
     // @will_follows_<uid>, @will_photo_favorites_<uid>. Pas de fuite cross-compte
     // (cle differente par user), hydratation immediate au re-login du meme compte.
@@ -9203,9 +9296,18 @@ function App() {
   // un selfie et re-suivre des events ensuite. Cf DELETE /runner/face-data.
   const deleteFaceData = useCallback(() => {
     if (!runnerSession?.token) return;
+    // Audit coureur 9 -- l ancienne explication renvoyait au « retrait d un
+    // event des favoris », terme que l app n emploie plus depuis le
+    // renommage en « Suivre », et ne disait pas ce qui distingue vraiment
+    // cette action de « Supprimer mon selfie ». Cote serveur :
+    //   DELETE /runner/selfie    -> efface la photo seule ;
+    //   DELETE /runner/face-data -> efface la photo ET l empreinte faciale
+    //                               enregistree sur tous les events.
+    // C est donc la SEULE action qui efface l empreinte, et c est cela qu il
+    // faut dire, ici et nulle part ailleurs.
     Alert.alert(
-      'Supprimer toutes mes données faciales ?',
-      'Cela supprime ton selfie ET toutes les photos déjà identifiées de toi sur l\'app. Action définitive.\n\nDifférent du retrait d\'un event des favoris (qui garde les photos déjà identifiées). Ton compte reste actif, tu peux redéposer un selfie ensuite.',
+      'Effacer mon empreinte faciale ?',
+      "Cela efface ton selfie ET l'empreinte faciale enregistrée pour toi sur tous les events Will. Will ne pourra plus te reconnaître, ni sur les photos à venir, ni sur celles déjà publiées.\n\nAction définitive. Ton compte reste actif : tu peux redéposer un selfie quand tu veux.",
       [
         { text: 'Annuler', style: 'cancel' },
         { text: 'Supprimer', style: 'destructive', onPress: async () => {
@@ -9234,7 +9336,7 @@ function App() {
             // suppression du selfie, quelques lignes plus bas.
             await Secure.removeItem(BIOMETRIC_CONSENT_KEY).catch(() => {});
             setProfileMenu(false);
-            Alert.alert('Données faciales supprimées', 'Ton consentement biométrique est retiré et ton selfie est supprimé de nos serveurs. Tu peux redéposer un selfie quand tu veux.');
+            Alert.alert('Empreinte faciale effacée', 'Ton consentement biométrique est retiré, ton selfie et ton empreinte faciale sont supprimés de nos serveurs. Tu peux redéposer un selfie quand tu veux.');
           } else {
             Alert.alert('Erreur', r?.error || 'Impossible de supprimer. Reessaie.');
           }
@@ -9543,16 +9645,41 @@ function App() {
         setSelfieUri(null);
         AsyncStorage.removeItem('@will_selfie').catch(() => {});
         Alert.alert('Visage trop petit', e.userMessage || 'Approche-toi de la caméra pour remplir l\'ovale.');
+        return;
       }
+      // Audit coureur 1 — l echec posait un etat 'failed' que rien n affichait
+      // et ne disait rien. Sans selfie arrive sur le serveur, le coureur ne
+      // recevra aucune photo : c est le seul moment ou le lui dire compte.
+      // La carte SelfieBlock (etat 'failed') reste ensuite visible en tete de
+      // l onglet Photos tant que l envoi n a pas abouti.
+      Alert.alert(
+        'Selfie non envoyé',
+        e?.userMessage || "Ton selfie n'est pas arrivé sur nos serveurs. Sans lui, Will ne peut pas te reconnaître sur les photos.",
+        [
+          { text: 'Plus tard', style: 'cancel' },
+          { text: "Réessayer l'envoi", onPress: () => { runSelfieUploadRef.current?.(uri); } },
+        ],
+      );
     }
   }, [runnerSession?.profile?.userId, runnerSession?.token]);
+
+  // Le bouton « Reessayer » de l alerte ci-dessus doit rappeler la DERNIERE
+  // version de runSelfieUpload : la closure de l alerte date du tour ou
+  // l echec est survenu.
+  const runSelfieUploadRef = useRef(null);
+  runSelfieUploadRef.current = runSelfieUpload;
 
   const retrySelfieUpload = useCallback(() => {
     if (selfieUri) runSelfieUpload(selfieUri);
   }, [selfieUri, runSelfieUpload]);
 
   const deleteSelfie = useCallback(() => {
-    Alert.alert('Supprimer ton selfie ?', 'Ton consentement biométrique sera retiré immédiatement et la reconnaissance s’arrêtera sur les nouvelles photos. Tu peux redéposer un selfie à tout moment.', [
+    // Audit coureur 9 -- cette action n appelle que DELETE /runner/selfie :
+    // elle retire la photo de reference, donc la reconnaissance s arrete sur
+    // les photos A VENIR, mais elle n efface PAS l empreinte deja
+    // enregistree. Le dire, plutot que de laisser croire que les deux
+    // boutons rouges font la meme chose.
+    Alert.alert('Supprimer ton selfie ?', 'Ta photo de référence est supprimée et Will arrête de te reconnaître sur les nouvelles photos. L\'empreinte faciale déjà enregistrée, elle, n\'est pas effacée : pour cela, utilise « Effacer mon empreinte faciale ». Tu peux redéposer un selfie à tout moment.', [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Supprimer', style: 'destructive', onPress: async () => {
         // 1. Supprime le selfie cote serveur en premier. Sinon le useEffect
@@ -9986,6 +10113,7 @@ function App() {
                     onTogglePhotoFavorite={togglePhotoFavorite}
                     onRefreshFavorites={refreshPhotoFavoritesFromServer}
                     isActive={bottomTab === 'photos'}
+                    refreshSignal={photosRefreshSignal}
                     selfieSkipped={selfieSkipped && !selfieUri}
                     selfieUploadState={selfieUploadState}
                     onRetryUpload={retrySelfieUpload}
@@ -10593,7 +10721,16 @@ function App() {
 
       <AuthRunnerModal
         visible={authModalVisible}
-        onClose={() => setAuthModalVisible(false)}
+        onClose={() => {
+          setAuthModalVisible(false);
+          // Audit coureur 10 -- l action mise de cote a l inscription (suivre
+          // l event qu on regardait) se rejoue ici, une fois l ecran
+          // d inscription refeme : c est le premier moment ou une SelfieModal
+          // peut s afficher sans se retrouver derriere lui.
+          const aRejouer = pendingApresInscriptionRef.current;
+          pendingApresInscriptionRef.current = null;
+          if (aRejouer) setTimeout(() => aRejouer(), 350);
+        }}
         onSuccess={handleAuthSuccess}
         onSelfieSaved={async (uri, creds) => {
           setSelfieUri(uri);
@@ -10617,7 +10754,19 @@ function App() {
               setSelfieUri(null);
               AsyncStorage.removeItem('@will_selfie').catch(() => {});
               Alert.alert('Visage trop petit', e.userMessage || "Approche-toi de la caméra pour remplir l'ovale.");
+              return;
             }
+            // Audit coureur 1 — un selfie perdu a l inscription laissait le
+            // coureur persuade d avoir tout fait. On le dit, et on propose de
+            // relancer l envoi sans lui redemander une photo.
+            Alert.alert(
+              'Selfie non envoyé',
+              e?.userMessage || "Ton selfie n'est pas arrivé sur nos serveurs. Sans lui, Will ne peut pas te reconnaître sur les photos.",
+              [
+                { text: 'Plus tard', style: 'cancel' },
+                { text: "Réessayer l'envoi", onPress: () => { runSelfieUploadRef.current?.(uri); } },
+              ],
+            );
           }
         }}
         onAskNotifications={async (jetonRecu) => {

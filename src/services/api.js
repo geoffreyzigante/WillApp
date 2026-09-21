@@ -138,6 +138,26 @@ export async function uploadSelfieToR2(uri, userId, runnerToken) {
   }
 }
 
+// Audit coureur 2 -- apiFetch LEVE sur panne reseau et sur 401 (session
+// expiree). follow / unfollow / deleteFaceData n attrapaient rien : la
+// rejection remontait jusqu a toggleFollow, qui n atteignait donc JAMAIS son
+// rollback — le coeur restait rempli alors que rien n etait parti, et le
+// wipe RGPD echouait sans un mot. On normalise en { status, error, network }
+// pour que les chemins de rollback deja ecrits se declenchent.
+//
+// status 0 = rien n a quitte le telephone (aucun statut HTTP). Le caller
+// peut ainsi distinguer « le serveur a refuse » de « le reseau est tombe ».
+function echecReseau(e) {
+  if (e?.name === 'AbortError') {
+    return { status: 0, network: true, aborted: true, error: 'Delai depasse. Reessaie.' };
+  }
+  return {
+    status: 0,
+    network: true,
+    error: e?.message || 'Connexion impossible. Verifie ton reseau.',
+  };
+}
+
 export const api = {
   async getEvents() {
     const r = await fetch(`${API_URL}/public-events`);
@@ -160,34 +180,46 @@ export const api = {
   // puis relance. Audit B14 : signature (eventCode, runnerApiFetch), le
   // fetcher injecte le Bearer.
   async follow(eventCode, runnerApiFetch) {
-    const r = await runnerApiFetch(`/runner/follow/${encodeURIComponent(eventCode)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ consent: true }),
-    });
-    if (r.ok) return r.json();
-    let error = '';
-    try { error = (await r.json())?.error || ''; } catch {}
-    return { status: r.status, error };
+    try {
+      const r = await runnerApiFetch(`/runner/follow/${encodeURIComponent(eventCode)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consent: true }),
+      });
+      if (r.ok) return r.json();
+      let error = '';
+      try { error = (await r.json())?.error || ''; } catch {}
+      return { status: r.status, error };
+    } catch (e) {
+      return echecReseau(e);
+    }
   },
   async unfollow(eventCode, runnerApiFetch) {
-    const r = await runnerApiFetch(`/runner/follow/${encodeURIComponent(eventCode)}`, {
-      method: 'DELETE',
-    });
-    if (r.ok) return r.json();
-    let error = '';
-    try { error = (await r.json())?.error || ''; } catch {}
-    return { status: r.status, error };
+    try {
+      const r = await runnerApiFetch(`/runner/follow/${encodeURIComponent(eventCode)}`, {
+        method: 'DELETE',
+      });
+      if (r.ok) return r.json();
+      let error = '';
+      try { error = (await r.json())?.error || ''; } catch {}
+      return { status: r.status, error };
+    } catch (e) {
+      return echecReseau(e);
+    }
   },
   // Wipe biometrique chirurgical : supprime selfie + empreintes sans toucher au compte.
   async deleteFaceData(runnerApiFetch) {
-    const r = await runnerApiFetch(`/runner/face-data`, {
-      method: 'DELETE',
-    });
-    if (r.ok) return r.json();
-    let error = '';
-    try { error = (await r.json())?.error || ''; } catch {}
-    return { status: r.status, error };
+    try {
+      const r = await runnerApiFetch(`/runner/face-data`, {
+        method: 'DELETE',
+      });
+      if (r.ok) return r.json();
+      let error = '';
+      try { error = (await r.json())?.error || ''; } catch {}
+      return { status: r.status, error };
+    } catch (e) {
+      return echecReseau(e);
+    }
   },
   // E2 -- enregistre le token Expo push cote worker.
   async registerPushToken(runnerToken, expoToken, platform) {

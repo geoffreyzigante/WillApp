@@ -264,7 +264,7 @@ export function BurgerMenuModal({
                   <Text style={styles.heroStatus} numberOfLines={2}>
                     {selfieOk
                       ? 'Selfie enregistré — on te reconnaît sur les photos'
-                      : 'Ajoute ton selfie pour recevoir tes photos'}
+                      : 'Dépose ton selfie : Will reconnaît ton visage'}
                   </Text>
                 </LinearGradient>
 

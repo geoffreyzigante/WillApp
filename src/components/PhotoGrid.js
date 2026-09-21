@@ -11,8 +11,8 @@
 //   alternatif avec pastille check). Utilisee dans les galeries de events
 //   et profile.
 
-import React, { useState, useRef } from 'react';
-import { View, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Dimensions } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import Svg, { Path } from 'react-native-svg';
 import { C } from '../constants/colors';
@@ -23,6 +23,13 @@ const { width: SCREEN_W } = Dimensions.get('window');
 
 export const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, showHeart, isFav, onToggleFav, favIndicator = false }) {
   const [errored, setErrored] = useState(false);
+  // Audit coureur 16 -- `errored` n etait jamais remis a false : une cellule
+  // recyclee sur une AUTRE photo gardait l icone cassee de la precedente, et
+  // une URL qui redevient joignable ne se rechargeait jamais. On repart d un
+  // etat propre a chaque changement de photo, et le tap relance le
+  // chargement (voir `essai` ci-dessous, qui change la cle de l image).
+  const [essai, setEssai] = useState(0);
+  useEffect(() => { setErrored(false); setEssai(0); }, [photo?.id, photo?.uri]);
   const cellRef = useRef(null);
   // size optionnel :
   //   - number  -> carre {width: n, height: n}
@@ -37,6 +44,9 @@ export const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, s
   // { x, y, w, h } de la thumb tapee et anime la photo viewer depuis cette
   // position vers le plein ecran.
   const handlePress = () => {
+    // Vignette en erreur : le tap ne doit pas ouvrir une photo qui ne
+    // s affichera pas, il doit reessayer de la charger.
+    if (errored) { setErrored(false); setEssai(n => n + 1); return; }
     if (!onPress) return;
     if (cellRef.current?.measureInWindow) {
       cellRef.current.measureInWindow((x, y, w, h) => onPress({ x, y, w, h }));
@@ -55,13 +65,14 @@ export const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, s
       <View style={{ flex: 1, borderRadius: 12, backgroundColor: C.primaryLight, overflow: 'hidden' }}>
         {!errored && (
           <ExpoImage
+            key={`img-${photo.id}-${essai}`}
             source={{ uri: photo.uri }}
             style={{ flex: 1 }}
             contentFit="cover"
             cachePolicy="memory-disk"
             priority="low"
             transition={150}
-            recyclingKey={photo.id}
+            recyclingKey={`${photo.id}-${essai}`}
             onError={(e) => {
               console.warn('[gallery] image load failed:', photo.uri, e?.error || e);
               setErrored(true);
@@ -69,10 +80,11 @@ export const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, s
           />
         )}
         {errored && (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 }}>
             <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
               <Path d="M3 16l5-5 4 4 3-3 6 6M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" stroke="#9ca3af" strokeWidth={1.5} />
             </Svg>
+            <Text style={{ color: '#9ca3af', fontSize: 9, fontFamily: 'Montserrat-SemiBold' }}>Recharger</Text>
           </View>
         )}
       </View>
@@ -172,7 +184,15 @@ export function PhotoGrid({ photos = [], onPress, photoFavoritesSet, onToggleFav
 // (caller recoit position absolute pour anime depuis cette thumb).
 export function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggleFavorite, selectionMode = false, selected = false, onToggleSelect, itemStyle }) {
   const itemRef = useRef(null);
+  // Audit coureur 16 -- cette cellule-ci n avait ni onError, ni marque
+  // visuelle, ni fond : une vignette qui ne chargeait pas laissait un trou
+  // blanc indistinguable d une photo claire, et rien ne permettait de
+  // reessayer. C est pourtant elle qui rend la grille de « Mes photos ».
+  const [errored, setErrored] = useState(false);
+  const [essai, setEssai] = useState(0);
+  useEffect(() => { setErrored(false); setEssai(0); }, [p?.id, p?.uri]);
   const handlePress = () => {
+    if (errored) { setErrored(false); setEssai(n => n + 1); return; }
     if (selectionMode) {
       onToggleSelect?.(p.id);
       return;
@@ -191,15 +211,35 @@ export function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggle
       activeOpacity={0.85}
       onPress={handlePress}
     >
-      <ExpoImage
-        source={{ uri: p.uri }}
-        style={s.gridImg}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        priority="low"
-        transition={100}
-        recyclingKey={p.id}
-      />
+      {/* Fond permanent : il tient la place pendant le chargement et reste
+          visible derriere la marque d erreur. */}
+      <View pointerEvents="none" style={{
+        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+        borderRadius: 12, backgroundColor: C.primaryLight,
+      }} />
+      {!errored ? (
+        <ExpoImage
+          key={`img-${p.id}-${essai}`}
+          source={{ uri: p.uri }}
+          style={s.gridImg}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          priority="low"
+          transition={100}
+          recyclingKey={`${p.id}-${essai}`}
+          onError={(e) => {
+            console.warn('[grid] image load failed:', p.uri, e?.error || e);
+            setErrored(true);
+          }}
+        />
+      ) : (
+        <View style={[s.gridImg, { alignItems: 'center', justifyContent: 'center', gap: 4 }]}>
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Path d="M3 16l5-5 4 4 3-3 6 6M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" stroke="#9ca3af" strokeWidth={1.5} />
+          </Svg>
+          <Text style={{ color: '#9ca3af', fontSize: 9, fontFamily: 'Montserrat-SemiBold' }}>Recharger</Text>
+        </View>
+      )}
       {/* Etoile favori : indicateur READ-ONLY uniquement pour les photos deja
           mises en favori. Le favoriting se fait uniquement depuis le viewer
           (meme logique que la galerie publique, decision UX 2026-06-03). */}

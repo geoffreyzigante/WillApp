@@ -23,6 +23,10 @@ import { Icon } from '../Icon';
 import { API_URL } from '../../constants/api';
 import { passwordStrength } from '../../utils/passwordStrength';
 import { Secure, BIOMETRIC_CONSENT_KEY } from '../../services/secureStore';
+import {
+  TexteConsentBiometrique, LABEL_CASE_CONSENT, URL_CONFIDENTIALITE,
+  LIEN_CONFIDENTIALITE_LABEL, PHRASE_SELFIE_AVANT_COURSE,
+} from '../TexteConsentBiometrique';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SelfieCameraModal } from './SelfieCameraModal';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -171,11 +175,30 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
     setSessionApple(null);
     setAppleEnAttente(null);
     setConsentChecked(false);
-    Secure.getItem(BIOMETRIC_CONSENT_KEY).then(v => setConsentGiven(!!v)).catch(() => setConsentGiven(false));
     AsyncStorage.getItem('@will_last_email_runner').then(v => {
       if (v) setEmail(prev => prev || v);
     }).catch(() => {});
   }, [visible, initialMode]);
+
+  // Audit coureur 6 -- le consentement biometrique est un acte de COMPTE, pas
+  // d appareil. La cle etait stockee par telephone et n etait pas effacee a
+  // la deconnexion : un deuxieme utilisateur qui creait son compte sur le
+  // meme telephone ne voyait ni le texte, ni la case, ni le lien vers la
+  // politique de confidentialite. Deux verrous, complementaires :
+  //   - ici : en mode inscription, on IGNORE la cle. Un compte qui n existe
+  //     pas encore n a jamais consenti, quoi qu il y ait sur l appareil.
+  //   - App.js logoutRunner : la cle est effacee a la deconnexion, comme
+  //     elle l est deja a la suppression du selfie, des donnees faciales et
+  //     du compte.
+  useEffect(() => {
+    if (!visible) return;
+    if (mode === 'register') {
+      setConsentGiven(false);
+      setConsentChecked(false);
+      return;
+    }
+    Secure.getItem(BIOMETRIC_CONSENT_KEY).then(v => setConsentGiven(!!v)).catch(() => setConsentGiven(false));
+  }, [visible, mode]);
 
   const reset = () => {
     setEmail(''); setPassword(''); setFirstName(''); setLastName('');
@@ -750,18 +773,14 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                 <Text style={{ fontSize: 12, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.1, textTransform: 'uppercase', color: T.textMuted, marginBottom: 8 }}>
                   Étape 1 sur 2 — Ton selfie
                 </Text>
-                <Text style={{ fontFamily: 'Montserrat', color: T.textBody, fontSize: 13.5, lineHeight: 19, marginBottom: 14 }}>
-                  Pour t'envoyer automatiquement tes photos d'event, Will utilise ton selfie comme référence biométrique. L'image et l'empreinte faciale générée par AWS Rekognition sont chiffrées, stockées sur des serveurs européens (eu-west-1 Francfort).{'\n\n'}
-                  Ton consentement est valable <Text style={{ fontFamily: 'Montserrat-SemiBold' }}>12 mois renouvelables</Text>. Tu recevras un rappel à J-30 et J-7 avant l'échéance. Sans renouvellement, ton selfie est automatiquement supprimé.{'\n\n'}
-                  Tu peux retirer ton consentement à tout moment depuis ton profil.
-                </Text>
+                <TexteConsentBiometrique style={{ fontFamily: 'Montserrat', color: T.textBody, fontSize: 13.5, lineHeight: 19, marginBottom: 14 }} />
                 <TouchableOpacity
-                  onPress={() => Linking.openURL('https://will-app.com/privacy').catch(() => {})}
+                  onPress={() => Linking.openURL(URL_CONFIDENTIALITE).catch(() => {})}
                   style={{ marginBottom: 16, alignSelf: 'flex-start' }}
                   hitSlop={10}
                 >
                   <Text style={{ color: T.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold', textDecorationLine: 'underline' }}>
-                    Lire la Politique de confidentialité
+                    {LIEN_CONFIDENTIALITE_LABEL}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -773,7 +792,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                     {consentChecked && <CheckIcon />}
                   </View>
                   <Text style={[checkboxStyles.text, { marginLeft: 12 }]}>
-                    J'accepte le traitement biométrique de mon image (RGPD art. 9) pour la reconnaissance faciale sur les events Will, pendant 12 mois renouvelables.
+                    {LABEL_CASE_CONSENT}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -803,8 +822,14 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                     ? `${info} Un selfie, quelques infos, et c'est fait.`
                     : "C'est lui qui te retrouvera sur les photos : Will reconnaît ton visage sur les events."}
                 </Text>
-                <Text style={{ color: T.textMuted, fontFamily: 'Montserrat', fontSize: 12, lineHeight: 17, textAlign: 'center', marginBottom: 22 }}>
+                <Text style={{ color: T.textMuted, fontFamily: 'Montserrat', fontSize: 12, lineHeight: 17, textAlign: 'center', marginBottom: 10 }}>
                   Image chiffrée, serveurs européens,{'\n'}consentement valable 12 mois.
+                </Text>
+                {/* Audit coureur 13 -- decision produit : les photos deja
+                    analysees ne sont pas repassees en reconnaissance quand un
+                    selfie arrive apres coup. Le dire ici, une fois. */}
+                <Text style={{ color: T.textMuted, fontFamily: 'Montserrat', fontSize: 12, lineHeight: 17, textAlign: 'center', marginBottom: 22, paddingHorizontal: 6 }}>
+                  {PHRASE_SELFIE_AVANT_COURSE}
                 </Text>
                 <View style={{ alignItems: 'center', marginBottom: 26 }}>
                   {/* Prise de vue en direct uniquement : autoriser la galerie

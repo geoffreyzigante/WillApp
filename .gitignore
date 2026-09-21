@@ -50,3 +50,8 @@ AUDIT.md
 
 # Dossiers de travail locaux
 _to_delete/
+
+# Maquettes et comparatifs produits pendant les sessions de travail :
+# a lire, pas a embarquer dans l'app (cf incident site du 2026-09-21, ou
+# git add -A avait publie 17 pages HTML de brouillon sur Pages).
+Claude outputs/

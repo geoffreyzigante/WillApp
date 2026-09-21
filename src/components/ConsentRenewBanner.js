@@ -43,7 +43,7 @@ export function ConsentRenewBanner({ runnerApiFetch, isAuthed }) {
   const handleRenew = () => {
     Alert.alert(
       'Renouveler ton consentement ?',
-      'Ton consentement biometrique sera renouvele pour 12 mois supplementaires. Aucun nouveau selfie n est necessaire.',
+      'Ton consentement biométrique sera renouvelé pour 12 mois supplémentaires. Aucun nouveau selfie n\'est nécessaire.',
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -53,12 +53,12 @@ export function ConsentRenewBanner({ runnerApiFetch, isAuthed }) {
             try {
               const r = await runnerApiFetch('/selfie/renew', { method: 'POST' });
               if (r?.ok) {
-                Alert.alert('Renouvele', 'Ton consentement est valable 12 mois de plus.');
+                Alert.alert('Renouvelé', 'Ton consentement est valable 12 mois de plus.');
                 await fetchStatus();
               } else {
                 let msg = '';
                 try { msg = (await r.json())?.message || ''; } catch {}
-                Alert.alert('Erreur', msg || 'Renouvellement impossible. Reessaie.');
+                Alert.alert('Erreur', msg || 'Renouvellement impossible. Réessaie.');
               }
             } finally { setBusy(false); }
           },
@@ -76,11 +76,11 @@ export function ConsentRenewBanner({ runnerApiFetch, isAuthed }) {
     }}>
       <View style={{ flex: 1 }}>
         <Text style={{ fontFamily: 'Montserrat-Bold', color: isUrgent ? '#7A1F1F' : '#7A4F00', fontSize: 13 }}>
-          {isUrgent ? 'Renouvelle ton consentement' : 'Consentement bientot expire'}
+          {isUrgent ? 'Renouvelle ton consentement' : 'Consentement bientôt expiré'}
         </Text>
         <Text style={{ fontFamily: 'Montserrat', color: isUrgent ? '#7A1F1F' : '#7A4F00', fontSize: 12, marginTop: 2, lineHeight: 16 }}>
           {isUrgent
-            ? `Plus que ${daysLabel}. Sans renouvellement, ton selfie sera supprime et la reconnaissance s arretera.`
+            ? `Plus que ${daysLabel}. Sans renouvellement, ton selfie sera supprimé et la reconnaissance s'arrêtera.`
             : `Ton consentement Will expire dans ${daysLabel}. Renouvelle en 1 tap.`}
         </Text>
       </View>

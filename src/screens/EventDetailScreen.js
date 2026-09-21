@@ -146,6 +146,11 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   const kmIndicatorInitRef = useRef(false);
   const kmRowAnim = useRef(new Animated.Value(0)).current;
   const [showUnfollowConfirm, setShowUnfollowConfirm] = useState(false);
+  // Audit coureur 5 -- loadPhotos avalait TOUTE erreur en liste vide, et la
+  // liste vide s affichait « Reviens le jour de l event ». Une panne reseau
+  // sur une course deja courue racontait donc au coureur que sa course
+  // n avait pas encore eu lieu. Troisieme etat, distinct des deux autres.
+  const [erreurChargement, setErreurChargement] = useState(false);
   const tint = colorForType(event.event_type);
   const upcoming = isUpcoming(event.event_date, event.event_date_end);
 
@@ -165,9 +170,21 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
 
   const loadPhotos = useCallback(async () => {
     setLoading(true);
+    setErreurChargement(false);
+    // Audit coureur 3 -- delai maximal : sans lui, un reseau qui accepte la
+    // connexion sans repondre laissait la fiche event en chargement sans fin.
+    let ctrl = null; let minuteur = null;
     try {
-      const r = await fetch(`${API_URL}/list-public/${event.code}`);
-      const data = r.ok ? await r.json() : { photos: [] };
+      ctrl = new AbortController();
+      minuteur = setTimeout(() => { try { ctrl.abort(); } catch {} }, 15000);
+    } catch {}
+    try {
+      const r = await fetch(`${API_URL}/list-public/${event.code}`, ctrl ? { signal: ctrl.signal } : undefined);
+      if (!r.ok) {
+        setErreurChargement(true);
+        return;
+      }
+      const data = await r.json();
       const list = (data.photos || []).map(p => {
         const parts = (p.key || '').split('/');
         const photographerId = parts.length >= 2 ? parts[1] : null;
@@ -191,9 +208,12 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         return extractIdx(b.id) - extractIdx(a.id);
       });
       setPhotos(list);
-    } catch {
-      setPhotos([]);
+    } catch (e) {
+      // On NE vide PAS la liste : si des photos etaient deja affichees, les
+      // remplacer par un etat vide serait un second mensonge.
+      setErreurChargement(true);
     } finally {
+      if (minuteur) clearTimeout(minuteur);
       setLoading(false);
     }
   }, [event.code, tint]);
@@ -408,21 +428,33 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           </View>
         </View>
 
+        {/* Audit coureur 14 -- le coeur etait une icone muette pour un acte
+            de consentement : personne ne pouvait deviner qu il declenchait
+            les notifications d un event. Il porte desormais son libelle sur
+            la fiche event. Et le retrait passe par la modale de confirmation
+            ecrite pour ca (« Ne plus suivre cet event ? »), qui etait du code
+            mort : setShowUnfollowConfirm n etait appele nulle part. */}
         {onToggleFollow && (
           <TouchableOpacity
-            onPress={onToggleFollow}
+            onPress={() => { if (isFollowing) setShowUnfollowConfirm(true); else onToggleFollow(); }}
             hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={isFollowing ? 'Ne plus suivre cet event' : 'Suivre cet event pour être notifié'}
             style={{
               position: 'absolute', top: 6, right: 6,
-              width: 40, height: 40,
-              alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'row', alignItems: 'center', gap: 6,
+              paddingHorizontal: 12, height: 34, borderRadius: 999,
+              backgroundColor: 'rgba(0,0,0,0.28)',
               zIndex: 10,
             }}
           >
-            <Svg width={22} height={20} viewBox="-1 -1.5 22.78 20.61"
+            <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61"
               fill={isFollowing ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}>
               <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
             </Svg>
+            <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
+              {isFollowing ? 'Suivi' : 'Suivre'}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -636,7 +668,25 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         </View>
       )}
 
-      {upcoming && photos.length === 0 && !loading ? (
+      {erreurChargement && photos.length === 0 && !loading ? (
+        <View style={{ paddingVertical: 34, paddingHorizontal: 24, alignItems: 'center' }}>
+          <Text style={{ color: '#C9B6FF', fontSize: 18, lineHeight: 22, fontFamily: 'AVEstiana-Bold', textAlign: 'center' }}>
+            Impossible de charger les photos
+          </Text>
+          <Text style={{ color: C.text, fontSize: 12, fontFamily: 'Montserrat-Medium', textAlign: 'center', marginTop: 6, lineHeight: 17 }}>
+            {upcoming
+              ? "Vérifie ta connexion. Cette course n'a pas encore eu lieu : il est normal qu'il n'y ait pas encore de photos."
+              : 'Vérifie ta connexion : les photos de cette course existent peut-être déjà.'}
+          </Text>
+          <TouchableOpacity
+            onPress={loadPhotos}
+            activeOpacity={0.85}
+            style={{ marginTop: 14, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 999, backgroundColor: C.primary }}
+          >
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      ) : upcoming && photos.length === 0 && !loading ? (
         <EtatVidePhotos />
       ) : (
         <>
@@ -729,6 +779,8 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
 
   const renderListEmpty = () => {
     if (showEmptyMessage) return null;
+    // Le bandeau d erreur est deja rendu en tete : pas deux fois.
+    if (erreurChargement) return null;
     if (upcoming) return null;
     if (loading) {
       return (
@@ -739,7 +791,9 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         </View>
       );
     }
-    return <EtatVidePhotos />;
+    // Une course deja courue qui n a recu aucune photo ne doit pas lire
+    // « Reviens le jour de l event » : ce jour est passe.
+    return <EtatVidePhotos sousTexte="Aucun photographe n'a encore envoyé de photo pour cette course." />;
   };
 
   const renderFooter = () => {
@@ -942,7 +996,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                 Aucune photo en favoris pour cet event.
               </Text>
             </View>
-          ) : ((loading || upcoming) && visiblePhotos.length === 0 ? renderListEmpty() : renderChunks())}
+          ) : ((loading || upcoming || photos.length === 0) && visiblePhotos.length === 0 ? renderListEmpty() : renderChunks())}
         {bibQuery.trim().length === 0 && renderFooter()}
       </ScrollView>
 
@@ -974,7 +1028,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
               fontSize: 11, color: C.textSoft, lineHeight: 15,
               marginBottom: 20, textAlign: 'center',
             }}>
-              Ta reconnaissance faciale globale n'est pas affectée — tu restes reconnaissable sur les autres events Will que tu suis. Pour la retirer, utilise « Supprimer mon selfie » dans ton profil.
+              Ta reconnaissance faciale n'est pas affectée — Will continue de te reconnaître sur les autres events. Pour l'arrêter partout, utilise « Effacer mon empreinte faciale » dans ton profil.
             </Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity

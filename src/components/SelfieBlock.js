@@ -3,7 +3,7 @@
 //   - selfieUri present  -> banniere "Selfie enregistre" + bouton delete +
 //                            etats uploadState 'failed' / 'uploading' / 'idle'
 //   - selfieUri absent + missing=true  -> CTA renforce orange ("Selfie manquant")
-//   - default            -> CTA gradient violet "Un selfie suffit"
+//   - default            -> CTA gradient violet "Tes photos, sans avoir a les chercher"
 
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
@@ -73,7 +73,7 @@ export function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, upl
                 Selfie manquant
               </Text>
               <Text style={[s.selfieSub, { marginTop: 0, fontSize: 13, lineHeight: 17 }]}>
-                Prends ton selfie pour récupérer tes photos
+                Un selfie avant le départ, et Will reconnaît ton visage
               </Text>
             </View>
           </View>
@@ -88,8 +88,8 @@ export function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, upl
     <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
       <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
         <View style={{ flex: 1 }}>
-          <Text style={s.selfieTitle}>Un selfie suffit</Text>
-          <Text style={s.selfieSub}>Un selfie suffit pour recevoir tes photos automatiquement sur tous tes events Will.</Text>
+          <Text style={s.selfieTitle}>Tes photos, sans avoir à les chercher</Text>
+          <Text style={s.selfieSub}>Un selfie avant le départ, et Will reconnaît ton visage sur tous tes events.</Text>
         </View>
         <View style={[s.selfieAvatar, { backgroundColor: 'transparent' }]}>
           {/* Icone ScanCoeur (source ~/WILL/ScanCoeur.svg) : cadres FaceID

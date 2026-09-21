@@ -450,13 +450,31 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                   {/* Actions irreversibles, groupees et annoncees comme
                       telles : dispersees dans la page et soulignees, elles
                       criaient plus fort que le reste. */}
+                  {/* Audit coureur 9 -- trois actions rouges dont deux
+                      indiscernables. Elles ne font pas la meme chose cote
+                      serveur : DELETE /runner/selfie retire la photo de
+                      reference, DELETE /runner/face-data retire la photo ET
+                      l empreinte faciale enregistree sur tous les events.
+                      « Effacer mon empreinte faciale » est desormais la
+                      SEULE formulation pour ce geste-la, ici comme dans les
+                      alertes de confirmation. */}
                   <View style={[drawer.section, { borderBottomWidth: 0 }]}>
                     <Text style={drawer.secLabel}>Zone sensible</Text>
                     {selfieUri ? (
                       <Action label="Supprimer mon selfie" ton="danger" onPress={onDelete} />
                     ) : null}
+                    {selfieUri ? (
+                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, lineHeight: 15, marginTop: -4, marginBottom: 10 }}>
+                        Retire ta photo de référence. Will arrête de te reconnaître sur les nouvelles photos.
+                      </Text>
+                    ) : null}
                     {onDeleteFaceData ? (
-                      <Action label="Supprimer mes données faciales" ton="danger" onPress={onDeleteFaceData} />
+                      <Action label="Effacer mon empreinte faciale" ton="danger" onPress={onDeleteFaceData} />
+                    ) : null}
+                    {onDeleteFaceData ? (
+                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, lineHeight: 15, marginTop: -4, marginBottom: 10 }}>
+                        Efface aussi l'empreinte déjà enregistrée sur tous les events. Définitif.
+                      </Text>
                     ) : null}
                     {onDeleteAccount ? (
                       <Action label="Supprimer mon compte" ton="danger" onPress={onDeleteAccount} dernier />

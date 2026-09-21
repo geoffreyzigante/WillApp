@@ -25,6 +25,10 @@ import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
 import { s } from '../../constants/styles';
 import { Secure, BIOMETRIC_CONSENT_KEY } from '../../services/secureStore';
+import {
+  TexteConsentBiometrique, LABEL_CASE_CONSENT, URL_CONFIDENTIALITE,
+  LIEN_CONFIDENTIALITE_LABEL, PHRASE_SELFIE_AVANT_COURSE,
+} from '../TexteConsentBiometrique';
 import { SelfieCameraModal } from './SelfieCameraModal';
 
 export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = false, onSkip }) {
@@ -94,18 +98,14 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
           {consentGiven === false ? (
             <>
               <Text style={[s.modalTitle, selfie.titre]}>Reconnaissance faciale</Text>
-              <Text style={[s.modalSub, selfie.texte, { textAlign: 'left' }]}>
-                Pour t'envoyer automatiquement tes photos d'event, Will utilise ton selfie comme référence biométrique. L'image et l'empreinte faciale générée par AWS Rekognition sont chiffrées, stockées sur des serveurs européens (eu-west-1 Francfort).{'\n\n'}
-                Ton consentement est valable <Text style={{ fontFamily: 'Montserrat-SemiBold' }}>12 mois renouvelables</Text>. Tu recevras un rappel à J-30 et J-7 avant l'échéance. Sans renouvellement, ton selfie est automatiquement supprimé.{'\n\n'}
-                Tu peux retirer ton consentement à tout moment depuis ton profil.
-              </Text>
+              <TexteConsentBiometrique style={[s.modalSub, selfie.texte, { textAlign: 'left' }]} />
               <TouchableOpacity
-                onPress={() => Linking.openURL('https://will-app.com/privacy').catch(() => {})}
+                onPress={() => Linking.openURL(URL_CONFIDENTIALITE).catch(() => {})}
                 style={{ marginBottom: 16, alignSelf: 'flex-start' }}
                 hitSlop={10}
               >
                 <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold', textDecorationLine: 'underline' }}>
-                  Lire la Politique de confidentialité
+                  {LIEN_CONFIDENTIALITE_LABEL}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -126,7 +126,7 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
                   ) : null}
                 </View>
                 <Text style={{ fontFamily: 'Montserrat', flex: 1, color: C.text, fontSize: 14, lineHeight: 19 }}>
-                  J'accepte le traitement biométrique de mon image (RGPD art. 9) pour la reconnaissance faciale sur les events Will, pendant 12 mois renouvelables.
+                  {LABEL_CASE_CONSENT}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -175,6 +175,13 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
                   la galerie reviendrait a laisser n importe qui enregistrer
                   le visage d un autre. C est la seule barriere qui rattache
                   le compte a la personne. */}
+              {/* Audit coureur 13 -- le rattrapage des selfies deposes apres
+                  coup ne sera pas implemente (cout reconnaissance faciale).
+                  On le dit ici, une fois, sans dramatiser. */}
+              <Text style={[selfie.texte, { marginTop: 10, marginBottom: 12, fontSize: 12.5, lineHeight: 17 }]}>
+                {PHRASE_SELFIE_AVANT_COURSE}
+              </Text>
+
               <TouchableOpacity style={selfie.pastille} onPress={take} activeOpacity={0.8}>
                 <Text style={selfie.pastilleTexte}>Prendre une photo</Text>
               </TouchableOpacity>

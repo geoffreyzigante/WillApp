@@ -41,7 +41,19 @@ import { API_URL } from '../constants/api';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
 
-export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerApiFetch, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, onRefreshFavorites, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload, headerH = 0, onNonVuesChange }) {
+// Audit coureur 3 -- delai maximal sur le parcours coureur. Aucun appel ne
+// pouvait echouer autrement qu en restant suspendu : sur un reseau qui
+// accepte la connexion sans jamais repondre (hotspot de salle, 3G de fin de
+// course), l ecran tournait indefiniment.
+const DELAI_MAX_MS = 15000;
+// Audit coureur 3 -- fraicheur : la route des events connus renvoie desormais
+// TOUS les events publics actifs, et on lancait un /personal-gallery PAR
+// event, en parallele, a chaque montage. Chacun declenche un scan R2 cote
+// serveur. On ne relance donc plus tout si les donnees datent de moins de
+// deux minutes ; le tirer-pour-rafraichir force, lui, toujours.
+const FRAICHEUR_MS = 120000;
+
+export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerApiFetch, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, onRefreshFavorites, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload, headerH = 0, onNonVuesChange, refreshSignal = 0 }) {
   const scrollRef = useRef(null);
   const [showBackTop, setShowBackTop] = useState(false);
   const backTopOpacity = useRef(new Animated.Value(0)).current;
@@ -68,6 +80,13 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     for (const c of knownEvents) set.add(c);
     return [...set];
   }, [follows, knownEvents]);
+  // Audit coureur 3 -- refreshAll dependait du TABLEAU : une nouvelle
+  // identite a chaque rendu de follows/knownEvents relancait un appel de
+  // galerie par event. Il depend maintenant de la cle textuelle, et lit la
+  // liste par reference.
+  const eventsKey = eventsToQuery.join(',');
+  const eventsToQueryRef = useRef(eventsToQuery);
+  eventsToQueryRef.current = eventsToQuery;
   const hasFollows = eventsToQuery.length > 0;
   const [photos, setPhotos] = useState([]);
   const [anySearching, setAnySearching] = useState(false);
@@ -75,9 +94,21 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
   const [refreshing, setRefreshing] = useState(false);
   const [visibleCount, setVisibleCount] = useState(30);
 
+  // Audit coureur 3 -- un echec de chargement etait avale en liste vide.
+  // 'timeout' = le serveur n a pas repondu dans les 15 s ; 'reseau' = aucune
+  // des requetes n est partie.
+  const [erreurChargement, setErreurChargement] = useState(null);
+  const derniereMajRef = useRef(0);
+  const photosRef = useRef([]);
+  const controleurRef = useRef(null);
+
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [downloading, setDownloading] = useState(false);
+  // Audit coureur 15 -- progression / annulation / reprise des echecs.
+  const [dlAvancement, setDlAvancement] = useState(null); // { fait, total }
+  const [dlEchecs, setDlEchecs] = useState([]);
+  const dlAnnuleRef = useRef(false);
   const [viewFilter, setViewFilter] = useState('me');
   const VIEW_KEYS = ['me', 'favs', 'all'];
   const viewIdx = Math.max(0, VIEW_KEYS.indexOf(viewFilter));
@@ -147,12 +178,26 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     }));
   }, [vignettes, visiblePhotos]);
 
+  useEffect(() => { photosRef.current = photos; }, [photos]);
+
   const meCount = useMemo(() => photos.filter(p => p._isPersonalMatch).length, [photos]);
   const favCount = useMemo(() => (
     photoFavoritesSet ? photos.filter(p => photoFavoritesSet.has(p.id)).length : 0
   ), [photos, photoFavoritesSet]);
 
+  // Audit coureur 3 -- un signal d abandon arme a 15 s. Chaque appel du
+  // parcours coureur en recoit un : sans lui, un serveur qui accepte la
+  // connexion sans repondre laissait l ecran tourner sans fin.
+  const signalAvecDelai = useCallback(() => {
+    try {
+      const ctrl = new AbortController();
+      setTimeout(() => { try { ctrl.abort(); } catch {} }, DELAI_MAX_MS);
+      return ctrl.signal;
+    } catch { return undefined; }
+  }, []);
+
   const togglePhotoSelect = useCallback((id) => {
+    setDlEchecs([]);
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -162,6 +207,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
   const exitSelection = useCallback(() => {
     setSelectionMode(false);
     setSelectedIds(new Set());
+    setDlEchecs([]);
   }, []);
   useEffect(() => { if (!isActive) exitSelection(); }, [isActive, exitSelection]);
 
@@ -232,11 +278,16 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
   const refreshKnownEvents = useCallback(async () => {
     if (!runnerApiFetch) return [];
     try {
-      const r = await runnerApiFetch(`/runner/known-events`);
+      const r = await runnerApiFetch(`/runner/known-events`, { signal: signalAvecDelai() });
       if (!r.ok) return [];
       const data = await r.json();
       const list = Array.isArray(data?.events) ? data.events : [];
-      setKnownEvents(list);
+      // Identite conservee si la liste n a pas bouge : sinon eventsToQuery
+      // changeait a chaque tirer-pour-rafraichir et declenchait un SECOND
+      // tour complet d appels de galerie, tous les events compris.
+      setKnownEvents((prev) => (
+        prev.length === list.length && prev.every((c, i) => c === list[i]) ? prev : list
+      ));
       if (knownEventsCacheKey) {
         AsyncStorage.setItem(knownEventsCacheKey, JSON.stringify(list)).catch(() => {});
       }
@@ -255,8 +306,18 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
   const tintRef = useRef(eventTintMap);
   useEffect(() => { tintRef.current = eventTintMap; }, [eventTintMap]);
 
-  const refreshAll = useCallback(async () => {
-    const queryList = eventsToQuery;
+  const refreshAll = useCallback(async (options = {}) => {
+    const force = options.force === true;
+    const queryList = eventsToQueryRef.current;
+    // Audit coureur 3 -- garde de fraicheur : un remontage (retour de
+    // l onglet, arrivee des events connus, changement de favoris) relancait
+    // un /personal-gallery par event, donc autant de scans R2. Si on a deja
+    // des photos de moins de deux minutes, on ne redemande rien.
+    if (!force && photosRef.current.length > 0
+        && Date.now() - derniereMajRef.current < FRAICHEUR_MS) {
+      setLoading(false);
+      return photosRef.current;
+    }
     if (queryList.length === 0 || !runnerApiFetch) {
       // Si pas d events suivis mais des favs : aller chercher les events
       // depuis les favs pour ne pas afficher empty alors qu il y a des favs.
@@ -295,11 +356,22 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     //    leurs URLs, meme si masques par face-gate/time-gate dans list-public.
     //    Indispensable pour afficher les favs qui pointent vers des photos
     //    non-visibles publiquement (l user les a fav, il y a droit).
+    // Un seul controleur pour toute la passe : le delai maximal vaut pour
+    // l ensemble, pas pour chaque requete prise isolement.
+    let controleur = null;
+    let minuteur = null;
+    try {
+      controleur = new AbortController();
+      minuteur = setTimeout(() => { try { controleur.abort(); } catch {} }, DELAI_MAX_MS);
+    } catch {}
+    controleurRef.current = controleur;
+    const signal = controleur ? controleur.signal : undefined;
+    let echecs = 0;
     const [results, favFullResp] = await Promise.all([
       Promise.all(queryList.map(async (code) => {
         try {
-          const r = await runnerApiFetch(`/personal-gallery/${encodeURIComponent(code)}`);
-          if (!r.ok) return { code, photos: [], paid: false };
+          const r = await runnerApiFetch(`/personal-gallery/${encodeURIComponent(code)}`, { signal });
+          if (!r.ok) return { code, photos: [], paid: false, echec: true };
           const data = await r.json();
           return {
             code,
@@ -315,17 +387,32 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
               type: data.event_type || null,
             },
           };
-        } catch { return { code, photos: [], paid: false, ev: null }; }
+        } catch (e) { echecs += 1; return { code, photos: [], paid: false, ev: null, echec: true }; }
       })),
       (async () => {
         try {
-          const r = await runnerApiFetch('/runner/photo-favorites-full');
+          const r = await runnerApiFetch('/runner/photo-favorites-full', { signal });
           if (!r.ok) return [];
           const d = await r.json();
           return Array.isArray(d?.photos) ? d.photos : [];
         } catch { return []; }
       })(),
     ]);
+    if (minuteur) clearTimeout(minuteur);
+    // Delai depasse, ou aucune requete n a abouti : on NE remplace PAS les
+    // photos deja affichees par une liste vide (c est ce qui produisait le
+    // faux « pas encore de photos »). On affiche un bandeau reessayable.
+    if (controleur && controleur.signal.aborted) {
+      setLoading(false);
+      setErreurChargement('timeout');
+      return photosRef.current;
+    }
+    if (queryList.length > 0 && echecs >= queryList.length) {
+      setLoading(false);
+      setErreurChargement('reseau');
+      return photosRef.current;
+    }
+    setErreurChargement(null);
     const now = Date.now();
     const merged = [];
     const seenIds = new Set();
@@ -386,6 +473,8 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       return extractIdx(b.id) - extractIdx(a.id);
     });
     seuilNouvellesRef.current = lastSeenRef.current;
+    derniereMajRef.current = Date.now();
+    photosRef.current = merged;
     setPhotos(merged);
     setAnySearching(searching);
     setLoading(false);
@@ -404,7 +493,10 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       ExpoImage.prefetch(aPrechauffer, 'memory-disk').catch(() => {});
     }
     return merged;
-  }, [eventsToQuery, runnerApiFetch, photosCacheKey]);
+  }, [eventsKey, runnerApiFetch, photosCacheKey]);
+
+  // Libere le controleur en cours si l ecran disparait.
+  useEffect(() => () => { try { controleurRef.current?.abort(); } catch {} }, []);
 
   // Supprime : on telechargeait la galerie publique COMPLETE de chaque event
   // ayant au moins un favori, pour n en garder que les quelques photos
@@ -448,6 +540,14 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
 
   useEffect(() => { refreshAll(); }, [refreshAll]);
 
+  // Une notification « nouvelles photos » passe outre la garde de fraicheur :
+  // c est le serveur qui vient de dire qu il y a du neuf.
+  const premierSignalRef = useRef(true);
+  useEffect(() => {
+    if (premierSignalRef.current) { premierSignalRef.current = false; return; }
+    refreshAll({ force: true });
+  }, [refreshSignal]);
+
   // Resolution anticipee : au chargement des photos, on va chercher les
   // events dont on n a ni le nom (worker ancien) ni la fiche publique, pour
   // que l entete soit deja prete a la premiere ouverture.
@@ -475,7 +575,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       const delai = Math.min(12000 + essais * 6000, 40000);
       minuteur = setTimeout(async () => {
         essais += 1;
-        await refreshAll();
+        await refreshAll({ force: true });
         planifier();
       }, delai);
     };
@@ -509,7 +609,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       refreshKnownEvents(),
       onRefreshFavorites?.(),
     ]);
-    const merged = await refreshAll();
+    const merged = await refreshAll({ force: true });
     setRefreshing(false);
 
     if (!lastSeenLoadedRef.current) {
@@ -548,8 +648,16 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     }, 2000);
   }, [refreshAll, refreshKnownEvents, onRefreshFavorites, titleOpacity, toastOpacity]);
 
-  const downloadSelected = useCallback(async () => {
-    if (selectedIds.size === 0 || downloading) return;
+  // Audit coureur 15 -- la boucle etait serie, muette et sans sortie : 40
+  // photos, aucun compteur, aucun moyen d arreter, et un « 12 echecs » final
+  // qui obligeait a tout reselectionner. `idsVoulus` permet la reprise des
+  // seuls echecs.
+  const downloadSelected = useCallback(async (idsVoulus) => {
+    const liste = Array.isArray(idsVoulus) ? idsVoulus : [...selectedIds];
+    if (liste.length === 0 || downloading) return;
+    dlAnnuleRef.current = false;
+    setDlEchecs([]);
+    setDlAvancement({ fait: 0, total: liste.length });
     setDownloading(true);
     try {
       const perm = await MediaLibrary.requestPermissionsAsync(true);
@@ -564,9 +672,13 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       }
       let saved = 0, failed = 0;
       let i = 0;
-      for (const id of selectedIds) {
+      const echecs = [];
+      let annule = false;
+      for (const id of liste) {
+        if (dlAnnuleRef.current) { annule = true; break; }
+        setDlAvancement({ fait: i, total: liste.length });
         const photo = photos.find(p => p.id === id);
-        if (!photo?.uri) { failed++; continue; }
+        if (!photo?.uri) { failed++; echecs.push(id); i++; continue; }
         let staged = null;
         try {
           const ext = await detectPhotoExtension(photo.uri);
@@ -582,24 +694,40 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           saved++;
         } catch (e) {
           failed++;
+          echecs.push(id);
           console.warn('[multi-download]', id, e?.message || e);
         } finally {
           try { if (staged?.exists) staged.delete(); } catch {}
           i++;
+          setDlAvancement({ fait: i, total: liste.length });
         }
       }
+      setDlEchecs(echecs);
       const savedMsg = saved === 1 ? '1 photo' : `${saved} photos`;
       const failedSuffix = failed > 0 ? ` (${failed} échec${failed > 1 ? 's' : ''})` : '';
+      if (annule) {
+        Alert.alert(
+          'Téléchargement arrêté',
+          saved > 0
+            ? `${savedMsg} déjà enregistrée${saved > 1 ? 's' : ''} dans ta pellicule. Les autres n'ont pas été téléchargées.`
+            : "Aucune photo n'a été enregistrée.",
+        );
+        return;
+      }
       Alert.alert(
         saved > 0 ? 'Enregistré' : 'Erreur',
         saved > 0
           ? `${savedMsg} dans ta pellicule${failedSuffix}.`
-          : 'Aucune photo n a pu etre sauvegardee. Verifie ta connexion et reessaie.'
+          : "Aucune photo n'a pu être enregistrée. Vérifie ta connexion et réessaie.",
       );
-      if (saved > 0) exitSelection();
+      // On ne sort du mode selection que si TOUT est passe : sinon le bouton
+      // « Reessayer les N echecs » n aurait plus rien sur quoi s appuyer.
+      if (saved > 0 && echecs.length === 0) exitSelection();
     } catch (e) {
       Alert.alert('Erreur', e?.message || 'Impossible de télécharger les photos.');
     } finally {
+      dlAnnuleRef.current = false;
+      setDlAvancement(null);
       setDownloading(false);
     }
   }, [selectedIds, photos, downloading, exitSelection]);
@@ -610,6 +738,9 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
   // Etat vide de l onglet, decline selon le filtre actif. Un seul endroit :
   // le cas « aucune photo du tout » et le cas « ce filtre ne renvoie rien »
   // doivent montrer la meme chose quand on est sur le meme onglet.
+  // Audit coureur 12 -- l etat vide ne proposait rien a faire et ne disait
+  // pas quand les photos arrivent. La prop onFindEvent existait depuis le
+  // debut sans jamais etre utilisee ; elle sert enfin de sortie.
   const etatVide = (
     <EtatVideWill
       variante={viewFilter === 'favs' ? 'favoris' : 'photos'}
@@ -620,9 +751,9 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           : 'Pas encore\nde photos'}
       sousTexte={viewFilter === 'favs'
         ? 'Ajoute tes photos favorites,\nde toi ou de tes amis'
-        : viewFilter === 'me'
-          ? 'Will te reconnaîtra sur les prochaines'
-          : 'Reviens après ton event'}
+        : "Les photos arrivent quand les photographes les envoient :\nsouvent dans les heures qui suivent la course,\nparfois le lendemain."}
+      actionLabel={viewFilter === 'favs' ? null : 'Trouver un event'}
+      onAction={viewFilter === 'favs' ? null : onFindEvent}
     />
   );
 
@@ -715,21 +846,77 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       <ConsentRenewBanner runnerApiFetch={runnerApiFetch} isAuthed={!!runnerUserId} />
       <VerifyEmailBanner runnerApiFetch={runnerApiFetch} isAuthed={!!runnerUserId} />
 
-      {!selfieUri && (
-        <SelfieBlock selfieUri={null} onPress={onOpenSelfie} onDelete={onDeleteSelfie} missing={selfieSkipped} />
+      {/* Audit coureur 1 -- selfieUri etait code en dur a null : la variante
+          « Envoi du selfie echoue » du composant, avec son bouton
+          « Reessayer l envoi », n avait aucun moyen de s afficher. On monte
+          desormais le bloc aussi quand l envoi a echoue, avec le vrai
+          selfie : l echec est visible en tete de l onglet ou le coureur
+          attend ses photos, et il y reste tant que l envoi n a pas abouti. */}
+      {(!selfieUri || selfieUploadState === 'failed') && (
+        <SelfieBlock
+          selfieUri={selfieUploadState === 'failed' ? selfieUri : null}
+          onPress={onOpenSelfie}
+          onDelete={onDeleteSelfie}
+          missing={selfieSkipped}
+          uploadState={selfieUploadState}
+          onRetryUpload={onRetryUpload}
+        />
       )}
+
+      {/* Audit coureur 3 -- delai depasse ou reseau absent : on le dit, et on
+          garde les photos deja affichees plutot que de les remplacer par un
+          etat vide mensonger. */}
+      {erreurChargement ? (
+        <View style={{
+          marginHorizontal: 14, marginBottom: 10, borderRadius: 12, padding: 14,
+          backgroundColor: '#FEE4E2', borderWidth: 1, borderColor: '#FDA29B',
+          flexDirection: 'row', alignItems: 'center', gap: 10,
+        }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: 'Montserrat-Bold', color: '#7A1F1F', fontSize: 13 }}>
+              {erreurChargement === 'timeout' ? 'Chargement trop long' : 'Impossible de charger tes photos'}
+            </Text>
+            <Text style={{ fontFamily: 'Montserrat', color: '#7A1F1F', fontSize: 12, marginTop: 2, lineHeight: 16 }}>
+              {erreurChargement === 'timeout'
+                ? "Le serveur n'a pas répondu en 15 secondes."
+                : 'Vérifie ta connexion.'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => { setErreurChargement(null); setLoading(photos.length === 0); refreshAll({ force: true }); }}
+            style={{ backgroundColor: '#C82424', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999 }}
+            activeOpacity={0.85}
+          >
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 13 }}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* Plus de page « Suis un event pour recevoir tes photos » : Will
           reconnait le visage sur TOUS les events, suivre un event ne
           conditionne que la notification. Un compte sans event connu tombe
-          donc sur le meme etat vide sobre que les autres. */}
-      {!hasFollows ? (
-        <EtatVideWill variante="photos" titre={'Pas encore\nde photos'} sousTexte={"Reviens après ton event"} />
-      ) : loading ? (
+          donc sur le meme etat vide sobre que les autres.
+          Audit coureur 4 -- « aucun suivi » etait teste AVANT « en cours de
+          chargement », alors que follows et knownEvents sont hydrates de
+          facon asynchrone : au demarrage, un coureur avec 200 photos lisait
+          « Pas encore de photos ». Les deux branches sont inversees. */}
+      {loading ? (
         <View style={{ paddingVertical: 40, alignItems: 'center' }}>
           <SpinningLoader size={26} color="#c9beed" />
           <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 10 }}>Chargement…</Text>
         </View>
+      ) : (!hasFollows && photos.length === 0) ? (
+        // Et pas seulement « aucun suivi » : le cache local peut deja porter
+        // des photos alors que la liste des events connus n est pas encore
+        // revenue. Sans ce garde-fou, l inversion des branches deplacait
+        // simplement le faux etat vide d un cas a l autre.
+        <EtatVideWill
+          variante="photos"
+          titre={'Pas encore\nde photos'}
+          sousTexte={"Les photos arrivent quand les photographes les envoient :\nsouvent dans les heures qui suivent la course,\nparfois le lendemain."}
+          actionLabel="Trouver un event"
+          onAction={onFindEvent}
+        />
       ) : photos.length === 0 && anySearching ? (
         <View style={{ paddingVertical: 40, alignItems: 'center', paddingHorizontal: 24 }}>
           <SpinningLoader size={26} color="#7B2FFF" />
@@ -755,21 +942,39 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
             }}>
               {selectionMode ? (
                 <>
-                  <TouchableOpacity onPress={exitSelection} hitSlop={10} disabled={downloading}>
-                    <Text style={{ color: C.textSoft, fontSize: 13, fontFamily: 'Montserrat-Medium' }}>Annuler</Text>
-                  </TouchableOpacity>
+                  {/* Pendant le telechargement, « Annuler » arrete la boucle
+                      au lieu d etre grise : c est la seule sortie quand on a
+                      selectionne 40 photos par erreur. */}
                   <TouchableOpacity
-                    onPress={downloadSelected}
+                    onPress={() => { if (downloading) { dlAnnuleRef.current = true; } else { exitSelection(); } }}
                     hitSlop={10}
-                    disabled={selectedIds.size === 0 || downloading}
-                    style={{ opacity: (selectedIds.size === 0 || downloading) ? 0.35 : 1 }}
                   >
-                    <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
-                      {downloading
-                        ? 'Téléchargement…'
-                        : `Télécharger${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+                    <Text style={{ color: downloading ? '#C82424' : C.textSoft, fontSize: 13, fontFamily: downloading ? 'Montserrat-SemiBold' : 'Montserrat-Medium' }}>
+                      {downloading ? 'Arrêter' : 'Annuler'}
                     </Text>
                   </TouchableOpacity>
+                  {downloading ? (
+                    <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
+                      {`${dlAvancement?.fait ?? 0} / ${dlAvancement?.total ?? selectedIds.size}`}
+                    </Text>
+                  ) : dlEchecs.length > 0 ? (
+                    <TouchableOpacity onPress={() => downloadSelected(dlEchecs)} hitSlop={10}>
+                      <Text style={{ color: '#C82424', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
+                        {`Réessayer ${dlEchecs.length} échec${dlEchecs.length > 1 ? 's' : ''}`}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => downloadSelected()}
+                      hitSlop={10}
+                      disabled={selectedIds.size === 0}
+                      style={{ opacity: selectedIds.size === 0 ? 0.35 : 1 }}
+                    >
+                      <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
+                        {`Télécharger${selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}`}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </>
               ) : (
                 <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>

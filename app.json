@@ -2,6 +2,7 @@
   "expo": {
     "name": "WillApp",
     "slug": "WillApp",
+    "scheme": "will",
     "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,14 +17,17 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.geoffreyzigante.will",
       "usesAppleSignIn": true,
+      "associatedDomains": [
+        "applinks:will-app.com",
+        "applinks:www.will-app.com"
+      ],
       "infoPlist": {
         "CFBundleDisplayName": "Will",
         "CADisableMinimumFrameDurationOnPhone": false,
-        "NSCameraUsageDescription": "Will utilise la caméra pour détecter les coureurs et prendre des photos automatiquement, et pour capturer votre selfie afin de retrouver vos photos grâce à la reconnaissance faciale.",
+        "NSCameraUsageDescription": "Will utilise la caméra pour prendre ton selfie : c'est lui qui permet de te reconnaître sur les photos de tes courses et de te les envoyer. Si tu photographies un event avec Will, elle sert aussi à capturer les coureurs.",
         "NSMicrophoneUsageDescription": "Will n'enregistre pas d'audio. Cette permission est requise par la librairie camera mais n'est pas utilisee par l'application.",
         "NSPhotoLibraryUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
         "NSPhotoLibraryAddUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
-        "NSLocationWhenInUseUsageDescription": "Will peut utiliser votre position pour associer vos photos à l'événement sportif correspondant.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -42,6 +46,17 @@
         "android.permission.POST_NOTIFICATIONS"
       ],
       "package": "com.geoffreyzigante.will",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            { "scheme": "https", "host": "will-app.com", "pathPrefix": "/event/" },
+            { "scheme": "https", "host": "www.will-app.com", "pathPrefix": "/event/" }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
@@ -69,7 +84,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Will utilise la caméra pour détecter les coureurs et prendre des photos automatiquement, et pour capturer votre selfie afin de retrouver vos photos grâce à la reconnaissance faciale."
+          "cameraPermission": "Will utilise la caméra pour prendre ton selfie : c'est lui qui permet de te reconnaître sur les photos de tes courses et de te les envoyer. Si tu photographies un event avec Will, elle sert aussi à capturer les coureurs."
         }
       ],
       [
@@ -83,7 +98,7 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Will utilise la caméra pour détecter les coureurs et prendre des photos automatiquement, et pour capturer votre selfie afin de retrouver vos photos grâce à la reconnaissance faciale.",
+          "cameraPermissionText": "Will utilise la caméra pour prendre ton selfie : c'est lui qui permet de te reconnaître sur les photos de tes courses et de te les envoyer. Si tu photographies un event avec Will, elle sert aussi à capturer les coureurs.",
           "enableFrameProcessors": true
         }
       ],

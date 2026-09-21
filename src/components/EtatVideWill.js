@@ -12,7 +12,7 @@
 // Inline plutot que bundlees : nettes a toutes les tailles, livrables en OTA.
 
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import Svg, { Path, Ellipse, Polyline, G } from 'react-native-svg';
 import { C } from '../constants/colors';
 
@@ -95,12 +95,17 @@ function IlluFavoris({ hauteur }) {
 
 const ILLUS = { photos: IlluPhotos, suivis: IlluSuivis, favoris: IlluFavoris };
 
+// Audit coureur 12 -- le composant n avait aucun onPress : c etait le seul
+// ecran du parcours coureur ou l on ne pouvait rien faire. actionLabel /
+// onAction sont optionnels, les appels existants ne changent pas.
 export function EtatVideWill({
   variante = 'photos',
   titre,
   sousTexte,
   hauteurIllu = 200,
   style,
+  actionLabel = null,
+  onAction = null,
 }) {
   const Illu = ILLUS[variante] || IlluPhotos;
   return (
@@ -118,6 +123,20 @@ export function EtatVideWill({
         }}>
           {sousTexte}
         </Text>
+      ) : null}
+      {actionLabel && onAction ? (
+        <TouchableOpacity
+          onPress={onAction}
+          activeOpacity={0.85}
+          style={{
+            marginTop: 18, paddingHorizontal: 22, paddingVertical: 12,
+            borderRadius: 999, backgroundColor: C.primary,
+          }}
+        >
+          <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>
+            {actionLabel}
+          </Text>
+        </TouchableOpacity>
       ) : null}
       <View pointerEvents="none" style={{ marginTop: 26 }}>
         <Illu hauteur={hauteurIllu} />
