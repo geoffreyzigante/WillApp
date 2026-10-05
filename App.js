@@ -70,7 +70,6 @@ import { API_URL, PRICE_PER_PHOTO_EUR } from './src/constants/api';
 import { completionOf } from './src/utils/eventCompletion';
 import { BoutonApple } from './src/components/BoutonApple';
 import {
-  UPLOAD_QUEUE_KEY,
   LAST_CAPTURE_KEY,
   PENDING_DIR_NAME,
   RAW_SUBDIR,
@@ -148,7 +147,6 @@ import {
   detectPhotoExtension,
 } from './src/utils/photo';
 import {
-  pendingDir,
   rawDir,
   processedDir,
   coversDir,
@@ -5106,7 +5104,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 if (pendingCount > 0) {
                   Alert.alert(
                     'Photos en cours d\'envoi',
-                    `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer. Garde l'app ouverte encore un instant pour qu'elles partent. Si tu te déconnectes, elles repartiront à ta prochaine connexion (tu devras ressaisir ton mot de passe).`,
+                    `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer. Garde l'app ouverte encore un instant pour qu'elles partent. Si tu te déconnectes, elles sont conservées sur le téléphone et repartiront à ta prochaine connexion sur cet événement.`,
                     [
                       { text: 'Rester', style: 'cancel' },
                       { text: 'Se déconnecter quand même', style: 'destructive', onPress: onLogout },
@@ -9118,8 +9116,26 @@ function App() {
   // handlePhotographerAuthFailure (parite avec logoutRunner / logoutOrganizer).
   // Le rendu PhotographerScreen.onLogout l utilise aussi.
   const logoutPhotographer = useCallback(async () => {
-    try { await AsyncStorage.multiRemove([UPLOAD_QUEUE_KEY, LAST_CAPTURE_KEY, PHOTOGRAPHER_ACTIVE_KEY]); } catch {}
-    try { const d = pendingDir(); if (d.exists) d.delete(); } catch {}
+    // La queue d upload et les fichiers de pendingDir SURVIVENT a la
+    // deconnexion (2026-10-05). Avant, l alerte promettait au benevole que
+    // ses photos repartiraient a la prochaine connexion pendant que ce
+    // bloc effacait la queue ET le dossier : le message mentait et les
+    // photos etaient perdues.
+    //
+    // La reprise est sure parce que chaque item porte SA PROPRE cle R2
+    // ({eventCode}/...) et que drainQueue construit l URL depuis l item,
+    // pas depuis la session (`${API_URL}/${item.key}`). Seul le Bearer
+    // vient de la session courante :
+    //   - reconnexion sur le MEME event  -> les photos repartent ;
+    //   - reconnexion sur un AUTRE event -> 403, l item finit en failed
+    //     apres MAX_RETRIES et s affiche sur la ligne « X a renvoyer ».
+    //     Jamais d upload silencieux sur le mauvais event.
+    // Le dossier se vide de lui-meme : chaque fichier est supprime a son
+    // PUT reussi, le delete global ici n etait que destructif.
+    //
+    // PHOTOGRAPHER_ACTIVE_KEY reste efface : c est le garde-fou F-I01
+    // contre la boucle de re-entree en mode photographe apres un 401.
+    try { await AsyncStorage.removeItem(PHOTOGRAPHER_ACTIVE_KEY); } catch {}
     setSession(null);
     setInPhotographerMode(false);
     Secure.removeItem('@will_photographer_session').catch(() => {});
