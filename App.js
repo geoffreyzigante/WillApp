@@ -5646,6 +5646,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             shadowOpacity: 0.25,
             shadowRadius: 12,
             shadowOffset: { width: 0, height: 4 },
+            // Les shadow* d iOS n ont aucun effet sur Android, qui ne connait
+            // qu elevation. Le toast est un aplat opaque a coins arrondis :
+            // elevation lui donne exactement la meme ombre portee, sans
+            // approximation. 6 correspond au rendu de shadowRadius 12 /
+            // opacity .25 sur la grille Material.
+            elevation: 6,
             zIndex: 9998,
           }}
         >
