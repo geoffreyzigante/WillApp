@@ -46,6 +46,7 @@
         "android.permission.POST_NOTIFICATIONS"
       ],
       "package": "com.geoffreyzigante.will",
+      "googleServicesFile": "./google-services.json",
       "intentFilters": [
         {
           "action": "VIEW",

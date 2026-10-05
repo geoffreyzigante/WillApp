@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "982060758853",
+    "project_id": "will-e72e0",
+    "storage_bucket": "will-e72e0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:982060758853:android:78c6a2a7e630829812702c",
+        "android_client_info": {
+          "package_name": "com.geoffreyzigante.will"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDn8HWXx73qwSmyCC9IfTdeV9HIniPmJY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
