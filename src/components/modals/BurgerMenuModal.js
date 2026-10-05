@@ -19,6 +19,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
 import { VENTE_PHOTOS_OUVERTE } from '../../constants/api';
+import { caps } from '../../services/capabilities';
 
 const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
@@ -323,12 +324,19 @@ export function BurgerMenuModal({
                     onPress={showOrgaRoleAlert}
                   />
                 )}
+                {/* caps.photographerMode et non Platform.OS : le jour ou
+                    readExposure sera porte sur Android, la ligne reapparait
+                    seule. Sans cette garde, le benevole Android tape ici et
+                    ne recoit qu une alerte « Pas encore disponible » : on
+                    annoncait une porte qui ne s ouvre pas. */}
+                {caps.photographerMode && (
                 <MenuRow
                   icon={<Icon.CamOrg size={19} color={C.primary} />}
                   label="Espace photographe"
                   onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}
                   dernier
                 />
+                )}
 
                 <View style={styles.rule} />
                 <TouchableOpacity style={styles.link} onPress={fire(onLogout)}>
@@ -396,12 +404,19 @@ export function BurgerMenuModal({
                     onPress={fire(() => onOpenOrgRole && onOpenOrgRole('create'))}
                   />
                 )}
+                {/* caps.photographerMode et non Platform.OS : le jour ou
+                    readExposure sera porte sur Android, la ligne reapparait
+                    seule. Sans cette garde, le benevole Android tape ici et
+                    ne recoit qu une alerte « Pas encore disponible » : on
+                    annoncait une porte qui ne s ouvre pas. */}
+                {caps.photographerMode && (
                 <MenuRow
                   icon={<Icon.CamOrg size={19} color={C.primary} />}
                   label="Espace photographe"
                   onPress={fire(() => onOpenOrgRole && onOpenOrgRole('photographer'))}
                   dernier
                 />
+                )}
                 </Animated.View>
               </>
             )}
