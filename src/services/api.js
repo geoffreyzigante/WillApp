@@ -256,6 +256,25 @@ export async function ensurePushRegistered(runnerToken, { ask = false } = {}) {
     status = req.status;
     if (status !== 'granted') return;
   }
+  // Android : le canal DOIT exister avant la premiere notification, pas a
+  // sa reception. Sans lui, expo-notifications en cree un « miscellaneous »
+  // a importance par defaut -- pas de banniere, pas de son, et un libelle
+  // incomprehensible dans les reglages systeme du telephone. Le worker
+  // nomme ce meme canal ("photos") dans chacun de ses envois.
+  // setNotificationChannelAsync est idempotent : le rappeler a chaque
+  // enregistrement met aussi a jour le libelle si on le change un jour.
+  if (Platform.OS === 'android') {
+    try {
+      await Notifications.setNotificationChannelAsync('photos', {
+        name: 'Photos prêtes',
+        description: 'Quand tes photos de course sont en ligne.',
+        importance: Notifications.AndroidImportance.HIGH,
+        lightColor: '#7B2FFF',
+        vibrationPattern: [0, 250, 250, 250],
+      });
+    } catch (e) { console.warn('[push] setNotificationChannelAsync', e?.message || e); }
+  }
+
   const projectId = Constants?.expoConfig?.extra?.eas?.projectId
     || Constants?.easConfig?.projectId;
   if (!projectId) {
