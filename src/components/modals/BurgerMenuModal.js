@@ -20,6 +20,7 @@ import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
 import { VENTE_PHOTOS_OUVERTE } from '../../constants/api';
 import { caps } from '../../services/capabilities';
+import { lh } from '../../constants/typo';
 
 const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
@@ -500,7 +501,7 @@ const styles = StyleSheet.create({
   },
   heroName: {
     fontFamily: 'AVEstiana',
-    fontSize: 24, color: '#FFFFFF', lineHeight: 27,
+    fontSize: 24, color: '#FFFFFF', lineHeight: lh(24, 27),
   },
   heroStatus: { fontFamily: 'Montserrat',
     fontSize: 12.5, color: 'rgba(255,255,255,0.88)', marginTop: 4, lineHeight: 17,

@@ -19,6 +19,7 @@ import { C } from '../constants/colors';
 import { s } from '../constants/styles';
 import { isUpcoming } from '../utils/format';
 import { API_URL } from '../constants/api';
+import { lh } from '../constants/typo';
 
 export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, cartTotal = 0, onOpenPanier, headerH = 0 }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -453,7 +454,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
                       fontSize: 16,
                       textAlign: 'center',
                       marginBottom: 12,
-                      lineHeight: 19,
+                      lineHeight: lh(16, 19),
                     }}>
                       Tu veux utiliser Will{'\n'}sur ton prochain event ?
                     </Text>

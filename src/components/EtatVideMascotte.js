@@ -9,6 +9,7 @@ import React from 'react';
 import { View, Text, Dimensions } from 'react-native';
 import { IlluNoPhotos } from './IlluNoPhotos';
 import { C } from '../constants/colors';
+import { lh } from '../constants/typo';
 
 export function EtatVideMascotte({
   titre = 'Pas encore\nde photos',
@@ -32,7 +33,7 @@ export function EtatVideMascotte({
       <View style={{ flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{
           fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 29,
-          lineHeight: 33, color: C.primary, textAlign: 'center',
+          lineHeight: lh(29, 33), color: C.primary, textAlign: 'center',
         }}>
           {titre}
         </Text>

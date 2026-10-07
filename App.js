@@ -69,6 +69,7 @@ installerJournal();
 import { API_URL, PRICE_PER_PHOTO_EUR } from './src/constants/api';
 import { completionOf } from './src/utils/eventCompletion';
 import { BoutonApple } from './src/components/BoutonApple';
+import { lh } from './src/constants/typo';
 import {
   LAST_CAPTURE_KEY,
   PENDING_DIR_NAME,
@@ -5478,7 +5479,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: '#ece9f4', alignItems: 'center', justifyContent: 'center' }}
                 accessibilityLabel="Fermer"
               >
-                <Text style={{ fontFamily: 'Montserrat', color: '#4a4458', fontSize: 22, lineHeight: 24 }}>✕</Text>
+                <Text style={{ fontFamily: 'Montserrat', color: '#4a4458', fontSize: 22, lineHeight: lh(22, 24, 'Montserrat') }}>✕</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={fetchMyPhotos}
@@ -7382,7 +7383,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                 hitSlop={14}
                 style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}
               >
-                <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: 18 }}>✕</Text>
+                <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>✕</Text>
               </TouchableOpacity>
               {/* La fusee se pose juste au-dessus du titre, en rose : elle
                   signe l action plutot que de flotter seule en haut. */}
@@ -10252,7 +10253,7 @@ function App() {
                 alignItems: 'center', justifyContent: 'center',
                 borderWidth: 1.5, borderColor: C.bg,
               }}>
-                <Text style={{ color: '#fff', fontSize: 10, fontFamily: 'Montserrat-SemiBold', lineHeight: 11 }}>
+                <Text style={{ color: '#fff', fontSize: 10, fontFamily: 'Montserrat-SemiBold', lineHeight: lh(10, 11, 'Montserrat') }}>
                   {photosUnread > 99 ? '99+' : photosUnread}
                 </Text>
               </View>

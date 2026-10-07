@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colorForType, C } from '../constants/colors';
 import { displayEventType, cityLabel, isUpcoming } from '../utils/format';
 import { API_URL } from '../constants/api';
+import { lh } from '../constants/typo';
 
 const HOT_ICON_PATH = "M14.23,5.38c-.29-.35-.86-.2-.98.24-.24.82-.66,1.59-1.17,2.27.05-2.98-1.33-5.74-3.52-7.69-.41-.36-1.08-.2-1.25.31-.67,2.03-2.48,3.44-3.77,5.12-5.63,6.25,3.31,16.13,9.78,10.23,2.86-2.53,3.36-7.53.91-10.47ZM8.91,15.24c-3.91,0-2.43-5.24-.45-6.9.21-.18.52-.16.69.06,1.39,1.72,3.67,6.85-.24,6.85Z";
 
@@ -149,7 +150,7 @@ function WelcomeCard({ onSignup, onLogin }) {
         start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }}
         style={{ flex: 1, padding: 18, paddingTop: 24, justifyContent: 'flex-start' }}
       >
-        <Text style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: 25 }}>
+        <Text style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25) }}>
           Un selfie.{'\n'}Toutes tes photos.
         </Text>
         <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 12, lineHeight: 17, marginTop: 12 }}>
@@ -325,7 +326,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontFamily: 'AVEstiana',
-    lineHeight: 21,
+    lineHeight: lh(18, 21),
     letterSpacing: -0.2,
     textShadowColor: 'rgba(0,0,0,0.3)',
     textShadowOffset: { width: 0, height: 1 },

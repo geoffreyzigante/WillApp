@@ -19,6 +19,7 @@ import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
 import { s } from '../../constants/styles';
 import { authStyles } from '../../constants/formStyles';
+import { lh } from '../../constants/typo';
 
 // Helpers date naissance : ISO yyyy-mm-dd <-> JJ/MM/AAAA pour l'affichage FR.
 const formatDobFr = (iso) => {
@@ -574,7 +575,7 @@ const drawer = StyleSheet.create({
     overflow: 'hidden',
   },
   heroSelfie: { width: '100%', height: '100%' },
-  heroName: { fontFamily: 'AVEstiana', fontSize: 24, color: '#FFFFFF', lineHeight: 27 },
+  heroName: { fontFamily: 'AVEstiana', fontSize: 24, color: '#FFFFFF', lineHeight: lh(24, 27) },
   heroStatus: { fontSize: 12.5, color: 'rgba(255,255,255,0.88)', marginTop: 4 },
 
   // Sections a plat : les cartes #faf9ff empilaient un aplat par groupe sur

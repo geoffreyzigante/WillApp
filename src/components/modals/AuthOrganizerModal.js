@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '../Icon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BoutonApple } from '../BoutonApple';
+import { lh } from '../../constants/typo';
 
 const T = {
   bg: '#ffffff',
@@ -209,7 +210,7 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
             <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: 18 }}>✕</Text>
+              <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>✕</Text>
             </TouchableOpacity>
             {/* Le logo manquait a l appel sur les ecrans d entree : c est
                 pourtant la qu il compte, quand on ne sait pas encore ou on

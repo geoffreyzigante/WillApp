@@ -15,6 +15,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Svg, { Path, Ellipse, Polyline, G } from 'react-native-svg';
 import { C } from '../constants/colors';
+import { lh } from '../constants/typo';
 
 const ROSE = '#f4a6ff';
 const ROUGE_COEUR = '#e14f62';
@@ -112,7 +113,7 @@ export function EtatVideWill({
     <View style={[{ alignItems: 'center', paddingTop: 30, paddingBottom: 24 }, style]}>
       <Text style={{
         fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 29,
-        lineHeight: 33, color: C.primary, textAlign: 'center',
+        lineHeight: lh(29, 33), color: C.primary, textAlign: 'center',
       }}>
         {titre}
       </Text>

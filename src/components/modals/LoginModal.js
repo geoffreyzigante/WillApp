@@ -27,6 +27,7 @@ import { PinInputRow } from '../PinInputRow';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '../Icon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { lh } from '../../constants/typo';
 
 export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   const insets = useSafeAreaInsets();
@@ -234,7 +235,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
             <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontFamily: 'Montserrat', color: '#4a4458', fontSize: 22, lineHeight: 24 }}>✕</Text>
+              <Text style={{ fontFamily: 'Montserrat', color: '#4a4458', fontSize: 22, lineHeight: lh(22, 24, 'Montserrat') }}>✕</Text>
             </TouchableOpacity>
             {/* Le logo manquait a l appel sur les ecrans d entree : c est
                 pourtant la qu il compte, quand on ne sait pas encore ou on

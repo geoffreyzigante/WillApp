@@ -6,6 +6,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { IlluPasDePhotos } from './IlluPasDePhotos';
 import { C } from '../constants/colors';
+import { lh } from '../constants/typo';
 
 export function EtatVidePhotos({
   texte = 'Pas encore de photos capturées',
@@ -21,7 +22,7 @@ export function EtatVidePhotos({
       <IlluPasDePhotos height={illuHeight} />
       <View style={{ alignItems: 'flex-start', gap: 3, flexShrink: 1 }}>
         <Text style={{
-          color: '#C9B6FF', fontSize: 18, lineHeight: 20,
+          color: '#C9B6FF', fontSize: 18, lineHeight: lh(18, 20),
           fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2,
         }}>
           {texte}

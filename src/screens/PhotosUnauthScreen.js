@@ -13,6 +13,7 @@ import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { C } from '../constants/colors';
+import { lh } from '../constants/typo';
 
 // Illu_Photos.svg (fourni par le user) : rangee de polaroids inclines,
 // rose au centre. Inline : net partout, livrable en OTA.
@@ -65,7 +66,7 @@ export function PhotosUnauthScreen({ onSignup, onLogin }) {
         </View>
         <Text style={{
           fontSize: 26, fontFamily: 'AVEstiana', fontStyle: 'normal', color: C.primary,
-          textAlign: 'center', marginBottom: 22, lineHeight: 30,
+          textAlign: 'center', marginBottom: 22, lineHeight: lh(26, 30),
         }}>
           Tes photos avant même{'\n'}la ligne d'arrivée
         </Text>

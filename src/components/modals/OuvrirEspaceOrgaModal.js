@@ -22,6 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C } from '../../constants/colors';
 import { Icon } from '../Icon';
+import { lh } from '../../constants/typo';
 
 const PROMESSES = [
   'Remplis les informations\net publie ton event',
@@ -58,13 +59,13 @@ export function OuvrirEspaceOrgaModal({ visible, onClose, onOuvrir, busy = false
               hitSlop={10}
               style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}
             >
-              <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: 18 }}>✕</Text>
+              <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>✕</Text>
             </TouchableOpacity>
             <View style={{ flex: 1, alignItems: 'center', marginRight: 30, marginBottom: 12 }}>
               <Icon.Fusee size={38} color={C.pinkPill} />
             </View>
           </View>
-          <Text style={{ fontFamily: 'AVEstiana', fontSize: 40, lineHeight: 34, color: '#fff', textAlign: 'center' }}>
+          <Text style={{ fontFamily: 'AVEstiana', fontSize: 40, lineHeight: lh(40, 34), color: '#fff', textAlign: 'center' }}>
             Lancer{'\n'}mon event
           </Text>
           <Text style={{
@@ -114,7 +115,7 @@ export function OuvrirEspaceOrgaModal({ visible, onClose, onOuvrir, busy = false
           >
             {busy
               ? <ActivityIndicator color="#fff" />
-              : <Text style={{ color: '#fff', fontFamily: 'AVEstiana', fontSize: 27, lineHeight: 32 }}>Go!</Text>}
+              : <Text style={{ color: '#fff', fontFamily: 'AVEstiana', fontSize: 27, lineHeight: lh(27, 32) }}>Go!</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity onPress={onClose} style={{ paddingVertical: 14, alignItems: 'center' }}>

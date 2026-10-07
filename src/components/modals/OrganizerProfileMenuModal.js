@@ -16,6 +16,7 @@ import Svg, { Path } from 'react-native-svg';
 import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
 import { authStyles } from '../../constants/formStyles';
+import { lh } from '../../constants/typo';
 
 const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
@@ -355,7 +356,7 @@ const drawer = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 12,
   },
-  heroName: { fontFamily: 'AVEstiana', fontSize: 24, color: '#FFFFFF', lineHeight: 27 },
+  heroName: { fontFamily: 'AVEstiana', fontSize: 24, color: '#FFFFFF', lineHeight: lh(24, 27) },
   heroStatus: { fontSize: 12.5, color: 'rgba(255,255,255,0.88)', marginTop: 4 },
   section: {
     paddingHorizontal: 20,

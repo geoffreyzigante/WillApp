@@ -29,6 +29,7 @@ import { formatDateLong, cityLabel, displayEventType, isUpcoming } from '../util
 import { raceTitle, extractBurstTs, extractIdx } from '../utils/photo';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
+import { lh } from '../constants/typo';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -670,7 +671,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
 
       {erreurChargement && photos.length === 0 && !loading ? (
         <View style={{ paddingVertical: 34, paddingHorizontal: 24, alignItems: 'center' }}>
-          <Text style={{ color: '#C9B6FF', fontSize: 18, lineHeight: 22, fontFamily: 'AVEstiana-Bold', textAlign: 'center' }}>
+          <Text style={{ color: '#C9B6FF', fontSize: 18, lineHeight: lh(18, 22), fontFamily: 'AVEstiana-Bold', textAlign: 'center' }}>
             Impossible de charger les photos
           </Text>
           <Text style={{ color: C.text, fontSize: 12, fontFamily: 'Montserrat-Medium', textAlign: 'center', marginTop: 6, lineHeight: 17 }}>

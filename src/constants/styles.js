@@ -8,6 +8,7 @@
 
 import { StyleSheet, Dimensions } from 'react-native';
 import { C } from './colors';
+import { lh } from './typo';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -48,7 +49,7 @@ export const s = StyleSheet.create({
   selfieCard: { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 8 },
   // Utilise le nom PostScript natif 'AVEstiana-Bold' (vs alias 'AVEstiana')
   // pour que iOS resolve le font sans ambiguite weight / style.
-  selfieTitle: { color: '#fff', fontSize: 24, fontFamily: 'AVEstiana-Bold', lineHeight: 28 },
+  selfieTitle: { color: '#fff', fontSize: 24, fontFamily: 'AVEstiana-Bold', lineHeight: lh(24, 28) },
   selfieSub: { fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
   selfieAvatar: { width: 68, height: 68, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 

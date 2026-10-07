@@ -32,6 +32,7 @@ import { SelfieCameraModal } from './SelfieCameraModal';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BoutonApple } from '../BoutonApple';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { lh } from '../../constants/typo';
 
 const T = {
   bg: '#ffffff',
@@ -494,7 +495,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
             <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: 18 }}>✕</Text>
+              <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>✕</Text>
             </TouchableOpacity>
             {/* Le logo manquait a l appel sur les ecrans d entree : c est
                 pourtant la qu il compte, quand on ne sait pas encore ou on
@@ -923,7 +924,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
         <Modal visible={!!appleEnAttente} transparent animationType="fade" onRequestClose={() => setAppleEnAttente(null)}>
           <View style={{ flex: 1, backgroundColor: 'rgba(26,11,46,0.55)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
             <View style={{ width: '100%', backgroundColor: '#fff', borderRadius: 22, paddingHorizontal: 24, paddingTop: 26, paddingBottom: 18 }}>
-              <Text style={{ fontFamily: 'AVEstiana', fontSize: 26, lineHeight: 30, color: T.primary, textAlign: 'center' }}>
+              <Text style={{ fontFamily: 'AVEstiana', fontSize: 26, lineHeight: lh(26, 30), color: T.primary, textAlign: 'center' }}>
                 Pas encore de compte ?
               </Text>
               <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 14, lineHeight: 20, color: T.textBody, textAlign: 'center', marginTop: 12 }}>

@@ -40,6 +40,7 @@ import { graverMention } from '../../services/graverMention';
 import { displayEventType } from '../../utils/format';
 import { colorForType } from '../../constants/colors';
 import { useCart } from '../../hooks/useCart';
+import { lh } from '../../constants/typo';
 
 // Flag fonctionnalite Supprimer dans la visionneuse. Refonte 2026-05 : la
 // suppression est en stand-by, on cable plus tard avec une confirmation
@@ -609,7 +610,7 @@ export function PhotoViewerModal({
                 fontFamily: 'AVEstiana',
                 fontSize: 22,
                 letterSpacing: -0.2,
-                lineHeight: 24,
+                lineHeight: lh(22, 24),
               }}>
                 {eventTitle}
               </Text>
