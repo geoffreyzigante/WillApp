@@ -1,21 +1,56 @@
-# Workflow OTA EAS Update — actif.
+# OTA EAS Update — MANUEL, volontairement.
 #
-# Reactive apres validation Cat G : build natif inclut expo-secure-store
-# (M-S08), teste sur device. Le JS qui reference SecureStore.* peut donc
-# etre pousse en OTA sans crash sur les binaires deployes.
+# Ce workflow se declenchait a chaque push sur main. Plus maintenant.
 #
-name: EAS Update
+# Pourquoi (2026-10-09) : un OTA ne livre que du JavaScript, il ne peut pas
+# ajouter de module natif. Si le JS pousse reference un module absent du
+# binaire deja installe, l app plante AU LANCEMENT chez tous les
+# utilisateurs — et un second OTA ne les rattrape pas, puisque l app ne
+# demarre plus assez longtemps pour le telecharger.
+#
+# Ce jour-la, main avait 217 commits de retard sur la branche de travail,
+# laquelle ajoute 4 dependances natives (react-native-safe-area-context,
+# @shopify/react-native-skia, expo-apple-authentication, expo-sensors) et
+# 4 plugins natifs. Une simple fusion vers main aurait suffi a casser
+# l app publiee, sans qu aucune etape ne le signale.
+#
+# La regle : on ne pousse un OTA que lorsque le binaire en ligne contient
+# deja tous les modules natifs que le JS reference, c est-a-dire apres
+# avoir publie un build natif issu du meme commit. Sinon, c est un build,
+# pas un OTA.
+name: EAS Update (manuel)
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: "Canal EAS vise"
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+      binaire_a_jour:
+        description: "Pour 'production' uniquement : tape OUI si le binaire en ligne contient deja tous les modules natifs de ce commit"
+        required: false
+        default: ""
 
 jobs:
   update:
     name: EAS Update
     runs-on: ubuntu-latest
     steps:
+      - name: Garde-fou production
+        if: inputs.canal == 'production' && inputs.binaire_a_jour != 'OUI'
+        run: |
+          echo "::error::Canal production demande sans confirmation."
+          echo "Un OTA production n est sur que si le binaire publie sur les"
+          echo "stores contient deja tous les modules natifs de ce commit."
+          echo "Si c est le cas, relance en tapant OUI dans 'binaire_a_jour'."
+          echo "Sinon, ce qu il faut, c est un build natif : eas build."
+          exit 1
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -32,7 +67,7 @@ jobs:
         run: npm install -g eas-cli@latest
 
       - name: Publish update
-        run: eas update --branch production --message "${{ github.event.head_commit.message }}"
+        run: eas update --branch "${{ inputs.canal }}" --message "${{ github.event.head_commit.message || github.sha }}"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: 1
