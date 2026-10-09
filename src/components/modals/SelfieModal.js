@@ -14,8 +14,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, Animated, ActivityIndicator,
-  Alert, Linking, StyleSheet,
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  Animated,
+  ActivityIndicator,
+  Alert,
+  Linking,
+  StyleSheet,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
@@ -88,8 +96,14 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       {/* Backdrop frosted glass (alignement UX modaux auth photographe/orga). */}
-      <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
-      <TouchableOpacity activeOpacity={1} style={[s.modalBackdrop, { backgroundColor: 'transparent' }]} onPress={onClose}>
+      {/* Le flou n existe pas sur Android (expo-blur y retombe sur un simple
+          voile) : le fond force a 'transparent' ne laissait alors AUCUNE
+          separation entre la feuille et la page. On garde le flou sur iOS et
+          le voile maison rgba(0,0,0,0.4) de modalBackdrop sur Android. */}
+      {Platform.OS === 'ios' ? (
+        <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+      ) : null}
+      <TouchableOpacity activeOpacity={1} style={[s.modalBackdrop, Platform.OS === 'ios' ? { backgroundColor: 'transparent' } : null]} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={[s.modalSheet, { paddingBottom: 32 }]} onPress={() => {}}>
           <TouchableOpacity onPress={onClose} hitSlop={20}>
             <View style={s.modalHandle} />

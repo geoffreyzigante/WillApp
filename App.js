@@ -10818,7 +10818,12 @@ function App() {
           BlurView backdrop + Animated.View translateY drag-down via
           useDismissibleSheet, handle visuel en haut, tap backdrop pour fermer. */}
       <View style={{ flex: 1 }}>
-        <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+        {/* Idem SelfieModal : sans flou, Android n avait aucun fond. */}
+        {Platform.OS === 'ios' ? (
+          <BlurView intensity={10} tint="light" style={StyleSheet.absoluteFillObject} />
+        ) : (
+          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
+        )}
         <TouchableOpacity
           activeOpacity={1}
           style={{ flex: 1, justifyContent: 'flex-end' }}
