@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+<style>
+@font-face{font-family:'AV Estiana';src:url('AVEstiana.woff2') format('woff2');font-weight:700;font-display:block}
+:root{
+  --violet:#7B2FFF; --violet-700:#5E1AD6; --violet-800:#4A1099; --violet-900:#2D086E;
+  --violet-100:#EDE7FF; --violet-050:#F5F3FF; --rose:#F4A6FF;
+  --ink:#1A1426; --ink-2:#5A5468; --ink-3:#918BA0; --ink-4:#B6B1C2;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#111;font-family:'Montserrat',sans-serif;-webkit-font-smoothing:antialiased}
+
+.frame{
+  position:relative; width:1320px; height:2868px; overflow:hidden;
+  display:flex; flex-direction:column; align-items:center;
+  background:linear-gradient(170deg,#8A45FF 0%,#7B2FFF 38%,#5E1AD6 72%,#3F0D9E 100%);
+}
+.frame::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(70% 45% at 50% -8%,rgba(255,255,255,.26),transparent 65%)}
+.frame.clair{background:linear-gradient(170deg,#F7F4FF 0%,#EDE7FF 55%,#DCCCFF 100%)}
+.frame.clair::before{background:radial-gradient(70% 45% at 50% -8%,rgba(255,255,255,.9),transparent 65%)}
+
+/* ─── bloc d accroche ─── */
+.tete{position:relative;z-index:2;width:100%;padding:170px 110px 0;text-align:center}
+.pre{display:inline-block;font:700 30px/1 'Montserrat';letter-spacing:.22em;
+  text-transform:uppercase;color:rgba(255,255,255,.62);margin-bottom:38px}
+.clair .pre{color:var(--violet-700)}
+.tete h2{font:700 94px/1.03 'AV Estiana','Montserrat';letter-spacing:-.02em;color:#fff}
+.clair .tete h2{color:var(--violet-900)}
+.tete p{margin-top:30px;font:500 36px/1.42 'Montserrat';color:rgba(255,255,255,.78)}
+.clair .tete p{color:var(--violet-800);opacity:.82}
+
+/* ─── telephone ─── */
+.tel{flex:0 0 auto;position:relative;z-index:2;width:1004px;height:2060px;margin-top:92px;
+  border-radius:92px;padding:13px;background:linear-gradient(160deg,#4a4458,#16121f 40%,#0b0810);
+  box-shadow:0 60px 120px -30px rgba(20,4,60,.62), 0 0 0 2px rgba(255,255,255,.1) inset}
+.ecran{position:relative;width:100%;height:100%;border-radius:80px;overflow:hidden;
+  background:#F7F5FC;display:flex;flex-direction:column}
+.ile{position:absolute;top:26px;left:50%;transform:translateX(-50%);
+  width:244px;height:68px;border-radius:40px;background:#07050c;z-index:9}
+.statut{position:relative;height:118px;flex:0 0 auto;display:flex;align-items:flex-end;
+  justify-content:space-between;padding:0 58px 14px;font:700 30px/1 'Montserrat';color:#1A1426;z-index:8}
+.statut .droite{display:flex;align-items:center;gap:12px}
+.bat{width:48px;height:24px;border-radius:7px;border:3px solid #1A1426;position:relative}
+.bat::after{content:"";position:absolute;inset:3px;right:9px;background:#1A1426;border-radius:3px}
+
+/* ─── contenu d ecran, commun ─── */
+.app{flex:1;min-height:0;padding:0 34px;overflow:hidden}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:22px 4px 26px}
+.logo{font:800 42px/1 'Montserrat';letter-spacing:-.04em;color:var(--violet)}
+.ava{width:62px;height:62px;border-radius:999px;background:var(--violet-100);
+  display:flex;align-items:center;justify-content:center;font:700 26px/1 'Montserrat';color:var(--violet-700)}
+.h1{font:800 54px/1.12 'Montserrat';letter-spacing:-.03em;color:var(--ink);margin:4px 0 10px}
+.sub{font:500 28px/1.4 'Montserrat';color:var(--ink-3);margin-bottom:30px}
+
+/* bandeau selfie (le vrai, celui de la galerie) */
+.bandeau{display:flex;align-items:center;gap:22px;background:var(--violet);
+  border-radius:34px;padding:26px 30px;margin-bottom:28px}
+.bandeau .ico{flex:0 0 auto}
+.bandeau .t{font:700 30px/1.22 'Montserrat';color:#fff;letter-spacing:-.02em}
+.bandeau .fl{margin-left:auto;flex:0 0 auto}
+
+/* mosaique */
+.grille{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grille .ph{border-radius:28px;overflow:hidden;background:#E6E6EC;aspect-ratio:3/4}
+.grille .ph.large{grid-column:span 2;aspect-ratio:16/10}
+.grille img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* hero event */
+.hero{position:relative;border-radius:40px;overflow:hidden;height:430px;margin-bottom:26px}
+.hero img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(100deg,var(--violet) 0%,var(--violet) 36%,rgba(123,47,255,.18) 100%)}
+.hero .txt{position:absolute;inset:0;z-index:2;padding:38px 40px;display:flex;
+  flex-direction:column;justify-content:flex-end;color:#fff}
+.hero .d{font:700 24px/1 'Montserrat';letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.86)}
+.hero .n{font:700 64px/1.04 'AV Estiana','Montserrat';letter-spacing:-.02em;margin:10px 0 6px}
+.hero .v{font:500 27px/1 'Montserrat';color:rgba(255,255,255,.9)}
+.facts{display:flex;gap:46px;margin-top:26px}
+.facts b{display:block;font:700 46px/1 'AV Estiana','Montserrat'}
+.facts span{display:block;font:700 19px/1 'Montserrat';letter-spacing:.1em;
+  text-transform:uppercase;color:rgba(255,255,255,.72);margin-top:9px}
+
+/* selfie */
+.selfie{position:relative;flex:1;background:#140A26;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:0}
+.selfie .ovale{width:560px;height:720px;border-radius:50%/44%;
+  background:radial-gradient(60% 55% at 50% 38%,rgba(255,255,255,.1),rgba(255,255,255,.03));
+  box-shadow:0 0 0 6px rgba(255,255,255,.9), 0 0 0 26px rgba(123,47,255,.28),
+             0 0 120px 40px rgba(123,47,255,.3);
+  display:flex;align-items:center;justify-content:center}
+.selfie .cons{margin-top:76px;font:700 40px/1.35 'Montserrat';color:#fff;text-align:center;letter-spacing:-.02em}
+.selfie .cons small{display:block;margin-top:16px;font:500 28px/1.4 'Montserrat';color:rgba(255,255,255,.62)}
+.selfie .decl{margin-top:72px;width:150px;height:150px;border-radius:999px;background:#fff;
+  box-shadow:0 0 0 10px rgba(255,255,255,.26)}
+
+/* notification iOS */
+.notif{position:absolute;top:150px;left:34px;right:34px;z-index:10;
+  background:rgba(255,255,255,.93);backdrop-filter:blur(30px);border-radius:40px;
+  padding:30px 34px;display:flex;gap:24px;align-items:center;
+  box-shadow:0 30px 70px -18px rgba(20,4,60,.4)}
+.notif .ic{width:88px;height:88px;border-radius:24px;background:var(--violet);
+  display:flex;align-items:center;justify-content:center;font:800 40px/1 'Montserrat';color:#fff;flex:0 0 auto}
+.notif .l1{font:700 29px/1.2 'Montserrat';color:var(--ink)}
+.notif .l2{font:500 27px/1.3 'Montserrat';color:var(--ink-2);margin-top:8px}
+
+/* mode photographe */
+.photog{flex:1;background:#0E0A18;position:relative;display:flex;flex-direction:column}
+.photog .vise{position:absolute;inset:0}
+.photog .vise img{width:100%;height:100%;object-fit:cover;opacity:.92}
+.photog .barre{position:relative;z-index:3;margin:118px 34px 0;display:flex;gap:16px}
+.pill{background:rgba(20,12,36,.72);backdrop-filter:blur(16px);border-radius:999px;
+  padding:18px 30px;font:700 27px/1 'Montserrat';color:#fff;display:flex;align-items:center;gap:14px}
+.pt{width:18px;height:18px;border-radius:999px;background:#30D158}
+.photog .bas{position:relative;z-index:3;margin-top:auto;padding:0 34px 70px;
+  display:flex;align-items:center;justify-content:space-between}
+.compteur{font:800 86px/1 'AV Estiana','Montserrat';color:#fff}
+.compteur span{display:block;font:700 22px/1 'Montserrat';letter-spacing:.12em;
+  text-transform:uppercase;color:rgba(255,255,255,.6);margin-top:12px}
+.obt{width:170px;height:170px;border-radius:999px;background:#FF3B30;
+  box-shadow:0 0 0 12px rgba(255,255,255,.9)}
+
+/* carte "comment ça marche" */
+.etapes{display:flex;flex-direction:column;gap:20px}
+.sectitre{margin:42px 0 24px;font:800 40px/1.1 'Montserrat';letter-spacing:-.03em;color:var(--ink)}
+.sectitre small{display:block;margin-top:12px;font:500 26px/1.3 'Montserrat';color:var(--ink-3);letter-spacing:0}
+.etape{display:flex;gap:26px;align-items:flex-start;background:#fff;border-radius:34px;padding:32px 34px;
+  box-shadow:0 2px 0 rgba(123,47,255,.05)}
+.etape .n{flex:0 0 auto;width:66px;height:66px;border-radius:999px;background:var(--violet-100);
+  color:var(--violet-700);font:800 32px/66px 'Montserrat';text-align:center}
+.etape .t{font:700 32px/1.25 'Montserrat';color:var(--ink);letter-spacing:-.02em}
+.etape .s{font:500 26px/1.4 'Montserrat';color:var(--ink-3);margin-top:10px}
+.etape.on{background:var(--violet)}
+.etape.on .n{background:rgba(255,255,255,.2);color:#fff}
+.etape.on .t{color:#fff}
+.etape.on .s{color:rgba(255,255,255,.78)}
+</style></head>
+<body>
+
+<!-- ═══════════ 1 · la promesse ═══════════ -->
+<div class="frame" id="f1">
+  <div class="tete">
+    <span class="pre">Photos de course</span>
+    <h2>Tes photos,<br>sans les chercher</h2>
+    <p>Fini les 2 000 photos à éplucher une par une</p>
+  </div>
+  <div class="tel"><div class="ecran">
+    <div class="ile"></div>
+    <div class="statut"><span>9:41</span><span class="droite">▮▮▮ <span class="bat"></span></span></div>
+    <div class="app">
+      <div class="nav"><span class="logo">will</span><span class="ava">G</span></div>
+      <div class="h1">Mes photos</div>
+      <div class="sub">Trail du Château de Gaillon · 11 nov.</div>
+      <div class="grille">
+        <div class="ph large"><img src="g6.jpg"></div>
+        <div class="ph"><img src="g2.jpg"></div>
+        <div class="ph"><img src="g3.jpg"></div>
+        <div class="ph"><img src="g5.jpg"></div>
+        <div class="ph"><img src="jour-j.jpg"></div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ═══════════ 2 · le selfie ═══════════ -->
+<div class="frame" id="f2">
+  <div class="tete">
+    <span class="pre">Avant le départ</span>
+    <h2>Un selfie,<br>et c'est tout</h2>
+    <p>Dix secondes au retrait du dossard. Une seule fois.</p>
+  </div>
+  <div class="tel"><div class="ecran">
+    <div class="ile"></div>
+    <div class="selfie">
+      <div class="ovale"></div>
+      <div class="cons">Place ton visage dans l'ovale
+        <small>Sans lunettes de soleil ni casquette</small></div>
+      <div class="decl"></div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ═══════════ 3 · le jour J ═══════════ -->
+<div class="frame" id="f3">
+  <div class="tete">
+    <span class="pre">Le jour J</span>
+    <h2>Tu cours.<br>On s'occupe du reste</h2>
+    <p>Les photographes shootent, Will reconnaît ton visage</p>
+  </div>
+  <div class="tel"><div class="ecran">
+    <div class="ile"></div>
+    <div class="statut"><span>9:41</span><span class="droite">▮▮▮ <span class="bat"></span></span></div>
+    <div class="app">
+      <div class="nav"><span class="logo">will</span><span class="ava">G</span></div>
+      <div class="hero">
+        <img src="jour-j.jpg">
+        <div class="txt">
+          <span class="d">11 novembre 2026</span>
+          <span class="n">Trail du Château</span>
+          <span class="v">Gaillon (27400) · Trail</span>
+          <div class="facts">
+            <div><b>J–0</b><span>Départ donné</span></div>
+            <div><b>4</b><span>Courses</span></div>
+            <div><b>11:45</b><span>1<sup>er</sup> départ</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="etapes">
+        <div class="etape on"><span class="n">1</span><div><div class="t">Selfie déposé</div>
+          <div class="s">Ton visage est enregistré pour cette course</div></div></div>
+        <div class="etape"><span class="n">2</span><div><div class="t">Les photos arrivent</div>
+          <div class="s">Chaque photo est analysée dès son envoi</div></div></div>
+        <div class="etape"><span class="n">3</span><div><div class="t">Les tiennes te rejoignent</div>
+          <div class="s">Tu reçois un mail quand elles sont prêtes</div></div></div>
+      </div>
+      <div class="sectitre">Les photos de la course
+        <small>312 en ligne · mise à jour en continu</small></div>
+      <div class="grille">
+        <div class="ph"><img src="g3.jpg"></div>
+        <div class="ph"><img src="g6.jpg"></div>
+        <div class="ph"><img src="g5.jpg"></div>
+        <div class="ph"><img src="g2.jpg"></div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ═══════════ 4 · la livraison ═══════════ -->
+<div class="frame clair" id="f4">
+  <div class="tete">
+    <span class="pre">Après l'arrivée</span>
+    <h2>Elles arrivent<br>toutes seules</h2>
+    <p>Pas de recherche, pas de numéro de dossard à retaper</p>
+  </div>
+  <div class="tel"><div class="ecran">
+    <div class="ile"></div>
+    <div class="notif">
+      <span class="ic">w</span>
+      <div><div class="l1">Tes photos sont prêtes</div>
+        <div class="l2">14 photos du Trail du Château t'attendent</div></div>
+    </div>
+    <div class="statut"><span>9:41</span><span class="droite">▮▮▮ <span class="bat"></span></span></div>
+    <div class="app" style="padding-top:238px">
+      <div class="h1">14 photos de toi</div>
+      <div class="sub">Trail du Château de Gaillon · en ligne</div>
+      <div class="grille">
+        <div class="ph large"><img src="g5.jpg"></div>
+        <div class="ph"><img src="g3.jpg"></div>
+        <div class="ph"><img src="g6.jpg"></div>
+        <div class="ph"><img src="g2.jpg"></div>
+        <div class="ph"><img src="jour-j.jpg"></div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ═══════════ 5 · mode photographe ═══════════ -->
+<div class="frame" id="f5">
+  <div class="tete">
+    <span class="pre">Pour les organisateurs</span>
+    <h2>L'app devient<br>un appareil photo</h2>
+    <p>Un bénévole, un code, un PIN. Les photos partent toutes seules.</p>
+  </div>
+  <div class="tel"><div class="ecran">
+    <div class="ile"></div>
+    <div class="photog">
+      <div class="vise"><img src="g2.jpg"></div>
+      <div class="barre">
+        <span class="pill"><span class="pt"></span>Prêt</span>
+        <span class="pill">Course · 10 km</span>
+        <span class="pill">KM 7</span>
+      </div>
+      <div class="bas">
+        <div class="compteur">438<span>Envoyées</span></div>
+        <div class="obt"></div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+</body></html>
