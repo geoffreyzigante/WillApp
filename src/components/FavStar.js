@@ -4,15 +4,50 @@
 // favoris coeur vs etoile").
 //
 // viewBox elargi de 2px sur chaque cote pour ne pas rogner le stroke (le
-// path Favoris_3.svg colle les bords 0,0 -> 18.42,17.61).
+// path Favoris_3.svg colle les bords 0,0 -> 18.42,17.61). Ces 2px servent
+// aussi de place au halo ci-dessous : largeur max = strokeWidth + 2,2,
+// soit 1,9 de debord — ca rentre.
+//
+// ── halo ────────────────────────────────────────────────────────────────
+// Une etoile blanche posee sur une photo a besoin d une separation, sinon
+// elle disparait sur un ciel clair. Les ombres RN ne savent pas la donner :
+// shadowColor n existe que sur iOS, et elevation ne dessine rien sous un
+// glyphe transparent sur Android. On dessine donc le halo DANS le SVG :
+// le meme trace, une premiere fois en sombre et plus large, puis par-dessus
+// en blanc. Aucune API de plateforme, donc iOS et Android rendent pareil.
+//
+// halo={false} pour les etoiles posees sur un aplat (bouton filtre), ou il
+// n y a rien a separer.
 
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
 
-export function FavStar({ size = 16, fill = '#fff', stroke = '#fff', strokeWidth = 1.6, style }) {
+const TRACE = "M10.09.61l1.91,5.17,5.51.22c.87.03,1.23,1.14.55,1.68l-4.33,3.42,1.5,5.31c.24.84-.7,1.52-1.43,1.04l-4.59-3.06-4.59,3.06c-.73.49-1.66-.2-1.43-1.04l1.5-5.31L.36,7.69c-.69-.54-.33-1.64.55-1.68l5.51-.22,1.91-5.17c.3-.82,1.46-.82,1.76,0Z";
+
+export function FavStar({ size = 16, fill = '#fff', stroke = '#fff', strokeWidth = 1.6, halo = true, style }) {
   return (
-    <Svg width={size * (22.42 / 21.61)} height={size} viewBox="-2 -2 22.42 21.61" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" style={style}>
-      <Path d="M10.09.61l1.91,5.17,5.51.22c.87.03,1.23,1.14.55,1.68l-4.33,3.42,1.5,5.31c.24.84-.7,1.52-1.43,1.04l-4.59-3.06-4.59,3.06c-.73.49-1.66-.2-1.43-1.04l1.5-5.31L.36,7.69c-.69-.54-.33-1.64.55-1.68l5.51-.22,1.91-5.17c.3-.82,1.46-.82,1.76,0Z" />
+    <Svg
+      width={size * (22.42 / 21.61)}
+      height={size}
+      viewBox="-2 -2 22.42 21.61"
+      style={style}
+    >
+      {halo ? (
+        <Path
+          d={TRACE}
+          fill="none"
+          stroke="rgba(0,0,0,0.55)"
+          strokeWidth={strokeWidth + 2.2}
+          strokeLinejoin="round"
+        />
+      ) : null}
+      <Path
+        d={TRACE}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
+      />
     </Svg>
   );
 }

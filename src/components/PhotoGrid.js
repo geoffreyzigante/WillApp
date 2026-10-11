@@ -98,16 +98,9 @@ export const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, s
         </TouchableOpacity>
       )}
       {favIndicator && !showHeart && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute', top: 6, right: 6,
-            // Drop shadow noir pour rendre l etoile visible sur photos
-            // claires comme sombres (remplace le contour noir).
-            shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
-            elevation: 3,
-          }}
-        >
+        <View pointerEvents="none" style={{ position: 'absolute', top: 6, right: 6 }}>
+          {/* Le halo est dans le SVG (cf FavStar) : il remplace le drop
+              shadow, qui ne dessinait rien sur Android. */}
           <FavStar size={18} fill="#fff" stroke="#fff" strokeWidth={1.4} />
         </View>
       )}
@@ -245,7 +238,7 @@ export function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggle
           (meme logique que la galerie publique, decision UX 2026-06-03). */}
       {showHearts && fav && !selectionMode && (
         <View pointerEvents="none" style={{ position: 'absolute', top: 6, right: 6 }}>
-          <FavStar size={14} fill="#fff" stroke="rgba(0,0,0,0.25)" strokeWidth={1.4} />
+          <FavStar size={14} fill="#fff" stroke="#fff" strokeWidth={1.4} />
         </View>
       )}
       {/* Mode selection : pastille check en haut-GAUCHE (etoile favori garde

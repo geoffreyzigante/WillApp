@@ -545,10 +545,6 @@ export function PhotoViewerModal({
   const bgStyle = useAnimatedStyle(() => ({ opacity: bgOpacity.value }));
   const uiStyle = useAnimatedStyle(() => ({ opacity: uiOpacity.value }));
 
-  const iconShadowWhiteStyle = Platform.OS === 'ios'
-    ? { shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } }
-    : null;
-
   // Fix 2026-07-22 : le zoom (scale + zoomTranslateX) etait pilote par
   // pinch/double-tap dans les shared values mais AUCUN style visuel ne les
   // consommait. Resultat : geste enregistre mais image immobile. On applique
@@ -720,7 +716,24 @@ export function PhotoViewerModal({
                           {item?.uri && !photosForSale ? (
                             <View style={mention.bloc} pointerEvents="none">
                               <Text style={mention.texte}>Photo capturée par</Text>
+                              {/* Le logo est un SVG : textShadow ne s y
+                                  applique pas, shadow* est iOS seul, et
+                                  elevation ne dessine rien sous un glyphe
+                                  transparent. Meme principe que FavStar :
+                                  on dessine le contour soi-meme, quatre
+                                  copies sombres decalees d un pixel sous la
+                                  blanche. Rendu identique sur les deux
+                                  plateformes. */}
                               <View style={mention.logo}>
+                                {[[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dx, dy]) => (
+                                  <View
+                                    key={`h${dx}:${dy}`}
+                                    pointerEvents="none"
+                                    style={{ position: 'absolute', left: dx, top: dy }}
+                                  >
+                                    <Icon.Logo width={29} color="rgba(0,0,0,0.55)" />
+                                  </View>
+                                ))}
                                 <Icon.Logo width={29} color="#FFFFFF" />
                               </View>
                             </View>
@@ -761,7 +774,6 @@ export function PhotoViewerModal({
                                     fill={photoFavoritesSet?.has(item.id) ? '#fff' : 'none'}
                                     stroke="#fff"
                                     strokeWidth={1.4}
-                                    style={iconShadowWhiteStyle}
                                   />
                                 </TouchableOpacity>
                               </ReAnimated.View>
@@ -984,12 +996,9 @@ const mention = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
-  // Le logo est un SVG : l ombre du texte ne s y applique pas, on lui met
-  // la sienne (shadow* sur le conteneur, ombre native).
+  // Le contour du logo est dessine dans le JSX (copies sombres decalees) :
+  // ce conteneur ne sert plus qu a les positionner.
   logo: {
-    shadowColor: '#000',
-    shadowOpacity: 0.75,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
+    position: 'relative',
   },
 });

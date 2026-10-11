@@ -765,6 +765,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                       fill={favOnly ? '#fff' : C.primary}
                       stroke={favOnly ? '#fff' : C.primary}
                       strokeWidth={1.8}
+                      halo={false}
                     />
                   </TouchableOpacity>
                 )}
