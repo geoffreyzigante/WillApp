@@ -716,24 +716,7 @@ export function PhotoViewerModal({
                           {item?.uri && !photosForSale ? (
                             <View style={mention.bloc} pointerEvents="none">
                               <Text style={mention.texte}>Photo capturée par</Text>
-                              {/* Le logo est un SVG : textShadow ne s y
-                                  applique pas, shadow* est iOS seul, et
-                                  elevation ne dessine rien sous un glyphe
-                                  transparent. Meme principe que FavStar :
-                                  on dessine le contour soi-meme, quatre
-                                  copies sombres decalees d un pixel sous la
-                                  blanche. Rendu identique sur les deux
-                                  plateformes. */}
                               <View style={mention.logo}>
-                                {[[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dx, dy]) => (
-                                  <View
-                                    key={`h${dx}:${dy}`}
-                                    pointerEvents="none"
-                                    style={{ position: 'absolute', left: dx, top: dy }}
-                                  >
-                                    <Icon.Logo width={29} color="rgba(0,0,0,0.55)" />
-                                  </View>
-                                ))}
                                 <Icon.Logo width={29} color="#FFFFFF" />
                               </View>
                             </View>
@@ -996,9 +979,17 @@ const mention = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
-  // Le contour du logo est dessine dans le JSX (copies sombres decalees) :
-  // ce conteneur ne sert plus qu a les positionner.
+  // Le logo est un SVG : l ombre du texte ne s y applique pas, on lui met
+  // la sienne (shadow* sur le conteneur, ombre native).
+  //
+  // Decision 2026-10-11 : on s en tient la. Un contour dessine le rendrait
+  // lisible aussi sur Android, mais la mention est un credit discret — la
+  // rendre plus visible n est pas souhaite. Elle reste donc sans
+  // separation sur Android, en connaissance de cause.
   logo: {
-    position: 'relative',
+    shadowColor: '#000',
+    shadowOpacity: 0.75,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
   },
 });
