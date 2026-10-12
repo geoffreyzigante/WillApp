@@ -29,6 +29,7 @@
         "CADisableMinimumFrameDurationOnPhone": false,
         "NSCameraUsageDescription": "Will utilise la caméra pour prendre ton selfie : c'est lui qui permet de te reconnaître sur les photos de tes courses et de te les envoyer. Si tu photographies un event avec Will, elle sert aussi à capturer les coureurs.",
         "NSMicrophoneUsageDescription": "Will n'enregistre pas d'audio. Cette permission est requise par la librairie camera mais n'est pas utilisee par l'application.",
+        "NSLocationWhenInUseUsageDescription": "Will n'utilise pas ta position. Cette autorisation est réclamée par une librairie photo, mais l'application ne la demande jamais.",
         "NSPhotoLibraryUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
         "NSPhotoLibraryAddUsageDescription": "Will peut sauvegarder les photos dans votre galerie.",
         "ITSAppUsesNonExemptEncryption": false
