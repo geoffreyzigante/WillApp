@@ -13,6 +13,9 @@
       "resizeMode": "cover",
       "backgroundColor": "#ffffff"
     },
+    "locales": {
+      "fr": "./locales/fr.json"
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.geoffreyzigante.will",
