@@ -14,7 +14,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
-  KeyboardAvoidingView, ActivityIndicator, Alert, Platform, StatusBar,
+  KeyboardAvoidingView, ActivityIndicator, Alert, StatusBar,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { C, colorForType } from '../../constants/colors';
@@ -255,7 +255,13 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
           </Text>
         </LinearGradient>
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* Clavier iOS : le ScrollView ci-dessous porte
+            automaticallyAdjustKeyboardInsets, le mecanisme natif, qui
+            compense deja le clavier ET fait defiler jusqu au champ
+            focalise. Un behavior="padding" ici compensait une seconde
+            fois : le champ sortait par le haut de l ecran. Voir
+            CLAUDE.md, « Clavier iOS ». */}
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={undefined}>
           <ScrollView
             style={{ backgroundColor: '#ffffff' }}
             keyboardShouldPersistTaps="handled"

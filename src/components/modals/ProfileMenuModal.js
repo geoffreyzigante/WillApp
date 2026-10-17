@@ -232,8 +232,14 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
         pointerEvents={visible ? 'auto' : 'none'}
         style={[drawer.panel, { top: heroOffset || 228, opacity: panelOpacity }]}
       >
+        {/* Clavier iOS : le ScrollView ci-dessous porte
+            automaticallyAdjustKeyboardInsets, le mecanisme natif, qui compense
+            deja le clavier ET fait defiler jusqu au champ focalise. Un
+            behavior="padding" ici compensait une seconde fois : le champ
+            sortait par le haut de l ecran. Android garde 'height', ou l inset
+            natif n existe pas. Voir CLAUDE.md, « Clavier iOS ». */}
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? undefined : 'height'}
           style={{ flex: 1 }}
         >
 

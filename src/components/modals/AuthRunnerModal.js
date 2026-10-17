@@ -542,7 +542,13 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
           )}
         </LinearGradient>
 
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* Clavier iOS : le ScrollView ci-dessous porte
+            automaticallyAdjustKeyboardInsets, le mecanisme natif, qui
+            compense deja le clavier ET fait defiler jusqu au champ
+            focalise. Un behavior="padding" ici compensait une seconde
+            fois : le champ sortait par le haut de l ecran. Voir
+            CLAUDE.md, « Clavier iOS ». */}
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={undefined}>
           <ScrollView
             style={{ backgroundColor: T.bg }}
             keyboardShouldPersistTaps="handled"
