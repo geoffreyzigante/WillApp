@@ -15,6 +15,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Keyboard,
   KeyboardAvoidingView, ActivityIndicator, Platform, Linking, Alert, StatusBar,
+  LayoutAnimation,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -476,6 +477,27 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
   // Dans une Modal RN, insets.top peut revenir a 0 (Android) : garde-fou.
   const padHaut = (insets.top || StatusBar.currentHeight || 20) + 12;
 
+  // L entete degradee occupait ~210 pt, soit un quart de l ecran, et ne
+  // bougeait pas quand le clavier montait. Sur un iPhone compact il restait
+  // alors ~29 % de hauteur pour deux champs, un bouton, un separateur et le
+  // bouton Apple : ca ne rentre pas, donc un champ passait forcement sous
+  // l entete (signale le 17/10/2026 sur la connexion par email).
+  //
+  // Clavier ouvert, le titre et le logo ne servent plus a rien : on sait ou
+  // on est, on est en train de taper. On les replie et on resserre les
+  // marges, ce qui rend ~80 pt au formulaire. La croix et les onglets
+  // restent : ce sont les deux seules commandes de l entete.
+  const [clavierOuvert, setClavierOuvert] = useState(false);
+  useEffect(() => {
+    const ouvre = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const ferme = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const anime = () => LayoutAnimation.configureNext(
+      LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+    const a = Keyboard.addListener(ouvre, () => { anime(); setClavierOuvert(true); });
+    const b = Keyboard.addListener(ferme, () => { anime(); setClavierOuvert(false); });
+    return () => { a.remove(); b.remove(); };
+  }, []);
+
   const submitLabel = sessionApple ? 'Terminer mon inscription'
     : mode === 'login' ? 'Se connecter'
     : mode === 'forgot' ? (forgotEmailSent ? 'Email envoyé' : 'Recevoir le lien')
@@ -491,26 +513,34 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
           colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={{ paddingHorizontal: 24, paddingTop: padHaut, paddingBottom: mode === 'forgot' ? 26 : 0 }}
+          style={{
+            paddingHorizontal: 24,
+            paddingTop: clavierOuvert ? (insets.top || StatusBar.currentHeight || 20) : padHaut,
+            paddingBottom: mode === 'forgot' ? 26 : 0,
+          }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: clavierOuvert ? 8 : 18 }}>
             <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>✕</Text>
             </TouchableOpacity>
             {/* Le logo manquait a l appel sur les ecrans d entree : c est
                 pourtant la qu il compte, quand on ne sait pas encore ou on
                 est. Centre sur la rangee, la croix restant a gauche. */}
-            <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, alignItems: 'center' }}>
-              <Icon.Logo width={64} color="#fff" />
-            </View>
+            {!clavierOuvert && (
+              <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, alignItems: 'center' }}>
+                <Icon.Logo width={64} color="#fff" />
+              </View>
+            )}
           </View>
 
-          <Text style={{
-            fontFamily: 'AVEstiana', fontStyle: 'normal',
-            fontSize: 30, color: '#fff', textAlign: 'center', marginBottom: mode === 'forgot' ? 0 : 20,
-          }}>
-            {mode === 'forgot' ? 'Mot de passe oublié' : mode === 'login' ? 'Se connecter' : "S'inscrire"}
-          </Text>
+          {!clavierOuvert && (
+            <Text style={{
+              fontFamily: 'AVEstiana', fontStyle: 'normal',
+              fontSize: 30, color: '#fff', textAlign: 'center', marginBottom: mode === 'forgot' ? 0 : 20,
+            }}>
+              {mode === 'forgot' ? 'Mot de passe oublié' : mode === 'login' ? 'Se connecter' : "S'inscrire"}
+            </Text>
+          )}
 
           {/* Connexion / Inscription : onglets textuels soulignes, en rose. */}
           {mode !== 'forgot' && (
