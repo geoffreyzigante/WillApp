@@ -383,13 +383,42 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
       return;
     }
     const emailPropre = String(email || '').trim().toLowerCase();
-    // Etape 1 de la connexion : on ne verifie que la forme de l email et on
-    // passe au mot de passe. Aucun appel reseau ici -- repondre « cet email
-    // existe / n existe pas » renseignerait un attaquant sur les comptes.
+    // Etape 1 de la connexion : forme de l email, puis on demande au serveur
+    // si le compte existe. S il n existe pas, direction l inscription tout de
+    // suite -- c est le geste que faisait deja la connexion en un temps, via
+    // COMPTE_INCONNU, et le site fait pareil.
+    //
+    // J avais d abord supprime cet appel pour ne pas reveler l existence d un
+    // compte. Le worker avait deja tranche l inverse, et il a raison : cette
+    // information est publique par /auth/check-email-exists, la cacher ici
+    // n aurait rien protege et aurait coute une etape a chaque nouvel
+    // inscrit. Voir worker/index.js l. 1638.
     if (loginEtape1) {
       if (!emailPropre) { setError('Tous les champs sont obligatoires.'); return; }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailPropre)) { setError('Email invalide.'); return; }
       setError('');
+      setBusy(true);
+      try {
+        const r = await fetch(`${API_URL}/auth/check-email-exists`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailPropre }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok && data?.exists === false) {
+          setPassword('');
+          setMode('register');
+          setRegisterStep(selfieUri ? 'form' : 'selfie');
+          setInfo(`Aucun compte pour ${emailPropre}.`);
+          setBusy(false);
+          return;
+        }
+      } catch {
+        // Reseau indisponible : on n immobilise pas l utilisateur. On passe au
+        // mot de passe, et la connexion tranchera -- elle renvoie
+        // COMPTE_INCONNU si le compte n existe pas.
+      }
+      setBusy(false);
       setEtapeLogin('motdepasse');
       return;
     }
