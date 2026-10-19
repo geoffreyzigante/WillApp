@@ -31,7 +31,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SelfieCameraModal } from './SelfieCameraModal';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BoutonApple } from '../BoutonApple';
+import { BoutonsConnexion } from '../BoutonsConnexion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lh } from '../../constants/typo';
 import { COURBE, DUREE } from '../../constants/anim';
@@ -211,11 +211,11 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
   // naissance, et la regle des 13 ans l exige. Tant que c est non nul, le
   // formulaire se reduit a ce qui manque (date + CGU) et le bouton final
   // complete le profil au lieu de creer un compte.
-  const [sessionApple, setSessionApple] = useState(null);
+  const [sessionOAuth, setSessionOAuth] = useState(null);
   // Jeton Apple garde en attente pendant qu on demande « pas encore de
   // compte ? ». Le jeton reste valable quelques minutes, largement de quoi
   // laisser l utilisateur repondre.
-  const [appleEnAttente, setAppleEnAttente] = useState(null);
+  const [oauthEnAttente, setOauthEnAttente] = useState(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -223,8 +223,8 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
     setForgotEmailSent(false);
     setRegisterStep('selfie');
     setSelfieUri(null);
-    setSessionApple(null);
-    setAppleEnAttente(null);
+    setSessionOAuth(null);
+    setOauthEnAttente(null);
     setConsentChecked(false);
     AsyncStorage.getItem('@will_last_email_runner').then(v => {
       if (v) setEmail(prev => prev || v);
@@ -256,15 +256,18 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
     setDateOfBirth(''); setDobInput(''); setDobPickerOuvert(false); setCguAccepted(false); setNotifsAccepted(true);
     setPasswordConfirm('');
     setError(''); setInfo(''); setBusy(false); setForgotEmailSent(false); setShowPassword(false);
-    setSessionApple(null); setAppleEnAttente(null);
+    setSessionOAuth(null); setOauthEnAttente(null);
   };
 
   const pwdStrength = passwordStrength(password);
 
-  // Le jeton Apple part tel quel au worker, qui le verifie contre les cles
-  // publiques d Apple. Trois issues : compte connu (on entre), compte cree
-  // mais incomplet (etape date de naissance), refus.
-  const connecterAvecApple = async ({ identityToken, prenom, nom }, creer = false) => {
+  // Le jeton du fournisseur part tel quel au worker, qui le verifie contre
+  // les cles publiques d Apple ou de Google. Trois issues : compte connu (on
+  // entre), compte cree mais incomplet (etape date de naissance), refus.
+  // Un seul chemin pour les deux fournisseurs : le worker ne distingue que le
+  // champ `provider`, et tout ce qui suit la verification est identique.
+  const connecterAvecOAuth = async (provider, { identityToken, prenom, nom }, creer = false) => {
+    const nomFournisseur = provider === 'google' ? 'Google' : 'Apple';
     setError('');
     setBusy(true);
     // La question « pas encore de compte ? » ne se pose que depuis l onglet
@@ -277,7 +280,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: 'apple',
+          provider,
           id_token: identityToken,
           role: 'runner',
           first_name: prenom,
@@ -287,12 +290,12 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
       });
       const data = await r.json();
       if (!r.ok) {
-        setError(data.error || 'Connexion Apple refusée.');
+        setError(data.error || `Connexion ${nomFournisseur} refusée.`);
         setBusy(false);
         return;
       }
       if (data.existe === false) {
-        setAppleEnAttente({ identityToken, prenom, nom });
+        setOauthEnAttente({ provider, identityToken, prenom, nom });
         setBusy(false);
         return;
       }
@@ -309,7 +312,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
         !String(data.profile?.firstName || prenom || '').trim() ||
         !String(data.profile?.lastName || nom || '').trim();
       if (data.date_naissance_requise || sansNoms) {
-        setSessionApple(session);
+        setSessionOAuth(session);
         setFirstName(data.profile?.firstName || prenom || '');
         setLastName(data.profile?.lastName || nom || '');
         setEmail(data.profile?.email || '');
@@ -350,7 +353,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
     // Fin de parcours Apple : le compte existe deja cote serveur, il ne lui
     // manque que la date de naissance. On complete le profil, puis on
     // enchaine exactement comme une inscription classique (selfie, notifs).
-    if (sessionApple) {
+    if (sessionOAuth) {
       if (!firstName.trim() || !lastName.trim()) { setError('Prénom et nom requis.'); return; }
       if (!dateOfBirth) { setError('Date de naissance requise.'); return; }
       if (ageFromIso(dateOfBirth) < 13) { setError('Tu dois avoir au moins 13 ans.'); return; }
@@ -359,27 +362,27 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
       try {
         const r = await fetch(`${API_URL}/runner/profile`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionApple.token}` },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionOAuth.token}` },
           body: JSON.stringify({ dateOfBirth, firstName: firstName.trim(), lastName: lastName.trim() }),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) { setError(data.error || 'Erreur'); setBusy(false); return; }
-        const profil = data.profile || sessionApple.profile;
+        const profil = data.profile || sessionOAuth.profile;
         onSuccess({
-          token: sessionApple.token,
+          token: sessionOAuth.token,
           profile: profil,
           isNewSignup: true,
-          roles: sessionApple.roles,
-          organizerProfile: sessionApple.organizerProfile,
+          roles: sessionOAuth.roles,
+          organizerProfile: sessionOAuth.organizerProfile,
         });
         try {
           if (selfieUri) {
             await AsyncStorage.setItem('@will_selfie', selfieUri);
-            await onSelfieSaved?.(selfieUri, { token: sessionApple.token, userId: profil?.userId });
+            await onSelfieSaved?.(selfieUri, { token: sessionOAuth.token, userId: profil?.userId });
           } else {
             onSkipSelfie?.();
           }
-          if (notifsAccepted) await onAskNotifications?.(sessionApple.token);
+          if (notifsAccepted) await onAskNotifications?.(sessionOAuth.token);
         } catch (err) {
           console.warn('[apple] etape selfie/notifs :', err?.message || err);
         }
@@ -597,7 +600,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
 
   useEffect(() => { if (visible) setEtapeLogin('email'); }, [visible]);
 
-  const submitLabel = sessionApple ? 'Terminer mon inscription'
+  const submitLabel = sessionOAuth ? 'Terminer mon inscription'
     : loginEtape1 ? 'Suivant'
     : mode === 'login' ? 'Se connecter'
     : mode === 'forgot' ? (forgotEmailSent ? 'Email envoyé' : 'Recevoir le lien')
@@ -839,7 +842,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
 
             {/* Email — commun aux modes formulaire. Apple l a deja fourni :
                 inutile de le redemander, et il n est pas modifiable. */}
-            {!etapeSelfie && !sessionApple && !loginEtape2 && (
+            {!etapeSelfie && !sessionOAuth && !loginEtape2 && (
             <FloatingField label="Email" style={{ marginBottom: 14 }}>
               {/* La touche entree enchaine au lieu de ne rien faire : a
                   l etape 1 elle valide l email et ouvre le mot de passe. */}
@@ -857,7 +860,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
             )}
 
             {/* Mot de passe (pas en forgot / etape selfie / fin Apple) */}
-            {mode !== 'forgot' && !etapeSelfie && !sessionApple && !loginEtape1 && (
+            {mode !== 'forgot' && !etapeSelfie && !sessionOAuth && !loginEtape1 && (
               <View style={{ marginBottom: 14 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
                   <Text style={fieldStyles.label}>Mot de passe</Text>
@@ -1097,11 +1100,12 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                 </TouchableOpacity>
               )}
 
-              {/* Voie Apple, sous le formulaire : l email reste l entree
-                  principale (decision user 2026-09-02). Le composant ne rend
-                  rien si Apple n est pas disponible sur l appareil. */}
-              {mode !== 'forgot' && !sessionApple && !loginEtape2 && (
-                <BoutonApple onJeton={connecterAvecApple} onErreur={setError} style={{ marginTop: 2 }} />
+              {/* Voies Apple et Google, sous le formulaire : l email reste
+                  l entree principale (decision user 2026-09-02). Le composant
+                  ne rend que les fournisseurs reellement disponibles sur
+                  l appareil, separateur compris. */}
+              {mode !== 'forgot' && !sessionOAuth && !loginEtape2 && (
+                <BoutonsConnexion onJeton={connecterAvecOAuth} onErreur={setError} style={{ marginTop: 2 }} />
               )}
 
               {/* Seul le mode "oubli" garde un lien de retour : la bascule
@@ -1120,27 +1124,27 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
           </ScrollView>
         </KeyboardAvoidingView>
 
-        {/* Apple a bien identifie la personne, mais aucun compte Will ne lui
+        {/* Le fournisseur a bien identifie la personne, mais aucun compte Will ne lui
             correspond. On demande avant de creer : cote worker, le premier
             appel etait une simple verification (check_only), donc « Annuler »
             ne laisse rien derriere lui. */}
-        <Modal visible={!!appleEnAttente} transparent animationType="fade" onRequestClose={() => setAppleEnAttente(null)}>
+        <Modal visible={!!oauthEnAttente} transparent animationType="fade" onRequestClose={() => setOauthEnAttente(null)}>
           <View style={{ flex: 1, backgroundColor: 'rgba(26,11,46,0.55)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
             <View style={{ width: '100%', backgroundColor: '#fff', borderRadius: 22, paddingHorizontal: 24, paddingTop: 26, paddingBottom: 18 }}>
               <Text style={{ fontFamily: 'AVEstiana', fontSize: 26, lineHeight: lh(26, 30), color: T.primary, textAlign: 'center' }}>
                 Pas encore de compte ?
               </Text>
               <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 14, lineHeight: 20, color: T.textBody, textAlign: 'center', marginTop: 12 }}>
-                Aucun compte Will n'est associé à cet identifiant Apple.
+                Aucun compte Will n'est associé à cet identifiant {oauthEnAttente?.provider === 'google' ? 'Google' : 'Apple'}.
               </Text>
               <TouchableOpacity
-                onPress={() => { const jeton = appleEnAttente; setAppleEnAttente(null); connecterAvecApple(jeton, true); }}
+                onPress={() => { const jeton = oauthEnAttente; setOauthEnAttente(null); connecterAvecOAuth(jeton.provider, jeton, true); }}
                 activeOpacity={0.9}
                 style={{ marginTop: 22, height: 50, borderRadius: 12, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' }}
               >
                 <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>M'inscrire</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setAppleEnAttente(null)} style={{ paddingVertical: 12, alignItems: 'center' }}>
+              <TouchableOpacity onPress={() => setOauthEnAttente(null)} style={{ paddingVertical: 12, alignItems: 'center' }}>
                 <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 14, color: T.textMuted }}>Annuler</Text>
               </TouchableOpacity>
             </View>

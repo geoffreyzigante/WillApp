@@ -20,7 +20,7 @@ import { passwordStrength } from '../../utils/passwordStrength';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '../Icon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BoutonApple } from '../BoutonApple';
+import { BoutonsConnexion } from '../BoutonsConnexion';
 import { lh } from '../../constants/typo';
 
 const T = {
@@ -170,7 +170,8 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
   // Meme route que cote coureur, avec role=organizer : le worker cree ou
   // complete le compte et renvoie un jeton organisateur. Aucune date de
   // naissance n est requise pour ce role.
-  const connecterAvecApple = async ({ identityToken, prenom, nom }) => {
+  const connecterAvecOAuth = async (provider, { identityToken, prenom, nom }) => {
+    const nomFournisseur = provider === 'google' ? 'Google' : 'Apple';
     setError('');
     setBusy(true);
     try {
@@ -178,7 +179,7 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: 'apple',
+          provider,
           id_token: identityToken,
           role: 'organizer',
           first_name: prenom,
@@ -187,7 +188,7 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
       });
       const data = await r.json();
       if (!r.ok) {
-        setError(data.error || 'Connexion Apple refusée.');
+        setError(data.error || `Connexion ${nomFournisseur} refusée.`);
         setBusy(false);
         return;
       }
@@ -373,8 +374,9 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
                   : <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>{mode === 'login' ? 'Se connecter' : 'Créer mon compte'}</Text>}
               </TouchableOpacity>
 
-              {/* Voie Apple, sous le formulaire — meme regle que cote coureur. */}
-              <BoutonApple onJeton={connecterAvecApple} onErreur={setError} style={{ marginTop: 2 }} />
+              {/* Voies Apple et Google, sous le formulaire — meme regle que
+                  cote coureur. */}
+              <BoutonsConnexion onJeton={connecterAvecOAuth} onErreur={setError} style={{ marginTop: 2 }} />
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
