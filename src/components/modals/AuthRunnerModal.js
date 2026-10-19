@@ -519,6 +519,15 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
     return () => { a.remove(); b.remove(); };
   }, []);
 
+  // Le repliement a ete ecrit avant la connexion en deux temps, quand il
+  // fallait loger DEUX champs sous une entete de 210 pt. Avec un seul champ,
+  // l etape 1 tient largement (≈190 pt necessaires pour 254 disponibles) :
+  // replier n y gagne plus rien et coute un sursaut visuel a chaque focus.
+  // Aucune des references ne fait disparaitre son identite des qu on touche
+  // un champ -- Google garde son logo, Apple garde son titre.
+  // Reste l inscription : six champs, la place manque vraiment.
+  const replierEntete = clavierOuvert && mode === 'register';
+
   useEffect(() => { if (visible) setEtapeLogin('email'); }, [visible]);
 
   const submitLabel = sessionApple ? 'Terminer mon inscription'
@@ -539,11 +548,11 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
           end={{ x: 1, y: 1 }}
           style={{
             paddingHorizontal: 24,
-            paddingTop: clavierOuvert ? (insets.top || StatusBar.currentHeight || 20) : padHaut,
+            paddingTop: replierEntete ? (insets.top || StatusBar.currentHeight || 20) : padHaut,
             paddingBottom: mode === 'forgot' ? 26 : 0,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: clavierOuvert ? 8 : 18 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: replierEntete ? 8 : 18 }}>
             {/* Etape 2 : le chevron revient a l email au lieu de fermer --
                 une faute de frappe se corrige sans tout recommencer. */}
             <TouchableOpacity
@@ -561,14 +570,14 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
             {/* Le logo manquait a l appel sur les ecrans d entree : c est
                 pourtant la qu il compte, quand on ne sait pas encore ou on
                 est. Centre sur la rangee, la croix restant a gauche. */}
-            {!clavierOuvert && (
+            {!replierEntete && (
               <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, alignItems: 'center' }}>
                 <Icon.Logo width={64} color="#fff" />
               </View>
             )}
           </View>
 
-          {!clavierOuvert && (
+          {!replierEntete && (
             <Text style={{
               fontFamily: 'AVEstiana', fontStyle: 'normal',
               fontSize: 30, color: '#fff', textAlign: 'center', marginBottom: mode === 'forgot' ? 0 : 20,
