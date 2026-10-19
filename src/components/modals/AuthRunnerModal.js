@@ -25,8 +25,7 @@ import { API_URL } from '../../constants/api';
 import { passwordStrength } from '../../utils/passwordStrength';
 import { Secure, BIOMETRIC_CONSENT_KEY } from '../../services/secureStore';
 import {
-  TexteConsentBiometrique, LABEL_CASE_CONSENT, URL_CONFIDENTIALITE,
-  LIEN_CONFIDENTIALITE_LABEL, PHRASE_SELFIE_AVANT_COURSE,
+  PHRASE_SELFIE_AVANT_COURSE,
 } from '../TexteConsentBiometrique';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SelfieCameraModal } from './SelfieCameraModal';
@@ -138,8 +137,6 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
   const [registerStep, setRegisterStep] = useState('selfie'); // 'selfie' | 'form'
   const [selfieUri, setSelfieUri] = useState(null);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [consentChecked, setConsentChecked] = useState(false);
-  const [consentGiven, setConsentGiven] = useState(null);
   const [forgotEmailSent, setForgotEmailSent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -225,31 +222,17 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
     setSelfieUri(null);
     setSessionOAuth(null);
     setOauthEnAttente(null);
-    setConsentChecked(false);
     AsyncStorage.getItem('@will_last_email_runner').then(v => {
       if (v) setEmail(prev => prev || v);
     }).catch(() => {});
   }, [visible, initialMode]);
 
   // Audit coureur 6 -- le consentement biometrique est un acte de COMPTE, pas
-  // d appareil. La cle etait stockee par telephone et n etait pas effacee a
-  // la deconnexion : un deuxieme utilisateur qui creait son compte sur le
-  // meme telephone ne voyait ni le texte, ni la case, ni le lien vers la
-  // politique de confidentialite. Deux verrous, complementaires :
-  //   - ici : en mode inscription, on IGNORE la cle. Un compte qui n existe
-  //     pas encore n a jamais consenti, quoi qu il y ait sur l appareil.
-  //   - App.js logoutRunner : la cle est effacee a la deconnexion, comme
-  //     elle l est deja a la suppression du selfie, des donnees faciales et
-  //     du compte.
-  useEffect(() => {
-    if (!visible) return;
-    if (mode === 'register') {
-      setConsentGiven(false);
-      setConsentChecked(false);
-      return;
-    }
-    Secure.getItem(BIOMETRIC_CONSENT_KEY).then(v => setConsentGiven(!!v)).catch(() => setConsentGiven(false));
-  }, [visible, mode]);
+  // d appareil : la cle est effacee a la deconnexion (App.js logoutRunner),
+  // comme elle l est deja a la suppression du selfie, des donnees faciales
+  // et du compte. Elle n est plus lue pour decider de ce qui s affiche :
+  // l inscription ne montre plus de pave juridique, elle est portee par la
+  // case des CGU, cochee a chaque creation de compte.
 
   const reset = () => {
     setEmail(''); setPassword(''); setFirstName(''); setLastName('');
@@ -358,6 +341,9 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
       if (!dateOfBirth) { setError('Date de naissance requise.'); return; }
       if (ageFromIso(dateOfBirth) < 13) { setError('Tu dois avoir au moins 13 ans.'); return; }
       if (!cguAccepted) { setError("Tu dois accepter les CGU et la politique de confidentialité."); return; }
+      // La case des CGU porte aussi le consentement biometrique : on le
+      // date ici, au moment ou elle est validee.
+      await Secure.setItem(BIOMETRIC_CONSENT_KEY, new Date().toISOString()).catch(() => {});
       setBusy(true);
       try {
         const r = await fetch(`${API_URL}/runner/profile`, {
@@ -476,6 +462,9 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
       if (ageFromIso(dateOfBirth) < 13) { setError('Tu dois avoir au moins 13 ans pour créer un compte.'); return; }
       if (password !== passwordConfirm) { setError('Les deux mots de passe ne correspondent pas.'); return; }
       if (!cguAccepted) { setError("Tu dois accepter les CGU et la politique de confidentialité."); return; }
+      // La case des CGU porte aussi le consentement biometrique : on le
+      // date ici, au moment ou elle est validee.
+      await Secure.setItem(BIOMETRIC_CONSENT_KEY, new Date().toISOString()).catch(() => {});
     }
     setBusy(true);
     try {
@@ -558,11 +547,6 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
     }
   };
 
-  const acceptConsent = async () => {
-    if (!consentChecked) return;
-    await Secure.setItem(BIOMETRIC_CONSENT_KEY, new Date().toISOString());
-    setConsentGiven(true);
-  };
   const etapeSelfie = mode === 'register' && registerStep === 'selfie';
   const insets = useSafeAreaInsets();
   // Dans une Modal RN, insets.top peut revenir a 0 (Android) : garde-fou.
@@ -956,11 +940,19 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                   <View style={[checkboxStyles.box, cguAccepted && checkboxStyles.boxOn]}>
                     {cguAccepted && <CheckIcon />}
                   </View>
+                  {/* Une seule case, biometrie comprise — exactement comme
+                      le site (decision user 2026-10-19). Le pave RGPD qui
+                      ouvrait l etape 1 disparait : il arrivait avant meme
+                      qu on ait explique a quoi sert le selfie. Le detail du
+                      traitement reste a un lien de distance, et l etape 1
+                      rappelle l essentiel en une ligne : image chiffree,
+                      serveurs europeens, 12 mois. */}
                   <Text style={checkboxStyles.text}>
                     J'accepte les{' '}
                     <Text onPress={() => Linking.openURL('https://will-app.com/cgu')} style={{ color: T.primary, fontFamily: 'Montserrat-SemiBold' }}>CGU</Text>
                     {' '}et la{' '}
-                    <Text onPress={() => Linking.openURL('https://will-app.com/confidentialite')} style={{ color: T.primary, fontFamily: 'Montserrat-SemiBold' }}>politique de confidentialité</Text>.
+                    <Text onPress={() => Linking.openURL('https://will-app.com/confidentialite')} style={{ color: T.primary, fontFamily: 'Montserrat-SemiBold' }}>politique de confidentialité</Text>
+                    , y compris le traitement biométrique de mon image pour la reconnaissance faciale sur les events Will, pendant 12 mois renouvelables.
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -974,47 +966,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
             )}
 
             {/* ── Inscription, etape 1 : le selfie d abord ───────────── */}
-            {etapeSelfie && consentGiven === false && (
-              <>
-                <Text style={{ fontSize: 12, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.1, textTransform: 'uppercase', color: T.textMuted, marginBottom: 8 }}>
-                  Étape 1 sur 2 — Ton selfie
-                </Text>
-                <TexteConsentBiometrique style={{ fontFamily: 'Montserrat', color: T.textBody, fontSize: 13.5, lineHeight: 19, marginBottom: 14 }} />
-                <TouchableOpacity
-                  onPress={() => Linking.openURL(URL_CONFIDENTIALITE).catch(() => {})}
-                  style={{ marginBottom: 16, alignSelf: 'flex-start' }}
-                  hitSlop={10}
-                >
-                  <Text style={{ color: T.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold', textDecorationLine: 'underline' }}>
-                    {LIEN_CONFIDENTIALITE_LABEL}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setConsentChecked(c => !c)}
-                  style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 18 }}
-                  activeOpacity={0.7}
-                >
-                  <View style={[checkboxStyles.box, consentChecked && checkboxStyles.boxOn]}>
-                    {consentChecked && <CheckIcon />}
-                  </View>
-                  <Text style={[checkboxStyles.text, { marginLeft: 12 }]}>
-                    {LABEL_CASE_CONSENT}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={acceptConsent}
-                  disabled={!consentChecked}
-                  activeOpacity={0.9}
-                  style={{ width: '100%', backgroundColor: T.primary, height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', opacity: consentChecked ? 1 : 0.4 }}
-                >
-                  <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>Continuer</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setRegisterStep('form')} style={{ paddingVertical: 14, alignItems: 'center', marginTop: 6 }}>
-                  <Text style={{ color: T.textMuted, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>Faire mon selfie plus tard</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {etapeSelfie && consentGiven === true && (
+            {etapeSelfie && (
               <>
                 {/* Maquette user 2026-09-01. */}
                 <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 14, color: '#1A1426', textAlign: 'center', marginBottom: 6 }}>
