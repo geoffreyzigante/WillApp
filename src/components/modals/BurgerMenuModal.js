@@ -16,6 +16,7 @@ import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
+import * as Updates from 'expo-updates';
 import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
 import { VENTE_PHOTOS_OUVERTE } from '../../constants/api';
@@ -68,6 +69,23 @@ function SousRow({ label, onPress, dernier }) {
       </View>
     </TouchableOpacity>
   );
+}
+
+// Ce qui tourne, en clair. Hors de tout composant : aucune dependance au
+// rendu, et ca ne change pas pendant la vie de l app.
+function libelleVersion() {
+  const runtime = Updates.runtimeVersion || '—';
+  if (Updates.isEmbeddedLaunch || !Updates.createdAt) return `${runtime} · binaire`;
+  try {
+    const d = new Date(Updates.createdAt);
+    const jj = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${runtime} · maj du ${jj}/${mm} ${hh}:${mi}`;
+  } catch {
+    return `${runtime} · maj`;
+  }
 }
 
 export function BurgerMenuModal({
@@ -362,6 +380,14 @@ export function BurgerMenuModal({
                   {/* Meme accroche que le hero du site. */}
                   <Text style={styles.heroName}>Un selfie.{'\n'}Toutes tes photos.</Text>
                   <Text style={styles.heroStatus}>L'application photo des événements sportifs</Text>
+                  {/* La version qui tourne reellement.
+                      Le 19/10/2026, trois heures sont passees a corriger un
+                      ecran sans pouvoir dire si le correctif etait arrive sur
+                      l appareil : ni Geoffrey ni moi ne pouvions lire la
+                      version active. Cette ligne repond a la question en une
+                      seconde. « binaire » = le bundle livre avec l app,
+                      « maj du ... » = une mise a jour OTA appliquee. */}
+                  <Text style={styles.heroVersion}>{libelleVersion()}</Text>
                 </LinearGradient>
 
                 <Animated.View style={{ flex: 1, opacity: contenuOpacity, transform: [{ translateX: contenuX }] }}>
@@ -505,6 +531,13 @@ const styles = StyleSheet.create({
   },
   heroStatus: { fontFamily: 'Montserrat',
     fontSize: 12.5, color: 'rgba(255,255,255,0.88)', marginTop: 4, lineHeight: 17,
+  },
+  // Discret : c est un outil de diagnostic, pas une information produit.
+  heroVersion: {
+    fontFamily: 'Montserrat',
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.45)',
+    marginTop: 8,
   },
 
   menuRow: {
