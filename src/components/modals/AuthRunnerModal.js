@@ -11,11 +11,11 @@
 //   - register : prenom + nom + date + email + password + CGU + biométrique
 //   - forgot : email -> POST /runner/forgot-password
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Keyboard,
   KeyboardAvoidingView, ActivityIndicator, Platform, Linking, Alert, StatusBar,
-  LayoutAnimation,
+  LayoutAnimation, Animated, Easing,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -171,10 +171,37 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
   // disparaissaient, la pastille apparaissait, le champ etait remplace, sans
   // aucune continuite. On anime la bascule -- ce qui part s efface, ce qui
   // arrive se place, et la hauteur de l entete suit au lieu de sauter.
+  // LayoutAnimation ne suffisait pas : dans une Modal, un changement qui
+  // monte et demonte des vues n est pas anime de facon fiable. On pilote donc
+  // la transition nous-memes -- fondu plus glissement, comme un empilement de
+  // pages. -1 = la vue arrive, 0 = en place, 1 = la vue part.
+  const transition = useRef(new Animated.Value(0)).current;
+  const sens = useRef(1);
+
   const allerEtape = (cible) => {
-    LayoutAnimation.configureNext(
-      LayoutAnimation.create(260, 'easeInEaseOut', 'opacity'));
-    setEtapeLogin(cible);
+    sens.current = cible === 'motdepasse' ? 1 : -1;
+    Animated.timing(transition, {
+      toValue: 1, duration: 120,
+      easing: Easing.in(Easing.quad), useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) return;
+      setEtapeLogin(cible);
+      transition.setValue(-1);
+      Animated.timing(transition, {
+        toValue: 0, duration: 200,
+        easing: Easing.out(Easing.cubic), useNativeDriver: true,
+      }).start();
+    });
+  };
+
+  const styleTransition = {
+    opacity: transition.interpolate({ inputRange: [-1, 0, 1], outputRange: [0, 1, 0] }),
+    transform: [{
+      translateX: transition.interpolate({
+        inputRange: [-1, 0, 1],
+        outputRange: [28 * sens.current, 0, -28 * sens.current],
+      }),
+    }],
   };
 
   // Message neutre (violet, pas rouge) : « pas de compte, cree le tien ».
@@ -713,6 +740,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 28, paddingTop: 20, paddingBottom: 44 + insets.bottom }}
           >
+          <Animated.View style={styleTransition}>
 
             {mode === 'register' && registerStep === 'form' && (
               <>
@@ -1087,6 +1115,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
               )}
             </View>
             )}
+          </Animated.View>
           </ScrollView>
         </KeyboardAvoidingView>
 
