@@ -81,7 +81,7 @@
       },
       "sentryDsn": "https://2c6ee4fdfc1d3b0dd4c707979f09c6f7@o4511568397205504.ingest.de.sentry.io/4511568409854032",
       "googleWebClientId": "980068791050-jg8nhoms2nre8dthm5va79rgnff0jasn.apps.googleusercontent.com",
-      "googleIosClientId": ""
+      "googleIosClientId": "980068791050-ft6rjv57ps938hg2s8lj3etbur5117eo.apps.googleusercontent.com"
     },
     "owner": "geoffreyzigante",
     "runtimeVersion": {
@@ -130,6 +130,12 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-secure-store",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.980068791050-ft6rjv57ps938hg2s8lj3etbur5117eo"
+        }
+      ],
       "./plugins/with-human-detector",
       "./plugins/with-human-detector-android",
       "./plugins/with-exposure-reader",
