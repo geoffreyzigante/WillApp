@@ -167,6 +167,16 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
   const loginEtape1 = mode === 'login' && etapeLogin === 'email';
   const loginEtape2 = mode === 'login' && etapeLogin === 'motdepasse';
 
+  // Passer d une etape a l autre changeait tout d un coup : les onglets
+  // disparaissaient, la pastille apparaissait, le champ etait remplace, sans
+  // aucune continuite. On anime la bascule -- ce qui part s efface, ce qui
+  // arrive se place, et la hauteur de l entete suit au lieu de sauter.
+  const allerEtape = (cible) => {
+    LayoutAnimation.configureNext(
+      LayoutAnimation.create(260, 'easeInEaseOut', 'opacity'));
+    setEtapeLogin(cible);
+  };
+
   // Message neutre (violet, pas rouge) : « pas de compte, cree le tien ».
   const [info, setInfo] = useState('');
   // Session ouverte par Apple mais incomplete : Apple ne donne pas de date de
@@ -419,7 +429,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
         // COMPTE_INCONNU si le compte n existe pas.
       }
       setBusy(false);
-      setEtapeLogin('motdepasse');
+      allerEtape('motdepasse');
       return;
     }
     if (mode === 'register') {
@@ -586,7 +596,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                 une faute de frappe se corrige sans tout recommencer. */}
             <TouchableOpacity
               onPress={() => {
-                if (loginEtape2) { setEtapeLogin('email'); setError(''); }
+                if (loginEtape2) { allerEtape('email'); setError(''); }
                 else onClose();
               }}
               hitSlop={10}
@@ -656,7 +666,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
           {loginEtape2 ? (
             <View style={{ alignItems: 'center', paddingBottom: 16 }}>
               <TouchableOpacity
-                onPress={() => { setEtapeLogin('email'); setError(''); }}
+                onPress={() => { allerEtape('email'); setError(''); }}
                 activeOpacity={0.8}
                 hitSlop={8}
                 accessibilityRole="button"
