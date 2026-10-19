@@ -156,6 +156,17 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  // Connexion en deux temps (reference : Google). Un seul champ a l ecran,
+  // donc le clavier ne peut plus rien cacher, quel que soit le telephone.
+  // Remplace la course aux pixels : le probleme n est pas resolu, il est
+  // supprime. Voir CLAUDE.md, « La reference, c est Apple, Google ou
+  // Facebook ».
+  const [etapeLogin, setEtapeLogin] = useState('email');
+
+  const loginEtape1 = mode === 'login' && etapeLogin === 'email';
+  const loginEtape2 = mode === 'login' && etapeLogin === 'motdepasse';
+
   // Message neutre (violet, pas rouge) : « pas de compte, cree le tien ».
   const [info, setInfo] = useState('');
   // Session ouverte par Apple mais incomplete : Apple ne donne pas de date de
@@ -372,6 +383,16 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
       return;
     }
     const emailPropre = String(email || '').trim().toLowerCase();
+    // Etape 1 de la connexion : on ne verifie que la forme de l email et on
+    // passe au mot de passe. Aucun appel reseau ici -- repondre « cet email
+    // existe / n existe pas » renseignerait un attaquant sur les comptes.
+    if (loginEtape1) {
+      if (!emailPropre) { setError('Tous les champs sont obligatoires.'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailPropre)) { setError('Email invalide.'); return; }
+      setError('');
+      setEtapeLogin('motdepasse');
+      return;
+    }
     if (mode === 'register') {
       // Meme ordre et memes messages que le site : c est le meme parcours,
       // il ne doit pas repondre differemment selon la surface. L email
@@ -498,7 +519,10 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
     return () => { a.remove(); b.remove(); };
   }, []);
 
+  useEffect(() => { if (visible) setEtapeLogin('email'); }, [visible]);
+
   const submitLabel = sessionApple ? 'Terminer mon inscription'
+    : loginEtape1 ? 'Suivant'
     : mode === 'login' ? 'Se connecter'
     : mode === 'forgot' ? (forgotEmailSent ? 'Email envoyé' : 'Recevoir le lien')
     : 'Créer mon compte';
@@ -520,8 +544,19 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: clavierOuvert ? 8 : 18 }}>
-            <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>✕</Text>
+            {/* Etape 2 : le chevron revient a l email au lieu de fermer --
+                une faute de frappe se corrige sans tout recommencer. */}
+            <TouchableOpacity
+              onPress={() => {
+                if (loginEtape2) { setEtapeLogin('email'); setError(''); }
+                else onClose();
+              }}
+              hitSlop={10}
+              style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>
+                {loginEtape2 ? '‹' : '✕'}
+              </Text>
             </TouchableOpacity>
             {/* Le logo manquait a l appel sur les ecrans d entree : c est
                 pourtant la qu il compte, quand on ne sait pas encore ou on
@@ -554,6 +589,9 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                       setMode(cle);
                       setError('');
                       setInfo('');
+                      // Sinon on revenait sur l etape mot de passe sans
+                      // email a l ecran.
+                      if (cle === 'login') setEtapeLogin('email');
                       if (cle === 'register') setRegisterStep(selfieUri ? 'form' : 'selfie');
                     }}
                     style={{
@@ -570,6 +608,21 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
               })}
             </View>
           )}
+
+          {/* Etape 2 : on rappelle dans quel compte on entre. Sans ca,
+              l utilisateur tape un mot de passe sans savoir pour qui. */}
+          {loginEtape2 ? (
+            <Text
+              numberOfLines={1}
+              style={{
+                fontFamily: 'Montserrat-Medium', fontSize: 13,
+                color: 'rgba(255,255,255,0.92)', textAlign: 'center',
+                paddingBottom: 10, lineHeight: lh(13, 18, 'Montserrat'),
+              }}
+            >
+              {String(email || '').trim().toLowerCase()}
+            </Text>
+          ) : null}
         </LinearGradient>
 
         {/* Clavier iOS : le ScrollView ci-dessous porte
@@ -684,7 +737,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
 
             {/* Email — commun aux modes formulaire. Apple l a deja fourni :
                 inutile de le redemander, et il n est pas modifiable. */}
-            {!etapeSelfie && !sessionApple && (
+            {!etapeSelfie && !sessionApple && !loginEtape2 && (
             <FloatingField label="Email" style={{ marginBottom: 14 }}>
               <TextInput
                 placeholder="willy@exemple.fr" placeholderTextColor={T.placeholder}
@@ -697,7 +750,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
             )}
 
             {/* Mot de passe (pas en forgot / etape selfie / fin Apple) */}
-            {mode !== 'forgot' && !etapeSelfie && !sessionApple && (
+            {mode !== 'forgot' && !etapeSelfie && !sessionApple && !loginEtape1 && (
               <View style={{ marginBottom: 14 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
                   <Text style={fieldStyles.label}>Mot de passe</Text>
@@ -934,7 +987,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
               {/* Voie Apple, sous le formulaire : l email reste l entree
                   principale (decision user 2026-09-02). Le composant ne rend
                   rien si Apple n est pas disponible sur l appareil. */}
-              {mode !== 'forgot' && !sessionApple && (
+              {mode !== 'forgot' && !sessionApple && !loginEtape2 && (
                 <BoutonApple onJeton={connecterAvecApple} onErreur={setError} style={{ marginTop: 2 }} />
               )}
 
