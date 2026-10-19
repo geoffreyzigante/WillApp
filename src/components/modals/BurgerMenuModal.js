@@ -11,7 +11,7 @@
 // suivante (modal stacking iOS, cf feedback_rn_modal_stacking).
 
 import React, { useRef, useEffect, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Easing, Alert } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Alert } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,7 +19,7 @@ import { Image as ExpoImage } from 'expo-image';
 import * as Updates from 'expo-updates';
 import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
-import { COURBE } from '../../constants/anim';
+import { COURBE, DUREE } from '../../constants/anim';
 import { VENTE_PHOTOS_OUVERTE } from '../../constants/api';
 import { caps } from '../../services/capabilities';
 import { lh } from '../../constants/typo';
@@ -156,22 +156,35 @@ export function BurgerMenuModal({
 
   const slideX = useRef(new Animated.Value(DRAWER_W)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
+
+  // Le meme piege que pour contenuOpacity ci-dessus, mais sur le tiroir :
+  // <Modal visible={visible}> se demontait a l instant ou on fermait, donc
+  // l animation de sortie n avait aucune frame pour s afficher et slideX
+  // restait bloque a 0 -- la fermeture ne s animait jamais, et l ouverture
+  // suivante partait deja en place. On garde la Modal montee jusqu a la fin
+  // de l animation, comme le fait ProfileMenuModal.
+  const [monte, setMonte] = useState(visible);
+  useEffect(() => { if (visible) setMonte(true); }, [visible]);
+
   useEffect(() => {
+    if (!monte) return;
     Animated.parallel([
       Animated.timing(slideX, {
         toValue: visible ? 0 : DRAWER_W,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
+        duration: visible ? DUREE.entree : DUREE.sortie,
+        easing: visible ? COURBE.entree : COURBE.sortie,
         useNativeDriver: true,
       }),
       Animated.timing(backdropOpacity, {
         toValue: visible ? 1 : 0,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
+        duration: visible ? DUREE.entree : DUREE.sortie,
+        easing: visible ? COURBE.entree : COURBE.sortie,
         useNativeDriver: true,
       }),
-    ]).start();
-  }, [visible, slideX, backdropOpacity]);
+    ]).start(({ finished }) => {
+      if (finished && !visible) setMonte(false);
+    });
+  }, [visible, monte, slideX, backdropOpacity]);
 
   // Prefetch du selfie des qu il est connu (au mount ou au changement de
   // selfieUri). Quand l user ouvre le drawer, l image est deja warm en cache
@@ -219,7 +232,7 @@ export function BurgerMenuModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <Modal visible={monte} transparent animationType="none" onRequestClose={onClose}>
       <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backdropOpacity }]}>
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose}>
           {Platform.OS === 'ios' ? (
