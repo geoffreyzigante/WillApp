@@ -577,8 +577,12 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
             </Text>
           )}
 
-          {/* Connexion / Inscription : onglets textuels soulignes, en rose. */}
-          {mode !== 'forgot' && (
+          {/* Connexion / Inscription : onglets textuels soulignes, en rose.
+              Masques a l etape 2 : le choix est deja fait, et leur soulignement
+              rose se disputait la place avec la pastille du compte. Google fait
+              pareil -- a ce moment il ne reste que le retour, le titre et le
+              compte. */}
+          {mode !== 'forgot' && !loginEtape2 && (
             <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 30 }}>
               {[['login', 'Connexion'], ['register', 'Inscription']].map(([cle, libelle]) => {
                 const actif = mode === cle;
@@ -612,16 +616,37 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
           {/* Etape 2 : on rappelle dans quel compte on entre. Sans ca,
               l utilisateur tape un mot de passe sans savoir pour qui. */}
           {loginEtape2 ? (
-            <Text
-              numberOfLines={1}
-              style={{
-                fontFamily: 'Montserrat-Medium', fontSize: 13,
-                color: 'rgba(255,255,255,0.92)', textAlign: 'center',
-                paddingBottom: 10, lineHeight: lh(13, 18, 'Montserrat'),
-              }}
-            >
-              {String(email || '').trim().toLowerCase()}
-            </Text>
+            <View style={{ alignItems: 'center', paddingBottom: 16 }}>
+              <TouchableOpacity
+                onPress={() => { setEtapeLogin('email'); setError(''); }}
+                activeOpacity={0.8}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Changer de compte, actuellement ${String(email || '').trim().toLowerCase()}`}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 8,
+                  maxWidth: '100%',
+                  paddingVertical: 7, paddingHorizontal: 14,
+                  borderRadius: 999,
+                  backgroundColor: 'rgba(255,255,255,0.18)',
+                }}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    fontFamily: 'Montserrat-Medium', fontSize: 13.5, color: '#fff',
+                    flexShrink: 1, lineHeight: lh(13.5, 18, 'Montserrat'),
+                  }}
+                >
+                  {String(email || '').trim().toLowerCase()}
+                </Text>
+                {/* Chevron vers le bas : la convention qui dit « on peut en
+                    changer », chez Google comme chez Apple. */}
+                <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                  <Path d="m6 9 6 6 6-6" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </TouchableOpacity>
+            </View>
           ) : null}
         </LinearGradient>
 
