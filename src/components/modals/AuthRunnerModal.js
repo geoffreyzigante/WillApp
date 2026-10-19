@@ -773,11 +773,16 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                 inutile de le redemander, et il n est pas modifiable. */}
             {!etapeSelfie && !sessionApple && !loginEtape2 && (
             <FloatingField label="Email" style={{ marginBottom: 14 }}>
+              {/* La touche entree enchaine au lieu de ne rien faire : a
+                  l etape 1 elle valide l email et ouvre le mot de passe. */}
               <TextInput
                 placeholder="willy@exemple.fr" placeholderTextColor={T.placeholder}
                 value={email} onChangeText={setEmail}
                 keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
                 textContentType="emailAddress" autoComplete="email"
+                returnKeyType={loginEtape1 ? 'next' : 'done'}
+                onSubmitEditing={loginEtape1 ? submit : undefined}
+                blurOnSubmit={!loginEtape1}
                 style={fieldStyles.input}
               />
             </FloatingField>
@@ -795,12 +800,18 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                   )}
                 </View>
                 <View style={{ position: 'relative', justifyContent: 'center' }}>
+                  {/* Etape 2 : le champ prend le focus seul, le clavier ne
+                      retombe pas entre les deux etapes. Pas en inscription,
+                      ou il volerait le focus au prenom. */}
                   <TextInput
                     placeholder="••••••••" placeholderTextColor={T.placeholder}
                     value={password} onChangeText={setPassword}
                     secureTextEntry={!showPassword}
                     textContentType={mode === 'register' ? 'newPassword' : 'password'}
                     autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                    autoFocus={loginEtape2}
+                    returnKeyType={loginEtape2 ? 'go' : 'done'}
+                    onSubmitEditing={loginEtape2 ? submit : undefined}
                     style={[fieldStyles.input, { paddingRight: 46 }]}
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={8} style={{ position: 'absolute', right: 12, width: 30, height: 30, alignItems: 'center', justifyContent: 'center' }}>
