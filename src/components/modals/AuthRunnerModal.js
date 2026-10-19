@@ -34,6 +34,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BoutonApple } from '../BoutonApple';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lh } from '../../constants/typo';
+import { COURBE, DUREE } from '../../constants/anim';
 
 const T = {
   bg: '#ffffff',
@@ -181,15 +182,15 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
   const allerEtape = (cible) => {
     sens.current = cible === 'motdepasse' ? 1 : -1;
     Animated.timing(transition, {
-      toValue: 1, duration: 120,
-      easing: Easing.in(Easing.quad), useNativeDriver: true,
+      toValue: 1, duration: DUREE.sortie,
+      easing: COURBE.sortie, useNativeDriver: true,
     }).start(({ finished }) => {
       if (!finished) return;
       setEtapeLogin(cible);
       transition.setValue(-1);
       Animated.timing(transition, {
-        toValue: 0, duration: 200,
-        easing: Easing.out(Easing.cubic), useNativeDriver: true,
+        toValue: 0, duration: DUREE.entree,
+        easing: COURBE.entree, useNativeDriver: true,
       }).start();
     });
   };

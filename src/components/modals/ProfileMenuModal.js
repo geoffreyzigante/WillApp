@@ -20,6 +20,7 @@ import { C } from '../../constants/colors';
 import { s } from '../../constants/styles';
 import { authStyles } from '../../constants/formStyles';
 import { lh } from '../../constants/typo';
+import { COURBE } from '../../constants/anim';
 
 // Helpers date naissance : ISO yyyy-mm-dd <-> JJ/MM/AAAA pour l'affichage FR.
 const formatDobFr = (iso) => {
@@ -82,8 +83,11 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
   //   les lignes du menu s effacent dessous pendant ce temps.
   // Courbes : sortie douce et longue a l aller (0.22,1,0.36,1), plus seche
   // au retour — un aller-retour symetrique fait mou.
-  const ENTREE = Easing.bezier(0.22, 1, 0.36, 1);
-  const SORTIE = Easing.bezier(0.4, 0, 0.6, 1);
+  // Courbes partagees : voir src/constants/anim.js. Elles etaient definies
+  // ici, puis recopiees dans BurgerMenuModal -- deux sources pour les memes
+  // valeurs, donc deux occasions de diverger.
+  const ENTREE = COURBE.entree;
+  const SORTIE = COURBE.sortie;
   const [monte, setMonte] = useState(visible);
   const panelOpacity = useRef(new Animated.Value(0)).current;
   const contentX = useRef(new Animated.Value(28)).current;

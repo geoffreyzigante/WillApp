@@ -19,6 +19,7 @@ import { Image as ExpoImage } from 'expo-image';
 import * as Updates from 'expo-updates';
 import { Icon } from '../Icon';
 import { C } from '../../constants/colors';
+import { COURBE } from '../../constants/anim';
 import { VENTE_PHOTOS_OUVERTE } from '../../constants/api';
 import { caps } from '../../services/capabilities';
 import { lh } from '../../constants/typo';
@@ -133,7 +134,7 @@ export function BurgerMenuModal({
       contenuX.setValue(contenuMasque ? -16 : 0);
       return;
     }
-    const courbe = contenuMasque ? Easing.bezier(0.4, 0, 0.6, 1) : Easing.bezier(0.22, 1, 0.36, 1);
+    const courbe = contenuMasque ? COURBE.sortie : COURBE.entree;
     Animated.parallel([
       Animated.timing(contenuOpacity, {
         toValue: contenuMasque ? 0 : 1,
