@@ -294,29 +294,20 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     return `${km} km`;
   };
 
-  // Les postes d une course donnee. Generalise depuis kmsForActiveRace : la
-  // rangee de niveau 2 en a besoin pour la course choisie, et un event a une
-  // seule course en a besoin sans qu aucune course soit "choisie".
-  const kmsPourCourse = (cle) => {
-    if (!cle) return [];
-    const kms = photos
-      .filter(p => photoRaceKey(p) === cle)
+  // Les postes presents dans une liste de photos, tries le long du parcours.
+  const kmsDesPhotos = (liste) => {
+    const kms = liste
       .map(p => p.km)
       .filter(k => k !== null && k !== undefined && k !== '');
     return Array.from(new Set(kms.map(String))).sort((a, b) => {
       const na = a === 'arrivee' ? 0.5 : Number(a);
       const nb = b === 'arrivee' ? 0.5 : Number(b);
-      return na - nb;
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return String(a).localeCompare(String(b), 'fr');
     });
   };
 
   const libellePoste = (k) => (k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`);
-
-  // Une seule course : c est elle qui porte les postes, meme si le filtre de
-  // niveau 1 n est pas affiche.
-  const courseDesPostes = activeRaceFilter !== 'all'
-    ? activeRaceFilter
-    : (uniqueRaces.length === 1 ? String(uniqueRaces[0]) : null);
 
   const puceCourses = useMemo(() => {
     if (uniqueRaces.length <= 1) return [];
@@ -330,19 +321,28 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     ];
   }, [photos, uniqueRaces, raceLabelById, event.distances]);
 
+  // Les postes de la vue courante — et non ceux de la seule course
+  // selectionnee. Sur « Toutes », on montre les postes de tout l event,
+  // courses confondues : c est ce que fait le site depuis le 29/09, parce
+  // qu un coureur qui se souvient du km 4 n avait aucun moyen d y aller
+  // depuis la vue par defaut. Cela couvre aussi les events dont les photos
+  // n ont aucune course assignee : il n y a pas de niveau 1, mais les postes
+  // existent et doivent se filtrer.
   const pucePostes = useMemo(() => {
-    const kms = kmsPourCourse(courseDesPostes);
+    const base = activeRaceFilter === 'all'
+      ? photos
+      : photos.filter(p => photoRaceKey(p) === activeRaceFilter);
+    const kms = kmsDesPhotos(base);
     if (kms.length <= 1) return [];
-    const dansLaCourse = photos.filter(p => photoRaceKey(p) === courseDesPostes);
     return [
-      { key: 'all', label: 'Tous', count: dansLaCourse.length },
+      { key: 'all', label: 'Tous', count: base.length },
       ...kms.map(k => ({
         key: k,
         label: libellePoste(k),
-        count: dansLaCourse.filter(p => String(p.km) === k).length,
+        count: base.filter(p => String(p.km) === k).length,
       })),
     ];
-  }, [photos, courseDesPostes]);
+  }, [photos, activeRaceFilter]);
 
   const kmsForActiveRace = (() => {
     if (activeRaceFilter === 'all') return [];
