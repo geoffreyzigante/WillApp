@@ -321,15 +321,19 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     ];
   }, [photos, uniqueRaces, raceLabelById, event.distances]);
 
-  // Les postes de la vue courante — et non ceux de la seule course
-  // selectionnee. Sur « Toutes », on montre les postes de tout l event,
-  // courses confondues : c est ce que fait le site depuis le 29/09, parce
-  // qu un coureur qui se souvient du km 4 n avait aucun moyen d y aller
-  // depuis la vue par defaut. Cela couvre aussi les events dont les photos
-  // n ont aucune course assignee : il n y a pas de niveau 1, mais les postes
-  // existent et doivent se filtrer.
+  // Les postes d une course, et d une seule (decision user 2026-10-20) : sur
+  // « Toutes », aucun poste n est propose. Un km n a pas le meme sens d une
+  // course a l autre — le km 7 du 10 km et le km 7 du trail ne sont pas au
+  // meme endroit du parcours — donc les melanger ne filtrerait rien de
+  // comprehensible. Le site le fait, l app non : c est l app qui a raison.
+  //
+  // Exception : un event dont les photos n ont aucune course assignee, ou
+  // n en a qu une. Il n y a alors qu un seul parcours possible, donc aucune
+  // ambiguite : les postes sont la seule rangee, au niveau 1.
   const pucePostes = useMemo(() => {
-    const base = activeRaceFilter === 'all'
+    const courseUnique = uniqueRaces.length <= 1;
+    if (!courseUnique && activeRaceFilter === 'all') return [];
+    const base = courseUnique
       ? photos
       : photos.filter(p => photoRaceKey(p) === activeRaceFilter);
     const kms = kmsDesPhotos(base);
@@ -342,7 +346,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         count: base.filter(p => String(p.km) === k).length,
       })),
     ];
-  }, [photos, activeRaceFilter]);
+  }, [photos, activeRaceFilter, uniqueRaces]);
+
+  // Sans cette remise a zero, un poste choisi puis un retour sur « Toutes »
+  // laissait la galerie filtree par un poste dont la rangee avait disparu :
+  // des photos manquantes, et plus aucun moyen de comprendre pourquoi.
+  useEffect(() => {
+    if (pucePostes.length === 0 && activeKmFilter !== 'all') setActiveKmFilter('all');
+  }, [pucePostes.length, activeKmFilter]);
 
   const kmsForActiveRace = (() => {
     if (activeRaceFilter === 'all') return [];
