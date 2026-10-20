@@ -83,7 +83,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   useEffect(() => {
     if (!mapQuery) { setMapInfo(null); return; }
     let cancelled = false;
-    const q = mapQuery.replace(/\s*\((\d{5})\)\s*/, ' $1').trim();
+    // La BAN ne digere pas les parentheses. Un code postal (5 chiffres) aide
+    // la recherche, on le garde sans parentheses ; un numero de departement
+    // (2 ou 3 chiffres, « Gaillon (27) ») n est pas une adresse et faisait
+    // echouer le geocodage -- donc carte vide. On le retire.
+    const q = mapQuery
+      .replace(/\s*\((\d{5})\)\s*/, ' $1')
+      .replace(/\s*\(\s*\d{2,3}\s*\)\s*/, ' ')
+      .trim();
     const zoom = mapPrecise ? 15 : 12;
     const cacheKey = `will:geo:${zoom}:${q}`;
 
@@ -166,7 +173,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     const t = new Date(); t.setHours(0, 0, 0, 0);
     if (t < start) return `J-${Math.round((start - t) / 86400000)}`;
     if (t <= end) return 'GO !';
-    return `J+${Math.round((t - end) / 86400000)}`;
+    // Apres l event, plus de compte a rebours : "J+44" ne repond a aucune
+    // question que se pose un coureur venu chercher ses photos (regle user
+    // 2026-10-20). Trois etats seulement : J-X, GO !, rien.
+    return null;
   })();
 
   const loadPhotos = useCallback(async () => {
@@ -479,33 +489,33 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           </View>
         </View>
 
-        {/* Audit coureur 14 -- le coeur etait une icone muette pour un acte
-            de consentement : personne ne pouvait deviner qu il declenchait
-            les notifications d un event. Il porte desormais son libelle sur
-            la fiche event. Et le retrait passe par la modale de confirmation
-            ecrite pour ca (« Ne plus suivre cet event ? »), qui etait du code
-            mort : setShowUnfollowConfirm n etait appele nulle part. */}
+        {/* Icone seule sur la hero : pas de pastille noire, pas de libelle —
+            c est la regle posee pour les actions superposees a une image
+            (user 2026-10-20). Elle annule la contre-mesure de l audit
+            coureur 14, qui avait ajoute le libelle ici parce que le coeur
+            n expliquait pas qu il declenchait les notifications ; l etat
+            suivi/non suivi reste porte par le remplissage, et le retrait
+            passe toujours par la modale de confirmation.
+            L ombre portee n est pas un fond : elle garde le blanc lisible
+            quand la photo d event est claire (contraste, regle 8). */}
         {onToggleFollow && (
           <TouchableOpacity
             onPress={() => { if (isFollowing) setShowUnfollowConfirm(true); else onToggleFollow(); }}
-            hitSlop={10}
+            hitSlop={14}
             accessibilityRole="button"
             accessibilityLabel={isFollowing ? 'Ne plus suivre cet event' : 'Suivre cet event pour être notifié'}
-            style={{
-              position: 'absolute', top: 6, right: 6,
-              flexDirection: 'row', alignItems: 'center', gap: 6,
-              paddingHorizontal: 12, height: 34, borderRadius: 999,
-              backgroundColor: 'rgba(0,0,0,0.28)',
-              zIndex: 10,
-            }}
+            style={{ position: 'absolute', top: 10, right: 14, zIndex: 10 }}
           >
-            <Svg width={18} height={16} viewBox="-1 -1.5 22.78 20.61"
-              fill={isFollowing ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}>
+            <Svg width={24} height={21} viewBox="-1 -1.5 22.78 20.61"
+              fill={isFollowing ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.8}
+              style={{
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.3,
+                shadowRadius: 3,
+              }}>
               <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
             </Svg>
-            <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
-              {isFollowing ? 'Suivi' : 'Suivre'}
-            </Text>
           </TouchableOpacity>
         )}
 
@@ -593,6 +603,12 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                 backgroundColor: `${tint}14`,
                 alignSelf: 'stretch',
               }}>
+                {/* Le bandeau n existe que si on a un point a montrer. Sans
+                    ce garde-fou, un geocodage sans resultat laissait un
+                    rectangle 2.4:1 vide sous « Infos pratiques » — la carte
+                    vide. L adresse et l itineraire, eux, restent : ils ne
+                    dependent pas du geocodage. */}
+                {mapInfo ? (
                 <View
                   style={{ width: '100%', aspectRatio: 2.4, position: 'relative', overflow: 'hidden' }}
                   onLayout={e => setMapW(Math.round(e.nativeEvent.layout.width))}
@@ -648,6 +664,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     </>
                   ) : null}
                 </View>
+                ) : null}
                 <View style={{
                   flexDirection: 'row', alignItems: 'center',
                   justifyContent: 'space-between',

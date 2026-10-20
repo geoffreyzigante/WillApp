@@ -20,6 +20,11 @@ import { T } from './tokens';
 
 export const C = {
   bg: '#FFFFFF',
+  // Le fond de l app, pose en dur dans styles.js root, PanierScreen,
+  // PhotosUnauthScreen et OrganizerEventPhotosScreen. Nomme ici pour que
+  // les nouveaux ecrans cessent de recopier le hex ; les quatre anciens
+  // restent a migrer.
+  fondApp: '#F5F3FF',
   primary: T.couleur.primaire,
   primaryDark: '#5A1FCC',
   primaryLight: T.couleur.primaireClair,

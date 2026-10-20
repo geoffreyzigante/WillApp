@@ -21,6 +21,7 @@
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { C } from '../constants/colors';
 import { FavStar } from './FavStar';
@@ -31,7 +32,9 @@ const NIVEAU = {
     taille: 10.5,
     hauteur: 30,
     padH: 12,
-    fond: '#EFE7FF',
+    // C.pillBg, la valeur de la charte — et non le #EDE4FF pose en dur dans
+    // l ecran : deux violets a deux points d ecart sur la meme ligne.
+    fond: C.pillBg,
     texte: C.primary,
     fondActif: C.primary,
     texteActif: '#fff',
@@ -41,7 +44,10 @@ const NIVEAU = {
     taille: 9,
     hauteur: 26,
     padH: 10,
-    fond: '#F6F4FA',
+    // Blanc, et non un gris clair : sur le fond lavande de l app (#F5F3FF),
+    // un #F6F4FA ne se distingue pas du fond. La hierarchie reste portee par
+    // la taille et la graisse du texte.
+    fond: C.bg,
     texte: '#5a5468',
     fondActif: '#1A1426',
     texteActif: '#fff',
@@ -73,13 +79,16 @@ function Puce({ libelle, compte, actif, niveau, onPress }) {
         {libelle}
       </Text>
       {compte != null && (
+        // Pas d opacite sur le compte : a 55 % le violet tombait a 2,35:1 sur
+        // la pastille et le gris a 2,54:1 sur le blanc, tres en dessous des
+        // 4,5:1 exiges. C est la graisse et la taille qui le mettent en
+        // retrait, pas la transparence.
         <Text
           style={{
             fontFamily: 'Montserrat-Medium',
             fontSize: n.taille - 0.5,
             marginLeft: 4,
             color: actif ? n.texteActif : n.texte,
-            opacity: actif ? 0.75 : 0.55,
           }}
         >
           {compte}
@@ -91,23 +100,36 @@ function Puce({ libelle, compte, actif, niveau, onPress }) {
 
 function Rangee({ items, actif, niveau, onChange, padH }) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ paddingHorizontal: padH, paddingRight: padH + 8 }}
-      keyboardShouldPersistTaps="handled"
-    >
-      {items.map(it => (
-        <Puce
-          key={String(it.key)}
-          libelle={it.label}
-          compte={it.count}
-          actif={String(it.key) === String(actif)}
-          niveau={niveau}
-          onPress={() => onChange(it.key)}
-        />
-      ))}
-    </ScrollView>
+    <View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: padH, paddingRight: padH + 24 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {items.map(it => (
+          <Puce
+            key={String(it.key)}
+            libelle={it.label}
+            compte={it.count}
+            actif={String(it.key) === String(actif)}
+            niveau={niveau}
+            onPress={() => onChange(it.key)}
+          />
+        ))}
+      </ScrollView>
+      {/* Une puce coupee net au bord droit se lit comme un defaut d affichage,
+          pas comme une invitation a faire defiler. Le degrade vers le fond
+          dit qu il y a une suite. Pose en overlay : il ne doit pas intercepter
+          le geste de defilement. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[`${C.fondApp}00`, C.fondApp]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 28 }}
+      />
+    </View>
   );
 }
 
@@ -136,7 +158,7 @@ export function FiltresGalerie({
   if (rangee1.length <= 1) return null;
 
   return (
-    <View style={{ backgroundColor: C.bg, paddingTop: 4, paddingBottom: 6 }}>
+    <View style={{ backgroundColor: C.fondApp, paddingTop: 8, paddingBottom: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Rangee items={rangee1} actif={actif1} niveau={1} onChange={change1} padH={padH} />
@@ -151,7 +173,7 @@ export function FiltresGalerie({
             hitSlop={10}
             activeOpacity={0.7}
             accessibilityLabel={sortDesc ? 'Trier du plus ancien au plus recent' : 'Trier du plus recent au plus ancien'}
-            style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#EDE4FF', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: C.pillBg, alignItems: 'center', justifyContent: 'center' }}
           >
             <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
               <Path d="M7 4v16M3 16l4 4 4-4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
@@ -166,7 +188,7 @@ export function FiltresGalerie({
               accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
               style={{
                 width: 30, height: 30, borderRadius: 15, marginLeft: 6,
-                backgroundColor: favOnly ? C.primary : '#EDE4FF',
+                backgroundColor: favOnly ? C.primary : C.pillBg,
                 alignItems: 'center', justifyContent: 'center',
               }}
             >
@@ -177,7 +199,7 @@ export function FiltresGalerie({
       </View>
 
       {rangee2.length > 1 && (
-        <View style={{ marginTop: 5 }}>
+        <View style={{ marginTop: 8 }}>
           <Rangee items={rangee2} actif={posteActif} niveau={2} onChange={onPoste} padH={padH} />
         </View>
       )}
