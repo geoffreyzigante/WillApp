@@ -636,7 +636,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     vide. L adresse et l itineraire, eux, restent : ils ne
                     dependent pas du geocodage. */}
                 {mapInfo ? (
-                <View
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ouvrir ${mapQuery} dans Plans`}
+                  onPress={() => {
+                    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
+                    Linking.openURL(url).catch(() => {});
+                  }}
                   style={{ width: '100%', aspectRatio: 2.4, position: 'relative', overflow: 'hidden' }}
                   onLayout={e => setMapW(Math.round(e.nativeEvent.layout.width))}
                 >
@@ -690,7 +697,20 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                       />
                     </>
                   ) : null}
-                </View>
+                  {/* Attribution : CARTO l exige sur chaque carte au titre de
+                      son offre gratuite, OpenStreetMap au titre de l ODbL.
+                      Posee sur la tuile, en petit, comme le fait Leaflet. */}
+                  <View style={{
+                    position: 'absolute', right: 0, bottom: 0,
+                    backgroundColor: 'rgba(255,255,255,0.72)',
+                    paddingHorizontal: 5, paddingVertical: 1,
+                    borderTopLeftRadius: 8,
+                  }}>
+                    <Text style={{ fontFamily: 'Montserrat', fontSize: 8, color: C.textSoft }}>
+                      © CARTO © OpenStreetMap
+                    </Text>
+                  </View>
+                </TouchableOpacity>
                 ) : null}
                 <View style={{
                   flexDirection: 'row', alignItems: 'center',
