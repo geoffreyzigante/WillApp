@@ -7,8 +7,8 @@
 // utils/eventCompletion.js, miroir de EventCompletionPanel.js cote web.
 //
 // Countdown : "J-3" avant l event, "GO !" pendant (event_date -> event_date_end),
-// rien apres : un compte a rebours ecoule ne compte plus rien.
-// rien apres. End absent -> single-day.
+// rien apres : un compte a rebours ecoule ne compte plus rien. End absent ->
+// single-day.
 
 import React, { useState, useEffect } from 'react';
 import {
