@@ -84,14 +84,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   useEffect(() => {
     if (!mapQuery) { setMapInfo(null); return; }
     let cancelled = false;
-    // La BAN ne digere pas les parentheses. Un code postal (5 chiffres) aide
-    // la recherche, on le garde sans parentheses ; un numero de departement
-    // (2 ou 3 chiffres, « Gaillon (27) ») n est pas une adresse et faisait
-    // echouer le geocodage -- donc carte vide. On le retire.
-    const q = mapQuery
-      .replace(/\s*\((\d{5})\)\s*/, ' $1')
-      .replace(/\s*\(\s*\d{2,3}\s*\)\s*/, ' ')
-      .trim();
+    // Le libelle part brut : la normalisation des parentheses vit dans
+    // /geocode cote worker, une seule fois pour l app et le site. Elle etait
+    // ici, et le site en avait une autre, incomplete (2026-10-20).
+    const q = mapQuery;
     const zoom = mapPrecise ? 15 : 12;
     const cacheKey = `will:geo:${zoom}:${q}`;
 

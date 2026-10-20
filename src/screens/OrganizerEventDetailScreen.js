@@ -7,7 +7,8 @@
 // utils/eventCompletion.js, miroir de EventCompletionPanel.js cote web.
 //
 // Countdown : "J-3" avant l event, "GO !" pendant (event_date -> event_date_end),
-// "J+5" apres. End absent -> single-day.
+// rien apres : un compte a rebours ecoule ne compte plus rien.
+// rien apres. End absent -> single-day.
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -74,7 +75,10 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
     const t = new Date(); t.setHours(0, 0, 0, 0);
     if (t < start) return `J-${Math.round((start - t) / 86400000)}`;
     if (t <= end) return 'GO !';
-    return `J+${Math.round((t - end) / 86400000)}`;
+    // Trois etats, ici comme sur la fiche coureur : J-X, GO !, rien. Deux
+    // ecrans de meme role ne peuvent pas repondre differemment a la meme
+    // question (regle user 2026-10-20).
+    return null;
   })();
 
   // Pas de expo-clipboard dans le projet : l ajouter serait un module natif
