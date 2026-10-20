@@ -469,23 +469,33 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
               {formatDateLongMinuscule(event.event_date, event.event_date_end)}
               {cityLabel(event.location) ? `  ·  ${cityLabel(event.location)}` : ''}
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text
-                style={[s.eventName, { fontSize: 22, lineHeight: 27, flexShrink: 1 }]}
-                numberOfLines={2}
-                ellipsizeMode="tail"
-              >
-                {event.name}
-              </Text>
+            {/* La pastille est imbriquee DANS le titre, pas posee a cote :
+                en rangee flex, un titre sur deux lignes la repoussait au
+                centre vertical du bloc. Ici elle suit le dernier mot, et
+                passe a la ligne avec lui. React Native autorise une View
+                dans un Text ; le decalage vertical la pose sur la ligne de
+                base plutot que sur le haut des capitales. */}
+            <Text
+              style={[s.eventName, { fontSize: 22, lineHeight: 27 }]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {event.name}
               {event.event_type ? (
-                <View style={{
-                  backgroundColor: 'rgba(255,255,255,0.22)',
-                  paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
-                }}>
-                  <Text style={{ color: '#fff', fontSize: 10, fontFamily: 'Montserrat-SemiBold' }}>{displayEventType(event.event_type)}</Text>
-                </View>
+                <Text>
+                  {'  '}
+                  <View style={{
+                    backgroundColor: 'rgba(255,255,255,0.22)',
+                    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
+                    transform: [{ translateY: 2 }],
+                  }}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontFamily: 'Montserrat-SemiBold' }}>
+                      {displayEventType(event.event_type)}
+                    </Text>
+                  </View>
+                </Text>
               ) : null}
-            </View>
+            </Text>
             <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginTop: 14, marginBottom: 12 }} />
             <TouchableOpacity
               onPress={() => {
