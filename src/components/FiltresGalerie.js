@@ -31,9 +31,9 @@ import { C } from '../constants/colors';
 const NIVEAU = {
   1: {
     police: 'Montserrat-SemiBold',
-    taille: 10.5,
-    hauteur: 30,
-    padH: 12,
+    taille: 12,
+    hauteur: 34,
+    padH: 14,
     // C.pillBg, la valeur de la charte — et non le #EDE4FF pose en dur dans
     // l ecran : deux violets a deux points d ecart sur la meme ligne.
     fond: C.pillBg,
@@ -43,8 +43,8 @@ const NIVEAU = {
   },
   2: {
     police: 'Montserrat-Medium',
-    taille: 9,
-    hauteur: 26,
+    taille: 10.5,
+    hauteur: 28,
     padH: 10,
     // Blanc, et non un gris clair : sur le fond lavande de l app (#F5F3FF),
     // un #F6F4FA ne se distingue pas du fond. La hierarchie reste portee par
