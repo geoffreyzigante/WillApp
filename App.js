@@ -6080,12 +6080,17 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
     const timeoutId = setTimeout(() => { ctl.timedOut = true; ctl.abort(); }, 3000);
     (async () => {
       try {
-        const r = await fetch(`https://geo.api.gouv.fr/communes?codePostal=${postalCode}&fields=nom&format=json`, { signal: ctl.signal });
+        // Via le worker (2026-10-20) : geo.api.gouv.fr etait appelee en direct
+        // ici, dans le site et dans le dashboard, en trois implementations.
+        // /villes garde la France sur geo.api — meilleure source pour ce pays
+        // — mais bascule sur sa table embarquee quand elle ne repond pas, et
+        // sait repondre pour les autres pays le jour venu.
+        const r = await fetch(`${API_URL}/villes?cp=${postalCode}`, { signal: ctl.signal });
         clearTimeout(timeoutId);
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
         if (cancelled) return;
-        const cities = (data || []).map(c => c.nom);
+        const cities = (data?.villes || []).map(c => c.nom);
         setCitySuggestions(cities);
         setCityFetchFailed(cities.length === 0);
         if (cities.length === 1 && !city) setCity(cities[0]);
