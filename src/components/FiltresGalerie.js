@@ -40,6 +40,12 @@ const NIVEAU = {
     texte: C.primary,
     fondActif: C.primary,
     texteActif: '#fff',
+    // Le compte est une quantite, pas un nom : il prend le gris de texte
+    // courant (C.textSoft, 6,04:1 sur la pastille) pour qu on lise d abord
+    // la course. Actif, tout passe en clair : C.pillBg donne 4,75:1 sur le
+    // violet plein, juste au-dessus du seuil.
+    compte: C.textSoft,
+    compteActif: C.pillBg,
   },
   2: {
     police: 'Montserrat-Medium',
@@ -50,9 +56,15 @@ const NIVEAU = {
     // un #F6F4FA ne se distingue pas du fond. La hierarchie reste portee par
     // la taille et la graisse du texte.
     fond: C.bg,
-    texte: '#5a5468',
+    // Le libelle du poste passe a l encre : son compte prenant le gris, les
+    // deux seraient devenus identiques si le libelle restait gris lui aussi.
+    // L encre sur blanc reste en retrait du violet sur pastille, qui porte
+    // le niveau 1.
+    texte: '#1A1426',
     fondActif: '#1A1426',
     texteActif: '#fff',
+    compte: C.textSoft,
+    compteActif: C.pillBg,
   },
 };
 
@@ -89,8 +101,8 @@ function Puce({ libelle, compte, actif, niveau, onPress }) {
           style={{
             fontFamily: 'Montserrat-Medium',
             fontSize: n.taille - 0.5,
-            marginLeft: 4,
-            color: actif ? n.texteActif : n.texte,
+            marginLeft: 5,
+            color: actif ? n.compteActif : n.compte,
           }}
         >
           {compte}
