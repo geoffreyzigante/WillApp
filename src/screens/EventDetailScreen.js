@@ -318,7 +318,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         count: photos.filter(p => photoRaceKey(p) === String(r)).length,
       })),
     ];
-  }, [photos, uniqueRaces, raceLabelById, evDistances]);
+  }, [photos, uniqueRaces, raceLabelById, event.distances]);
 
   const pucePostes = useMemo(() => {
     const kms = kmsPourCourse(courseDesPostes);
