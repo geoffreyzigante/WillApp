@@ -1,5 +1,5 @@
 // Ecran detail event coureur : hero + CTA Favoris + Infos pratiques inline +
-// filtres race/km (RaceDropdown), grid bento (1 big 2x2 + 11 small alternance
+// filtres course/poste en puces (FiltresGalerie), grid bento (1 big 2x2 + 11 small alternance
 // gauche/droite par chunk de 12), pagination, recherche dossard.
 //
 // Wrappe dans GridErrorBoundary : si une URL malformee ou un render thrown
@@ -20,7 +20,7 @@ import { Icon } from '../components/Icon';
 import { SkeletonCell } from '../components/SkeletonCell';
 import { FavStar } from '../components/FavStar';
 import { PhotoCell } from '../components/PhotoGrid';
-import { RaceDropdown } from '../components/wheels';
+import { FiltresGalerie } from '../components/FiltresGalerie';
 import { AppHeader } from '../components/AppHeader';
 import { C, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
@@ -284,6 +284,56 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     return `${km} km`;
   };
 
+  // Les postes d une course donnee. Generalise depuis kmsForActiveRace : la
+  // rangee de niveau 2 en a besoin pour la course choisie, et un event a une
+  // seule course en a besoin sans qu aucune course soit "choisie".
+  const kmsPourCourse = (cle) => {
+    if (!cle) return [];
+    const kms = photos
+      .filter(p => photoRaceKey(p) === cle)
+      .map(p => p.km)
+      .filter(k => k !== null && k !== undefined && k !== '');
+    return Array.from(new Set(kms.map(String))).sort((a, b) => {
+      const na = a === 'arrivee' ? 0.5 : Number(a);
+      const nb = b === 'arrivee' ? 0.5 : Number(b);
+      return na - nb;
+    });
+  };
+
+  const libellePoste = (k) => (k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`);
+
+  // Une seule course : c est elle qui porte les postes, meme si le filtre de
+  // niveau 1 n est pas affiche.
+  const courseDesPostes = activeRaceFilter !== 'all'
+    ? activeRaceFilter
+    : (uniqueRaces.length === 1 ? String(uniqueRaces[0]) : null);
+
+  const puceCourses = useMemo(() => {
+    if (uniqueRaces.length <= 1) return [];
+    return [
+      { key: 'all', label: 'Toutes', count: photos.length },
+      ...uniqueRaces.map(r => ({
+        key: String(r),
+        label: raceTabLabel(String(r)),
+        count: photos.filter(p => photoRaceKey(p) === String(r)).length,
+      })),
+    ];
+  }, [photos, uniqueRaces, raceLabelById, evDistances]);
+
+  const pucePostes = useMemo(() => {
+    const kms = kmsPourCourse(courseDesPostes);
+    if (kms.length <= 1) return [];
+    const dansLaCourse = photos.filter(p => photoRaceKey(p) === courseDesPostes);
+    return [
+      { key: 'all', label: 'Tous', count: dansLaCourse.length },
+      ...kms.map(k => ({
+        key: k,
+        label: libellePoste(k),
+        count: dansLaCourse.filter(p => String(p.km) === k).length,
+      })),
+    ];
+  }, [photos, courseDesPostes]);
+
   const kmsForActiveRace = (() => {
     if (activeRaceFilter === 'all') return [];
     const kms = photos
@@ -323,14 +373,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   }, [activeKmFilter, activeRaceFilter, kmsForActiveRace.length]);
 
   const filteredPhotos = (() => {
-    let list;
-    if (activeRaceFilter === 'all') {
-      list = photos;
-    } else {
-      list = photos.filter(p => photoRaceKey(p) === activeRaceFilter);
-      if (activeKmFilter !== 'all') {
-        list = list.filter(p => String(p.km) === activeKmFilter);
-      }
+    let list = activeRaceFilter === 'all'
+      ? photos
+      : photos.filter(p => photoRaceKey(p) === activeRaceFilter);
+    // Le poste se filtre meme sans course selectionnee : quand l event n a
+    // qu une course, elle n est jamais "choisie" mais ses postes sont bien
+    // le filtre affiche (rangee de niveau 1).
+    if (activeKmFilter !== 'all') {
+      list = list.filter(p => String(p.km) === activeKmFilter);
     }
     if (favOnly && isAuthed && photoFavoritesSet) {
       list = list.filter(p => photoFavoritesSet.has(p.id));
@@ -689,93 +739,42 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         </View>
       ) : upcoming && photos.length === 0 && !loading ? (
         <EtatVidePhotos />
-      ) : (
-        <>
-          {photos.length > 0 && (
-            <View>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {/* Filtres race + km : seulement si l'event a plusieurs distances. */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexShrink: 1, minWidth: 0 }}>
-                  {uniqueRaces.length > 1 && (
-                    <RaceDropdown
-                      items={[{ key: 'all', label: 'Toutes les photos' }, ...uniqueRaces.map(r => ({ key: String(r), label: raceTabLabel(String(r)) }))]}
-                      activeKey={activeRaceFilter}
-                      onChange={(key) => {
-                        LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
-                        setActiveRaceFilter(key);
-                        if (key === 'all') setActiveKmFilter('all');
-                      }}
-                      accent={C.primary}
-                      bg="#EDE4FF"
-                    />
-                  )}
-                  {uniqueRaces.length > 1 && activeRaceFilter !== 'all' && kmsForActiveRace.length > 1 && (
-                    <RaceDropdown
-                      items={[{ key: 'all', label: 'km' }, ...kmsForActiveRace.map(k => ({
-                        key: k,
-                        label: k === '0' ? 'Départ' : k === 'arrivee' ? 'Arrivée' : `km ${k}`,
-                      }))]}
-                      activeKey={activeKmFilter}
-                      onChange={setActiveKmFilter}
-                      accent={C.primary}
-                      bg="#EDE4FF"
-                      compact
-                    />
-                  )}
-                </View>
-                {/* Tri chronologique + favoris : toujours visibles des qu'il y
-                    a au moins une photo (independamment du nombre de distances). */}
-                <TouchableOpacity
-                  onPress={() => {
-                    try { Haptics?.selectionAsync?.(); } catch {}
-                    setSortDesc(v => !v);
-                  }}
-                  hitSlop={10}
-                  activeOpacity={0.7}
-                  accessibilityLabel={sortDesc ? 'Trier du plus ancien au plus recent' : 'Trier du plus recent au plus ancien'}
-                  style={{
-                    width: 30, height: 30, borderRadius: 15,
-                    backgroundColor: '#EDE4FF',
-                    alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                    <Path d="M7 4v16M3 16l4 4 4-4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                    <Path d="M17 20V4M13 8l4-4 4 4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  </Svg>
-                </TouchableOpacity>
-                {isAuthed && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      try { Haptics?.selectionAsync?.(); } catch {}
-                      setFavOnly(v => !v);
-                    }}
-                    hitSlop={10}
-                    activeOpacity={0.7}
-                    accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
-                    style={{
-                      width: 30, height: 30, borderRadius: 15,
-                      backgroundColor: favOnly ? C.primary : '#EDE4FF',
-                      alignItems: 'center', justifyContent: 'center',
-                      marginLeft: 6,
-                    }}
-                  >
-                    <FavStar
-                      size={14}
-                      fill={favOnly ? '#fff' : C.primary}
-                      stroke={favOnly ? '#fff' : C.primary}
-                      strokeWidth={1.8}
-                      halo={false}
-                    />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          )}
-        </>
-      )}
+      ) : null}
     </View>
   );
+
+  // Rendu a part, et non dans renderHeader : c est l enfant d index 1 du
+  // ScrollView, celui que stickyHeaderIndices colle en haut. Il doit donc
+  // exister a chaque rendu, meme vide, sinon l index designe autre chose.
+  const renderFiltres = () => {
+    if (photos.length === 0 || erreurChargement || (upcoming && photos.length === 0)) {
+      return <View />;
+    }
+    return (
+      <View style={{ marginHorizontal: -20 }}>
+        <FiltresGalerie
+          courses={puceCourses}
+          postes={pucePostes}
+          courseActive={activeRaceFilter}
+          posteActif={activeKmFilter}
+          onCourse={(key) => {
+            LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+            setActiveRaceFilter(key);
+            setActiveKmFilter('all');
+          }}
+          onPoste={(key) => {
+            LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+            setActiveKmFilter(key);
+          }}
+          sortDesc={sortDesc}
+          onSort={() => setSortDesc(v => !v)}
+          favOnly={favOnly}
+          onFav={() => setFavOnly(v => !v)}
+          isAuthed={isAuthed}
+        />
+      </View>
+    );
+  };
 
   const showEmptyMessage = upcoming && photos.length === 0 && !loading;
 
@@ -988,8 +987,13 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         }}
         scrollEventThrottle={250}
         showsVerticalScrollIndicator={false}
+        /* La barre de filtres (enfant 1) reste en haut pendant le
+           defilement : changer de course ne demande plus de remonter
+           toute la galerie. */
+        stickyHeaderIndices={[1]}
       >
         {renderHeader()}
+        {renderFiltres()}
         {bibQuery.trim().length > 0
           ? renderBibResults()
           : favOnly && visiblePhotos.length === 0 && !loading ? (
