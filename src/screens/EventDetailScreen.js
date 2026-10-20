@@ -25,7 +25,7 @@ import { AppHeader } from '../components/AppHeader';
 import { C, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
 import { API_URL } from '../constants/api';
-import { formatDateLong, cityLabel, displayEventType, isUpcoming } from '../utils/format';
+import { formatDateLong, formatDateLongMinuscule, cityLabel, displayEventType, isUpcoming } from '../utils/format';
 import { raceTitle, extractBurstTs, extractIdx } from '../utils/photo';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
@@ -41,7 +41,10 @@ export function EventDetailScreen(props) {
   );
 }
 
-function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange }) {
+// sortDesc et favOnly viennent d App.js : leurs deux boutons vivent
+// desormais dans la pill de recherche par dossard, qui est rendue la-bas,
+// par-dessus la barre d onglets. L ecran lit l etat, il ne le detient plus.
+function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange, sortDesc = true, favOnly = false }) {
   const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,8 +53,6 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [activeRaceFilter, setActiveRaceFilter] = useState('all');
   const [activeKmFilter, setActiveKmFilter] = useState('all');
-  const [sortDesc, setSortDesc] = useState(true);
-  const [favOnly, setFavOnly] = useState(false);
   // Infos pratiques : ouvertes automatiquement quand on detecte qu il
   // n y a pas de photos (event upcoming ou tout simplement vide).
   // Si l user clique sur le toggle ensuite, son choix est respecte
@@ -461,16 +462,21 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             />
           ) : null}
           <View style={[s.eventCardCenter, { paddingRight: 84, paddingVertical: 16 }]}>
+            {/* Trois lignes sont devenues deux (user 2026-10-20) : le lieu
+                suit la date, le type suit le nom. La hero perd la hauteur
+                d une ligne sans rien perdre de son contenu. */}
             <Text style={s.eventDate} numberOfLines={1}>
-              {formatDateLong(event.event_date, event.event_date_end)}
+              {formatDateLongMinuscule(event.event_date, event.event_date_end)}
+              {cityLabel(event.location) ? `  ·  ${cityLabel(event.location)}` : ''}
             </Text>
-            <Text style={[s.eventName, { fontSize: 22, lineHeight: 27 }]} numberOfLines={2} ellipsizeMode="tail">{event.name}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'nowrap' }}>
-              {cityLabel(event.location) ? (
-                <Text style={[s.eventLocation, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
-                  {cityLabel(event.location)}
-                </Text>
-              ) : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text
+                style={[s.eventName, { fontSize: 22, lineHeight: 27, flexShrink: 1 }]}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
+                {event.name}
+              </Text>
               {event.event_type ? (
                 <View style={{
                   backgroundColor: 'rgba(255,255,255,0.22)',
@@ -794,11 +800,6 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
             setActiveKmFilter(key);
           }}
-          sortDesc={sortDesc}
-          onSort={() => setSortDesc(v => !v)}
-          favOnly={favOnly}
-          onFav={() => setFavOnly(v => !v)}
-          isAuthed={isAuthed}
         />
       </View>
     );

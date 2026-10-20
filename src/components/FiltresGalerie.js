@@ -14,17 +14,19 @@
 // Le compte de photos est colle a chaque puce : un poste a 3 photos ne
 // merite pas un tap, et ca se voit avant de taper.
 //
+// Le tri et les favoris ne sont plus ici : ce sont des actions, pas des
+// filtres, et ils ont rejoint la recherche de dossard en bas d ecran (user
+// 2026-10-20). La barre ne porte plus que ce qui filtre.
+//
 // La rangee des postes n existe que si la course choisie en compte plus d un
 // — sinon elle ne filtrerait rien. Et quand l event n a qu une seule course,
 // les postes remontent au niveau 1 : il n y a rien a hierarchiser.
 
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { C } from '../constants/colors';
-import { FavStar } from './FavStar';
 
 const NIVEAU = {
   1: {
@@ -140,11 +142,6 @@ export function FiltresGalerie({
   posteActif = 'all',
   onCourse,
   onPoste,
-  sortDesc,
-  onSort,
-  favOnly,
-  onFav,
-  isAuthed = false,
   padH = 20,
 }) {
   // Un seul niveau a afficher : les postes prennent la place des courses,
@@ -159,44 +156,7 @@ export function FiltresGalerie({
 
   return (
     <View style={{ backgroundColor: C.fondApp, paddingTop: 8, paddingBottom: 8 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Rangee items={rangee1} actif={actif1} niveau={1} onChange={change1} padH={padH} />
-        </View>
-
-        {/* Tri et favoris restent hors du defilement horizontal : ce sont des
-            actions, pas des filtres, et elles doivent toujours tomber au
-            meme endroit. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingRight: padH, paddingLeft: 2 }}>
-          <TouchableOpacity
-            onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} onSort(); }}
-            hitSlop={10}
-            activeOpacity={0.7}
-            accessibilityLabel={sortDesc ? 'Trier du plus ancien au plus recent' : 'Trier du plus recent au plus ancien'}
-            style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: C.pillBg, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-              <Path d="M7 4v16M3 16l4 4 4-4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-              <Path d="M17 20V4M13 8l4-4 4 4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-            </Svg>
-          </TouchableOpacity>
-          {isAuthed && (
-            <TouchableOpacity
-              onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} onFav(); }}
-              hitSlop={10}
-              activeOpacity={0.7}
-              accessibilityLabel={favOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
-              style={{
-                width: 30, height: 30, borderRadius: 15, marginLeft: 6,
-                backgroundColor: favOnly ? C.primary : C.pillBg,
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <FavStar size={14} fill={favOnly ? '#fff' : C.primary} stroke={favOnly ? '#fff' : C.primary} strokeWidth={1.8} halo={false} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+      <Rangee items={rangee1} actif={actif1} niveau={1} onChange={change1} padH={padH} />
 
       {rangee2.length > 1 && (
         <View style={{ marginTop: 8 }}>

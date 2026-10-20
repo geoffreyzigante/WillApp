@@ -8331,6 +8331,11 @@ function App() {
   const [eventPanelHasScrolled, setEventPanelHasScrolled] = useState(false);
   // Trigger scroll-to-top du EventDetailScreen depuis la pill bib (arrow).
   const [scrollToTopSignal, setScrollToTopSignal] = useState(0);
+  // Tri chronologique et favoris : l etat vit ici, avec la recherche par
+  // dossard, parce que leurs deux boutons sont dans la meme pill flottante
+  // (user 2026-10-20). EventDetailScreen les recoit en props.
+  const [galerieTriDesc, setGalerieTriDesc] = useState(true);
+  const [galerieFavOnly, setGalerieFavOnly] = useState(false);
   useEffect(() => {
     const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
@@ -9888,6 +9893,11 @@ function App() {
     setEventPanelHasPhotos(false);
     // Reset hasScrolled : nouvelle vue commence en haut.
     setEventPanelHasScrolled(false);
+    // Le tri et les favoris vivent ici depuis qu ils sont dans la pill : sans
+    // cette remise a zero, ouvrir un autre event heritait du « favoris
+    // seulement » du precedent, et sa galerie semblait vide.
+    setGalerieTriDesc(true);
+    setGalerieFavOnly(false);
   }, [eventInPanel?.code]);
 
   // Anime translateX quand openedEvent change. Pas d anim au mount (init OK).
@@ -10079,6 +10089,8 @@ function App() {
                     scrollToTopSignal={scrollToTopSignal}
                     onPhotosCountChange={(n, loading) => setEventPanelHasPhotos(!loading && n > 0)}
                     onScrolledChange={setEventPanelHasScrolled}
+                    sortDesc={galerieTriDesc}
+                    favOnly={galerieFavOnly}
                   />
                 </View>
               </GestureDetector>
@@ -10330,6 +10342,10 @@ function App() {
           flexDirection: 'row',
           alignItems: 'center',
           gap: 8,
+          // Largeur bornee plutot que des largeurs fixes : la pill s etire,
+          // et les 56 px laisses de chaque cote sont la marge dont la fleche
+          // back-to-top (posee a -48) a besoin pour ne pas sortir de l ecran.
+          width: SCREEN_W - 112,
         }}>
           {/* Arrow back-to-top : position absolute avec offset left negatif
               calcule (-48 = -40 width arrow - 8 gap) -> colle a 8px a gauche
@@ -10370,7 +10386,7 @@ function App() {
             </TouchableOpacity>
           )}
           <View style={{
-            width: 200,
+            flex: 1,
             borderRadius: 22,
             overflow: 'hidden',
             borderWidth: bibQuery.length > 0 ? 1.5 : StyleSheet.hairlineWidth,
@@ -10409,6 +10425,40 @@ function App() {
                 maxLength={5}
                 style={{ flex: 1, fontSize: 13.5, color: C.primary, fontFamily: 'Montserrat-SemiBold', padding: 0, paddingVertical: 2 }}
               />
+              {/* Tri et favoris : deux actions, posees la ou se trouve deja
+                  la main. Elles ont quitte la barre de filtres, qui ne doit
+                  porter que ce qui filtre. */}
+              <TouchableOpacity
+                onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setGalerieTriDesc(v => !v); }}
+                hitSlop={8}
+                activeOpacity={0.7}
+                accessibilityLabel={galerieTriDesc ? 'Trier du plus ancien au plus recent' : 'Trier du plus recent au plus ancien'}
+                style={{
+                  width: 28, height: 28, borderRadius: 14,
+                  backgroundColor: C.pillBg,
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+                  <Path d="M7 4v16M3 16l4 4 4-4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d="M17 20V4M13 8l4-4 4 4" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </TouchableOpacity>
+              {!!runnerSession && (
+                <TouchableOpacity
+                  onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setGalerieFavOnly(v => !v); }}
+                  hitSlop={8}
+                  activeOpacity={0.7}
+                  accessibilityLabel={galerieFavOnly ? 'Afficher toutes les photos' : 'Afficher uniquement les favoris'}
+                  style={{
+                    width: 28, height: 28, borderRadius: 14,
+                    backgroundColor: galerieFavOnly ? C.primary : C.pillBg,
+                    alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <FavStar size={14} fill={galerieFavOnly ? '#fff' : C.primary} stroke={galerieFavOnly ? '#fff' : C.primary} strokeWidth={1.8} halo={false} />
+                </TouchableOpacity>
+              )}
             </BlurView>
           </View>
           {bibQuery.length > 0 && (

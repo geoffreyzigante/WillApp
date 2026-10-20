@@ -62,6 +62,16 @@ export const formatDateLong = (iso, isoEnd) => {
   return `Du ${ds.getDate()} ${MONTHS_FULL[ds.getMonth()]} ${ds.getFullYear()} au ${de.getDate()} ${MONTHS_FULL[de.getMonth()]} ${de.getFullYear()}`;
 };
 
+// Meme date, mois en minuscules : « 29 mars 2026 ». La fiche event coureur
+// l utilise depuis que le lieu a rejoint la ligne de date (user 2026-10-20) —
+// deux mots en capitales suivis d une ville, ca criait. Les autres surfaces
+// (accueil, panier, espace organisateur) gardent MONTHS_FULL en capitales.
+export const formatDateLongMinuscule = (iso, isoEnd) => {
+  let t = formatDateLong(iso, isoEnd);
+  for (const m of MONTHS_FULL) t = t.replace(m, m.toLocaleLowerCase('fr-FR'));
+  return t;
+};
+
 // Variante affichage formulaire creation event : sur 1 jour on prefixe par le
 // jour de la semaine court ("VEN. 15 MAI 2026").
 export const formatDateForForm = (iso, isoEnd) => {
