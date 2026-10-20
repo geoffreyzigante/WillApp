@@ -109,9 +109,16 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       const x0 = Math.floor(xExact - 0.5);
       const y0 = Math.floor(yExact - 0.5);
       const bloc = {
+        // ?v=2 : purge de cache. Les tuiles blanches « API KEY REQUIRED »
+        // servies pendant la panne CARTO ont ete mises en cache 30 jours,
+        // a l edge Cloudflare comme sur les telephones, avec un en-tete
+        // immutable. Sans changer l URL, les coureurs auraient garde une
+        // carte blanche jusqu a fin novembre. Le worker ignore la query, le
+        // cache non : c est tout ce qu il faut. A incrementer a chaque fois
+        // qu une tuile deja servie doit etre refaite.
         tiles: [
-          [`${API_URL}/map-tile/${zoom}/${x0}/${y0}`, `${API_URL}/map-tile/${zoom}/${x0 + 1}/${y0}`],
-          [`${API_URL}/map-tile/${zoom}/${x0}/${y0 + 1}`, `${API_URL}/map-tile/${zoom}/${x0 + 1}/${y0 + 1}`],
+          [`${API_URL}/map-tile/${zoom}/${x0}/${y0}?v=2`, `${API_URL}/map-tile/${zoom}/${x0 + 1}/${y0}?v=2`],
+          [`${API_URL}/map-tile/${zoom}/${x0}/${y0 + 1}?v=2`, `${API_URL}/map-tile/${zoom}/${x0 + 1}/${y0 + 1}?v=2`],
         ],
         // Position du point dans le bloc, en tiles (0-2).
         pointX: xExact - x0,
