@@ -84,9 +84,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   useEffect(() => {
     if (!mapQuery) { setMapInfo(null); return; }
     let cancelled = false;
-    // Le libelle part brut : la normalisation des parentheses vit dans
-    // /geocode cote worker, une seule fois pour l app et le site. Elle etait
-    // ici, et le site en avait une autre, incomplete (2026-10-20).
+    // Le libelle part brut. Il etait nettoye ici (retrait des parentheses)
+    // pour un bug qui n existait pas : mesure faite le 22/10/2026, la BAN
+    // accepte « Gaillon (27) » sans broncher. Et ce numero de departement
+    // l aide a departager deux communes homonymes.
     const q = mapQuery;
     const zoom = mapPrecise ? 15 : 12;
     const cacheKey = `will:geo:${zoom}:${q}`;
