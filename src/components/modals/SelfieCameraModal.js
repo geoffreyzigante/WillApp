@@ -37,11 +37,20 @@ import { s } from '../../constants/styles';
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
 
 // Calage 2026-09-01, mesures relevees sur iPhone : un visage qui remplit
-// exactement l ovale donne taille = 0.47 et dist = 0.00. La fenetre est
-// centree sur cette valeur ; au-dela de 0.60 la tete deborde de l ovale, en
-// dessous de 0.36 elle y flotte.
-const TAILLE_MIN = 0.36;
-const TAILLE_MAX = 0.60;
+// exactement l ovale donne taille = 0.47 et dist = 0.00.
+//
+// Resserrage 2026-10-25. Le plancher 0.36 valait 77 % de cette valeur de
+// reference : mesure prise sur la capture d un selfie accepte, la boite de
+// visage faisait 157 x 198 pt pour un ovale de 260 x 340, soit un visage
+// flottant au milieu du guide. Vision ne cadre que du sourcil au menton
+// (ni cheveux ni front haut), donc « remplir l ovale » correspond a une
+// boite d environ 208 x 255 pt : il manquait un facteur 1,3.
+//
+// Le plancher passe donc juste sous la valeur de reference plutot que 23 %
+// dessous. 0.47 reste atteignable — c est une valeur relevee sur l appareil,
+// pas une extrapolation — donc aucun risque de blocage.
+const TAILLE_MIN = 0.45;
+const TAILLE_MAX = 0.62;
 const DIST_MAX = 0.13;
 
 // Angles de pose toleres, en degres.
