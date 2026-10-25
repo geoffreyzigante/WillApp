@@ -45,8 +45,8 @@ export function VerifyEmailBanner({ runnerApiFetch, isAuthed, isActive = true })
 
   const handleResend = () => {
     Alert.alert(
-      'Renvoyer l email de validation ?',
-      'On t enverra un nouveau lien a ton adresse email.',
+      'Renvoyer l\u2019email de validation ?',
+      'On t\u2019enverra un nouveau lien \u00e0 ton adresse email.',
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -55,13 +55,23 @@ export function VerifyEmailBanner({ runnerApiFetch, isAuthed, isActive = true })
             setBusy(true);
             try {
               const r = await runnerApiFetch('/runner/resend-verification', { method: 'POST' });
-              if (r?.ok) {
-                Alert.alert('Email envoye', 'Verifie ta boite (et les spams). Le lien est valable 24 h.');
+              // La route repond { ok, sent, reason }. On ne lisait que `ok` :
+              // quand le serveur repondait sent=false / ALREADY_VERIFIED, l app
+              // disait quand meme « verifie ta boite » et laissait l utilisateur
+              // attendre un email qui ne partirait jamais — en gardant un
+              // bandeau que le serveur considere deja resolu. Ce cas est
+              // desormais dit, et il fait disparaitre le bandeau sur-le-champ.
+              const corps = r?.ok ? await r.json().catch(() => null) : null;
+              if (corps && corps.sent === false && corps.reason === 'ALREADY_VERIFIED') {
+                setNeedsVerify(false);
+                Alert.alert('Adresse d\u00e9j\u00e0 confirm\u00e9e', 'Ton compte est actif, il n\u2019y a rien \u00e0 renvoyer.');
+              } else if (r?.ok) {
+                Alert.alert('Email envoy\u00e9', 'V\u00e9rifie ta bo\u00eete (et les spams). Le lien est valable 24\u00a0h.');
               } else {
-                Alert.alert('Erreur', 'Envoi impossible pour le moment. Reessaie plus tard.');
+                Alert.alert('Erreur', 'Envoi impossible pour le moment. R\u00e9essaie plus tard.');
               }
             } catch {
-              Alert.alert('Erreur', 'Envoi impossible pour le moment. Reessaie plus tard.');
+              Alert.alert('Erreur', 'Envoi impossible pour le moment. R\u00e9essaie plus tard.');
             } finally {
               setBusy(false);
             }
