@@ -395,11 +395,11 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     //
     // On ne compare jamais frame.width a une constante : selon la version de
     // VisionCamera le buffer est annonce brut (1920 x 1080) ou deja redresse
-    // (1080 x 1920). Les deux axes sont donc designes par leur taille — long
-    // et court — et chaque fraction est multipliee par le sien. Releve terrain
-    // 2026-10-25 : f.w est la fraction du grand axe (0,243 pour un visage de
-    // 198 pt de haut) et f.h celle du petit (0,343 pour 157 pt de large) ; les
-    // deux retombent au point pres sur la capture, ce qui fixe l appariement.
+    // (1080 x 1920). Les deux axes sont donc designes par leur taille, long et
+    // court. Reste a savoir laquelle des deux fractions de Vision va avec
+    // lequel — question tranchee plus bas par l aspect de la boite, et non par
+    // une hypothese : un releve deduit d une capture EN SUPPOSANT l appariement
+    // ne prouve rien, il se contente de le reproduire (erreur du 25/10).
     const bufLong = frame.width > frame.height ? frame.width : frame.height;
     const bufCourt = frame.width > frame.height ? frame.height : frame.width;
     const ech = Math.max(winW / bufCourt, winH / bufLong);
@@ -411,28 +411,40 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     let roll = 0;
     for (let i = 0; i < n; i++) {
       const f = faces[i];
-      // Les deux cotes de la boite, en points d ecran ; le plus grand est la
-      // hauteur, un visage etant plus haut que large.
-      const c1 = f.w * bufLong * ech;
-      const c2 = f.h * bufCourt * ech;
-      const hPt = c1 > c2 ? c1 : c2;
-      const wPt = c1 > c2 ? c2 : c1;
+      // APPARIEMENT DETERMINE A L EXECUTION.
+      //
+      // Deux lectures sont possibles et elles different d un facteur
+      // bufLong / bufCourt, soit 1,78 en 16:9 — de quoi faire valider un
+      // visage a 75 % de la cible, ce qui est arrive. Plutot que de supposer,
+      // on calcule les deux et on garde celle dont la boite a l aspect d un
+      // visage : Vision cadre du sourcil au menton et de joue a joue, soit
+      // environ 1,3 fois plus haut que large. Les deux candidats etant
+      // separes par (bufLong / bufCourt)^2, l ecart d aspect est d un facteur
+      // 3 : aucune ambiguite, sur aucun format ni aucun OS.
+      const aH = f.w * bufLong * ech;
+      const aW = f.h * bufCourt * ech;
+      const bH = f.h * bufLong * ech;
+      const bW = f.w * bufCourt * ech;
+      const ecartA = aW > 0 ? Math.abs(aH / aW - 1.3) : 9;
+      const ecartB = bW > 0 ? Math.abs(bH / bW - 1.3) : 9;
+      const lectureA = ecartA <= ecartB;
+      const hPt = lectureA ? aH : bH;
+      const wPt = lectureA ? aW : bW;
       // Part de la cible atteinte, sur l axe le plus contraignant.
       const rW = wPt / (OVAL_W * CIBLE_PART_W);
       const rH = hPt / (OVAL_H * CIBLE_PART_H);
       const r = rW > rH ? rW : rH;
       if (r > remplissage) {
         remplissage = r;
-        // Ecart a l OVALE, pas au centre de l image. L axe vertical est celui
-        // dont l extension mesuree est la plus grande — un visage est plus
-        // haut que large — donc aucune hypothese materielle ici non plus.
-        const vertEstLong = c1 > c2;
-        const dBrut = vertEstLong
+        // Ecart a l OVALE, pas au centre de l image. Le centre suit le meme
+        // appariement que la taille : cx va avec w, cy avec h, ce sont les
+        // deux axes de la meme boite.
+        const dBrut = lectureA
           ? (f.cx - 0.5) * bufLong * ech
-          : (f.cy - 0.5) * bufCourt * ech;
-        const dH = vertEstLong
+          : (f.cy - 0.5) * bufLong * ech;
+        const dH = lectureA
           ? (f.cy - 0.5) * bufCourt * ech
-          : (f.cx - 0.5) * bufLong * ech;
+          : (f.cx - 0.5) * bufCourt * ech;
         // Le sens de l axe vertical depend de l orientation du capteur et n a
         // pas ete releve sur appareil. On retient donc la plus petite des deux
         // lectures : sous l une comme sous l autre convention, un visage pose
