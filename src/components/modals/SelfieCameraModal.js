@@ -233,8 +233,30 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     Animated.spring(captureScale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 6 }).start();
   };
 
+  // Le declencheur refuse tant que le cadrage n est pas bon (user
+  // 2026-10-25). Le guidage existait deja — six etats, six messages — mais le
+  // bouton rose, lui, ne le consultait pas : on pouvait photographier un
+  // visage coupe pendant que la bande affichait « Recule un peu ». Un selfie
+  // mal cadre, c est une reference biometrique mediocre pour toute la saison.
+  //
+  // Refuser sans rien dire serait pire : l appui rate secoue le message et
+  // declenche un retour haptique d avertissement, pour qu on regarde la
+  // consigne plutot que le bouton.
+  const secousse = useRef(new Animated.Value(0)).current;
+  const refuserCapture = useCallback(() => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    secousse.setValue(0);
+    Animated.sequence([
+      Animated.timing(secousse, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.timing(secousse, { toValue: -1, duration: 120, useNativeDriver: true }),
+      Animated.timing(secousse, { toValue: 0.6, duration: 100, useNativeDriver: true }),
+      Animated.timing(secousse, { toValue: 0, duration: 80, useNativeDriver: true }),
+    ]).start();
+  }, [secousse]);
+
   const shoot = useCallback(async () => {
     if (!cameraRef.current || busy) return;
+    if (etatRef.current !== 'ok') { refuserCapture(); return; }
     setBusy(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -255,7 +277,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     } finally {
       setBusy(false);
     }
-  }, [busy, flash]);
+  }, [busy, flash, refuserCapture]);
 
   const shootRef = useRef(shoot);
   useEffect(() => { shootRef.current = shoot; }, [shoot]);
@@ -513,10 +535,18 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             onPressOut={onCapturePressOut}
             disabled={busy || !hasPermission || !device}
             activeOpacity={1}
+            accessibilityRole="button"
+            accessibilityLabel="Prendre le selfie"
+            accessibilityHint={etat === 'ok' ? undefined : MESSAGES[etat] || MESSAGES.rien}
+            accessibilityState={{ disabled: etat !== 'ok' }}
             style={{
               width: PASTILLE, height: PASTILLE, borderRadius: PASTILLE / 2,
               backgroundColor: ROSE,
-              opacity: busy || !hasPermission || !device ? 0.5 : 1,
+              // Pas pret : la pastille s eteint sans disparaitre, pour rester
+              // une cible identifiable plutot qu un fantome.
+              opacity: busy || !hasPermission || !device ? 0.5 : (etat === 'ok' ? 1 : 0.42),
+              borderWidth: etat === 'ok' ? 0 : 2,
+              borderColor: 'rgba(255,255,255,0.65)',
             }}
           />
         </Animated.View>
@@ -528,6 +558,9 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             textAlign: 'center', color: '#fff',
             fontSize: 17, fontFamily: 'Montserrat-SemiBold',
             opacity: opaciteGuidage,
+            transform: [{
+              translateX: secousse.interpolate({ inputRange: [-1, 1], outputRange: [-9, 9] }),
+            }],
           }}
         >
           {MESSAGES[etat] || MESSAGES.rien}
