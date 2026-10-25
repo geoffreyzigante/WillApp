@@ -36,22 +36,23 @@ import { s } from '../../constants/styles';
 
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
 
-// Calage 2026-09-01, mesures relevees sur iPhone : un visage qui remplit
-// exactement l ovale donne taille = 0.47 et dist = 0.00.
+// Criteres de cadrage, exprimes PAR RAPPORT A L OVALE et non en fraction du
+// buffer camera (refonte 2026-10-25, cf. commentaire « un seul referentiel »
+// plus bas). 1.0 = la boite de visage remplit exactement la cible.
 //
-// Resserrage 2026-10-25. Le plancher 0.36 valait 77 % de cette valeur de
-// reference : mesure prise sur la capture d un selfie accepte, la boite de
-// visage faisait 157 x 198 pt pour un ovale de 260 x 340, soit un visage
-// flottant au milieu du guide. Vision ne cadre que du sourcil au menton
-// (ni cheveux ni front haut), donc « remplir l ovale » correspond a une
-// boite d environ 208 x 255 pt : il manquait un facteur 1,3.
-//
-// Le plancher passe donc juste sous la valeur de reference plutot que 23 %
-// dessous. 0.47 reste atteignable — c est une valeur relevee sur l appareil,
-// pas une extrapolation — donc aucun risque de blocage.
-const TAILLE_MIN = 0.45;
-const TAILLE_MAX = 0.62;
-const DIST_MAX = 0.13;
+// La cible n est pas l ovale entier : Vision ne cadre que du sourcil au
+// menton et de joue a joue, ni cheveux ni haut du front. Un visage qui
+// remplit l ovale a l oeil donne donc une boite d environ 80 % de sa largeur
+// et 75 % de sa hauteur. Ces deux fractions sont anatomiques, pas materielles :
+// elles valent sur tous les telephones.
+const CIBLE_PART_W = 0.80;
+const CIBLE_PART_H = 0.75;
+// Tolerance autour de la cible. Large volontairement : trop pres degrade moins
+// la reconnaissance que trop loin, et un etau serre bloquerait l inscription.
+const REMPLISSAGE_MIN = 0.86;
+const REMPLISSAGE_MAX = 1.22;
+// Ecart de centrage tolere, en fraction de la hauteur de l ovale.
+const ECART_MAX = 0.18;
 
 // Angles de pose toleres, en degres.
 //
@@ -67,7 +68,7 @@ const DELAI_AUTO = 2000;
 // Diametre du declencheur rose pose sur le sommet de la bande.
 const PASTILLE = 96;
 
-// Bandeau de mesure a l ecran (n / taille / dist / yaw / roll). Seuils cales,
+// Bandeau de mesure a l ecran (n / rempl / ecart / yaw / roll). Seuils cales,
 // on le laisse a false ; le repasser a true pour un nouveau calage terrain.
 const DEBUG_GUIDAGE = false;
 
@@ -200,8 +201,11 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
 
   const winW = Dimensions.get('window').width;
   const winH = Dimensions.get('window').height;
-  const OVAL_W = 260;
-  const OVAL_H = 340;
+  // L ovale suit la largeur de l ecran. En dur a 260 pt il occupait 81 % de la
+  // largeur d un iPhone SE et 59 % de celle d un Pro Max : meme guide, deux
+  // cadrages demandes. Les bornes evitent un ovale minuscule sur tablette.
+  const OVAL_W = Math.round(Math.max(210, Math.min(300, winW * 0.62)));
+  const OVAL_H = Math.round(OVAL_W * (340 / 260));
   const cx = winW / 2;
   // Approximation safe-area bas : home indicator iOS ~34, +24 demandes.
   const bottomInset = Platform.OS === 'ios' ? 58 : 32;
@@ -237,7 +241,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     const b = OVAL_H / 2;
     const h = ((a - b) * (a - b)) / ((a + b) * (a + b));
     return Math.PI * (a + b) * (1 + (3 * h) / (10 + Math.sqrt(4 - 3 * h)));
-  }, []);
+  }, [OVAL_W, OVAL_H]);
 
   const [etat, setEtat] = useState('rien');
   // Message affiche, distinct de l etat mesure : il ne suit qu apres
@@ -316,13 +320,13 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   // Analyse -> etat. Appelee ~6 fois par seconde depuis le worklet ; on ne
   // re-rend que sur changement reel d etat.
   const onAnalyseJS = useMemo(
-    () => Worklets.createRunOnJS((n, taille, dist, pose, yaw, roll) => {
+    () => Worklets.createRunOnJS((n, remplissage, ecart, pose, yaw, roll) => {
       let e;
       if (n === 0) e = 'rien';
       else if (n > 1) e = 'plusieurs';
-      else if (taille < TAILLE_MIN) e = 'loin';
-      else if (taille > TAILLE_MAX) e = 'pres';
-      else if (dist > DIST_MAX) e = 'decentre';
+      else if (remplissage < REMPLISSAGE_MIN) e = 'loin';
+      else if (remplissage > REMPLISSAGE_MAX) e = 'pres';
+      else if (ecart > ECART_MAX) e = 'decentre';
       else if (pose === 1 && (yaw > YAW_MAX || roll > ROLL_MAX)) e = 'profil';
       else e = 'ok';
       if (etatRef.current !== e) {
@@ -331,7 +335,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       }
       if (DEBUG_GUIDAGE) {
         const txt =
-          'n=' + n + '  taille=' + taille.toFixed(2) + '  dist=' + dist.toFixed(2) +
+          'n=' + n + '  rempl=' + remplissage.toFixed(2) + '  ecart=' + ecart.toFixed(2) +
           (pose === 1 ? '  yaw=' + Math.round(yaw) + '  roll=' + Math.round(roll) : '  (pose absente)');
         mesureRef.current = txt;
         setMesure(txt);
@@ -357,19 +361,54 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     const res = detectHumans(frame, { zoneWidthPercent: 1, axis: 'midX', humans: false });
     const faces = res && res.faces ? res.faces : [];
     const n = faces.length;
-    let taille = 0;
-    let dist = 1;
+
+    // UN SEUL REFERENTIEL : le point ecran.
+    //
+    // Les coordonnees de Vision sont des fractions du buffer camera. Les
+    // comparer a des seuils fixes supposait un buffer et un ecran donnes :
+    // sur un autre telephone, le meme seuil ne decrit plus le meme cadrage.
+    // Deux variables changent d un appareil a l autre — le format du buffer
+    // (16:9 ou 4:3, le facteur entre les deux atteint 1,33) et la taille de
+    // l ecran, puisque l apercu est en « cover » — et elles se composent.
+    // On ramene donc la boite de visage en points d ecran, pour la comparer a
+    // l ovale lui-meme. Le guide et la regle ne peuvent plus diverger.
+    //
+    // Cover : l apercu couvre l ecran, le grand axe du buffer tient la hauteur.
+    //
+    // On ne compare jamais frame.width a une constante : selon la version de
+    // VisionCamera le buffer est annonce brut (1920 x 1080) ou deja redresse
+    // (1080 x 1920). Les deux axes sont donc designes par leur taille — long
+    // et court — et chaque fraction est multipliee par le sien. Releve terrain
+    // 2026-10-25 : f.w est la fraction du grand axe (0,243 pour un visage de
+    // 198 pt de haut) et f.h celle du petit (0,343 pour 157 pt de large) ; les
+    // deux retombent au point pres sur la capture, ce qui fixe l appariement.
+    const bufLong = frame.width > frame.height ? frame.width : frame.height;
+    const bufCourt = frame.width > frame.height ? frame.height : frame.width;
+    const ech = Math.max(winW / bufCourt, winH / bufLong);
+
+    let remplissage = 0;
+    let ecart = 1;
     let pose = 0;
     let yaw = 0;
     let roll = 0;
     for (let i = 0; i < n; i++) {
       const f = faces[i];
-      const t = f.w > f.h ? f.w : f.h;
-      if (t > taille) {
-        taille = t;
-        const dx = f.cx - 0.5;
-        const dy = f.cy - 0.5;
-        dist = Math.sqrt(dx * dx + dy * dy);
+      // Les deux cotes de la boite, en points d ecran ; le plus grand est la
+      // hauteur, un visage etant plus haut que large.
+      const c1 = f.w * bufLong * ech;
+      const c2 = f.h * bufCourt * ech;
+      const hPt = c1 > c2 ? c1 : c2;
+      const wPt = c1 > c2 ? c2 : c1;
+      // Part de la cible atteinte, sur l axe le plus contraignant.
+      const rW = wPt / (OVAL_W * CIBLE_PART_W);
+      const rH = hPt / (OVAL_H * CIBLE_PART_H);
+      const r = rW > rH ? rW : rH;
+      if (r > remplissage) {
+        remplissage = r;
+        // Ecart au centre, en points puis en fraction de la hauteur d ovale.
+        const d1 = (f.cx - 0.5) * bufLong * ech;
+        const d2 = (f.cy - 0.5) * bufCourt * ech;
+        ecart = Math.sqrt(d1 * d1 + d2 * d2) / OVAL_H;
         // Champs absents sur les builds anterieurs : pose reste a 0 et le
         // critere d orientation est simplement ignore.
         pose = f.pose === 1 ? 1 : 0;
@@ -379,8 +418,8 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
         roll = r0 > 90 ? 180 - r0 : r0;
       }
     }
-    onAnalyseJS(n, taille, dist, pose, yaw, roll);
-  }, [onAnalyseJS, analyseActiveSV, skipSV]);
+    onAnalyseJS(n, remplissage, ecart, pose, yaw, roll);
+  }, [onAnalyseJS, analyseActiveSV, skipSV, winW, winH, OVAL_W, OVAL_H]);
 
   // Stabilisation de la consigne : 450 ms sans changement d etat avant de
   // remplacer la phrase, et un fondu plutot qu une coupe.
