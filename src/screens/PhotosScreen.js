@@ -231,7 +231,14 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       lastSeenLoadedRef.current = true;
     }).catch(() => { lastSeenLoadedRef.current = true; });
     AsyncStorage.getItem(photosCacheKey).then(s => {
-      if (!s) { setLoading(true); return; }
+      // Pas de setLoading(true) ici : l etat initial est deja true, et cette
+      // lecture est ASYNCHRONE. Sur un compte neuf, refreshAll n a rien a
+      // demander et pose loading=false en quelques millisecondes ; la lecture
+      // du cache resolvait ensuite, ne trouvait rien, et remettait loading a
+      // true — sans plus personne pour le redescendre. D ou le « Chargement… »
+      // sans fin apres une inscription, que seule une relance faisait ceder
+      // (l ordre des deux resolutions changeait). Course corrigee le 25/10.
+      if (!s) return;
       try {
         const cached = JSON.parse(s);
         if (Array.isArray(cached) && cached.length > 0) {
@@ -751,7 +758,11 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           : 'Pas encore\nde photos'}
       sousTexte={viewFilter === 'favs'
         ? 'Ajoute tes photos favorites,\nde toi ou de tes amis'
-        : "Les photos arrivent quand les photographes les envoient :\nsouvent dans les heures qui suivent la course,\nparfois le lendemain."}
+        : viewFilter === 'me'
+          // L ancien texte parlait d une course deja courue — faux juste
+          // apres une inscription, et il n indiquait pas quoi faire.
+          ? 'Trouve ta course : dès que les photographes envoient leurs photos,\nWill reconnaît ton visage et les dépose ici.'
+          : 'Les photos arrivent quand les photographes les envoient,\nsouvent dans les heures qui suivent la course.'}
       actionLabel={viewFilter === 'favs' ? null : 'Trouver un event'}
       onAction={viewFilter === 'favs' ? null : onFindEvent}
     />

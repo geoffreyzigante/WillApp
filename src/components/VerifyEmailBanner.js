@@ -9,6 +9,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Alert, AppState, ActivityIndicator } from 'react-native';
+import { C } from '../constants/colors';
 
 export function VerifyEmailBanner({ runnerApiFetch, isAuthed }) {
   const [needsVerify, setNeedsVerify] = useState(false);
@@ -66,23 +67,23 @@ export function VerifyEmailBanner({ runnerApiFetch, isAuthed }) {
 
   return (
     <View style={{
-      backgroundColor: '#EDE4FF', marginHorizontal: 14, marginBottom: 10, borderRadius: 12,
-      padding: 14, borderWidth: 1, borderColor: '#C4A6FF',
-      flexDirection: 'row', alignItems: 'center', gap: 10,
+      backgroundColor: C.white, marginHorizontal: 14, marginBottom: 10, borderRadius: 16,
+      padding: 14, borderWidth: 1, borderColor: C.primaryLight,
+      flexDirection: 'row', alignItems: 'center', gap: 14,
     }}>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontFamily: 'Montserrat-Bold', color: '#4C0FB3', fontSize: 13 }}>
-          Confirme ton adresse email
+        <Text style={{ fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 15, color: C.primary }}>
+          Confirme ton adresse
         </Text>
-        <Text style={{ fontFamily: 'Montserrat', color: '#4C0FB3', fontSize: 12, marginTop: 2, lineHeight: 16 }}>
-          On t a envoye un lien de validation. Verifie ta boite pour activer ton compte.
+        <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 2, lineHeight: 16 }}>
+          On t'a envoyé un lien de validation. Vérifie ta boîte pour activer ton compte.
         </Text>
       </View>
       <TouchableOpacity
         onPress={handleResend}
         disabled={busy}
         style={{
-          backgroundColor: '#7B2FFF', paddingHorizontal: 14, paddingVertical: 9,
+          backgroundColor: C.primary, paddingHorizontal: 16, paddingVertical: 10,
           borderRadius: 999, opacity: busy ? 0.6 : 1,
         }}
         activeOpacity={0.85}

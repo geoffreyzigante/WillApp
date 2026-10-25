@@ -129,12 +129,15 @@ export function EtatVideWill({
         <TouchableOpacity
           onPress={onAction}
           activeOpacity={0.85}
+          // Meme bouton que partout ailleurs dans l app (s.btnPrimary) :
+          // rayon 16 et corps 15, pas une pilule en 14. Seule la largeur
+          // change, un etat vide ne porte pas un bouton pleine largeur.
           style={{
-            marginTop: 18, paddingHorizontal: 22, paddingVertical: 12,
-            borderRadius: 999, backgroundColor: C.primary,
+            marginTop: 18, paddingHorizontal: 24, paddingVertical: 14,
+            borderRadius: 16, backgroundColor: C.primary,
           }}
         >
-          <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>
+          <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 }}>
             {actionLabel}
           </Text>
         </TouchableOpacity>
