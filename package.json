@@ -10,7 +10,9 @@
     "test:quality": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/_loader_js_extension.mjs\", pathToFileURL(\"./\"));' scripts/test_quality_failsafes.mjs",
     "test:step": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/_loader_js_extension.mjs\", pathToFileURL(\"./\"));' scripts/test_step_trigger.mjs",
     "test": "npm run test:quality && npm run test:step && npm run test:journal",
-    "test:journal": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/_loader_js_extension.mjs\", pathToFileURL(\"./\"));' scripts/test_journal.mjs"
+    "test:journal": "node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"./scripts/_loader_js_extension.mjs\", pathToFileURL(\"./\"));' scripts/test_journal.mjs",
+    "lint": "eslint . --ext .js,.jsx --max-warnings=-1",
+    "lint:erreurs": "eslint . --ext .js,.jsx --quiet"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -53,5 +55,10 @@
     "react-native-worklets": "0.8.3",
     "react-native-worklets-core": "^1.6.3"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1"
+  }
 }

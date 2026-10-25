@@ -1,0 +1,40 @@
+# Controles automatiques a chaque poussee.
+#
+# Pourquoi (2026-10-25) : le depot n avait ni linter ni execution de ses
+# propres tests. Un identifiant hors portee — « evDistances » — a passe la
+# compilation, est parti en OTA et a donne un ecran blanc sur chaque fiche
+# event. Verifie depuis : la regle no-undef attrape exactement ce bug.
+#
+# Ce qui bloque : les ERREURS du linter et les tests. Les 724 avertissements
+# (dependances de hooks, variables inutilisees) sont affiches mais ne
+# bloquent pas — une CI rouge en permanence ne se lit plus.
+name: Contrôles
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  controles:
+    name: Lint et tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Installer les dependances
+        run: npm ci
+
+      - name: Linter — les erreurs bloquent
+        run: npm run lint:erreurs
+
+      - name: Linter — les avertissements, pour information
+        run: npm run lint || true
+
+      - name: Tests
+        run: npm test

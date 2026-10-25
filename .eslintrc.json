@@ -1,0 +1,101 @@
+{
+  "root": true,
+  "env": {
+    "es2022": true,
+    "node": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "plugins": [
+    "react",
+    "react-hooks"
+  ],
+  "settings": {
+    "react": {
+      "version": "detect"
+    }
+  },
+  "globals": {
+    "__DEV__": "readonly",
+    "fetch": "readonly",
+    "FormData": "readonly",
+    "Blob": "readonly",
+    "URL": "readonly",
+    "URLSearchParams": "readonly",
+    "AbortController": "readonly",
+    "TextEncoder": "readonly",
+    "TextDecoder": "readonly",
+    "requestAnimationFrame": "readonly",
+    "cancelAnimationFrame": "readonly",
+    "performance": "readonly",
+    "atob": "readonly",
+    "btoa": "readonly",
+    "alert": "readonly",
+    "FileReader": "readonly",
+    "XMLHttpRequest": "readonly",
+    "WebSocket": "readonly",
+    "File": "readonly",
+    "Headers": "readonly",
+    "Request": "readonly",
+    "Response": "readonly",
+    "setImmediate": "readonly",
+    "clearImmediate": "readonly",
+    "navigator": "readonly",
+    "global": "readonly",
+    "process": "readonly",
+    "console": "readonly",
+    "setTimeout": "readonly",
+    "clearTimeout": "readonly",
+    "setInterval": "readonly",
+    "clearInterval": "readonly",
+    "Intl": "readonly"
+  },
+  "rules": {
+    "no-undef": "error",
+    "no-unused-vars": [
+      "warn",
+      {
+        "args": "none",
+        "ignoreRestSiblings": true,
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "no-dupe-keys": "error",
+    "no-dupe-args": "error",
+    "no-duplicate-case": "error",
+    "no-unreachable": "error",
+    "no-const-assign": "error",
+    "no-self-compare": "error",
+    "no-constant-condition": [
+      "error",
+      {
+        "checkLoops": false
+      }
+    ],
+    "valid-typeof": "error",
+    "use-isnan": "error",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+    "react/jsx-key": "warn",
+    "react/jsx-no-undef": "error",
+    "react/no-children-prop": "off",
+    "react/prop-types": "off",
+    "react/display-name": "off"
+  },
+  "ignorePatterns": [
+    "node_modules/",
+    "dist/",
+    "ios/",
+    "android/",
+    "_to_delete/",
+    "Claude outputs/",
+    "plugins/*.swift",
+    "plugins/*.kt",
+    "plugins/*.m"
+  ]
+}
