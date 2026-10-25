@@ -11,7 +11,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Alert, AppState, ActivityIndicator } from 'react-native';
 import { C } from '../constants/colors';
 
-export function VerifyEmailBanner({ runnerApiFetch, isAuthed }) {
+export function VerifyEmailBanner({ runnerApiFetch, isAuthed, isActive = true }) {
   const [needsVerify, setNeedsVerify] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -34,6 +34,12 @@ export function VerifyEmailBanner({ runnerApiFetch, isAuthed }) {
     });
     return () => sub.remove();
   }, [fetchStatus]);
+
+  // Le retour au premier plan ne suffit pas : si le lien s ouvre dans le
+  // navigateur integre du client mail, l app ne passe jamais en arriere-plan
+  // et l evenement AppState ne tombe pas. On rafraichit donc aussi a chaque
+  // fois que l onglet redevient actif.
+  useEffect(() => { if (isActive) fetchStatus(); }, [isActive, fetchStatus]);
 
   if (!needsVerify) return null;
 
@@ -67,7 +73,10 @@ export function VerifyEmailBanner({ runnerApiFetch, isAuthed }) {
 
   return (
     <View style={{
-      backgroundColor: C.white, marginHorizontal: 14, marginBottom: 10, borderRadius: 16,
+      // Pas de marge laterale propre : le parent pose deja 20 de padding, et
+      // les 14 d avant rentraient le bandeau de 34 quand la barre de filtres
+      // juste dessous part a 20. Deux bords gauches dans le meme ecran.
+      backgroundColor: C.white, marginBottom: 10, borderRadius: 16,
       padding: 14, borderWidth: 1, borderColor: C.primaryLight,
       flexDirection: 'row', alignItems: 'center', gap: 14,
     }}>
@@ -82,13 +91,14 @@ export function VerifyEmailBanner({ runnerApiFetch, isAuthed }) {
       <TouchableOpacity
         onPress={handleResend}
         disabled={busy}
-        style={{
-          backgroundColor: C.primary, paddingHorizontal: 16, paddingVertical: 10,
-          borderRadius: 999, opacity: busy ? 0.6 : 1,
-        }}
-        activeOpacity={0.85}
+        // Action secondaire en texte (token btnSecondaryText), pas une
+        // pilule pleine : un bouton plein dans une carte de rayon 16 avec
+        // 14 de padding devrait avoir un rayon de 2 pour s emboiter, ce qui
+        // n existe pas dans l echelle. Et il prenait le pas sur le titre.
+        style={{ paddingHorizontal: 4, paddingVertical: 6, opacity: busy ? 0.5 : 1 }}
+        activeOpacity={0.6}
       >
-        {busy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 13 }}>Renvoyer</Text>}
+        {busy ? <ActivityIndicator color={C.primary} size="small" /> : <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>Renvoyer</Text>}
       </TouchableOpacity>
     </View>
   );

@@ -855,7 +855,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
 
       <View style={{ height: 14 }} />
       <ConsentRenewBanner runnerApiFetch={runnerApiFetch} isAuthed={!!runnerUserId} />
-      <VerifyEmailBanner runnerApiFetch={runnerApiFetch} isAuthed={!!runnerUserId} />
+      <VerifyEmailBanner runnerApiFetch={runnerApiFetch} isAuthed={!!runnerUserId} isActive={isActive} />
 
       {/* Audit coureur 1 -- selfieUri etait code en dur a null : la variante
           « Envoi du selfie echoue » du composant, avec son bouton
