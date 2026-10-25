@@ -41,6 +41,30 @@ export function VerifyEmailBanner({ runnerApiFetch, isAuthed, isActive = true })
   // fois que l onglet redevient actif.
   useEffect(() => { if (isActive) fetchStatus(); }, [isActive, fetchStatus]);
 
+  // Tant que le bandeau est la, on redemande le statut toutes les 15 s.
+  //
+  // Constate : il ne partait qu en quittant l onglet et en y revenant. Les
+  // trois declencheurs precedents — montage, retour d arriere-plan,
+  // activation de l onglet — laissent un trou quand l utilisateur valide
+  // depuis le navigateur integre de son client mail puis revient a une app
+  // qui n a jamais quitte le premier plan ni change d onglet. C est le motif
+  // des ecrans « en attente de confirmation » d Apple et de Google : on
+  // interroge plutot que d attendre un evenement qui ne viendra pas.
+  //
+  // Borne a 5 minutes et uniquement pendant que le bandeau est affiche, donc
+  // uniquement pour un compte en attente : une vingtaine de GET au plus, et
+  // aucun pour un compte deja valide.
+  useEffect(() => {
+    if (!needsVerify || !isActive) return;
+    let essais = 0;
+    const minuteur = setInterval(() => {
+      essais += 1;
+      if (essais > 20) { clearInterval(minuteur); return; }
+      fetchStatus();
+    }, 15000);
+    return () => clearInterval(minuteur);
+  }, [needsVerify, isActive, fetchStatus]);
+
   if (!needsVerify) return null;
 
   const handleResend = () => {
