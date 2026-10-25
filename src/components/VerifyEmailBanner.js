@@ -72,33 +72,40 @@ export function VerifyEmailBanner({ runnerApiFetch, isAuthed, isActive = true })
   };
 
   return (
+    // Variante « ligne compacte » (choix user 2026-10-25). Le compte marche
+    // deja sans validation : ce bandeau ne merite pas le tiers superieur de
+    // l ecran ni le poids d un CTA. Une ligne, un point rose, l action a
+    // droite. La phrase explicative tombe — elle vit dans l email.
+    //
+    // Pas de marge laterale propre : le parent pose deja 20 de padding, et
+    // les 14 d avant rentraient le bandeau de 34 quand la barre de filtres
+    // juste dessous part a 20. Deux bords gauches dans le meme ecran.
+    //
+    // Violet sur pillBg mesure 4,75:1 — au-dessus du seuil de 4,5:1 exige
+    // pour du texte courant.
     <View style={{
-      // Pas de marge laterale propre : le parent pose deja 20 de padding, et
-      // les 14 d avant rentraient le bandeau de 34 quand la barre de filtres
-      // juste dessous part a 20. Deux bords gauches dans le meme ecran.
-      backgroundColor: C.white, marginBottom: 10, borderRadius: 16,
-      padding: 14, borderWidth: 1, borderColor: C.primaryLight,
-      flexDirection: 'row', alignItems: 'center', gap: 14,
+      backgroundColor: C.pillBg, marginBottom: 10, borderRadius: 999,
+      paddingLeft: 16, paddingRight: 8, paddingVertical: 11,
+      flexDirection: 'row', alignItems: 'center', gap: 10,
     }}>
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 15, color: C.primary }}>
-          Confirme ton adresse
-        </Text>
-        <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 2, lineHeight: 16 }}>
-          On t'a envoyé un lien de validation. Vérifie ta boîte pour activer ton compte.
-        </Text>
-      </View>
+      <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: C.pinkPillActive }} />
+      <Text style={{ flex: 1, fontFamily: 'Montserrat-SemiBold', fontSize: 13, color: C.primary }}>
+        Confirme ton adresse
+      </Text>
       <TouchableOpacity
         onPress={handleResend}
         disabled={busy}
-        // Action secondaire en texte (token btnSecondaryText), pas une
-        // pilule pleine : un bouton plein dans une carte de rayon 16 avec
-        // 14 de padding devrait avoir un rayon de 2 pour s emboiter, ce qui
-        // n existe pas dans l echelle. Et il prenait le pas sur le titre.
-        style={{ paddingHorizontal: 4, paddingVertical: 6, opacity: busy ? 0.5 : 1 }}
+        accessibilityRole="button"
+        accessibilityLabel="Renvoyer l'email de validation"
+        // hitSlop : la ligne fait 39 pt de haut, la cible tactile doit en
+        // faire 44.
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        style={{ paddingHorizontal: 10, paddingVertical: 2, opacity: busy ? 0.5 : 1 }}
         activeOpacity={0.6}
       >
-        {busy ? <ActivityIndicator color={C.primary} size="small" /> : <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>Renvoyer</Text>}
+        {busy
+          ? <ActivityIndicator color={C.primary} size="small" />
+          : <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 13 }}>Renvoyer</Text>}
       </TouchableOpacity>
     </View>
   );
