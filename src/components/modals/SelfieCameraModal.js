@@ -204,7 +204,22 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   const BOMBE = 34;
   const bandeY = winH - BANDE_H;
   const bandePath = `M0,${winH} L0,${bandeY} Q${winW / 2},${bandeY - BOMBE * 2} ${winW},${bandeY} L${winW},${winH} Z`;
-  const cy = Math.max(OVAL_H / 2 + topInset + 40, (bandeY - BOMBE) / 2 + 20);
+  // L ovale est centre sur l ECRAN, pas sur l espace libre au-dessus de la
+  // bande (correction 2026-10-25).
+  //
+  // Le critere de centrage compare le centre du visage au centre de l image
+  // (0,5 ; 0,5) et tolere 0,13 d ecart. Tant que l ovale etait cale au-dessus
+  // de la bande, son centre tombait vers 0,38 de la hauteur : un visage juge
+  // « bien centre » par le code apparaissait donc 12 % plus bas que l ovale,
+  // menton dessous. Le guide disait une chose, la regle en mesurait une
+  // autre — et c est la regle qui declenchait.
+  //
+  // Le clamp garde l ovale au-dessus de la bande sur les petits ecrans ; sur
+  // un iPhone courant il ne s applique pas.
+  const cyIdeal = winH / 2;
+  const cyMax = bandeY - BOMBE - OVAL_H / 2 - 12;
+  const cyMin = OVAL_H / 2 + topInset + 8;
+  const cy = Math.max(cyMin, Math.min(cyIdeal, cyMax));
 
   // Perimetre de l ovale (Ramanujan) : sert au remplissage progressif du
   // contour pendant le compte a rebours de la capture automatique.
@@ -216,6 +231,13 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   }, []);
 
   const [etat, setEtat] = useState('rien');
+  // Message affiche, distinct de l etat mesure : il ne suit qu apres
+  // stabilisation (user 2026-10-25). A 6 Hz, un visage qui oscille autour
+  // d un seuil faisait clignoter les consignes — illisible, et anxiogene
+  // sur un ecran ou l on se regarde. L etat brut, lui, continue de piloter
+  // le declencheur et l anneau : seule la phrase attend.
+  const [messageEtat, setMessageEtat] = useState('rien');
+  const messageOpacite = useRef(new Animated.Value(1)).current;
   const [mesure, setMesure] = useState('');
   const [apercu, setApercu] = useState(null);
   const etatRef = useRef('rien');
@@ -351,6 +373,21 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     onAnalyseJS(n, taille, dist, pose, yaw, roll);
   }, [onAnalyseJS, analyseActiveSV, skipSV]);
 
+  // Stabilisation de la consigne : 450 ms sans changement d etat avant de
+  // remplacer la phrase, et un fondu plutot qu une coupe.
+  useEffect(() => {
+    if (etat === messageEtat) return;
+    const t = setTimeout(() => {
+      Animated.timing(messageOpacite, { toValue: 0, duration: 110, useNativeDriver: true })
+        .start(({ finished }) => {
+          if (!finished) return;
+          setMessageEtat(etat);
+          Animated.timing(messageOpacite, { toValue: 1, duration: 170, useNativeDriver: true }).start();
+        });
+    }, 450);
+    return () => clearTimeout(t);
+  }, [etat, messageEtat, messageOpacite]);
+
   // Declenchement automatique : le cadrage doit rester bon pendant tout le
   // remplissage de l anneau. Le moindre ecart annule et remet a zero.
   useEffect(() => {
@@ -373,6 +410,8 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     if (!visible) {
       setApercu(null);
       setEtat('rien');
+      setMessageEtat('rien');
+      messageOpacite.setValue(1);
       etatRef.current = 'rien';
       anneau.setValue(0);
     }
@@ -557,13 +596,13 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             position: 'absolute', bottom: bottomInset + 74, left: 24, right: 24,
             textAlign: 'center', color: '#fff',
             fontSize: 17, fontFamily: 'Montserrat-SemiBold',
-            opacity: opaciteGuidage,
+            opacity: Animated.multiply(opaciteGuidage, messageOpacite),
             transform: [{
               translateX: secousse.interpolate({ inputRange: [-1, 1], outputRange: [-9, 9] }),
             }],
           }}
         >
-          {MESSAGES[etat] || MESSAGES.rien}
+          {MESSAGES[messageEtat] || MESSAGES.rien}
         </Animated.Text>
 
         {/* Fermeture, dans la bande, sous le contenu. */}
