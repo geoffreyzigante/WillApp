@@ -201,11 +201,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
 
   const winW = Dimensions.get('window').width;
   const winH = Dimensions.get('window').height;
-  // L ovale suit la largeur de l ecran. En dur a 260 pt il occupait 81 % de la
-  // largeur d un iPhone SE et 59 % de celle d un Pro Max : meme guide, deux
-  // cadrages demandes. Les bornes evitent un ovale minuscule sur tablette.
-  const OVAL_W = Math.round(Math.max(210, Math.min(300, winW * 0.62)));
-  const OVAL_H = Math.round(OVAL_W * (340 / 260));
+  // OVALE : voir plus bas, il depend de la bande basse.
   const cx = winW / 2;
   // Approximation safe-area bas : home indicator iOS ~34, +24 demandes.
   const bottomInset = Platform.OS === 'ios' ? 58 : 32;
@@ -229,10 +225,32 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   //
   // Le clamp garde l ovale au-dessus de la bande sur les petits ecrans ; sur
   // un iPhone courant il ne s applique pas.
+  // L ovale suit l ecran sur SES DEUX axes.
+  //
+  // En dur a 260 x 340 pt il occupait 81 % de la largeur d un iPhone SE et
+  // 59 % de celle d un Pro Max : meme guide, deux cadrages demandes. Mais la
+  // largeur seule ne suffit pas — calcule : sur SE (320 x 568) un ovale de
+  // 275 pt de haut deborde de 17 pt sur la bande basse, le menton du guide
+  // passant sous le bouton. La hauteur disponible entre la safe area et l arc
+  // de la bande est donc la seconde borne.
+  const dispoH = (bandeY - BOMBE - 12) - (topInset + 8);
+  const hParLargeur = Math.max(210, Math.min(300, winW * 0.62)) * (340 / 260);
+  const OVAL_H = Math.round(Math.max(200, Math.min(hParLargeur, dispoH)));
+  const OVAL_W = Math.round(OVAL_H * (260 / 340));
+
   const cyIdeal = winH / 2;
   const cyMax = bandeY - BOMBE - OVAL_H / 2 - 12;
   const cyMin = OVAL_H / 2 + topInset + 8;
   const cy = Math.max(cyMin, Math.min(cyIdeal, cyMax));
+
+  // Decalage entre le centre de l ovale et celui de l image. Le « cover »
+  // centre le recadrage, donc le centre de l image tombe au centre de l ecran :
+  // tout ecart de l ovale a ce centre doit etre retranche de la mesure, sinon
+  // la regle demande un cadrage que le guide ne montre pas. Calcule : sur un
+  // iPhone SE 2/3 (375 x 667) la bande de 210 pt force l ovale 74 pt au-dessus
+  // du centre, soit plus que la tolerance — un visage pose dans l ovale aurait
+  // ete refuse en boucle.
+  const decalageOval = cy - winH / 2;
 
   // Perimetre de l ovale (Ramanujan) : sert au remplissage progressif du
   // contour pendant le compte a rebours de la capture automatique.
@@ -405,10 +423,27 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       const r = rW > rH ? rW : rH;
       if (r > remplissage) {
         remplissage = r;
-        // Ecart au centre, en points puis en fraction de la hauteur d ovale.
-        const d1 = (f.cx - 0.5) * bufLong * ech;
-        const d2 = (f.cy - 0.5) * bufCourt * ech;
-        ecart = Math.sqrt(d1 * d1 + d2 * d2) / OVAL_H;
+        // Ecart a l OVALE, pas au centre de l image. L axe vertical est celui
+        // dont l extension mesuree est la plus grande — un visage est plus
+        // haut que large — donc aucune hypothese materielle ici non plus.
+        const vertEstLong = c1 > c2;
+        const dBrut = vertEstLong
+          ? (f.cx - 0.5) * bufLong * ech
+          : (f.cy - 0.5) * bufCourt * ech;
+        const dH = vertEstLong
+          ? (f.cy - 0.5) * bufCourt * ech
+          : (f.cx - 0.5) * bufLong * ech;
+        // Le sens de l axe vertical depend de l orientation du capteur et n a
+        // pas ete releve sur appareil. On retient donc la plus petite des deux
+        // lectures : sous l une comme sous l autre convention, un visage pose
+        // dans l ovale lit zero. Le seul faux positif possible est un visage
+        // place au double du decalage de l autre cote, c est-a-dire derriere
+        // la bande basse, la ou personne ne se cadre. A reduire a une branche
+        // des que la convention sera relevee sur appareil.
+        const dv1 = dBrut - decalageOval;
+        const dv2 = -dBrut - decalageOval;
+        const dV = Math.abs(dv1) < Math.abs(dv2) ? dv1 : dv2;
+        ecart = Math.sqrt(dH * dH + dV * dV) / OVAL_H;
         // Champs absents sur les builds anterieurs : pose reste a 0 et le
         // critere d orientation est simplement ignore.
         pose = f.pose === 1 ? 1 : 0;
@@ -419,7 +454,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       }
     }
     onAnalyseJS(n, remplissage, ecart, pose, yaw, roll);
-  }, [onAnalyseJS, analyseActiveSV, skipSV, winW, winH, OVAL_W, OVAL_H]);
+  }, [onAnalyseJS, analyseActiveSV, skipSV, winW, winH, OVAL_W, OVAL_H, decalageOval]);
 
   // Stabilisation de la consigne : 450 ms sans changement d etat avant de
   // remplacer la phrase, et un fondu plutot qu une coupe.
