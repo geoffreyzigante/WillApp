@@ -61,14 +61,20 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
       .catch(() => setCodeError('Connexion impossible. Vérifie ton réseau.'))
       .finally(() => setCodeLoading(false));
   }, [codeInput, codeLoading, onOpenEvent]);
-  // Indicateur violet qui glisse entre les 3 pills. Mesure une fois la largeur
-  // du conteneur (- padding), divise par 3 = largeur d un slot. Spring sur
-  // translateX synchronise avec le state tab.
-  const TAB_KEYS = ['upcoming', 'past', 'follows'];
+  // Deux pills seulement — A venir / Passes (user 2026-10-25). « Suivis »
+  // n est pas un etat de la liste au meme titre que les deux autres : c est un
+  // filtre qu on active et qu on retire. Il est donc devenu une icone a cote
+  // de la loupe, et le curseur violet n a plus que deux positions.
+  const TAB_KEYS = ['upcoming', 'past'];
   const tabIdx = Math.max(0, TAB_KEYS.indexOf(tab));
+  const suivisActif = tab === 'follows';
   const [tabsContainerW, setTabsContainerW] = useState(0);
+  // Position de la barre de filtres dans la page, pour pouvoir la remonter en
+  // haut quand la recherche s ouvre (user 2026-10-25) : sinon le carousel
+  // occupe l ecran, la barre reste au milieu et on ne voit aucun resultat.
+  const [filtresY, setFiltresY] = useState(0);
   const tabsSlideX = useRef(new Animated.Value(0)).current;
-  const slotW = tabsContainerW > 0 ? tabsContainerW / 3 : 0;
+  const slotW = tabsContainerW > 0 ? tabsContainerW / 2 : 0;
   useEffect(() => {
     if (slotW <= 0) return;
     Animated.spring(tabsSlideX, {
@@ -81,20 +87,24 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
   // Transition du CONTENU sous les pills : fade + slide horizontal directionnel
   // (entree par la droite si on va vers un tab "plus loin", par la gauche
   // sinon). Donne un sentiment de "page qui glisse" en sync avec l indicateur.
-  const lastTabIdxRef = useRef(tabIdx);
+  // Indice de contenu, distinct de celui du curseur : « Suivis » ne bouge pas
+  // le curseur mais change bien la liste, et sans cet indice la bascule
+  // depuis « A venir » se ferait sans aucune transition.
+  const contentIdx = suivisActif ? 2 : tabIdx;
+  const lastTabIdxRef = useRef(contentIdx);
   const contentFade = useRef(new Animated.Value(1)).current;
   const contentSlideX = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (lastTabIdxRef.current === tabIdx) return;
-    const direction = tabIdx > lastTabIdxRef.current ? 1 : -1;
-    lastTabIdxRef.current = tabIdx;
+    if (lastTabIdxRef.current === contentIdx) return;
+    const direction = contentIdx > lastTabIdxRef.current ? 1 : -1;
+    lastTabIdxRef.current = contentIdx;
     contentFade.setValue(0);
     contentSlideX.setValue(direction * 20);
     Animated.parallel([
       Animated.timing(contentFade, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.spring(contentSlideX, { toValue: 0, useNativeDriver: true, tension: 50, friction: 12 }),
     ]).start();
-  }, [tabIdx, contentFade, contentSlideX]);
+  }, [contentIdx, contentFade, contentSlideX]);
   const tabFiltered = events.filter(e => {
     if (tab === 'upcoming') return isUpcoming(e.event_date, e.event_date_end);
     if (tab === 'past') return !isUpcoming(e.event_date, e.event_date_end);
@@ -178,6 +188,18 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     }
   }, []);
+  // Ouverture de la recherche : la barre de filtres monte en haut de l ecran.
+  // Le carousel prend la moitie de la hauteur utile ; tant qu il reste en
+  // place, on tape une recherche sans voir le moindre resultat. On defile donc
+  // jusqu a la barre, ce qui place la liste juste en dessous.
+  useEffect(() => {
+    if (!searchOpen || filtresY <= 0) return;
+    const t = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, filtresY - headerH), animated: true });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [searchOpen, filtresY, headerH]);
+
   const [showBackTop, setShowBackTop] = useState(false);
   const backTopOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -249,8 +271,11 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
         onLogin={onOpenAuthLogin}
       />
 
-      {/* Row tabs + bouton loupe a droite */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      {/* Row tabs + Suivis + loupe */}
+      <View
+        onLayout={(e) => setFiltresY(e.nativeEvent.layout.y)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}
+      >
         <View
           onLayout={(e) => setTabsContainerW(e.nativeEvent.layout.width - 8)}
           style={{
@@ -272,6 +297,9 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
                 width: slotW,
                 backgroundColor: C.primary,
                 borderRadius: 12,
+                // Suivis actif : aucune des deux pills ne l est, le curseur
+                // s efface plutot que de designer un onglet qui ne filtre rien.
+                opacity: suivisActif ? 0 : 1,
                 transform: [{ translateX: tabsSlideX }],
               }}
             />
@@ -279,15 +307,36 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
           <TouchableOpacity onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setTab('upcoming'); }} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
             <Text style={[s.pillText, tab === 'upcoming' && s.pillTextActive]} numberOfLines={1}>À venir</Text>
           </TouchableOpacity>
-          {tab === 'follows' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
           <TouchableOpacity onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setTab('past'); }} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
             <Text style={[s.pillText, tab === 'past' && s.pillTextActive]} numberOfLines={1}>Passés</Text>
           </TouchableOpacity>
-          {tab === 'upcoming' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
-          <TouchableOpacity onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setTab('follows'); }} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
-            <Text style={[s.pillText, tab === 'follows' && s.pillTextActive]} numberOfLines={1}>Suivis</Text>
-          </TouchableOpacity>
         </View>
+
+        {/* Suivis : un filtre qu on active, pas un troisieme onglet. Le coeur
+            est le meme que celui des fiches event, donc l etat « suivi » se
+            lit partout de la meme facon. Un second appui le retire. */}
+        <TouchableOpacity
+          onPress={() => {
+            try { Haptics?.selectionAsync?.(); } catch {}
+            setTab(suivisActif ? 'upcoming' : 'follows');
+          }}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityState={{ selected: suivisActif }}
+          accessibilityLabel={suivisActif ? 'Afficher tous les events' : 'Afficher seulement les events suivis'}
+          style={{
+            width: 40, height: 40, borderRadius: 16,
+            backgroundColor: suivisActif ? C.primary : C.pillBg,
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Svg width={19} height={17} viewBox="-1 -1.5 22.78 20.61"
+            fill={suivisActif ? '#fff' : 'none'}
+            stroke={suivisActif ? '#fff' : C.primary}
+            strokeWidth={1.8}>
+            <Path d="M15.11,0c-1.97,0-3.7,1.01-4.72,2.53-1.02-1.53-2.75-2.53-4.72-2.53C2.54,0,0,2.54,0,5.67c0,3.56,4.8,8.32,7.88,11,1.44,1.26,3.58,1.26,5.02,0,3.07-2.68,7.88-7.44,7.88-11,0-3.13-2.54-5.67-5.67-5.67Z" />
+          </Svg>
+        </TouchableOpacity>
         <TouchableOpacity
           onPress={() => {
             if (searchOpen) closeSearch({ scrollTop: true });

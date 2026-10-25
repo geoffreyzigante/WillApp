@@ -1,4 +1,5 @@
-// Carrousel "Hot ones" : derniers events passes avec photos publiques
+// Carrousel "Hot ones" : events passes avec photos publiques, dans un ordre
+// tire au sort a chaque ouverture (la carte d invitation, elle, reste en tete)
 // (has_photos = true cote worker). Design hero iOS : cover full-bleed avec
 // rotation auto-play d une photo random toutes les 3.5s, overlay sombre,
 // nom + ville · type en bas. Brand WILL : titre AVEstiana sans fontWeight.
@@ -6,7 +7,7 @@
 // Coût réseau : 1 fetch /list-public/{code} par card affichée (max 10),
 // limité aux 5 premières photos après shuffle pour borner la mémoire.
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated } from 'react-native';
 import Svg, { Path, Ellipse } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
@@ -178,14 +179,32 @@ function WelcomeCard({ onSignup, onLogin }) {
 }
 
 export function HotOnesCarousel({ events, onOpenEvent, isAuthed = true, onSignup, onLogin }) {
-  // featured_new (admin) -> en tete du carousel, suivi des events passes
-  // avec photos. dedup pour eviter qu un featured_new past apparaisse 2x.
+  // featured_new (admin) + events passes avec photos. dedup pour eviter qu un
+  // featured_new past apparaisse 2x.
   const newOnes = (events || []).filter(e => e?.featured_new === true);
   const newCodes = new Set(newOnes.map(e => e.code));
   const past = (events || [])
     .filter(e => e && !newCodes.has(e.code) && e.has_photos && !isUpcoming(e.event_date, e.event_date_end))
     .sort((a, b) => (b.event_date_end || b.event_date || '').localeCompare(a.event_date_end || a.event_date || ''));
-  const hotOnes = [...newOnes, ...past].slice(0, MAX_ITEMS);
+  const candidats = [...newOnes, ...past].slice(0, MAX_ITEMS);
+
+  // Ordre aleatoire (user 2026-10-25) : le carousel etait trie par date, donc
+  // le meme event ouvrait la page pendant des semaines et les suivants
+  // n etaient jamais vus. Tire au sort une fois par liste, pas a chaque
+  // rendu — sinon les cartes sauteraient a chaque rotation de photo.
+  const cles = candidats.map(e => e.code).join(',');
+  const hotOnes = useMemo(() => {
+    const liste = [...candidats];
+    for (let i = liste.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [liste[i], liste[j]] = [liste[j], liste[i]];
+    }
+    return liste;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cles]);
+
+  // La carte d invitation reste en tete, hors tirage : c est le seul endroit
+  // ou un visiteur non connecte apprend a quoi sert Will.
   const items = (!isAuthed && onSignup)
     ? [{ __welcome: true, code: '__welcome' }, ...hotOnes]
     : hotOnes;
