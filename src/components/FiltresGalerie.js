@@ -31,7 +31,12 @@ import { C } from '../constants/colors';
 const NIVEAU = {
   1: {
     police: 'Montserrat-SemiBold',
-    taille: 12,
+    // 13, et 11,5 pour la seconde ligne (taille - 1,5). Apple fixe le plancher
+    // de lisibilite a 11 pt : a 12, la seconde ligne tombait a 10,5, et elle
+    // porte les horaires de depart et les comptes de photos — de l information
+    // qu on doit lire, pas un libelle qu on reconnait. L ecart de 1,5 pt entre
+    // les deux niveaux est conserve, donc la hierarchie ne bouge pas.
+    taille: 13,
     hauteur: 34,
     // Valeur explicite plutot que hauteur / 2 : 17, dans l echelle, et qui ne
     // derive plus si la hauteur change.
@@ -52,7 +57,10 @@ const NIVEAU = {
   },
   2: {
     police: 'Montserrat-Medium',
-    taille: 10.5,
+    // 11,5, et 11 pour le compte (taille - 0,5) : meme plancher. C est la
+    // graisse, la couleur et la taille relative qui subordonnent ce niveau au
+    // premier, pas le fait de passer sous le seuil de lisibilite.
+    taille: 11.5,
     hauteur: 28,
     rayon: 14,
     padH: 10,

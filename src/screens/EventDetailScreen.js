@@ -456,7 +456,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
                     transform: [{ translateY: 2 }],
                   }}>
-                    <Text style={{ color: '#fff', fontSize: 10, fontFamily: 'Montserrat-SemiBold' }}>
+                    {/* 11 et non 10 : plancher de lisibilite Apple. Le type
+                        se reconnait plus qu il ne se lit, mais rien ne
+                        justifiait de rester sous le seuil. */}
+                    <Text style={{ color: '#fff', fontSize: 11, fontFamily: 'Montserrat-SemiBold' }}>
                       {displayEventType(event.event_type)}
                     </Text>
                   </View>
