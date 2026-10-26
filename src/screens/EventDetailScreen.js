@@ -559,8 +559,16 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           le message « pas encore de photos » et sa mascotte, qui vivent dans
           renderHeader. Les puces se retrouvaient en bas de page. En mode
           fiche elles appartiennent a l event, pas a la galerie ; en mode
-          filtre elles appartiennent a la galerie et restent collantes. */}
-      {photos.length === 0 && !erreurChargement && puceCoursesInfo.length > 0 ? (
+          filtre elles appartiennent a la galerie et restent collantes.
+
+          Condition : des que le niveau 1 filtrant ne s affichera PAS, pas
+          seulement quand il n y a aucune photo. Un event a une seule course
+          mais avec des photos tombait entre les deux — le mode fiche
+          l excluait, et le niveau 1 n a rien a filtrer avec une seule course,
+          si bien que ses horaires devenaient inatteignables alors qu ils
+          vivaient avant dans le panneau depliable. Regression du commit
+          precedent, signalee par Geoffrey. */}
+      {!erreurChargement && puceCourses.length < 2 && puceCoursesInfo.length > 0 ? (
         <View style={{ marginHorizontal: -20, marginTop: 10 }}>
           <FiltresGalerie courses={puceCoursesInfo} inerte />
         </View>
