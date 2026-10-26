@@ -43,9 +43,6 @@ export function EventDetailScreen(props) {
 // sortDesc et favOnly viennent d App.js : leurs deux boutons vivent
 // desormais dans la pill de recherche par dossard, qui est rendue la-bas,
 // par-dessus la barre d onglets. L ecran lit l etat, il ne le detient plus.
-// Melange deux couleurs hex et renvoie un hex opaque. Sert a connaitre la
-// couleur REELLE d un fond pose en transparence : un degrade qui doit s y
-// fondre ne peut pas reutiliser la couche translucide, il la doublerait.
 // Premiere lettre en majuscule, le reste intact : « minimes filles » devient
 // « Minimes filles » sans toucher a « 10 km Rando » ni aux sigles. La saisie
 // de l organisateur n est pas normalisee, l affichage l est.
@@ -53,26 +50,6 @@ function majusculePremiere(t) {
   const v = String(t || '').trim();
   if (!v) return '';
   return v.charAt(0).toUpperCase() + v.slice(1);
-}
-
-function melangerSurFond(fond, dessus, alpha) {
-  const lire = (h) => {
-    const m = /^#?([0-9a-f]{6})$/i.exec(String(h || '').trim());
-    if (!m) return null;
-    const n = parseInt(m[1], 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  };
-  const f = lire(fond);
-  const d = lire(dessus);
-  if (!f || !d) {
-    // Le repli silencieux est ce qui a cache le bug : la fonction rendait le
-    // fond de page, le panneau et ses fondus prenaient donc une couleur
-    // plausible et personne n etait prevenu. Il parle desormais.
-    if (__DEV__) console.warn('[melangerSurFond] couleur illisible', { fond, dessus });
-    return fond;
-  }
-  const c = f.map((v, i) => Math.round(alpha * d[i] + (1 - alpha) * v));
-  return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
 function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange, sortDesc = true, favOnly = false }) {
@@ -84,23 +61,6 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [activeRaceFilter, setActiveRaceFilter] = useState('all');
   const [activeKmFilter, setActiveKmFilter] = useState('all');
-  // Infos pratiques : ouvertes automatiquement quand on detecte qu il
-  // n y a pas de photos (event upcoming ou tout simplement vide).
-  // Si l user clique sur le toggle ensuite, son choix est respecte
-  // (userToggledRef = true bloque tout auto-update ulterieur).
-  // Ouverture immediate (pas apres le fetch photos) quand on sait deja qu il
-  // n y aura rien a montrer : event a venir, ou has_photos=false renvoye par
-  // /public-events. Evite le flip ferme -> ouvert au montage.
-  const [infoSheetOpen, setInfoSheetOpen] = useState(
-    () => isUpcoming(event?.event_date, event?.event_date_end) || event?.has_photos === false
-  );
-  const userToggledRef = useRef(false);
-  useEffect(() => {
-    if (userToggledRef.current) return;
-    if (!loading && photos.length === 0) {
-      setInfoSheetOpen(true);
-    }
-  }, [loading, photos.length]);
   // Mini-carte : 1 tile CartoDB Positron (sans cle, sans install RN) centree
   // sur lat/lng (issu de BAN). Marker brand violet pose en overlay au pixel
   // exact, calcule depuis la position fractionnaire dans la tile.
@@ -111,14 +71,6 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // et six tuiles par ouverture d event. Le worker garde /geocode et
   // /map-tile : le site, lui, affiche une vraie carte Leaflet.
   const mapQuery = (event?.address || event?.location || '').trim();
-
-  // Rangee de puces defilante : on ne devine pas le debordement, on le mesure.
-  const [railW, setRailW] = useState(0);
-  const [railContenuW, setRailContenuW] = useState(0);
-  const [railX, setRailX] = useState(0);
-  const deborde = railContenuW > railW + 1;
-  const debordeGauche = deborde && railX > 2;
-  const debordeDroite = deborde && railX < railContenuW - railW - 2;
 
   const raceTabLayoutsRef = useRef({});
   const kmTabLayoutsRef = useRef({});
@@ -137,20 +89,6 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   const [erreurChargement, setErreurChargement] = useState(false);
   const tint = colorForType(event.event_type);
 
-  // Couleur du panneau d infos, et point d arrivee de ses fondus.
-  //
-  // DOIT rester apres `tint` : declare plus haut, il lisait un `tint` pas
-  // encore initialise. Pas d erreur a l execution — le transpileur ramene les
-  // const en var, donc la valeur etait simplement `undefined` — mais
-  // melangerSurFond rendait alors son fond par defaut, et le panneau comme le
-  // fondu prenaient la couleur de la PAGE au lieu du melange. Mesure sur deux
-  // captures : panneau a (235, 226, 251) avant, (244, 243, 254) apres, soit
-  // tout juste la couleur de page. C est la cause des trois reglages de fondu
-  // sans effet : il finissait bien sur un presque-blanc, exactement ce que
-  // Geoffrey decrivait. Meme famille que le `evDistances` du 22/10 — un
-  // identifiant lu avant d exister, qu aucun linter ne signale puisqu il
-  // existe, plus bas.
-  const fondPanneau = useMemo(() => melangerSurFond(C.fondApp, tint, 0.10), [tint]);
   const upcoming = isUpcoming(event.event_date, event.event_date_end);
 
   const countdown = (() => {
@@ -302,15 +240,49 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
 
   const puceCourses = useMemo(() => {
     if (uniqueRaces.length <= 1) return [];
+    // Le compte passe en SECONDE LIGNE et non plus colle au libelle (fusion
+    // user 2026-10-26) : la rangee ne sert plus seulement a filtrer, elle
+    // remplace la fiche des courses. « Toutes » en porte une aussi, sans quoi
+    // elle ferait 34 pt a cote de voisines a 46.
+    const nPhotos = (n) => `${n} photo${n > 1 ? 's' : ''}`;
     return [
-      { key: 'all', label: 'Toutes', count: photos.length },
-      ...uniqueRaces.map(r => ({
-        key: String(r),
-        label: raceTabLabel(String(r)),
-        count: photos.filter(p => photoRaceKey(p) === String(r)).length,
-      })),
+      { key: 'all', label: 'Toutes', sous: nPhotos(photos.length) },
+      ...uniqueRaces.map(r => {
+        const n = photos.filter(p => photoRaceKey(p) === String(r)).length;
+        return {
+          key: String(r),
+          label: majusculePremiere(raceTabLabel(String(r))),
+          sous: nPhotos(n),
+        };
+      }),
     ];
   }, [photos, uniqueRaces, raceLabelById, event.distances]);
+
+  // AVANT L EVENT : la meme rangee, en fiche. Il n y a aucune photo, donc
+  // rien a filtrer, mais les courses existent deja et c est ce qu on vient
+  // lire. Source : event.distances, et non les courses presentes dans les
+  // photos — qui par definition n existent pas encore.
+  const puceCoursesInfo = useMemo(() => {
+    const evd = Array.isArray(event.distances) ? event.distances : [];
+    return evd.map((d, i) => {
+      const km = d && d.km !== undefined && d.km !== null && d.km !== '' ? `${d.km} km` : '';
+      const hasLabel = !!(d && d.label && String(d.label).trim());
+      const time = d && d.time && String(d.time).trim() ? String(d.time).trim() : '';
+      const elev = d && d.elevation && String(d.elevation).trim() ? String(d.elevation).trim() : '';
+      return {
+        key: `info-${i}`,
+        // Memes deux regles que dans le panneau qu elle remplace : majuscule
+        // a la premiere lettre, et a defaut de nom dedie le type de l event
+        // tient lieu de nom.
+        label: majusculePremiere(
+          hasLabel
+            ? String(d.label).trim()
+            : [displayEventType(event.event_type), km].filter(Boolean).join(' ')
+        ),
+        sous: [hasLabel ? km : '', time, elev ? `${elev} mD+` : ''].filter(Boolean).join('  ·  '),
+      };
+    });
+  }, [event.distances, event.event_type]);
 
   // Les postes d une course, et d une seule (decision user 2026-10-20) : sur
   // « Toutes », aucun poste n est propose. Un km n a pas le meme sens d une
@@ -400,8 +372,6 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     return sortDesc ? list : [...list].reverse();
   })();
 
-  const distances = Array.isArray(event.distances) ? event.distances : [];
-
   const openWebsite = () => {
     if (!event.website) return;
     const url = event.website.startsWith('http') ? event.website : `https://${event.website}`;
@@ -487,23 +457,59 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                 </Text>
               ) : null}
             </Text>
-            <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginTop: 14, marginBottom: 12 }} />
-            <TouchableOpacity
-              onPress={() => {
-                userToggledRef.current = true;
-                setInfoSheetOpen(v => !v);
-              }}
-              activeOpacity={0.7}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
-            >
-              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                <Path
-                  d={infoSheetOpen ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'}
-                  stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"
-                />
-              </Svg>
-              <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Infos pratiques</Text>
-            </TouchableOpacity>
+            {(mapQuery || event.website) ? (
+              <>
+                <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginTop: 14, marginBottom: 12 }} />
+                {/* LES DEUX ACTIONS, a la place du chevron « Infos pratiques »
+                    (fusion user 2026-10-26). Le panneau qu il ouvrait n existe
+                    plus : les courses sont passees dans la rangee de filtres,
+                    qui les porte deja. Restent les deux sorties, et elles
+                    tiennent sur la ligne qu occupait le chevron.
+
+                    Alignees a GAUCHE comme tout le reste du hero, et non
+                    centrees : les 84 pt de marge droite sont la reserve du
+                    compte a rebours, et une rangee centree la mangeait — « J-16 »
+                    arrivait a 4 pt du libelle (mesure en maquette).
+
+                    « Site » et non « Site organisateur » : meme a gauche, les
+                    deux libelles complets plus le filet ne laissaient pas la
+                    place. Le globe porte le sens. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {event.website ? (
+                    <TouchableOpacity
+                      onPress={openWebsite}
+                      activeOpacity={0.6}
+                      hitSlop={{ top: 8, bottom: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Ouvrir le site de l organisateur"
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                    >
+                      <Icon.Site size={15} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-Medium' }}>Site</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {(mapQuery && event.website) ? (
+                    <View style={{ width: 1, height: 20, marginHorizontal: 22, backgroundColor: 'rgba(255,255,255,0.4)' }} />
+                  ) : null}
+                  {mapQuery ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
+                        Linking.openURL(url).catch(() => {});
+                      }}
+                      activeOpacity={0.6}
+                      hitSlop={{ top: 8, bottom: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Itineraire vers ${mapQuery}`}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                    >
+                      <Icon.Itineraire size={15} color="#fff" />
+                      <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-Medium' }}>Itinéraire</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
           </View>
         </View>
 
@@ -546,224 +552,6 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         ) : null}
       </View>
 
-      {infoSheetOpen && (
-        <View style={{ marginTop: -24, position: 'relative' }}>
-          <View style={{
-            // Fond OPAQUE, pas la teinte a 10 % en translucide.
-            //
-            // Tant que le panneau etait une couche transparente, le fondu ne
-            // pouvait pas tomber juste : le panneau etait compose par le GPU,
-            // en P3 sur iOS, pendant que la couleur de fin du degrade etait
-            // calculee en sRGB (cf. la note de colors.js sur l ecart P3, plus
-            // marque sur les magentas). Deux chemins differents pour une meme
-            // couleur donnent deux couleurs. Le bord du fondu restait donc
-            // visible quelle que soit sa largeur — ce qui explique trois
-            // reglages successifs sans resultat.
-            //
-            // Desormais le panneau porte LITTERALEMENT fondPanneau, et le
-            // degrade finit sur la meme constante. L egalite ne depend plus
-            // d un calcul mais de l identite.
-            backgroundColor: fondPanneau,
-            borderBottomLeftRadius: 16, borderBottomRightRadius: 16,
-            paddingTop: 16 + 16, paddingBottom: 16, paddingHorizontal: 16,
-          }}>
-            {/* PUCES DE COURSE, rangee defilante (variante B6 des maquettes,
-                user 2026-10-26). Remplace un tableau a quatre colonnes ou
-                « Depart » et « Denivele » etaient reecrits a chaque ligne et
-                chaque valeur tenait sur deux lignes : 60 pt par course. Ici
-                56 pt, quel que soit le nombre de courses.
-                Le libelle est en AVEstiana pour ne pas se confondre avec les
-                puces de filtre, juste dessous, qui sont cliquables. */}
-            {distances.length > 0 && (
-              // Le rail deborde du padding du panneau : la puce est coupee au
-              // bord du panneau et non 16 pt avant, sinon la coupe nette
-              // arrive AVANT le fondu et c est elle qu on voit.
-              <View style={{ position: 'relative', marginHorizontal: -16 }}>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  onLayout={(e) => setRailW(Math.round(e.nativeEvent.layout.width))}
-                  onContentSizeChange={(w) => setRailContenuW(Math.round(w))}
-                  onScroll={(e) => setRailX(Math.round(e.nativeEvent.contentOffset.x))}
-                  scrollEventThrottle={32}
-                  contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
-                >
-                  {distances.map((dist, i) => {
-                    const hasLabel = !!(dist && dist.label && String(dist.label).trim());
-                    const km = dist && dist.km !== undefined && dist.km !== null && dist.km !== ''
-                      ? `${dist.km} km` : '';
-                    // Sans nom dedie, le type de l event tient lieu de nom :
-                    // « Cross-country 2 km » plutot qu un « 2 km » orphelin
-                    // (user 2026-10-26). Et la premiere lettre passe en
-                    // majuscule quoi qu en dise la saisie de l organisateur.
-                    const titre = majusculePremiere(
-                      hasLabel
-                        ? String(dist.label).trim()
-                        : [displayEventType(event.event_type), km].filter(Boolean).join(' ')
-                    );
-                    const time = dist && dist.time && String(dist.time).trim() ? String(dist.time).trim() : '';
-                    const elev = dist && dist.elevation && String(dist.elevation).trim() ? String(dist.elevation).trim() : '';
-                    // Seconde ligne : km (si le libelle a pris la premiere),
-                    // heure de depart, denivele — dans cet ordre, separes par
-                    // des points medians. Les absents ne laissent pas de trou.
-                    const sous = [hasLabel ? km : '', time, elev ? `${elev} mD+` : '']
-                      .filter(Boolean).join('  ·  ');
-                    return (
-                      <View key={i} style={{
-                        backgroundColor: 'rgba(255,255,255,0.75)',
-                        borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
-                      }}>
-                        <Text style={{ fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 14, color: tint }}>
-                          {titre}
-                        </Text>
-                        {sous ? (
-                          <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 11, color: tint, opacity: 0.7, marginTop: 2 }}>
-                            {sous}
-                          </Text>
-                        ) : null}
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-                {/* FONDUS DE DEFILEMENT. Ils fondent vers le MELANGE du fond
-                    de page et de la teinte a 10 %, pas vers la teinte a 10 % :
-                    le panneau etant deja teinte par-dessus le fond, un
-                    degrade vers cette meme teinte repeindrait une seconde
-                    couche et laisserait une bande plus foncee que le fond.
-                    Et ils n apparaissent que si le contenu deborde vraiment,
-                    mesure au layout — pas « s il y a plus d une course » :
-                    un libelle long deborde parfois seul, trois puces courtes
-                    tiennent parfois a l aise. Un fondu devant du vide annonce
-                    du contenu qui n existe pas. */}
-                {debordeGauche ? (
-                  <LinearGradient
-                    colors={[fondPanneau, fondPanneau, `${fondPanneau}DB`, `${fondPanneau}00`]}
-                    locations={[0, 0.25, 0.6, 1]}
-                    start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                    pointerEvents="none"
-                    style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 88 }}
-                  />
-                ) : null}
-                {debordeDroite ? (
-                  <LinearGradient
-                    // Quatre arrets et non trois : le voile atteignait 100 %
-                    // au dernier pixel seulement, si bien que la puce — blanche
-                    // a 75 %, donc #FAF7FF — restait claire sous un voile a
-                    // 86 % jusqu au bord. Il est desormais plein des 80 % de
-                    // la course, et le dernier quart est la couleur du panneau
-                    // nue. Mesure au pixel : le fond vise est bien #E9DFFF,
-                    // identique au panneau, pas du blanc.
-                    //
-                    // 88 et non 56 : une puce fait environ 110 pt de large et
-                    // sa surface est blanche a 75 %, donc #FAF7FF. Sur 56 pt le
-                    // voile n avait pas la place de la dissoudre — il se lisait
-                    // comme une ombre, pas comme une coupe (constate sur
-                    // appareil, deux captures comparees). A 88 il couvre les
-                    // quatre cinquiemes de la puce coupee.
-                    colors={[`${fondPanneau}00`, `${fondPanneau}DB`, fondPanneau, fondPanneau]}
-                    locations={[0, 0.4, 0.75, 1]}
-                    start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                    pointerEvents="none"
-                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 88 }}
-                  />
-                ) : null}
-              </View>
-            )}
-
-            {/* LES DEUX ACTIONS (maquette user 2026-10-26). Ni pilule ni
-                bouton a contour : une icone teintee, un libelle en encre,
-                chaque action centree dans sa moitie, un filet vertical entre
-                les deux. La couleur ne sert qu a designer l action, le texte
-                reste lisible comme du texte.
-
-                Pourquoi pas de bouton : la rangee est posee sur un panneau
-                deja teinte, a 16 pt de ses coins bas en rayon 16 — un bouton
-                plein y demanderait un rayon de 0 pour s emboiter, et deux
-                boutons cote a cote pesaient plus lourd que les courses
-                au-dessus d eux, qui sont le vrai contenu.
-
-                Si une seule des deux existe, elle prend toute la largeur et
-                le filet disparait : pas de separateur devant du vide. */}
-            {(mapQuery || event.website) ? (
-              // DISTRIBUTION. Chaque action etait centree dans SA MOITIE, le
-              // filet au centre du panneau. Mais « Site organisateur » fait
-              // 114 pt et « Itineraire » 60 : centrer chacune dans une moitie
-              // egale donnait 11 pt d ecart au filet a gauche contre 41 a
-              // droite (mesure sur capture). Les moities etaient egales, les
-              // ecarts non — et c est l ecart au filet que l oeil compare.
-              //
-              // Donc : groupe centre, ecart fixe de 22 de part et d autre du
-              // filet. Les quatre espaces que l oeil peut comparer — bord,
-              // filet a gauche, filet a droite, bord — sont egaux deux a deux.
-              // Seul le filet ne tombe plus au centre geometrique du panneau,
-              // mais rien ne marque ce centre.
-              //
-              // 16 au-dessus et non 14 : avec les 10 de padding de la rangee,
-              // l air au-dessus du texte (26) egale celui en dessous (10 + 16
-              // de padding du panneau).
-              <View style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                marginTop: distances.length > 0 ? 16 : 0,
-              }}>
-                {event.website ? (
-                  <TouchableOpacity
-                    onPress={openWebsite}
-                    activeOpacity={0.6}
-                    hitSlop={{ top: 7, bottom: 7 }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Ouvrir le site de l organisateur"
-                    style={{
-                      flexDirection: 'row', alignItems: 'center',
-                      gap: 8, paddingVertical: 10,
-                    }}
-                  >
-                    <Icon.Site size={15} color={tint} />
-                    <Text style={{ color: '#1A1426', fontSize: 13, fontFamily: 'Montserrat-Medium' }}>
-                      Site organisateur
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-                {(mapQuery && event.website) ? (
-                  // 1 pt plein et non StyleSheet.hairlineWidth : un tiers de
-                  // point a 35 % d opacite ne se voyait pas, ce qui revient
-                  // exactement a ne pas l avoir pose.
-                  <View style={{ width: 1, height: 22, marginHorizontal: 22, backgroundColor: `${tint}66` }} />
-                ) : null}
-                {mapQuery ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
-                      Linking.openURL(url).catch(() => {});
-                    }}
-                    activeOpacity={0.6}
-                    hitSlop={{ top: 7, bottom: 7 }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Itineraire vers ${mapQuery}`}
-                    style={{
-                      flexDirection: 'row', alignItems: 'center',
-                      gap: 8, paddingVertical: 10,
-                    }}
-                  >
-                    <Icon.Itineraire size={15} color={tint} />
-                    <Text style={{ color: '#1A1426', fontSize: 13, fontFamily: 'Montserrat-Medium' }}>
-                      Itinéraire
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            ) : null}
-          </View>
-          <LinearGradient
-            colors={[`${tint}40`, `${tint}00`]}
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: 0, right: 0,
-              top: 0, height: 36,
-            }}
-          />
-        </View>
-      )}
 
       {erreurChargement && photos.length === 0 && !loading ? (
         <View style={{ paddingVertical: 34, paddingHorizontal: 24, alignItems: 'center' }}>
@@ -793,8 +581,17 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // ScrollView, celui que stickyHeaderIndices colle en haut. Il doit donc
   // exister a chaque rendu, meme vide, sinon l index designe autre chose.
   const renderFiltres = () => {
-    if (photos.length === 0 || erreurChargement || (upcoming && photos.length === 0)) {
-      return <View />;
+    // Pas de photos : la rangee passe en fiche des courses, inerte. C est le
+    // seul etat ou elle a un sens sans filtrer, et c est aussi le moment ou
+    // l on vient chercher les horaires. En cas d erreur de chargement on ne
+    // montre rien : on ne sait pas s il y a des photos.
+    if (erreurChargement) return <View />;
+    if (photos.length === 0) {
+      return puceCoursesInfo.length > 0 ? (
+        <View style={{ marginHorizontal: -20 }}>
+          <FiltresGalerie courses={puceCoursesInfo} inerte />
+        </View>
+      ) : <View />;
     }
     return (
       <View style={{ marginHorizontal: -20 }}>

@@ -33,6 +33,9 @@ const NIVEAU = {
     police: 'Montserrat-SemiBold',
     taille: 12,
     hauteur: 34,
+    // Valeur explicite plutot que hauteur / 2 : 17, dans l echelle, et qui ne
+    // derive plus si la hauteur change.
+    rayon: 17,
     padH: 14,
     // C.pillBg, la valeur de la charte — et non le #EDE4FF pose en dur dans
     // l ecran : deux violets a deux points d ecart sur la meme ligne.
@@ -51,6 +54,7 @@ const NIVEAU = {
     police: 'Montserrat-Medium',
     taille: 10.5,
     hauteur: 28,
+    rayon: 14,
     padH: 10,
     // Blanc, et non un gris clair : sur le fond lavande de l app (#F5F3FF),
     // un #F6F4FA ne se distingue pas du fond. La hierarchie reste portee par
@@ -68,31 +72,60 @@ const NIVEAU = {
   },
 };
 
-function Puce({ libelle, compte, actif, niveau, onPress }) {
+function Puce({ libelle, sous, compte, actif, niveau, inerte = false, onPress }) {
   const n = NIVEAU[niveau];
+  // Deux lignes des qu une seconde ligne est fournie : le nom de course au
+  // premier rang, et dessous ce qui sert au moment ou l on regarde — l heure
+  // de depart et le denivele avant l event, le nombre de photos apres.
+  const deuxLignes = !!sous;
+  // RAYON. Une pilule prend la moitie de sa hauteur : 17 sur une puce de 34,
+  // soit un point de l echelle. Sur deux lignes la puce monte a 46, donc 23 —
+  // cinq points au-dela de 18, la plus grande valeur de l echelle. Le 999
+  // cesse d etre conforme des que la puce grandit, sans que rien le signale.
+  // On pose donc des valeurs explicites : 18 sur deux lignes, et la moitie de
+  // la hauteur fixe sur une ligne, qui reste dans l echelle.
+  const rayon = deuxLignes ? 18 : n.rayon;
+  const Enveloppe = inerte ? View : TouchableOpacity;
+  const propsTactiles = inerte ? {} : {
+    onPress: () => {
+      try { Haptics?.selectionAsync?.(); } catch {}
+      onPress();
+    },
+    activeOpacity: 0.75,
+    accessibilityRole: 'button',
+    accessibilityState: { selected: actif },
+  };
   return (
-    <TouchableOpacity
-      onPress={() => {
-        try { Haptics?.selectionAsync?.(); } catch {}
-        onPress();
-      }}
-      activeOpacity={0.75}
-      accessibilityRole="button"
-      accessibilityState={{ selected: actif }}
+    <Enveloppe
+      {...propsTactiles}
       style={{
-        height: n.hauteur,
+        height: deuxLignes ? undefined : n.hauteur,
         paddingHorizontal: n.padH,
-        borderRadius: n.hauteur / 2,
+        paddingVertical: deuxLignes ? 8 : 0,
+        borderRadius: rayon,
         backgroundColor: actif ? n.fondActif : n.fond,
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: deuxLignes ? 'column' : 'row',
+        alignItems: deuxLignes ? 'flex-start' : 'center',
+        justifyContent: 'center',
         marginRight: 6,
       }}
     >
       <Text style={{ fontFamily: n.police, fontSize: n.taille, color: actif ? n.texteActif : n.texte }}>
         {libelle}
       </Text>
-      {compte != null && (
+      {deuxLignes ? (
+        <Text
+          style={{
+            fontFamily: 'Montserrat-Medium',
+            fontSize: n.taille - 1.5,
+            marginTop: 1,
+            color: actif ? n.compteActif : n.compte,
+          }}
+        >
+          {sous}
+        </Text>
+      ) : null}
+      {!deuxLignes && compte != null && (
         // Pas d opacite sur le compte : a 55 % le violet tombait a 2,35:1 sur
         // la pastille et le gris a 2,54:1 sur le blanc, tres en dessous des
         // 4,5:1 exiges. C est la graisse et la taille qui le mettent en
@@ -108,11 +141,11 @@ function Puce({ libelle, compte, actif, niveau, onPress }) {
           {compte}
         </Text>
       )}
-    </TouchableOpacity>
+    </Enveloppe>
   );
 }
 
-function Rangee({ items, actif, niveau, onChange, padH }) {
+function Rangee({ items, actif, niveau, onChange, padH, inerte = false }) {
   return (
     <View>
       <ScrollView
@@ -125,9 +158,11 @@ function Rangee({ items, actif, niveau, onChange, padH }) {
           <Puce
             key={String(it.key)}
             libelle={it.label}
+            sous={it.sous}
             compte={it.count}
-            actif={String(it.key) === String(actif)}
+            actif={!inerte && String(it.key) === String(actif)}
             niveau={niveau}
+            inerte={inerte}
             onPress={() => onChange(it.key)}
           />
         ))}
@@ -155,6 +190,10 @@ export function FiltresGalerie({
   onCourse,
   onPoste,
   padH = 20,
+  // Avant l event il n y a aucune photo, donc rien a filtrer : la meme rangee
+  // sert alors de fiche des courses. Elle n est pas cliquable, ne porte pas de
+  // « Toutes » et n affiche aucun actif (fusion user 2026-10-26).
+  inerte = false,
 }) {
   // Un seul niveau a afficher : les postes prennent la place des courses,
   // dans le style du niveau 1. Rien a hierarchiser avec une seule rangee.
@@ -164,11 +203,14 @@ export function FiltresGalerie({
   const change1 = seulementPostes ? onPoste : onCourse;
   const rangee2 = seulementPostes ? [] : postes;
 
-  if (rangee1.length <= 1) return null;
+  // En mode informatif, une seule course merite d etre annoncee : c est la
+  // fiche de l event, pas un filtre. En mode filtre, une rangee d un seul
+  // element ne filtre rien.
+  if (rangee1.length < (inerte ? 1 : 2)) return null;
 
   return (
     <View style={{ backgroundColor: C.fondApp, paddingTop: 8, paddingBottom: 8 }}>
-      <Rangee items={rangee1} actif={actif1} niveau={1} onChange={change1} padH={padH} />
+      <Rangee items={rangee1} actif={actif1} niveau={1} onChange={change1} padH={padH} inerte={inerte} />
 
       {rangee2.length > 1 && (
         <View style={{ marginTop: 8 }}>
