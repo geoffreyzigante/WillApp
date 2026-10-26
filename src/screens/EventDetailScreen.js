@@ -643,9 +643,25 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                 Si une seule des deux existe, elle prend toute la largeur et
                 le filet disparait : pas de separateur devant du vide. */}
             {(mapQuery || event.website) ? (
+              // DISTRIBUTION. Chaque action etait centree dans SA MOITIE, le
+              // filet au centre du panneau. Mais « Site organisateur » fait
+              // 114 pt et « Itineraire » 60 : centrer chacune dans une moitie
+              // egale donnait 11 pt d ecart au filet a gauche contre 41 a
+              // droite (mesure sur capture). Les moities etaient egales, les
+              // ecarts non — et c est l ecart au filet que l oeil compare.
+              //
+              // Donc : groupe centre, ecart fixe de 22 de part et d autre du
+              // filet. Les quatre espaces que l oeil peut comparer — bord,
+              // filet a gauche, filet a droite, bord — sont egaux deux a deux.
+              // Seul le filet ne tombe plus au centre geometrique du panneau,
+              // mais rien ne marque ce centre.
+              //
+              // 16 au-dessus et non 14 : avec les 10 de padding de la rangee,
+              // l air au-dessus du texte (26) egale celui en dessous (10 + 16
+              // de padding du panneau).
               <View style={{
-                flexDirection: 'row', alignItems: 'center',
-                marginTop: distances.length > 0 ? 14 : 0,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                marginTop: distances.length > 0 ? 16 : 0,
               }}>
                 {event.website ? (
                   <TouchableOpacity
@@ -655,8 +671,8 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     accessibilityRole="button"
                     accessibilityLabel="Ouvrir le site de l organisateur"
                     style={{
-                      flex: 1, flexDirection: 'row', alignItems: 'center',
-                      justifyContent: 'center', gap: 8, paddingVertical: 10,
+                      flexDirection: 'row', alignItems: 'center',
+                      gap: 8, paddingVertical: 10,
                     }}
                   >
                     <Icon.Site size={15} color={tint} />
@@ -669,7 +685,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                   // 1 pt plein et non StyleSheet.hairlineWidth : un tiers de
                   // point a 35 % d opacite ne se voyait pas, ce qui revient
                   // exactement a ne pas l avoir pose.
-                  <View style={{ width: 1, height: 22, backgroundColor: `${tint}66` }} />
+                  <View style={{ width: 1, height: 22, marginHorizontal: 22, backgroundColor: `${tint}66` }} />
                 ) : null}
                 {mapQuery ? (
                   <TouchableOpacity
@@ -682,8 +698,8 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     accessibilityRole="button"
                     accessibilityLabel={`Itineraire vers ${mapQuery}`}
                     style={{
-                      flex: 1, flexDirection: 'row', alignItems: 'center',
-                      justifyContent: 'center', gap: 8, paddingVertical: 10,
+                      flexDirection: 'row', alignItems: 'center',
+                      gap: 8, paddingVertical: 10,
                     }}
                   >
                     <Icon.Itineraire size={15} color={tint} />
