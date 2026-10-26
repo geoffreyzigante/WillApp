@@ -1093,6 +1093,46 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   useEffect(() => { selectedRaceRef.current = selectedRace; }, [selectedRace]);
   useEffect(() => { selectedKmRef.current = selectedKm; }, [selectedKm]);
   const distances = Array.isArray(session?.event?.distances) ? session.event.distances : [];
+
+  // PERSISTANCE DU POSTE (course + km), par event.
+  //
+  // Les deux etaient en useState nu. Toute relance de l app — y compris la
+  // re-entree automatique apres un kill iOS, juste au-dessus — les remettait a
+  // null EN SILENCE : la roulette reaffichait « Toutes » et les photos
+  // suivantes partaient sans course, sans que rien ne le signale. Releve sur
+  // « Trail de Vernon - Giverny » le 26/10 : 218 photos de 07:08 a 07:12 sans
+  // course ni poste, 154 de 07:37 a 07:42 avec. Le poste ne change pas quand
+  // l app redemarre — le photographe, lui, n a pas bouge.
+  //
+  // Stockage par code d event : un benevole qui couvre deux events le meme
+  // week-end ne doit pas heriter du poste de l autre.
+  const clePoste = session?.event?.code ? `@will_poste_${session.event.code}` : null;
+  const posteRestaureRef = useRef(null);
+  useEffect(() => {
+    if (!clePoste || distances.length === 0) return;
+    if (posteRestaureRef.current === clePoste) return;
+    posteRestaureRef.current = clePoste;
+    AsyncStorage.getItem(clePoste).then((brut) => {
+      if (!brut) return;
+      try {
+        const { raceKm, km } = JSON.parse(brut);
+        if (raceKm != null) {
+          const d = distances.find(x => String(x.km) === String(raceKm));
+          if (d) setSelectedRace(d);
+        }
+        if (km !== undefined && km !== null) setSelectedKm(km);
+      } catch {}
+    }).catch(() => {});
+  }, [clePoste, distances.length]);
+
+  useEffect(() => {
+    if (!clePoste || posteRestaureRef.current !== clePoste) return;
+    const valeur = JSON.stringify({
+      raceKm: selectedRace ? String(selectedRace.km) : null,
+      km: selectedKm,
+    });
+    AsyncStorage.setItem(clePoste, valeur).catch(() => {});
+  }, [clePoste, selectedRace, selectedKm]);
   // Course "Toutes" : ceiling = plus longue distance de l'event (pas un floor
   // arbitraire). Course choisie : ceiling = sa distance. Fallback 50 km si
   // aucune distance valide (event mal configure).
