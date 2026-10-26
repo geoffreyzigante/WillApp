@@ -14,7 +14,7 @@ import { Icon } from './Icon';
 import { C } from '../constants/colors';
 import { s } from '../constants/styles';
 
-export function AppHeader({ runnerFirstName = '', selfieUri = null, selfieUploadState = 'idle', onOpenProfile, onLogoPress }) {
+export function AppHeader({ runnerFirstName = '', selfieUri = null, selfieUploadState = 'idle', onOpenProfile, onLogoPress, onBack = null }) {
   const selfieOk = !!runnerFirstName && !!selfieUri && selfieUploadState !== 'failed' && selfieUploadState !== 'uploading';
   // Le logo Will ramene a l'accueil (mirror le tap "Accueil" bottom nav).
   // Si onLogoPress non fourni, fallback sur onOpenProfile pour ne rien casser.
@@ -38,9 +38,33 @@ export function AppHeader({ runnerFirstName = '', selfieUri = null, selfieUpload
         style={StyleSheet.absoluteFillObject}
       />
       <View style={[s.headerRow, { paddingHorizontal: 20, paddingBottom: 8 }]}>
-      <TouchableOpacity onPress={handleLogoPress} activeOpacity={0.7} hitSlop={8}>
-        <Icon.Logo width={72} color={C.primary} />
-      </TouchableOpacity>
+      {/* Sur une page event, le logo cede la place au retour (user
+          2026-10-26) : on y arrive depuis une liste, la sortie prime sur le
+          rappel de marque. Meme geometrie que son frere de droite, le
+          burger — 36 x 36, rayon 12, fond transparent — pour que les deux
+          extremites du header pesent pareil. */}
+      {onBack ? (
+        <TouchableOpacity
+          onPress={onBack}
+          activeOpacity={0.7}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Retour"
+          style={{
+            width: 36, height: 36, borderRadius: 12,
+            alignItems: 'center', justifyContent: 'center',
+            marginLeft: -8,
+          }}
+        >
+          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+            <Path d="M15 5l-7 7 7 7" stroke={C.primary} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity onPress={handleLogoPress} activeOpacity={0.7} hitSlop={8}>
+          <Icon.Logo width={72} color={C.primary} />
+        </TouchableOpacity>
+      )}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }}>
         {runnerFirstName ? (
           <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.7} hitSlop={6} style={{ alignItems: 'flex-end', flexShrink: 1 }}>

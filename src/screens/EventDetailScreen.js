@@ -10,7 +10,6 @@ import {
   View, Text, TouchableOpacity, Image, ScrollView, RefreshControl, Modal,
   LayoutAnimation, ActivityIndicator, StyleSheet, Linking, Animated, Dimensions,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
@@ -44,6 +43,23 @@ export function EventDetailScreen(props) {
 // sortDesc et favOnly viennent d App.js : leurs deux boutons vivent
 // desormais dans la pill de recherche par dossard, qui est rendue la-bas,
 // par-dessus la barre d onglets. L ecran lit l etat, il ne le detient plus.
+// Melange deux couleurs hex et renvoie un hex opaque. Sert a connaitre la
+// couleur REELLE d un fond pose en transparence : un degrade qui doit s y
+// fondre ne peut pas reutiliser la couche translucide, il la doublerait.
+function melangerSurFond(fond, dessus, alpha) {
+  const lire = (h) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(h || '').trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  };
+  const f = lire(fond);
+  const d = lire(dessus);
+  if (!f || !d) return fond;
+  const c = f.map((v, i) => Math.round(alpha * d[i] + (1 - alpha) * v));
+  return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
 function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange, sortDesc = true, favOnly = false }) {
   const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
   const [photos, setPhotos] = useState([]);
@@ -73,81 +89,28 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // Mini-carte : 1 tile CartoDB Positron (sans cle, sans install RN) centree
   // sur lat/lng (issu de BAN). Marker brand violet pose en overlay au pixel
   // exact, calcule depuis la position fractionnaire dans la tile.
-  // Adresse precise si l organisateur l a saisie, sinon la ville
-  // (ex "Les Andelys (27700)") : mieux vaut une carte au niveau commune
-  // que pas de carte du tout. Le code postal sort des parentheses, la BAN
-  // ne les digere pas.
+  // Adresse precise si l organisateur l a saisie, sinon la ville. Sert
+  // desormais au seul lien « Itineraire » : le bandeau de carte a ete retire
+  // (choix user 2026-10-26, variante B des maquettes). Il coutait 150 pt de
+  // hauteur pour un apercu qu on quittait au premier tap, plus un geocodage
+  // et six tuiles par ouverture d event. Le worker garde /geocode et
+  // /map-tile : le site, lui, affiche une vraie carte Leaflet.
   const mapQuery = (event?.address || event?.location || '').trim();
-  const mapPrecise = !!event?.address;
-  const [mapInfo, setMapInfo] = useState(null);
-  const [mapW, setMapW] = useState(0);
-  useEffect(() => {
-    if (!mapQuery) { setMapInfo(null); return; }
-    let cancelled = false;
-    // Le libelle part brut. Il etait nettoye ici (retrait des parentheses)
-    // pour un bug qui n existait pas : mesure faite le 22/10/2026, la BAN
-    // accepte « Gaillon (27) » sans broncher. Et ce numero de departement
-    // l aide a departager deux communes homonymes.
-    const q = mapQuery;
-    const zoom = mapPrecise ? 15 : 12;
-    const cacheKey = `will:geo:${zoom}:${q}`;
 
-    // Mosaique 2x2 centree sur le point : une seule tile "cover" recadre le
-    // carre dans un bandeau 2.4:1 et decale le marker (le % s appliquait au
-    // container, pas a l image). Avec 4 tiles on positionne le bloc pour que
-    // le point tombe pile au centre, sans jamais laisser de vide.
-    const composer = ({ lat, lng }) => {
-      const n = Math.pow(2, zoom);
-      const xExact = (lng + 180) / 360 * n;
-      const latRad = lat * Math.PI / 180;
-      const yExact = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
-      // Coin haut-gauche du bloc 2x2 : le point reste entre 0.5 et 1.5 tile
-      // dans le bloc -> marge >= 1/2 tile de chaque cote.
-      const x0 = Math.floor(xExact - 0.5);
-      const y0 = Math.floor(yExact - 0.5);
-      const bloc = {
-        // ?v=2 : purge de cache. Les tuiles blanches « API KEY REQUIRED »
-        // servies pendant la panne CARTO ont ete mises en cache 30 jours,
-        // a l edge Cloudflare comme sur les telephones, avec un en-tete
-        // immutable. Sans changer l URL, les coureurs auraient garde une
-        // carte blanche jusqu a fin novembre. Le worker ignore la query, le
-        // cache non : c est tout ce qu il faut. A incrementer a chaque fois
-        // qu une tuile deja servie doit etre refaite.
-        tiles: [
-          [`${API_URL}/map-tile/${zoom}/${x0}/${y0}?v=2`, `${API_URL}/map-tile/${zoom}/${x0 + 1}/${y0}?v=2`],
-          [`${API_URL}/map-tile/${zoom}/${x0}/${y0 + 1}?v=2`, `${API_URL}/map-tile/${zoom}/${x0 + 1}/${y0 + 1}?v=2`],
-        ],
-        // Position du point dans le bloc, en tiles (0-2).
-        pointX: xExact - x0,
-        pointY: yExact - y0,
-      };
-      // Telechargement lance des que les coords sont connues, sans attendre
-      // le layout : les 4 tuiles sont deja en cache disque quand le bloc
-      // se monte, et le restent pour les prochaines ouvertures.
-      ExpoImage.prefetch(bloc.tiles.flat(), { cachePolicy: 'memory-disk' }).catch(() => {});
-      return bloc;
-    };
+  // Rangee de puces defilante : on ne devine pas le debordement, on le mesure.
+  const [railW, setRailW] = useState(0);
+  const [railContenuW, setRailContenuW] = useState(0);
+  const [railX, setRailX] = useState(0);
+  const deborde = railContenuW > railW + 1;
+  const debordeGauche = deborde && railX > 2;
+  const debordeDroite = deborde && railX < railContenuW - railW - 2;
 
-    (async () => {
-      // Cache local : le geocodage d une adresse ne bouge pas, inutile de
-      // repayer un aller-retour reseau a chaque ouverture de l event.
-      try {
-        const cached = await AsyncStorage.getItem(cacheKey);
-        if (cached && !cancelled) setMapInfo(composer(JSON.parse(cached)));
-        if (cached) return;
-      } catch {}
-      try {
-        const r = await fetch(`${API_URL}/geocode?q=${encodeURIComponent(q)}`);
-        if (!r.ok) return;
-        const d = await r.json();
-        if (!d || !d.found) return;
-        const coords = { lat: d.lat, lng: d.lng };
-        AsyncStorage.setItem(cacheKey, JSON.stringify(coords)).catch(() => {});
-        if (!cancelled) setMapInfo(composer(coords));
-      } catch {}
-    })();
-    return () => { cancelled = true; };
-  }, [mapQuery, mapPrecise]);
+  // Couleur de fondu : le panneau pose la teinte a 10 % PAR-DESSUS le fond de
+  // page, donc sa couleur reelle est le melange des deux. Fondre vers la
+  // teinte a 10 % y ajouterait une seconde couche et laisserait une bande
+  // visiblement plus foncee que le fond — on verrait le rectangle au lieu de
+  // voir la coupe. Calcule ici parce que la teinte change a chaque event.
+  const fondPanneau = useMemo(() => melangerSurFond(C.fondApp, tint, 0.10), [tint]);
 
   const raceTabLayoutsRef = useRef({});
   const kmTabLayoutsRef = useRef({});
@@ -433,8 +396,8 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
 
   const renderHeader = () => (
     <View style={{ gap: 8, paddingBottom: 8 }}>
-      {/* Header mirror Accueil : Logo gauche + Hello + burger droite.
-          Le burger ouvre le drawer (mirror onOpenProfile = setBurgerMenu). */}
+      {/* Header mirror Accueil, au logo pres : ici c est un retour (voir
+          AppHeader). Le burger ouvre le drawer (mirror onOpenProfile). */}
       <View style={{ marginHorizontal: -20 }}>
         <AppHeader
           runnerFirstName={runnerFirstName || ''}
@@ -442,6 +405,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           selfieUploadState={selfieUploadState}
           onOpenProfile={onOpenProfile}
           onLogoPress={onLogoPress}
+          onBack={onClose}
         />
       </View>
 
@@ -566,213 +530,127 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             borderBottomLeftRadius: 16, borderBottomRightRadius: 16,
             paddingTop: 16 + 16, paddingBottom: 16, paddingHorizontal: 16,
           }}>
+            {/* PUCES DE COURSE, rangee defilante (variante B6 des maquettes,
+                user 2026-10-26). Remplace un tableau a quatre colonnes ou
+                « Depart » et « Denivele » etaient reecrits a chaque ligne et
+                chaque valeur tenait sur deux lignes : 60 pt par course. Ici
+                56 pt, quel que soit le nombre de courses.
+                Le libelle est en AVEstiana pour ne pas se confondre avec les
+                puces de filtre, juste dessous, qui sont cliquables. */}
             {distances.length > 0 && (
-              <View>
-                {distances.map((d, i) => {
-                  // Mirror du pattern vitrine event/index.html : layout
-                  // grid 4 colonnes (label | km | Depart | Denivele), avec
-                  // mot-cle (Depart/Denivele) et valeur sur 2 lignes.
-                  // La col label prend 1.5fr, les 3 autres 1fr.
-                  const hasLabel = !!(d && d.label && String(d.label).trim());
-                  const km = d && d.km !== undefined && d.km !== null && d.km !== ''
-                    ? `${d.km} km` : '';
-                  const labelText = hasLabel ? String(d.label).trim() : km;
-                  const kmSecondary = hasLabel ? km : '';
-                  const time = d && d.time && String(d.time).trim() ? String(d.time).trim() : '';
-                  const elev = d && d.elevation && String(d.elevation).trim() ? String(d.elevation).trim() : '';
-                  return (
-                    <View key={i} style={{
-                      paddingVertical: 12,
-                      borderBottomWidth: i === distances.length - 1 ? 0 : StyleSheet.hairlineWidth,
-                      borderBottomColor: `${tint}40`,
-                      flexDirection: 'row',
-                      alignItems: 'flex-start',
-                    }}>
-                      {/* Col 1.5 : label de course en gras tint. Wrap autorise. */}
-                      <View style={{ flex: 1.5, paddingRight: 8 }}>
-                        <Text style={{ color: tint, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>
-                          {labelText}
+              <View style={{ position: 'relative' }}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  onLayout={(e) => setRailW(Math.round(e.nativeEvent.layout.width))}
+                  onContentSizeChange={(w) => setRailContenuW(Math.round(w))}
+                  onScroll={(e) => setRailX(Math.round(e.nativeEvent.contentOffset.x))}
+                  scrollEventThrottle={32}
+                  contentContainerStyle={{ gap: 8 }}
+                >
+                  {distances.map((dist, i) => {
+                    const hasLabel = !!(dist && dist.label && String(dist.label).trim());
+                    const km = dist && dist.km !== undefined && dist.km !== null && dist.km !== ''
+                      ? `${dist.km} km` : '';
+                    const titre = hasLabel ? String(dist.label).trim() : km;
+                    const time = dist && dist.time && String(dist.time).trim() ? String(dist.time).trim() : '';
+                    const elev = dist && dist.elevation && String(dist.elevation).trim() ? String(dist.elevation).trim() : '';
+                    // Seconde ligne : km (si le libelle a pris la premiere),
+                    // heure de depart, denivele — dans cet ordre, separes par
+                    // des points medians. Les absents ne laissent pas de trou.
+                    const sous = [hasLabel ? km : '', time, elev ? `${elev} mD+` : '']
+                      .filter(Boolean).join('  ·  ');
+                    return (
+                      <View key={i} style={{
+                        backgroundColor: 'rgba(255,255,255,0.75)',
+                        borderRadius: 12, paddingHorizontal: 13, paddingVertical: 9,
+                      }}>
+                        <Text style={{ fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 15, color: tint }}>
+                          {titre}
                         </Text>
-                      </View>
-                      {/* Col 1 : km secondaire en petit, meme tint. */}
-                      <View style={{ flex: 1, paddingRight: 8 }}>
-                        {kmSecondary ? (
-                          <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontFamily: 'Montserrat-Medium' }}>
-                            {kmSecondary}
+                        {sous ? (
+                          <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 11, color: tint, opacity: 0.75, marginTop: 2 }}>
+                            {sous}
                           </Text>
                         ) : null}
                       </View>
-                      {/* Col 1 : Depart key/value sur 2 lignes. */}
-                      <View style={{ flex: 1, paddingRight: 8 }}>
-                        {time ? (
-                          <>
-                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontFamily: 'Montserrat-Medium' }}>Départ</Text>
-                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontFamily: 'Montserrat-Medium' }}>{time}</Text>
-                          </>
-                        ) : null}
-                      </View>
-                      {/* Col 1 : Denivele key/value sur 2 lignes. */}
-                      <View style={{ flex: 1 }}>
-                        {elev ? (
-                          <>
-                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontFamily: 'Montserrat-Medium' }}>Dénivelé</Text>
-                            <Text style={{ color: tint, fontSize: 12, opacity: 0.85, fontFamily: 'Montserrat-Medium' }}>{elev} mD+</Text>
-                          </>
-                        ) : null}
-                      </View>
-                    </View>
-                  );
-                })}
+                    );
+                  })}
+                </ScrollView>
+                {/* FONDUS DE DEFILEMENT. Ils fondent vers le MELANGE du fond
+                    de page et de la teinte a 10 %, pas vers la teinte a 10 % :
+                    le panneau etant deja teinte par-dessus le fond, un
+                    degrade vers cette meme teinte repeindrait une seconde
+                    couche et laisserait une bande plus foncee que le fond.
+                    Et ils n apparaissent que si le contenu deborde vraiment,
+                    mesure au layout — pas « s il y a plus d une course » :
+                    un libelle long deborde parfois seul, trois puces courtes
+                    tiennent parfois a l aise. Un fondu devant du vide annonce
+                    du contenu qui n existe pas. */}
+                {debordeGauche ? (
+                  <LinearGradient
+                    colors={[fondPanneau, `${fondPanneau}00`]}
+                    start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                    pointerEvents="none"
+                    style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 28 }}
+                  />
+                ) : null}
+                {debordeDroite ? (
+                  <LinearGradient
+                    colors={[`${fondPanneau}00`, fondPanneau]}
+                    start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                    pointerEvents="none"
+                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 28 }}
+                  />
+                ) : null}
               </View>
             )}
 
-            {mapQuery ? (
+            {/* RANGEE D ACTIONS. Le lieu n y figure pas : la hero l affiche
+                deja a la suite de la date, et l ecrire deux fois a 40 pt
+                d ecart etait le defaut de la variante precedente. Le pin
+                entre donc dans la pilule, qui dit l action et son objet.
+                « Site organisateur » passe en lien texte : deux pilules de
+                meme poids se disputaient l attention pour deux usages tres
+                inegaux. */}
+            {(mapQuery || event.website) ? (
               <View style={{
-                marginTop: distances.length > 0 ? 14 : 4,
-                borderRadius: 12,
-                overflow: 'hidden',
-                backgroundColor: `${tint}14`,
-                alignSelf: 'stretch',
+                flexDirection: 'row', alignItems: 'center', gap: 14,
+                marginTop: distances.length > 0 ? 12 : 0,
               }}>
-                {/* Le bandeau n existe que si on a un point a montrer. Sans
-                    ce garde-fou, un geocodage sans resultat laissait un
-                    rectangle 2.4:1 vide sous « Infos pratiques » — la carte
-                    vide. L adresse et l itineraire, eux, restent : ils ne
-                    dependent pas du geocodage. */}
-                {mapInfo ? (
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Ouvrir ${mapQuery} dans Plans`}
-                  onPress={() => {
-                    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
-                    Linking.openURL(url).catch(() => {});
-                  }}
-                  style={{ width: '100%', aspectRatio: 2.4, position: 'relative', overflow: 'hidden' }}
-                  onLayout={e => setMapW(Math.round(e.nativeEvent.layout.width))}
-                >
-                  {mapInfo && mapW > 0 ? (
-                    <>
-                      {/* Bloc 2x2 de tiles, decale pour que le point tombe au
-                          centre du bandeau. S = largeur du container : la
-                          marge d 1/2 tile autour du point garantit qu il n y a
-                          jamais de vide sur les bords. */}
-                      <View
-                        pointerEvents="none"
-                        style={{
-                          position: 'absolute',
-                          width: mapW * 2,
-                          height: mapW * 2,
-                          left: mapW / 2 - mapInfo.pointX * mapW,
-                          top: mapW / 2 / 2.4 - mapInfo.pointY * mapW,
-                        }}
-                      >
-                        {mapInfo.tiles.map((row, ri) => (
-                          <View key={ri} style={{ flexDirection: 'row' }}>
-                            {row.map((uri, ci) => (
-                              <ExpoImage
-                                key={ci}
-                                source={{ uri }}
-                                style={{ width: mapW, height: mapW }}
-                                contentFit="cover"
-                                cachePolicy="memory-disk"
-                                transition={120}
-                              />
-                            ))}
-                          </View>
-                        ))}
-                      </View>
-                      <View
-                        pointerEvents="none"
-                        style={{
-                          position: 'absolute',
-                          left: '50%', top: '50%',
-                          width: 28, height: 28,
-                          marginLeft: -14, marginTop: -14,
-                          backgroundColor: '#7B2FFF',
-                          borderRadius: 14,
-                          borderWidth: 3, borderColor: '#fff',
-                          shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.3,
-                          shadowRadius: 4,
-                          elevation: 4,
-                        }}
-                      />
-                    </>
-                  ) : null}
-                  {/* Attribution : CARTO l exige sur chaque carte au titre de
-                      son offre gratuite, OpenStreetMap au titre de l ODbL.
-                      Posee sur la tuile, en petit, comme le fait Leaflet. */}
-                  <View style={{
-                    position: 'absolute', right: 0, bottom: 0,
-                    backgroundColor: 'rgba(255,255,255,0.72)',
-                    paddingHorizontal: 5, paddingVertical: 1,
-                    borderTopLeftRadius: 8,
-                  }}>
-                    <Text style={{ fontFamily: 'Montserrat', fontSize: 8, color: C.textSoft }}>
-                      © CARTO © OpenStreetMap
+                <View style={{ flex: 1 }} />
+                {event.website ? (
+                  <TouchableOpacity onPress={openWebsite} activeOpacity={0.6} hitSlop={8}>
+                    <Text style={{ color: tint, opacity: 0.8, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
+                      Site organisateur
                     </Text>
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
                 ) : null}
-                <View style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingVertical: 10, paddingHorizontal: 14,
-                  gap: 12,
-                }}>
-                  <Text
-                    numberOfLines={1}
-                    style={{ color: tint, fontSize: 13, flex: 1, fontFamily: 'Montserrat-Medium' }}
-                  >
-                    {mapQuery}
-                  </Text>
+                {mapQuery ? (
                   <TouchableOpacity
                     onPress={() => {
                       const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
                       Linking.openURL(url).catch(() => {});
                     }}
-                    activeOpacity={0.7}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Itineraire vers ${mapQuery}`}
+                    style={{
+                      backgroundColor: tint, borderRadius: 999,
+                      paddingHorizontal: 13, paddingVertical: 7,
+                      flexDirection: 'row', alignItems: 'center', gap: 6,
+                    }}
                   >
-                    <Text style={{ color: tint, fontSize: 13, fontFamily: 'Montserrat-Bold' }}>
+                    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                      <Path d="M12 22s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+                      <Path d="M12 13.6a2.6 2.6 0 100-5.2 2.6 2.6 0 000 5.2z" stroke="#fff" strokeWidth={2.4} />
+                    </Svg>
+                    <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'Montserrat-Bold' }}>
                       Itinéraire
                     </Text>
-                    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-                      <Path d="M5 12h14M13 6l6 6-6 6" stroke={tint} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-                    </Svg>
                   </TouchableOpacity>
-                </View>
+                ) : null}
               </View>
-            ) : null}
-
-            {event.website ? (
-              <TouchableOpacity
-                onPress={openWebsite}
-                activeOpacity={0.85}
-                style={{
-                  backgroundColor: tint,
-                  paddingVertical: 11, paddingHorizontal: 20,
-                  borderRadius: 999,
-                  flexDirection: 'row', alignItems: 'center',
-                  gap: 8,
-                  marginTop: (distances.length > 0 || mapQuery) ? 14 : 4,
-                  alignSelf: 'flex-start',
-                  shadowColor: tint,
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.22,
-                  shadowRadius: 14,
-                  elevation: 3,
-                }}
-              >
-                <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-Bold' }}>
-                  Site organisateur
-                </Text>
-                <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-                  <Path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
-              </TouchableOpacity>
             ) : null}
           </View>
           <LinearGradient
