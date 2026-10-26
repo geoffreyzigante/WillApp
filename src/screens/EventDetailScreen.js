@@ -315,14 +315,21 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // photo, avec leur compte.
   const puceCoursesFicheApres = useMemo(() => {
     if (photos.length === 0) return [];
-    return uniqueRaces.map((r) => {
-      const n = photos.filter(p => photoRaceKey(p) === String(r)).length;
-      return {
-        key: String(r),
-        label: majusculePremiere(raceTabLabel(String(r))),
-        sous: `${n} photo${n > 1 ? 's' : ''}`,
-      };
-    });
+    // Le compte est celui de TOUTE la galerie, pas des photos portant la cle
+    // de course. Cette fiche ne s affiche que lorsqu il y a moins de deux
+    // courses a filtrer : les photos appartiennent donc toutes a celle-ci, y
+    // compris celles que le photographe n a pas rattachees a une course.
+    // Constate sur « Les Foulees Gourmandes » : la fiche annoncait 100 photos
+    // — les seules portant la cle — pendant que la rangee des postes juste
+    // dessous affichait « Tous 942 ». Deux comptes contradictoires a 40 pt
+    // d ecart, dont le plus petit etait faux.
+    const n = photos.length;
+    const sous = `${n} photo${n > 1 ? 's' : ''}`;
+    return uniqueRaces.map((r) => ({
+      key: String(r),
+      label: majusculePremiere(raceTabLabel(String(r))),
+      sous,
+    }));
   }, [photos, uniqueRaces, raceLabelById, event.distances]);
 
   // Les postes d une course, et d une seule (decision user 2026-10-20) : sur
