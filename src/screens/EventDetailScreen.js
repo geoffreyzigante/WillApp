@@ -298,66 +298,11 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             ? [String(d.label).trim(), libelleDouble ? km : ''].filter(Boolean).join(' ')
             : [displayEventType(event.event_type), km].filter(Boolean).join(' ')
         ),
-        // Variante portant TOUJOURS le kilometrage, pour les rangees sans
-        // seconde ligne qui ne peuvent pas le reléguer dessous.
-        titreAvecKm: majusculePremiere(
-          hasLabel
-            ? [String(d.label).trim(), km].filter(Boolean).join(' ')
-            : [displayEventType(event.event_type), km].filter(Boolean).join(' ')
-        ),
         sous: [(hasLabel && !libelleDouble) ? km : '', time, elev ? `${elev} mD+` : '']
           .filter(Boolean).join('  ·  '),
       };
     });
   }, [event.distances, event.event_type]);
-
-  // LA FICHE, une fois les photos arrivees. Trois cas et non deux : avant
-  // l event la fiche annonce les horaires, apres elle dit de quelle course
-  // sont les photos. Audit des galeries existantes (26/10) : quatre events
-  // declarent plusieurs courses mais n ont de photos que sur une seule —
-  // Vernon-Giverny 3 pour 1, Chateau Gaillard 4 pour 1, Bortis 2 pour 1,
-  // Foulees Gourmandes 1 pour 1. La fiche des horaires y listait des courses
-  // sans aucune photo, et des heures de depart pour une course courue il y a
-  // des mois. Elle est donc construite ici sur les courses REELLEMENT en
-  // photo, avec leur compte.
-  const puceCoursesFicheApres = useMemo(() => {
-    if (photos.length === 0) return [];
-    // UNE SEULE COURSE DECLAREE. C est la condition pour attribuer toute la
-    // galerie a cette course : s il y en a plusieurs, les photos sans
-    // etiquette peuvent venir de n importe laquelle. Releve sur les donnees
-    // reelles le 26/10 : « Trail du Chateau Gaillard » a 496 photos dont UNE
-    // seule porte une course, pour quatre courses declarees — annoncer
-    // « Trail 35 km, 496 photos » aurait ete faux. « Vernon-Giverny », 154
-    // etiquetees sur 372 pour trois courses declarees, de meme.
-    const declarees = Array.isArray(event.distances) ? event.distances.length : 0;
-    if (declarees > 1) return [];
-    // Le compte est celui de TOUTE la galerie, pas des photos portant la cle
-    // de course. Cette fiche ne s affiche que lorsqu il y a moins de deux
-    // courses a filtrer : les photos appartiennent donc toutes a celle-ci, y
-    // compris celles que le photographe n a pas rattachees a une course.
-    // Constate sur « Les Foulees Gourmandes » : la fiche annoncait 100 photos
-    // — les seules portant la cle — pendant que la rangee des postes juste
-    // dessous affichait « Tous 942 ». Deux comptes contradictoires a 40 pt
-    // d ecart, dont le plus petit etait faux.
-    const n = photos.length;
-    const sous = `${n} photo${n > 1 ? 's' : ''}`;
-    return uniqueRaces.map((r) => ({
-      key: String(r),
-      label: majusculePremiere(raceTabLabel(String(r))),
-      sous,
-    }));
-  }, [photos, uniqueRaces, raceLabelById, event.distances]);
-
-  // LES COURSES DECLAREES, sans compte. Cas d un event a plusieurs courses
-  // dont les photos ne portent pas d etiquette exploitable : on ne peut rien
-  // attribuer, donc on n affiche aucun chiffre. La rangee dit ce qui a eu
-  // lieu, les postes filtrent ce qui est filtrable. Pas d horaire non plus :
-  // la course est courue. Le kilometrage monte donc dans le titre, faute de
-  // seconde ligne pour le porter.
-  const puceCoursesDeclarees = useMemo(
-    () => puceCoursesInfo.map(it => ({ key: it.key, label: it.titreAvecKm, sous: '' })),
-    [puceCoursesInfo],
-  );
 
   // Les postes d une course, et d une seule (decision user 2026-10-20) : sur
   // « Toutes », aucun poste n est propose. Un km n a pas le meme sens d une
@@ -646,40 +591,27 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           si bien que ses horaires devenaient inatteignables alors qu ils
           vivaient avant dans le panneau depliable. Regression du commit
           precedent, signalee par Geoffrey. */}
-      {(() => {
-        if (erreurChargement || puceCourses.length >= 2) return null;
-        // Avant l event : les horaires. Apres : la course des photos et leur
-        // nombre. Jamais les horaires d une course deja courue.
-        // Trois sources, pas deux. Avant l event : les horaires. Apres, si
-        // l event ne declare qu une course : cette course et le compte de
-        // toute la galerie. Apres, si plusieurs courses sont declarees mais
-        // que les photos ne permettent pas de filtrer : les courses, sans
-        // aucun chiffre — on ne sait pas laquelle a quoi.
-        const fiche = photos.length === 0
-          ? puceCoursesInfo
-          : (puceCoursesFicheApres.length > 0 ? puceCoursesFicheApres : puceCoursesDeclarees);
-        if (fiche.length === 0) return null;
-        // Le compte tombe si la rangee des postes affiche deja le total.
-        // « Les Foulees Gourmandes » montrait « Course 13 km / 942 photos »
-        // et, 40 pt dessous, « Tous 942 » : le meme nombre deux fois. La
-        // fiche n apporte alors que le nom de la course, et une seule ligne
-        // suffit a le dire.
-        //
-        // Calcule ICI et non dans le memo : pucePostes est declare apres
-        // puceCoursesFicheApres, et le lire la-haut serait exactement la
-        // faute du fondPanneau de ce matin — un identifiant lu avant son
-        // initialisation, sans erreur a l execution.
-        const totalDejaAffiche = pucePostes.length > 1;
-        const items = totalDejaAffiche ? fiche.map(it => ({ ...it, sous: '' })) : fiche;
+      {/* LA FICHE DES COURSES, juste sous la hero, et UNIQUEMENT tant qu il
+          n y a pas de photo. C est la seule situation ou elle a un objet :
+          annoncer les horaires de depart avant l event.
+
+          Une fois les photos arrivees elle ne dit plus rien. Sur un event a
+          une seule course, elle se reduisait a une puce isolee, non
+          cliquable, repetant ce que la hero affiche deja, posee juste au
+          dessus des vrais filtres. J ai mis quatre commits a inventer des cas
+          pour la conserver — compte de la galerie, puis courses declarees
+          sans chiffre, puis compte retire quand les postes l affichent — au
+          lieu de constater qu apres la course, la page appartient aux photos.
+
+          Rendue ici et non dans renderFiltres, qui est l enfant d index 1 du
+          ScrollView : celui-ci vient apres tout l en-tete, donc apres le
+          message « pas encore de photos » et sa mascotte. */}
+      {photos.length === 0 && !erreurChargement && puceCoursesInfo.length > 0 ? (
         // Pas de marge propre : FiltresGalerie pose deja 8 de padding haut.
-        // Les 10 d avant s y ajoutaient, soit 18 entre la hero et la premiere
-        // puce — trop loin pour un bloc qui prolonge la hero.
-        return (
-          <View style={{ marginHorizontal: -20 }}>
-            <FiltresGalerie courses={items} inerte />
-          </View>
-        );
-      })()}
+        <View style={{ marginHorizontal: -20 }}>
+          <FiltresGalerie courses={puceCoursesInfo} inerte />
+        </View>
+      ) : null}
 
       {erreurChargement && photos.length === 0 && !loading ? (
         <View style={{ paddingVertical: 34, paddingHorizontal: 24, alignItems: 'center' }}>
