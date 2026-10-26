@@ -298,6 +298,13 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             ? [String(d.label).trim(), libelleDouble ? km : ''].filter(Boolean).join(' ')
             : [displayEventType(event.event_type), km].filter(Boolean).join(' ')
         ),
+        // Variante portant TOUJOURS le kilometrage, pour les rangees sans
+        // seconde ligne qui ne peuvent pas le reléguer dessous.
+        titreAvecKm: majusculePremiere(
+          hasLabel
+            ? [String(d.label).trim(), km].filter(Boolean).join(' ')
+            : [displayEventType(event.event_type), km].filter(Boolean).join(' ')
+        ),
         sous: [(hasLabel && !libelleDouble) ? km : '', time, elev ? `${elev} mD+` : '']
           .filter(Boolean).join('  ·  '),
       };
@@ -315,6 +322,15 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // photo, avec leur compte.
   const puceCoursesFicheApres = useMemo(() => {
     if (photos.length === 0) return [];
+    // UNE SEULE COURSE DECLAREE. C est la condition pour attribuer toute la
+    // galerie a cette course : s il y en a plusieurs, les photos sans
+    // etiquette peuvent venir de n importe laquelle. Releve sur les donnees
+    // reelles le 26/10 : « Trail du Chateau Gaillard » a 496 photos dont UNE
+    // seule porte une course, pour quatre courses declarees — annoncer
+    // « Trail 35 km, 496 photos » aurait ete faux. « Vernon-Giverny », 154
+    // etiquetees sur 372 pour trois courses declarees, de meme.
+    const declarees = Array.isArray(event.distances) ? event.distances.length : 0;
+    if (declarees > 1) return [];
     // Le compte est celui de TOUTE la galerie, pas des photos portant la cle
     // de course. Cette fiche ne s affiche que lorsqu il y a moins de deux
     // courses a filtrer : les photos appartiennent donc toutes a celle-ci, y
@@ -331,6 +347,17 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       sous,
     }));
   }, [photos, uniqueRaces, raceLabelById, event.distances]);
+
+  // LES COURSES DECLAREES, sans compte. Cas d un event a plusieurs courses
+  // dont les photos ne portent pas d etiquette exploitable : on ne peut rien
+  // attribuer, donc on n affiche aucun chiffre. La rangee dit ce qui a eu
+  // lieu, les postes filtrent ce qui est filtrable. Pas d horaire non plus :
+  // la course est courue. Le kilometrage monte donc dans le titre, faute de
+  // seconde ligne pour le porter.
+  const puceCoursesDeclarees = useMemo(
+    () => puceCoursesInfo.map(it => ({ key: it.key, label: it.titreAvecKm, sous: '' })),
+    [puceCoursesInfo],
+  );
 
   // Les postes d une course, et d une seule (decision user 2026-10-20) : sur
   // « Toutes », aucun poste n est propose. Un km n a pas le meme sens d une
@@ -623,7 +650,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         if (erreurChargement || puceCourses.length >= 2) return null;
         // Avant l event : les horaires. Apres : la course des photos et leur
         // nombre. Jamais les horaires d une course deja courue.
-        const fiche = photos.length > 0 ? puceCoursesFicheApres : puceCoursesInfo;
+        // Trois sources, pas deux. Avant l event : les horaires. Apres, si
+        // l event ne declare qu une course : cette course et le compte de
+        // toute la galerie. Apres, si plusieurs courses sont declarees mais
+        // que les photos ne permettent pas de filtrer : les courses, sans
+        // aucun chiffre — on ne sait pas laquelle a quoi.
+        const fiche = photos.length === 0
+          ? puceCoursesInfo
+          : (puceCoursesFicheApres.length > 0 ? puceCoursesFicheApres : puceCoursesDeclarees);
         if (fiche.length === 0) return null;
         // Pas de marge propre : FiltresGalerie pose deja 8 de padding haut.
         // Les 10 d avant s y ajoutaient, soit 18 entre la hero et la premiere
