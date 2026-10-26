@@ -270,11 +270,24 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // photos — qui par definition n existent pas encore.
   const puceCoursesInfo = useMemo(() => {
     const evd = Array.isArray(event.distances) ? event.distances : [];
+    // Le kilometrage monte dans le TITRE des que deux courses partagent un
+    // libelle. Audit des galeries existantes (26/10) : les organisateurs
+    // saisissent le plus souvent la categorie et non un nom — « Trail des
+    // Violettes » a trois courses nommees « Trail », « Foulees de la Seine »
+    // deux « Course ». Avec le kilometrage relegue en seconde ligne, les
+    // titres devenaient indiscernables. Carrington, dont les quatre libelles
+    // different, garde ses titres courts.
+    const libelles = evd.map(d => String((d && d.label) || '').trim().toLowerCase()).filter(Boolean);
+    const libelleDouble = libelles.some((l, i) => libelles.indexOf(l) !== i);
     return evd.map((d, i) => {
       const km = d && d.km !== undefined && d.km !== null && d.km !== '' ? `${d.km} km` : '';
       const hasLabel = !!(d && d.label && String(d.label).trim());
       const time = d && d.time && String(d.time).trim() ? String(d.time).trim() : '';
-      const elev = d && d.elevation && String(d.elevation).trim() ? String(d.elevation).trim() : '';
+      // Un denivele de 0 n est pas une information : « Les Foulees Gourmandes »
+      // affichait « 17:00 · 0 mD+ ». Les organisateurs laissent le champ a 0
+      // quand le parcours est plat, ce qui va de soi sur une course sur route.
+      const elevBrut = d && d.elevation !== undefined && d.elevation !== null ? String(d.elevation).trim() : '';
+      const elev = elevBrut && Number(elevBrut) > 0 ? elevBrut : '';
       return {
         key: `info-${i}`,
         // Memes deux regles que dans le panneau qu elle remplace : majuscule
@@ -282,13 +295,35 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         // tient lieu de nom.
         label: majusculePremiere(
           hasLabel
-            ? String(d.label).trim()
+            ? [String(d.label).trim(), libelleDouble ? km : ''].filter(Boolean).join(' ')
             : [displayEventType(event.event_type), km].filter(Boolean).join(' ')
         ),
-        sous: [hasLabel ? km : '', time, elev ? `${elev} mD+` : ''].filter(Boolean).join('  ·  '),
+        sous: [(hasLabel && !libelleDouble) ? km : '', time, elev ? `${elev} mD+` : '']
+          .filter(Boolean).join('  ·  '),
       };
     });
   }, [event.distances, event.event_type]);
+
+  // LA FICHE, une fois les photos arrivees. Trois cas et non deux : avant
+  // l event la fiche annonce les horaires, apres elle dit de quelle course
+  // sont les photos. Audit des galeries existantes (26/10) : quatre events
+  // declarent plusieurs courses mais n ont de photos que sur une seule —
+  // Vernon-Giverny 3 pour 1, Chateau Gaillard 4 pour 1, Bortis 2 pour 1,
+  // Foulees Gourmandes 1 pour 1. La fiche des horaires y listait des courses
+  // sans aucune photo, et des heures de depart pour une course courue il y a
+  // des mois. Elle est donc construite ici sur les courses REELLEMENT en
+  // photo, avec leur compte.
+  const puceCoursesFicheApres = useMemo(() => {
+    if (photos.length === 0) return [];
+    return uniqueRaces.map((r) => {
+      const n = photos.filter(p => photoRaceKey(p) === String(r)).length;
+      return {
+        key: String(r),
+        label: majusculePremiere(raceTabLabel(String(r))),
+        sous: `${n} photo${n > 1 ? 's' : ''}`,
+      };
+    });
+  }, [photos, uniqueRaces, raceLabelById, event.distances]);
 
   // Les postes d une course, et d une seule (decision user 2026-10-20) : sur
   // « Toutes », aucun poste n est propose. Un km n a pas le meme sens d une
@@ -577,14 +612,21 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           si bien que ses horaires devenaient inatteignables alors qu ils
           vivaient avant dans le panneau depliable. Regression du commit
           precedent, signalee par Geoffrey. */}
-      {!erreurChargement && puceCourses.length < 2 && puceCoursesInfo.length > 0 ? (
+      {(() => {
+        if (erreurChargement || puceCourses.length >= 2) return null;
+        // Avant l event : les horaires. Apres : la course des photos et leur
+        // nombre. Jamais les horaires d une course deja courue.
+        const fiche = photos.length > 0 ? puceCoursesFicheApres : puceCoursesInfo;
+        if (fiche.length === 0) return null;
         // Pas de marge propre : FiltresGalerie pose deja 8 de padding haut.
         // Les 10 d avant s y ajoutaient, soit 18 entre la hero et la premiere
         // puce — trop loin pour un bloc qui prolonge la hero.
-        <View style={{ marginHorizontal: -20 }}>
-          <FiltresGalerie courses={puceCoursesInfo} inerte />
-        </View>
-      ) : null}
+        return (
+          <View style={{ marginHorizontal: -20 }}>
+            <FiltresGalerie courses={fiche} inerte />
+          </View>
+        );
+      })()}
 
       {erreurChargement && photos.length === 0 && !loading ? (
         <View style={{ paddingVertical: 34, paddingHorizontal: 24, alignItems: 'center' }}>
