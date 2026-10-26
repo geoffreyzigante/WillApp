@@ -2815,6 +2815,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           id,
           exif: r.exif || null,
           race: r.race ?? null,
+          raceId: r.raceId ?? null,
           km: r.km ?? null,
           eventCode: session?.event?.code || 'unknown',
           photographerId: session?.photographer_id || null,
@@ -2841,6 +2842,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         key: finalKey,
         isRaw: !!r.isRaw,
         race: r.race,
+        raceId: r.raceId ?? null,
         km: r.km,
         // Declenchement par lignes : ce qui est capture est ce qui est envoye.
         // upload_kept pose des la creation -> le reducer, qui ne traite que les
@@ -3838,6 +3840,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             };
             if (tierHeader) headers['X-Will-Tier'] = tierHeader;
             if (item.race) headers['X-Will-Race'] = String(item.race);
+            if (item.raceId) headers['X-Will-Race-Id'] = String(item.raceId);
             if (item.km) headers['X-Will-Km'] = String(item.km);
             // EXIF en clair : le JPEG livre l a perdu (thumbnail ImageIO).
             // Temps de pose, ISO, ouverture, modele — ce qu il faut pour
@@ -4492,6 +4495,16 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         // dans un worklet a closure figee au mount, donc lire les state donnerait
         // toujours null/null. La ref pointe sur la valeur courante de la roulette.
         race: selectedRaceRef.current ? String(selectedRaceRef.current.km) : null,
+        // L IDENTIFIANT de la course, en plus de sa distance. Jusqu ici seule
+        // la distance etait stockee, et l identifiant recalcule a la lecture en
+        // cherchant cette distance dans la table des courses. Or deux courses
+        // d un meme event peuvent avoir la meme distance — « Trail de Vernon -
+        // Giverny » a un Trail 10 km ET une Marche 10 km. La table n en retient
+        // qu une : les photos de l autre s affichaient sous le mauvais nom,
+        // sans que rien ne permette de les distinguer. La distance reste
+        // envoyee pour les lectures anciennes.
+        raceId: selectedRaceRef.current && selectedRaceRef.current.id
+          ? String(selectedRaceRef.current.id) : null,
         // selectedKm = null -> non posté ; 0 = "Départ" ; 'arrivee' = "Arrivée" ; N = km N.
         km: selectedKmRef.current !== null ? String(selectedKmRef.current) : null,
         exif,
