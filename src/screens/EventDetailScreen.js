@@ -46,6 +46,15 @@ export function EventDetailScreen(props) {
 // Melange deux couleurs hex et renvoie un hex opaque. Sert a connaitre la
 // couleur REELLE d un fond pose en transparence : un degrade qui doit s y
 // fondre ne peut pas reutiliser la couche translucide, il la doublerait.
+// Premiere lettre en majuscule, le reste intact : « minimes filles » devient
+// « Minimes filles » sans toucher a « 10 km Rando » ni aux sigles. La saisie
+// de l organisateur n est pas normalisee, l affichage l est.
+function majusculePremiere(t) {
+  const v = String(t || '').trim();
+  if (!v) return '';
+  return v.charAt(0).toUpperCase() + v.slice(1);
+}
+
 function melangerSurFond(fond, dessus, alpha) {
   const lire = (h) => {
     const m = /^#?([0-9a-f]{6})$/i.exec(String(h || '').trim());
@@ -555,7 +564,15 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     const hasLabel = !!(dist && dist.label && String(dist.label).trim());
                     const km = dist && dist.km !== undefined && dist.km !== null && dist.km !== ''
                       ? `${dist.km} km` : '';
-                    const titre = hasLabel ? String(dist.label).trim() : km;
+                    // Sans nom dedie, le type de l event tient lieu de nom :
+                    // « Cross-country 2 km » plutot qu un « 2 km » orphelin
+                    // (user 2026-10-26). Et la premiere lettre passe en
+                    // majuscule quoi qu en dise la saisie de l organisateur.
+                    const titre = majusculePremiere(
+                      hasLabel
+                        ? String(dist.label).trim()
+                        : [displayEventType(event.event_type), km].filter(Boolean).join(' ')
+                    );
                     const time = dist && dist.time && String(dist.time).trim() ? String(dist.time).trim() : '';
                     const elev = dist && dist.elevation && String(dist.elevation).trim() ? String(dist.elevation).trim() : '';
                     // Seconde ligne : km (si le libelle a pris la premiere),
@@ -566,13 +583,13 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     return (
                       <View key={i} style={{
                         backgroundColor: 'rgba(255,255,255,0.75)',
-                        borderRadius: 12, paddingHorizontal: 13, paddingVertical: 9,
+                        borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
                       }}>
-                        <Text style={{ fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 15, color: tint }}>
+                        <Text style={{ fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 14, color: tint }}>
                           {titre}
                         </Text>
                         {sous ? (
-                          <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 11, color: tint, opacity: 0.75, marginTop: 2 }}>
+                          <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 11, color: tint, opacity: 0.7, marginTop: 2 }}>
                             {sous}
                           </Text>
                         ) : null}
@@ -634,21 +651,25 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                   <TouchableOpacity
                     onPress={openWebsite}
                     activeOpacity={0.6}
+                    hitSlop={{ top: 7, bottom: 7 }}
                     accessibilityRole="button"
                     accessibilityLabel="Ouvrir le site de l organisateur"
                     style={{
                       flex: 1, flexDirection: 'row', alignItems: 'center',
-                      justifyContent: 'center', gap: 10, paddingVertical: 12,
+                      justifyContent: 'center', gap: 8, paddingVertical: 10,
                     }}
                   >
-                    <Icon.Site size={17} color={tint} />
-                    <Text style={{ color: '#1A1426', fontSize: 15, fontFamily: 'Montserrat-Medium' }}>
+                    <Icon.Site size={15} color={tint} />
+                    <Text style={{ color: '#1A1426', fontSize: 13, fontFamily: 'Montserrat-Medium' }}>
                       Site organisateur
                     </Text>
                   </TouchableOpacity>
                 ) : null}
                 {(mapQuery && event.website) ? (
-                  <View style={{ width: StyleSheet.hairlineWidth, height: 26, backgroundColor: `${tint}59` }} />
+                  // 1 pt plein et non StyleSheet.hairlineWidth : un tiers de
+                  // point a 35 % d opacite ne se voyait pas, ce qui revient
+                  // exactement a ne pas l avoir pose.
+                  <View style={{ width: 1, height: 22, backgroundColor: `${tint}66` }} />
                 ) : null}
                 {mapQuery ? (
                   <TouchableOpacity
@@ -657,15 +678,16 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                       Linking.openURL(url).catch(() => {});
                     }}
                     activeOpacity={0.6}
+                    hitSlop={{ top: 7, bottom: 7 }}
                     accessibilityRole="button"
                     accessibilityLabel={`Itineraire vers ${mapQuery}`}
                     style={{
                       flex: 1, flexDirection: 'row', alignItems: 'center',
-                      justifyContent: 'center', gap: 10, paddingVertical: 12,
+                      justifyContent: 'center', gap: 8, paddingVertical: 10,
                     }}
                   >
-                    <Icon.Itineraire size={17} color={tint} />
-                    <Text style={{ color: '#1A1426', fontSize: 15, fontFamily: 'Montserrat-Medium' }}>
+                    <Icon.Itineraire size={15} color={tint} />
+                    <Text style={{ color: '#1A1426', fontSize: 13, fontFamily: 'Montserrat-Medium' }}>
                       Itinéraire
                     </Text>
                   </TouchableOpacity>
