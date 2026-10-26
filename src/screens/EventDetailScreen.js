@@ -610,10 +610,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                 {debordeGauche ? (
                   <LinearGradient
                     colors={[fondPanneau, fondPanneau, `${fondPanneau}DB`, `${fondPanneau}00`]}
-                    locations={[0, 0.2, 0.55, 1]}
+                    locations={[0, 0.25, 0.6, 1]}
                     start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
                     pointerEvents="none"
-                    style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 56 }}
+                    style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 88 }}
                   />
                 ) : null}
                 {debordeDroite ? (
@@ -622,14 +622,21 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     // au dernier pixel seulement, si bien que la puce — blanche
                     // a 75 %, donc #FAF7FF — restait claire sous un voile a
                     // 86 % jusqu au bord. Il est desormais plein des 80 % de
-                    // la course, et les 11 derniers points sont la couleur du
-                    // panneau nue. Mesure au pixel : le fond vise est bien
-                    // #E9DFFF, identique au panneau, pas du blanc.
+                    // la course, et le dernier quart est la couleur du panneau
+                    // nue. Mesure au pixel : le fond vise est bien #E9DFFF,
+                    // identique au panneau, pas du blanc.
+                    //
+                    // 88 et non 56 : une puce fait environ 110 pt de large et
+                    // sa surface est blanche a 75 %, donc #FAF7FF. Sur 56 pt le
+                    // voile n avait pas la place de la dissoudre — il se lisait
+                    // comme une ombre, pas comme une coupe (constate sur
+                    // appareil, deux captures comparees). A 88 il couvre les
+                    // quatre cinquiemes de la puce coupee.
                     colors={[`${fondPanneau}00`, `${fondPanneau}DB`, fondPanneau, fondPanneau]}
-                    locations={[0, 0.45, 0.8, 1]}
+                    locations={[0, 0.4, 0.75, 1]}
                     start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
                     pointerEvents="none"
-                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 56 }}
+                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 88 }}
                   />
                 ) : null}
               </View>
