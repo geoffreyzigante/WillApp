@@ -611,71 +611,62 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
               </View>
             )}
 
-            {/* LES DEUX ACTIONS, a poids egal en largeur mais pas en
-                remplissage (variante 1 des maquettes, user 2026-10-26).
-                Avant : un lien texte en teinte a 80 % et une pilule pleine,
-                tous deux serres a droite, la moitie gauche vide — le lien
-                pesait presque autant que la pilule pour un usage bien moindre.
-                Desormais deux boutons de meme largeur : la hierarchie passe
-                par le remplissage, plein contre contour, et les cibles
-                tactiles doublent.
+            {/* LES DEUX ACTIONS (maquette user 2026-10-26). Ni pilule ni
+                bouton a contour : une icone teintee, un libelle en encre,
+                chaque action centree dans sa moitie, un filet vertical entre
+                les deux. La couleur ne sert qu a designer l action, le texte
+                reste lisible comme du texte.
 
-                Rayon 999 et non 14 comme dans la maquette : ces boutons sont
-                a 16 pt des coins bas du panneau, lui-meme en rayon 16, donc
-                la regle d emboitement donne 0. La pilule est l alternative
-                admise, et c est deja la langue du panneau.
+                Pourquoi pas de bouton : la rangee est posee sur un panneau
+                deja teinte, a 16 pt de ses coins bas en rayon 16 — un bouton
+                plein y demanderait un rayon de 0 pour s emboiter, et deux
+                boutons cote a cote pesaient plus lourd que les courses
+                au-dessus d eux, qui sont le vrai contenu.
 
-                Le lieu n y figure pas : la hero l affiche a la suite de la
-                date. Le pin entre donc dans le bouton, qui dit l action et
-                son objet. */}
+                Si une seule des deux existe, elle prend toute la largeur et
+                le filet disparait : pas de separateur devant du vide. */}
             {(mapQuery || event.website) ? (
               <View style={{
-                flexDirection: 'row', gap: 10,
-                marginTop: distances.length > 0 ? 12 : 0,
+                flexDirection: 'row', alignItems: 'center',
+                marginTop: distances.length > 0 ? 14 : 0,
               }}>
+                {event.website ? (
+                  <TouchableOpacity
+                    onPress={openWebsite}
+                    activeOpacity={0.6}
+                    accessibilityRole="button"
+                    accessibilityLabel="Ouvrir le site de l organisateur"
+                    style={{
+                      flex: 1, flexDirection: 'row', alignItems: 'center',
+                      justifyContent: 'center', gap: 10, paddingVertical: 12,
+                    }}
+                  >
+                    <Icon.Site size={17} color={tint} />
+                    <Text style={{ color: '#1A1426', fontSize: 15, fontFamily: 'Montserrat-Medium' }}>
+                      Site organisateur
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+                {(mapQuery && event.website) ? (
+                  <View style={{ width: StyleSheet.hairlineWidth, height: 26, backgroundColor: `${tint}59` }} />
+                ) : null}
                 {mapQuery ? (
                   <TouchableOpacity
                     onPress={() => {
                       const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
                       Linking.openURL(url).catch(() => {});
                     }}
-                    activeOpacity={0.85}
+                    activeOpacity={0.6}
                     accessibilityRole="button"
                     accessibilityLabel={`Itineraire vers ${mapQuery}`}
                     style={{
-                      flex: 1, backgroundColor: tint, borderRadius: 999,
-                      paddingVertical: 13,
-                      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+                      flex: 1, flexDirection: 'row', alignItems: 'center',
+                      justifyContent: 'center', gap: 10, paddingVertical: 12,
                     }}
                   >
-                    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                      <Path d="M12 22s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
-                      <Path d="M12 13.6a2.6 2.6 0 100-5.2 2.6 2.6 0 000 5.2z" stroke="#fff" strokeWidth={2.4} />
-                    </Svg>
-                    <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-Bold' }}>
+                    <Icon.Itineraire size={17} color={tint} />
+                    <Text style={{ color: '#1A1426', fontSize: 15, fontFamily: 'Montserrat-Medium' }}>
                       Itinéraire
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-                {event.website ? (
-                  <TouchableOpacity
-                    onPress={openWebsite}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel="Ouvrir le site de l organisateur"
-                    style={{
-                      flex: 1, borderRadius: 999,
-                      borderWidth: 1.5, borderColor: `${tint}66`,
-                      paddingVertical: 11.5,
-                      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    }}
-                  >
-                    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                      <Path d="M12 21a9 9 0 100-18 9 9 0 000 18z" stroke={tint} strokeWidth={2.2} />
-                      <Path d="M3 12h18M12 3c2.6 2.6 2.6 15.4 0 18M12 3c-2.6 2.6-2.6 15.4 0 18" stroke={tint} strokeWidth={2.2} strokeLinecap="round" />
-                    </Svg>
-                    <Text style={{ color: tint, fontSize: 14, fontFamily: 'Montserrat-Bold' }}>
-                      Site
                     </Text>
                   </TouchableOpacity>
                 ) : null}
