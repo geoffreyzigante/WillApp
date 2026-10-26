@@ -25,7 +25,7 @@ import { C, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
 import { API_URL } from '../constants/api';
 import { formatDateLong, formatDateLongMinuscule, cityLabel, displayEventType, isUpcoming } from '../utils/format';
-import { raceTitle, extractBurstTs, extractIdx } from '../utils/photo';
+import { extractBurstTs, extractIdx } from '../utils/photo';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
 import { lh } from '../constants/typo';
@@ -46,6 +46,29 @@ export function EventDetailScreen(props) {
 // Premiere lettre en majuscule, le reste intact : « minimes filles » devient
 // « Minimes filles » sans toucher a « 10 km Rando » ni aux sigles. La saisie
 // de l organisateur n est pas normalisee, l affichage l est.
+// UN SEUL NOM DE COURSE pour toute la page.
+//
+// Le programme et les filtres nommaient les courses chacun de leur cote. La
+// regle « a defaut de nom dedie, le type de l event tient lieu de nom » a donc
+// du etre posee deux fois — et la seconde avec un jour de retard, si bien que
+// la meme course s affichait « Cross-country 8 km » avant l event et « 8 km »
+// apres. Une seule fonction desormais, deux appelants.
+//
+// avecKm : le kilometrage est dans le titre. Faux quand une seconde ligne le
+// porte deja — mais vrai des que deux courses partagent un libelle, sans quoi
+// leurs titres seraient identiques.
+// labelSeul : l organisateur a demande que son libelle s affiche tel quel,
+// sans distance accolee.
+function nommerCourse({ label, labelSeul = false, km, type, avecKm = true }) {
+  const l = String(label || '').trim();
+  const kmTxt = km !== undefined && km !== null && km !== '' ? `${km} km` : '';
+  if (l) {
+    if (labelSeul || !avecKm) return majusculePremiere(l);
+    return majusculePremiere([l, kmTxt].filter(Boolean).join(' '));
+  }
+  return majusculePremiere([type, kmTxt].filter(Boolean).join(' '));
+}
+
 function majusculePremiere(t) {
   const v = String(t || '').trim();
   if (!v) return '';
@@ -90,6 +113,23 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   const tint = colorForType(event.event_type);
 
   const upcoming = isUpcoming(event.event_date, event.event_date_end);
+
+  // REGLE COMMUNE DE LA PAGE. Elle est dans l un de deux registres, jamais les
+  // deux, et tout le reste en decoule — aucune condition ne vise un event
+  // particulier.
+  //
+  //   PROGRAMME, tant qu aucune photo n est arrivee : la page annonce ce qui
+  //   va avoir lieu. Une ligne par course, quel qu en soit le nombre — un
+  //   programme d une seule course reste un programme.
+  //
+  //   CHOIX, des la premiere photo : la page ne propose plus que des filtres.
+  //   Un niveau de choix n existe qu a partir de deux options, sinon il ne
+  //   filtre rien. Vrai des courses comme des postes.
+  //
+  // C est le passage d un registre a l autre qui m a coute quatre commits :
+  // j ai voulu garder le programme dans le registre du choix, ou il n a pas de
+  // sens, et chaque correctif ajoutait une regle au lieu d en retirer une.
+  const registreProgramme = photos.length === 0;
 
   const countdown = (() => {
     if (!event.event_date) return null;
@@ -219,14 +259,12 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     const evDistances = Array.isArray(event.distances) ? event.distances : [];
     const d = evDistances.find(x => x && (x.id === raceKey || String(x.km) === String(raceKey)));
     const km = d ? d.km : raceKey;
-    const nomDedie = entry && String(entry.label || '').trim();
-    if (nomDedie) return raceTitle({ label: entry.label, label_only: entry.label_only, km });
-    // Sans nom dedie, le type de l event tient lieu de nom (user 2026-10-26).
-    // La regle valait deja pour la fiche des courses ; elle manquait ici, donc
-    // les memes courses s affichaient « Cross-country 8 km » avant l event et
-    // « 8 km » une fois les photos arrivees. Une seule regle pour les deux.
-    return [displayEventType(event.event_type), km !== undefined && km !== null && km !== '' ? `${km} km` : '']
-      .filter(Boolean).join(' ');
+    return nommerCourse({
+      label: entry && entry.label,
+      labelSeul: !!(entry && entry.label_only),
+      km,
+      type: displayEventType(event.event_type),
+    });
   };
 
   // Les postes presents dans une liste de photos, tries le long du parcours.
@@ -293,11 +331,12 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         // Memes deux regles que dans le panneau qu elle remplace : majuscule
         // a la premiere lettre, et a defaut de nom dedie le type de l event
         // tient lieu de nom.
-        label: majusculePremiere(
-          hasLabel
-            ? [String(d.label).trim(), libelleDouble ? km : ''].filter(Boolean).join(' ')
-            : [displayEventType(event.event_type), km].filter(Boolean).join(' ')
-        ),
+        label: nommerCourse({
+          label: d && d.label,
+          km: d && d.km,
+          type: displayEventType(event.event_type),
+          avecKm: libelleDouble,
+        }),
         sous: [(hasLabel && !libelleDouble) ? km : '', time, elev ? `${elev} mD+` : '']
           .filter(Boolean).join('  ·  '),
       };
@@ -606,14 +645,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           Rendue ici et non dans renderFiltres, qui est l enfant d index 1 du
           ScrollView : celui-ci vient apres tout l en-tete, donc apres le
           message « pas encore de photos » et sa mascotte. */}
-      {photos.length === 0 && !erreurChargement && puceCoursesInfo.length > 0 ? (
+      {registreProgramme && !erreurChargement && puceCoursesInfo.length > 0 ? (
         // Pas de marge propre : FiltresGalerie pose deja 8 de padding haut.
         <View style={{ marginHorizontal: -20 }}>
           <FiltresGalerie courses={puceCoursesInfo} inerte />
         </View>
       ) : null}
 
-      {erreurChargement && photos.length === 0 && !loading ? (
+      {erreurChargement && registreProgramme && !loading ? (
         <View style={{ paddingVertical: 34, paddingHorizontal: 24, alignItems: 'center' }}>
           <Text style={{ color: '#C9B6FF', fontSize: 18, lineHeight: lh(18, 22), fontFamily: 'AVEstiana-Bold', textAlign: 'center' }}>
             Impossible de charger les photos
@@ -631,7 +670,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>Réessayer</Text>
           </TouchableOpacity>
         </View>
-      ) : upcoming && photos.length === 0 && !loading ? (
+      ) : upcoming && registreProgramme && !loading ? (
         <EtatVidePhotos />
       ) : null}
     </View>
@@ -645,9 +684,9 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     // seul etat ou elle a un sens sans filtrer, et c est aussi le moment ou
     // l on vient chercher les horaires. En cas d erreur de chargement on ne
     // montre rien : on ne sait pas s il y a des photos.
-    // Sans photo il n y a rien a filtrer : la fiche des courses est rendue
-    // plus haut, dans l en-tete, pour qu elle suive la hero.
-    if (erreurChargement || photos.length === 0) return <View />;
+    // Registre du programme : rien a filtrer. Il est rendu plus haut, dans
+    // l en-tete, pour suivre la hero.
+    if (erreurChargement || registreProgramme) return <View />;
     return (
       <View style={{ marginHorizontal: -20 }}>
         <FiltresGalerie
@@ -669,7 +708,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     );
   };
 
-  const showEmptyMessage = upcoming && photos.length === 0 && !loading;
+  const showEmptyMessage = upcoming && registreProgramme && !loading;
 
   const renderListEmpty = () => {
     if (showEmptyMessage) return null;

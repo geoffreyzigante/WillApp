@@ -214,9 +214,10 @@ export function FiltresGalerie({
   const change1 = seulementPostes ? onPoste : onCourse;
   const rangee2 = seulementPostes ? [] : postes;
 
-  // En mode informatif, une seule course merite d etre annoncee : c est la
-  // fiche de l event, pas un filtre. En mode filtre, une rangee d un seul
-  // element ne filtre rien.
+  // SEUIL, derive de la regle commune de la page event : un niveau de CHOIX
+  // n existe qu a partir de deux options, sinon il ne filtre rien ; un
+  // PROGRAMME n est pas un choix, et une course unique reste a annoncer.
+  // Ce n est donc pas deux cas mais une seule regle, lue des deux cotes.
   if (rangee1.length < (inerte ? 1 : 2)) return null;
 
   return (
