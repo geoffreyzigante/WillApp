@@ -659,12 +659,24 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           ? puceCoursesInfo
           : (puceCoursesFicheApres.length > 0 ? puceCoursesFicheApres : puceCoursesDeclarees);
         if (fiche.length === 0) return null;
+        // Le compte tombe si la rangee des postes affiche deja le total.
+        // « Les Foulees Gourmandes » montrait « Course 13 km / 942 photos »
+        // et, 40 pt dessous, « Tous 942 » : le meme nombre deux fois. La
+        // fiche n apporte alors que le nom de la course, et une seule ligne
+        // suffit a le dire.
+        //
+        // Calcule ICI et non dans le memo : pucePostes est declare apres
+        // puceCoursesFicheApres, et le lire la-haut serait exactement la
+        // faute du fondPanneau de ce matin — un identifiant lu avant son
+        // initialisation, sans erreur a l execution.
+        const totalDejaAffiche = pucePostes.length > 1;
+        const items = totalDejaAffiche ? fiche.map(it => ({ ...it, sous: '' })) : fiche;
         // Pas de marge propre : FiltresGalerie pose deja 8 de padding haut.
         // Les 10 d avant s y ajoutaient, soit 18 entre la hero et la premiere
         // puce — trop loin pour un bloc qui prolonge la hero.
         return (
           <View style={{ marginHorizontal: -20 }}>
-            <FiltresGalerie courses={fiche} inerte />
+            <FiltresGalerie courses={items} inerte />
           </View>
         );
       })()}
