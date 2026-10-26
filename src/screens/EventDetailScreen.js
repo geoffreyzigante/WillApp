@@ -609,8 +609,8 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     du contenu qui n existe pas. */}
                 {debordeGauche ? (
                   <LinearGradient
-                    colors={[fondPanneau, `${fondPanneau}DB`, `${fondPanneau}00`]}
-                    locations={[0, 0.45, 1]}
+                    colors={[fondPanneau, fondPanneau, `${fondPanneau}DB`, `${fondPanneau}00`]}
+                    locations={[0, 0.2, 0.55, 1]}
                     start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
                     pointerEvents="none"
                     style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 56 }}
@@ -618,8 +618,15 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                 ) : null}
                 {debordeDroite ? (
                   <LinearGradient
-                    colors={[`${fondPanneau}00`, `${fondPanneau}DB`, fondPanneau]}
-                    locations={[0, 0.55, 1]}
+                    // Quatre arrets et non trois : le voile atteignait 100 %
+                    // au dernier pixel seulement, si bien que la puce — blanche
+                    // a 75 %, donc #FAF7FF — restait claire sous un voile a
+                    // 86 % jusqu au bord. Il est desormais plein des 80 % de
+                    // la course, et les 11 derniers points sont la couleur du
+                    // panneau nue. Mesure au pixel : le fond vise est bien
+                    // #E9DFFF, identique au panneau, pas du blanc.
+                    colors={[`${fondPanneau}00`, `${fondPanneau}DB`, fondPanneau, fondPanneau]}
+                    locations={[0, 0.45, 0.8, 1]}
                     start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
                     pointerEvents="none"
                     style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 56 }}
