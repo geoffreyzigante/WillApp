@@ -575,7 +575,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           vivaient avant dans le panneau depliable. Regression du commit
           precedent, signalee par Geoffrey. */}
       {!erreurChargement && puceCourses.length < 2 && puceCoursesInfo.length > 0 ? (
-        <View style={{ marginHorizontal: -20, marginTop: 10 }}>
+        // Pas de marge propre : FiltresGalerie pose deja 8 de padding haut.
+        // Les 10 d avant s y ajoutaient, soit 18 entre la hero et la premiere
+        // puce — trop loin pour un bloc qui prolonge la hero.
+        <View style={{ marginHorizontal: -20 }}>
           <FiltresGalerie courses={puceCoursesInfo} inerte />
         </View>
       ) : null}

@@ -101,7 +101,10 @@ function Puce({ libelle, sous, compte, actif, niveau, inerte = false, onPress })
       style={{
         height: deuxLignes ? undefined : n.hauteur,
         paddingHorizontal: n.padH,
-        paddingVertical: deuxLignes ? 8 : 0,
+        // 10 et non 8 : sur deux lignes, 8 serrait le texte contre le bord
+        // haut et bas de la pastille (user 2026-10-26). La puce passe de 46 a
+        // 50 pt ; le rayon 18 reste dans l echelle, une pilule demanderait 25.
+        paddingVertical: deuxLignes ? 10 : 0,
         borderRadius: rayon,
         backgroundColor: actif ? n.fondActif : n.fond,
         flexDirection: deuxLignes ? 'column' : 'row',
