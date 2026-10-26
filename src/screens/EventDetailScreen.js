@@ -553,6 +553,19 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       </View>
 
 
+      {/* LA FICHE DES COURSES, juste sous la hero.
+          Rendue ICI et non dans renderFiltres : cette derniere est l enfant
+          d index 1 du ScrollView, qui vient APRES tout l en-tete — donc apres
+          le message « pas encore de photos » et sa mascotte, qui vivent dans
+          renderHeader. Les puces se retrouvaient en bas de page. En mode
+          fiche elles appartiennent a l event, pas a la galerie ; en mode
+          filtre elles appartiennent a la galerie et restent collantes. */}
+      {photos.length === 0 && !erreurChargement && puceCoursesInfo.length > 0 ? (
+        <View style={{ marginHorizontal: -20, marginTop: 10 }}>
+          <FiltresGalerie courses={puceCoursesInfo} inerte />
+        </View>
+      ) : null}
+
       {erreurChargement && photos.length === 0 && !loading ? (
         <View style={{ paddingVertical: 34, paddingHorizontal: 24, alignItems: 'center' }}>
           <Text style={{ color: '#C9B6FF', fontSize: 18, lineHeight: lh(18, 22), fontFamily: 'AVEstiana-Bold', textAlign: 'center' }}>
@@ -585,14 +598,9 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     // seul etat ou elle a un sens sans filtrer, et c est aussi le moment ou
     // l on vient chercher les horaires. En cas d erreur de chargement on ne
     // montre rien : on ne sait pas s il y a des photos.
-    if (erreurChargement) return <View />;
-    if (photos.length === 0) {
-      return puceCoursesInfo.length > 0 ? (
-        <View style={{ marginHorizontal: -20 }}>
-          <FiltresGalerie courses={puceCoursesInfo} inerte />
-        </View>
-      ) : <View />;
-    }
+    // Sans photo il n y a rien a filtrer : la fiche des courses est rendue
+    // plus haut, dans l en-tete, pour qu elle suive la hero.
+    if (erreurChargement || photos.length === 0) return <View />;
     return (
       <View style={{ marginHorizontal: -20 }}>
         <FiltresGalerie
