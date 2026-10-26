@@ -535,7 +535,21 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       {infoSheetOpen && (
         <View style={{ marginTop: -24, position: 'relative' }}>
           <View style={{
-            backgroundColor: `${tint}1A`,
+            // Fond OPAQUE, pas la teinte a 10 % en translucide.
+            //
+            // Tant que le panneau etait une couche transparente, le fondu ne
+            // pouvait pas tomber juste : le panneau etait compose par le GPU,
+            // en P3 sur iOS, pendant que la couleur de fin du degrade etait
+            // calculee en sRGB (cf. la note de colors.js sur l ecart P3, plus
+            // marque sur les magentas). Deux chemins differents pour une meme
+            // couleur donnent deux couleurs. Le bord du fondu restait donc
+            // visible quelle que soit sa largeur — ce qui explique trois
+            // reglages successifs sans resultat.
+            //
+            // Desormais le panneau porte LITTERALEMENT fondPanneau, et le
+            // degrade finit sur la meme constante. L egalite ne depend plus
+            // d un calcul mais de l identite.
+            backgroundColor: fondPanneau,
             borderBottomLeftRadius: 16, borderBottomRightRadius: 16,
             paddingTop: 16 + 16, paddingBottom: 16, paddingHorizontal: 16,
           }}>
