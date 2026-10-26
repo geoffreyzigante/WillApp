@@ -219,8 +219,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     const evDistances = Array.isArray(event.distances) ? event.distances : [];
     const d = evDistances.find(x => x && (x.id === raceKey || String(x.km) === String(raceKey)));
     const km = d ? d.km : raceKey;
-    if (entry) return raceTitle({ label: entry.label, label_only: entry.label_only, km });
-    return `${km} km`;
+    const nomDedie = entry && String(entry.label || '').trim();
+    if (nomDedie) return raceTitle({ label: entry.label, label_only: entry.label_only, km });
+    // Sans nom dedie, le type de l event tient lieu de nom (user 2026-10-26).
+    // La regle valait deja pour la fiche des courses ; elle manquait ici, donc
+    // les memes courses s affichaient « Cross-country 8 km » avant l event et
+    // « 8 km » une fois les photos arrivees. Une seule regle pour les deux.
+    return [displayEventType(event.event_type), km !== undefined && km !== null && km !== '' ? `${km} km` : '']
+      .filter(Boolean).join(' ');
   };
 
   // Les postes presents dans une liste de photos, tries le long du parcours.
