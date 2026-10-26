@@ -538,7 +538,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                 Le libelle est en AVEstiana pour ne pas se confondre avec les
                 puces de filtre, juste dessous, qui sont cliquables. */}
             {distances.length > 0 && (
-              <View style={{ position: 'relative' }}>
+              // Le rail deborde du padding du panneau : la puce est coupee au
+              // bord du panneau et non 16 pt avant, sinon la coupe nette
+              // arrive AVANT le fondu et c est elle qu on voit.
+              <View style={{ position: 'relative', marginHorizontal: -16 }}>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -546,7 +549,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                   onContentSizeChange={(w) => setRailContenuW(Math.round(w))}
                   onScroll={(e) => setRailX(Math.round(e.nativeEvent.contentOffset.x))}
                   scrollEventThrottle={32}
-                  contentContainerStyle={{ gap: 8 }}
+                  contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
                 >
                   {distances.map((dist, i) => {
                     const hasLabel = !!(dist && dist.label && String(dist.label).trim());
@@ -589,43 +592,47 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     du contenu qui n existe pas. */}
                 {debordeGauche ? (
                   <LinearGradient
-                    colors={[fondPanneau, `${fondPanneau}00`]}
+                    colors={[fondPanneau, `${fondPanneau}DB`, `${fondPanneau}00`]}
+                    locations={[0, 0.45, 1]}
                     start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
                     pointerEvents="none"
-                    style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 28 }}
+                    style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 56 }}
                   />
                 ) : null}
                 {debordeDroite ? (
                   <LinearGradient
-                    colors={[`${fondPanneau}00`, fondPanneau]}
+                    colors={[`${fondPanneau}00`, `${fondPanneau}DB`, fondPanneau]}
+                    locations={[0, 0.55, 1]}
                     start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
                     pointerEvents="none"
-                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 28 }}
+                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 56 }}
                   />
                 ) : null}
               </View>
             )}
 
-            {/* RANGEE D ACTIONS. Le lieu n y figure pas : la hero l affiche
-                deja a la suite de la date, et l ecrire deux fois a 40 pt
-                d ecart etait le defaut de la variante precedente. Le pin
-                entre donc dans la pilule, qui dit l action et son objet.
-                « Site organisateur » passe en lien texte : deux pilules de
-                meme poids se disputaient l attention pour deux usages tres
-                inegaux. */}
+            {/* LES DEUX ACTIONS, a poids egal en largeur mais pas en
+                remplissage (variante 1 des maquettes, user 2026-10-26).
+                Avant : un lien texte en teinte a 80 % et une pilule pleine,
+                tous deux serres a droite, la moitie gauche vide — le lien
+                pesait presque autant que la pilule pour un usage bien moindre.
+                Desormais deux boutons de meme largeur : la hierarchie passe
+                par le remplissage, plein contre contour, et les cibles
+                tactiles doublent.
+
+                Rayon 999 et non 14 comme dans la maquette : ces boutons sont
+                a 16 pt des coins bas du panneau, lui-meme en rayon 16, donc
+                la regle d emboitement donne 0. La pilule est l alternative
+                admise, et c est deja la langue du panneau.
+
+                Le lieu n y figure pas : la hero l affiche a la suite de la
+                date. Le pin entre donc dans le bouton, qui dit l action et
+                son objet. */}
             {(mapQuery || event.website) ? (
               <View style={{
-                flexDirection: 'row', alignItems: 'center', gap: 14,
+                flexDirection: 'row', gap: 10,
                 marginTop: distances.length > 0 ? 12 : 0,
               }}>
-                <View style={{ flex: 1 }} />
-                {event.website ? (
-                  <TouchableOpacity onPress={openWebsite} activeOpacity={0.6} hitSlop={8}>
-                    <Text style={{ color: tint, opacity: 0.8, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
-                      Site organisateur
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
                 {mapQuery ? (
                   <TouchableOpacity
                     onPress={() => {
@@ -636,17 +643,39 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     accessibilityRole="button"
                     accessibilityLabel={`Itineraire vers ${mapQuery}`}
                     style={{
-                      backgroundColor: tint, borderRadius: 999,
-                      paddingHorizontal: 13, paddingVertical: 7,
-                      flexDirection: 'row', alignItems: 'center', gap: 6,
+                      flex: 1, backgroundColor: tint, borderRadius: 999,
+                      paddingVertical: 13,
+                      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
                     }}
                   >
-                    <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
                       <Path d="M12 22s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z" stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
                       <Path d="M12 13.6a2.6 2.6 0 100-5.2 2.6 2.6 0 000 5.2z" stroke="#fff" strokeWidth={2.4} />
                     </Svg>
-                    <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'Montserrat-Bold' }}>
+                    <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-Bold' }}>
                       Itinéraire
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+                {event.website ? (
+                  <TouchableOpacity
+                    onPress={openWebsite}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel="Ouvrir le site de l organisateur"
+                    style={{
+                      flex: 1, borderRadius: 999,
+                      borderWidth: 1.5, borderColor: `${tint}66`,
+                      paddingVertical: 11.5,
+                      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+                    }}
+                  >
+                    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                      <Path d="M12 21a9 9 0 100-18 9 9 0 000 18z" stroke={tint} strokeWidth={2.2} />
+                      <Path d="M3 12h18M12 3c2.6 2.6 2.6 15.4 0 18M12 3c-2.6 2.6-2.6 15.4 0 18" stroke={tint} strokeWidth={2.2} strokeLinecap="round" />
+                    </Svg>
+                    <Text style={{ color: tint, fontSize: 14, fontFamily: 'Montserrat-Bold' }}>
+                      Site
                     </Text>
                   </TouchableOpacity>
                 ) : null}
