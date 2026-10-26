@@ -64,7 +64,13 @@ function melangerSurFond(fond, dessus, alpha) {
   };
   const f = lire(fond);
   const d = lire(dessus);
-  if (!f || !d) return fond;
+  if (!f || !d) {
+    // Le repli silencieux est ce qui a cache le bug : la fonction rendait le
+    // fond de page, le panneau et ses fondus prenaient donc une couleur
+    // plausible et personne n etait prevenu. Il parle desormais.
+    if (__DEV__) console.warn('[melangerSurFond] couleur illisible', { fond, dessus });
+    return fond;
+  }
   const c = f.map((v, i) => Math.round(alpha * d[i] + (1 - alpha) * v));
   return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
@@ -114,13 +120,6 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   const debordeGauche = deborde && railX > 2;
   const debordeDroite = deborde && railX < railContenuW - railW - 2;
 
-  // Couleur de fondu : le panneau pose la teinte a 10 % PAR-DESSUS le fond de
-  // page, donc sa couleur reelle est le melange des deux. Fondre vers la
-  // teinte a 10 % y ajouterait une seconde couche et laisserait une bande
-  // visiblement plus foncee que le fond — on verrait le rectangle au lieu de
-  // voir la coupe. Calcule ici parce que la teinte change a chaque event.
-  const fondPanneau = useMemo(() => melangerSurFond(C.fondApp, tint, 0.10), [tint]);
-
   const raceTabLayoutsRef = useRef({});
   const kmTabLayoutsRef = useRef({});
   const raceIndicatorX = useRef(new Animated.Value(0)).current;
@@ -137,6 +136,21 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // n avait pas encore eu lieu. Troisieme etat, distinct des deux autres.
   const [erreurChargement, setErreurChargement] = useState(false);
   const tint = colorForType(event.event_type);
+
+  // Couleur du panneau d infos, et point d arrivee de ses fondus.
+  //
+  // DOIT rester apres `tint` : declare plus haut, il lisait un `tint` pas
+  // encore initialise. Pas d erreur a l execution — le transpileur ramene les
+  // const en var, donc la valeur etait simplement `undefined` — mais
+  // melangerSurFond rendait alors son fond par defaut, et le panneau comme le
+  // fondu prenaient la couleur de la PAGE au lieu du melange. Mesure sur deux
+  // captures : panneau a (235, 226, 251) avant, (244, 243, 254) apres, soit
+  // tout juste la couleur de page. C est la cause des trois reglages de fondu
+  // sans effet : il finissait bien sur un presque-blanc, exactement ce que
+  // Geoffrey decrivait. Meme famille que le `evDistances` du 22/10 — un
+  // identifiant lu avant d exister, qu aucun linter ne signale puisqu il
+  // existe, plus bas.
+  const fondPanneau = useMemo(() => melangerSurFond(C.fondApp, tint, 0.10), [tint]);
   const upcoming = isUpcoming(event.event_date, event.event_date_end);
 
   const countdown = (() => {
