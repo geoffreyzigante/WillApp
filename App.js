@@ -8215,6 +8215,35 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
 
 // BIOMETRIC_CONSENT_KEY -> src/services/secureStore.js
 
+// Efface le selfie DU TELEPHONE : la cle AsyncStorage et, quand la valeur
+// stockee est un chemin de fichier, le JPEG lui-meme (27/10). Jusqu ici les
+// six endroits qui appellent cette fonction ne retiraient que la cle. Le
+// serveur, lui, effacait bien — mais la photo du visage restait sur
+// l appareil, y compris apres « Effacer mon empreinte faciale », dont
+// l alerte affirme pourtant que le selfie est supprime. Donnee biometrique :
+// l ecart entre la promesse et le fait n etait pas tenable.
+//
+// Une seule fonction pour les six appels, plutot qu un `delete()` recopie
+// six fois : le prochain endroit qui oublie le selfie n aura pas a y repenser.
+//
+// La valeur stockee est tantot un chemin de fichier (capture locale, via
+// SelfieModal), tantot un data:image/jpeg;base64 (selfie rapatrie du
+// serveur) : seul le premier cas a un fichier a supprimer.
+//
+// Ce qui n est PAS couvert, volontairement : les prises abandonnees pendant
+// le cadrage (bouton « Reprendre » dans SelfieCameraModal), qui laissent
+// chacune leur fichier dans le cache. Y toucher voudrait dire modifier la
+// prise de vue, gelee par decision produit.
+async function oublierSelfieLocal() {
+  try {
+    const v = await AsyncStorage.getItem('@will_selfie');
+    if (v && !v.startsWith('data:')) {
+      try { new File(v).delete(); } catch {}
+    }
+  } catch {}
+  try { await AsyncStorage.removeItem('@will_selfie'); } catch {}
+}
+
 // Sous-modal : viewport caméra custom avec masque rond circulaire.
 // Caméra avant en Vision Camera : grand angle natif explicite + viewport
 // dimensionné au ratio 4:3 du capteur pour éviter le crop/zoom apparent
@@ -9031,7 +9060,7 @@ function App() {
     setFollows([]);
     setPhotoFavorites([]);
     Secure.removeItem('@will_runner').catch(() => {});
-    AsyncStorage.removeItem('@will_selfie').catch(() => {});
+    oublierSelfieLocal();
     // Audit coureur 6 -- le consentement biometrique appartient au COMPTE,
     // pas au telephone. La cle etait stockee par appareil et n etait pas
     // effacee ici, contrairement a la suppression du selfie, a celle des
@@ -9436,7 +9465,7 @@ function App() {
             setSelfieUri(null);
             setFollows([]);
             const uid = runnerSession?.profile?.userId;
-            await AsyncStorage.removeItem('@will_selfie').catch(() => {});
+            await oublierSelfieLocal();
             await AsyncStorage.removeItem('@will_follows').catch(() => {});
             // Cache photos scope par userId : on supprime celui du user courant.
             if (uid) await AsyncStorage.removeItem(`@will_photos_cache_${uid}`).catch(() => {});
@@ -9483,7 +9512,7 @@ function App() {
             await Promise.all([
               Secure.removeItem('@will_runner'),
               Secure.removeItem(BIOMETRIC_CONSENT_KEY),
-              AsyncStorage.removeItem('@will_selfie'),
+              oublierSelfieLocal(),
             ]);
             setRunnerSession(null);
             setSelfieUri(null);
@@ -9762,7 +9791,7 @@ function App() {
       // l user soit invite a refaire un selfie + Alert avec message clair.
       if (e?.code === 'face_too_small') {
         setSelfieUri(null);
-        AsyncStorage.removeItem('@will_selfie').catch(() => {});
+        oublierSelfieLocal();
         Alert.alert('Visage trop petit', e.userMessage || 'Approche-toi de la caméra pour remplir l\'ovale.');
         return;
       }
@@ -9811,7 +9840,7 @@ function App() {
         }
         // 2. Clear local. RGPD : revoque aussi le consentement biometrique.
         await Promise.all([
-          AsyncStorage.removeItem('@will_selfie'),
+          oublierSelfieLocal(),
           Secure.removeItem(BIOMETRIC_CONSENT_KEY),
         ]);
         setSelfieUri(null);
@@ -10916,7 +10945,7 @@ function App() {
             setSelfieUploadState('failed');
             if (e?.code === 'face_too_small') {
               setSelfieUri(null);
-              AsyncStorage.removeItem('@will_selfie').catch(() => {});
+              oublierSelfieLocal();
               Alert.alert('Visage trop petit', e.userMessage || "Approche-toi de la caméra pour remplir l'ovale.");
               return;
             }
