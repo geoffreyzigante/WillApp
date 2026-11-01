@@ -343,7 +343,7 @@ export function BurgerMenuModal({
                       </View>
                     </View>
                     <SousRow label="Mes events" onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))} />
-                    <SousRow label="Mon compte" onPress={empiler(onOpenOrganizerAccount)} />
+                    <SousRow label="Mon compte" onPress={empiler(onOpenOrganizerAccount)} dernier={!caps.photographerMode} />
                   </>
                 ) : (
                   /* Sans espace organisateur, « Espace organisateur » ne
@@ -355,9 +355,14 @@ export function BurgerMenuModal({
                     icon={<Icon.GearOrg size={19} color={C.primary} />}
                     label="Espace organisateur"
                     onPress={showOrgaRoleAlert}
+                    dernier={!caps.photographerMode}
                   />
                 )}
-                {/* caps.photographerMode et non Platform.OS : le jour ou
+                {/* dernier sur les lignes ci-dessus suit cette meme garde :
+                    quand la ligne photographe est masquee, le filet de la
+                    ligne precedente ne separait plus rien et fermait le menu
+                    sur un trait orphelin (vu sur Android, 01/11).
+                    caps.photographerMode et non Platform.OS : le jour ou
                     readExposure sera porte sur Android, la ligne reapparait
                     seule. Sans cette garde, le benevole Android tape ici et
                     ne recoit qu une alerte « Pas encore disponible » : on
@@ -431,7 +436,7 @@ export function BurgerMenuModal({
                       </View>
                     </View>
                     <SousRow label="Mes events" onPress={fire(() => onOpenOrgRole && onOpenOrgRole('organizer'))} />
-                    <SousRow label="Mon compte" onPress={empiler(onOpenOrganizerAccount)} />
+                    <SousRow label="Mon compte" onPress={empiler(onOpenOrganizerAccount)} dernier={!caps.photographerMode} />
                   </>
                 ) : (
                   /* Sans espace organisateur, « Espace organisateur » ne
@@ -443,6 +448,7 @@ export function BurgerMenuModal({
                     icon={<Icon.Fusee size={19} color={C.primary} />}
                     label="Lancer mon event"
                     onPress={fire(() => onOpenOrgRole && onOpenOrgRole('create'))}
+                    dernier={!caps.photographerMode}
                   />
                 )}
                 {/* caps.photographerMode et non Platform.OS : le jour ou
