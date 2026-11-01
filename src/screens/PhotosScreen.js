@@ -799,7 +799,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           activeOpacity={0.85}
           style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
         >
-          <Text style={[s.pillText, viewFilter === 'me' && s.pillTextActive]} numberOfLines={1}>Moi ({meCount})</Text>
+          <Text style={[s.pillText, viewFilter === 'me' && s.pillTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit minimumFontScale={0.85}>Moi ({meCount})</Text>
         </TouchableOpacity>
         {viewFilter === 'all' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
         <TouchableOpacity
@@ -807,7 +807,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           activeOpacity={0.85}
           style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
         >
-          <Text style={[s.pillText, viewFilter === 'favs' && s.pillTextActive]} numberOfLines={1}>Favoris ({favCount})</Text>
+          <Text style={[s.pillText, viewFilter === 'favs' && s.pillTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit minimumFontScale={0.85}>Favoris ({favCount})</Text>
         </TouchableOpacity>
         {viewFilter === 'me' && <View pointerEvents="none" style={{ width: 1, height: 18, backgroundColor: 'rgba(123,47,255,0.3)', zIndex: 2 }} />}
         <TouchableOpacity
@@ -815,7 +815,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           activeOpacity={0.85}
           style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}
         >
-          <Text style={[s.pillText, viewFilter === 'all' && s.pillTextActive]} numberOfLines={1}>Tous ({photos.length})</Text>
+          <Text style={[s.pillText, viewFilter === 'all' && s.pillTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit minimumFontScale={0.85}>Tous ({photos.length})</Text>
         </TouchableOpacity>
       </View>
   );
