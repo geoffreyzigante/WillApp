@@ -509,7 +509,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
           setPasswordConfirm('');
           setMode('login');
           setRegisterStep('selfie');
-          setError("Tu as déjà un compte Will avec cet email. Connecte-toi : ton profil coureur sera ajouté.");
+          setError("Tu as déjà un compte Will avec cet email. Connecte-toi : ton profil participant sera ajouté.");
           setBusy(false);
           return;
         }

@@ -14,7 +14,7 @@ export const REQUIRED_FIELDS = [
   },
   {
     id: 'distances',
-    label: 'Courses',
+    label: 'Épreuves',
     check: (ev) => Array.isArray(ev.distances) && ev.distances.length > 0,
   },
   {
@@ -71,7 +71,7 @@ export function billingLabel(ev) {
   if (mode === 'free') return 'Offre partenaire gratuite';
   const pricingMode = ev?.pricing_mode === 'free' ? 'free' : (ev?.pricing_mode === 'paid' ? 'paid' : null);
   if (ev?.active && pricingMode) {
-    return `Forfait ${pricingMode === 'free' ? 'Photos offertes' : 'Coureurs paient'}`;
+    return `Forfait ${pricingMode === 'free' ? 'Photos offertes' : 'Participants paient'}`;
   }
   const status = ev?.billing_status || ev?.status;
   if (status === 'paid' || status === 'active') return 'Payé';

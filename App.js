@@ -5123,8 +5123,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 <>
                   <Text style={{ color: P.labelPanel, fontSize: 12, fontFamily: 'Montserrat-Medium', marginTop: 6 }}>
                     {capaciteCoureurs.haute > capaciteCoureurs.basse
-                      ? `Place pour ${capaciteCoureurs.basse.toLocaleString('fr-FR')} à ${capaciteCoureurs.haute.toLocaleString('fr-FR')} coureurs`
-                      : `Place pour ~${capaciteCoureurs.basse.toLocaleString('fr-FR')} coureurs`}
+                      ? `Place pour ${capaciteCoureurs.basse.toLocaleString('fr-FR')} à ${capaciteCoureurs.haute.toLocaleString('fr-FR')} participants`
+                      : `Place pour ~${capaciteCoureurs.basse.toLocaleString('fr-FR')} participants`}
                   </Text>
                   <Text style={{ color: P.labelMuted, fontSize: 11, fontFamily: 'Montserrat-Medium', marginTop: 1 }}>
                     {capaciteCoureurs.haute > capaciteCoureurs.basse
@@ -5138,7 +5138,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                         fontSize: 12, fontFamily: 'Montserrat-SemiBold', marginTop: 2,
                       }}
                     >
-                      {capaciteCoureurs.restants.toLocaleString('fr-FR')} coureurs attendus — {capaciteCoureurs.suffisant
+                      {capaciteCoureurs.restants.toLocaleString('fr-FR')} participants attendus — {capaciteCoureurs.suffisant
                         ? "c'est suffisant"
                         : 'libère de la place ou trouve du réseau'}
                     </Text>
@@ -5746,7 +5746,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             Capture démarrée automatiquement
           </Text>
           <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 13, marginTop: 4, textAlign: 'center', opacity: 0.92 }}>
-            Tape « Stop » quand la course est finie.
+            Tape « Stop » quand l'épreuve est finie.
           </Text>
         </View>
       ) : null}
@@ -7253,7 +7253,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
               <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 40 }}>
                 <Text style={{ fontSize: 18, fontFamily: 'Montserrat-SemiBold', marginBottom: 8 }}>Visibilité publique</Text>
                 <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: C.textSoft, marginBottom: 20, lineHeight: 18 }}>
-                  Si non listé, ton event est masqué de la liste publique Will mais reste accessible par lien direct et tes coureurs déjà inscrits voient toujours leurs photos.
+                  Si non listé, ton event est masqué de la liste publique Will mais reste accessible par lien direct et tes participants déjà inscrits voient toujours leurs photos.
                 </Text>
                 {[true, false].map((val) => (
                   <TouchableOpacity
@@ -7374,7 +7374,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                       <TextInput
                         value={d.label}
                         onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
-                        placeholder={d.label_only ? 'Nom de la course' : (eventType || 'Type')}
+                        placeholder={d.label_only ? 'Nom de l\u2019épreuve' : (eventType || 'Type')}
                         placeholderTextColor="rgba(26,10,62,0.35)"
                         maxLength={40}
                         style={{ fontFamily: 'Montserrat', height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', paddingHorizontal: 12, color: C.text, fontSize: 14 }}
@@ -7425,7 +7425,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                       return out;
                     });
                     if (cleaned.length === 0) { Alert.alert('Au moins une distance requise'); return; }
-                    if (!cleaned.every(d => d.km > 0)) { Alert.alert('Distance > 0 requise pour chaque course'); return; }
+                    if (!cleaned.every(d => d.km > 0)) { Alert.alert('Distance > 0 requise pour chaque épreuve'); return; }
                     const ok = await savePartial({ distances: cleaned });
                     if (ok) validerChamp();
                   }}
@@ -7650,10 +7650,10 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                   maintenant ou apres. */}
               <>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 12 }}>
-                <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: C.text }}>Les courses</Text>
+                <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: C.text }}>Les épreuves</Text>
                 <View style={{ flex: 1, height: 1, backgroundColor: '#efeaf8' }} />
               </View>
-<Text style={formSectionStyle.heading}>Courses</Text>
+<Text style={formSectionStyle.heading}>Épreuves</Text>
                     {distances.map((d, idx) => (
                       <View key={idx} style={{ backgroundColor: '#faf9ff', borderRadius: 12, padding: 10, marginBottom: 8 }}>
                         <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
@@ -7669,7 +7669,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                           <TextInput
                             value={d.label}
                             onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
-                            placeholder={d.label_only ? 'Nom de la course' : (eventType || 'Type')}
+                            placeholder={d.label_only ? 'Nom de l\u2019épreuve' : (eventType || 'Type')}
                             placeholderTextColor="#A89CB8"
                             maxLength={40}
                             style={[formSectionStyle.input, { marginBottom: 0 }]}
@@ -7704,10 +7704,10 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                       onPress={addDistance}
                       style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 12, backgroundColor: '#f5f3ff', marginBottom: 8 }}
                     >
-                      <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>+ Ajouter une course</Text>
+                      <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>+ Ajouter une épreuve</Text>
                     </TouchableOpacity>
                     {showErr[2] && distances.length > 0 && !distances.every(d => parseFloat(d.km) > 0) && (
-                      <Text style={errStyle}>Distance &gt; 0 requise pour chaque course</Text>
+                      <Text style={errStyle}>Distance &gt; 0 requise pour chaque épreuve</Text>
                     )}
                   
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 12 }}>
@@ -7756,12 +7756,12 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
                       {message.trim().length
                         ? `${message.trim().length} caractère${message.trim().length > 1 ? 's' : ''}`
-                        : 'Ce que le coureur doit savoir avant de venir.'}
+                        : 'Ce que le participant doit savoir avant de venir.'}
                     </Text>
 
                     <Text style={formSectionStyle.heading}>Image de couverture</Text>
                     <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginBottom: 10, marginLeft: 4, lineHeight: 17 }}>
-                      Cette image sera affichée sur la page de ton event et dans l'app coureur. Format paysage 2:1 — tu la cadreras à l'étape suivante.
+                      Cette image sera affichée sur la page de ton event et dans l'app Will. Format paysage 2:1 — tu la cadreras à l'étape suivante.
                     </Text>
                     <TouchableOpacity
                       onPress={pickAndUploadCover}
@@ -9498,7 +9498,7 @@ function App() {
     if (!runnerSession?.token) return;
     Alert.alert(
       'Supprimer mon compte ?',
-      'Cette action est définitive. Ton selfie, ton profil coureur et toutes tes données associées seront supprimés. Tes photos d\'événements ne te seront plus envoyées.',
+      'Cette action est définitive. Ton selfie, ton profil participant et toutes tes données associées seront supprimés. Tes photos d\'événements ne te seront plus envoyées.',
       [
         { text: 'Annuler', style: 'cancel' },
         { text: 'Supprimer', style: 'destructive', onPress: async () => {
@@ -9627,7 +9627,7 @@ function App() {
     const token = runnerSession?.token;
     if (!token) {
       // Garde-fou : appel direct sans auth. Le caller doit utiliser requireAuth.
-      Alert.alert('Connexion requise', 'Connecte-toi a ton compte coureur pour suivre un event.');
+      Alert.alert('Connexion requise', 'Connecte-toi a ton compte participant pour suivre un event.');
       return;
     }
     const uid = runnerSession?.profile?.userId;

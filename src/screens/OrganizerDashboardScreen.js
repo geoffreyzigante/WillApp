@@ -97,7 +97,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
     if (!Number.isFinite(coureurs) || coureurs <= 0) {
       Alert.alert(
         'Estimation manquante',
-        "Le montant dépend du nombre de photos attendues. Renseigne le nombre de coureurs dans « Modifier », ou active ton event depuis will-app.com/orga pour estimer précisément (postes photo, photographes externes).",
+        "Le montant dépend du nombre de photos attendues. Renseigne le nombre de participants dans « Modifier », ou active ton event depuis will-app.com/orga pour estimer précisément (postes photo, photographes externes).",
         [{ text: 'OK' }]
       );
       return;
@@ -105,7 +105,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
     const photos = Math.round(coureurs);
     Alert.alert(
       'Mettre en ligne',
-      `Estimation : ${photos} photos (${photos} coureurs × 1 poste photo). Tu vas être redirigé vers la page de paiement sécurisée, où le montant s'affiche avant validation. Le prix définitif est régularisé après l'event sur le nombre réel de photos.\n\nPlusieurs postes ou des photographes externes ? Estime depuis will-app.com/orga.`,
+      `Estimation : ${photos} photos (${photos} participants × 1 poste photo). Tu vas être redirigé vers la page de paiement sécurisée, où le montant s'affiche avant validation. Le prix définitif est régularisé après l'event sur le nombre réel de photos.\n\nPlusieurs postes ou des photographes externes ? Estime depuis will-app.com/orga.`,
       [
         { text: 'Annuler', style: 'cancel' },
         { text: 'Continuer', onPress: () => lancerCheckout(e, photos) },

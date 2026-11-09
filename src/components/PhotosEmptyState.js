@@ -66,7 +66,7 @@ export function PhotosEmptyState({ selfieUri, onFindEvent }) {
       {/* 3 etapes pedagogiques */}
       <View style={{ paddingHorizontal: 8 }}>
         <PhotosStepRow num={1} text={selfieUri ? "Ton selfie est déjà enregistré ✓" : "Ajoute ton selfie"} done={!!selfieUri} />
-        <PhotosStepRow num={2} text="Tu suis l'event de ta course" />
+        <PhotosStepRow num={2} text="Tu suis ton event" />
         <PhotosStepRow num={3} text="Tes photos arrivent automatiquement" />
       </View>
     </View>

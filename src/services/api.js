@@ -287,7 +287,7 @@ export async function ensurePushRegistered(runnerToken, { ask = false } = {}) {
     try {
       await Notifications.setNotificationChannelAsync('photos', {
         name: 'Photos prêtes',
-        description: 'Quand tes photos de course sont en ligne.',
+        description: 'Quand tes photos sont en ligne.',
         importance: Notifications.AndroidImportance.HIGH,
         lightColor: '#7B2FFF',
         vibrationPattern: [0, 250, 250, 250],

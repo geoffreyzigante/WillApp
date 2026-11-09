@@ -84,7 +84,7 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>Espace photographe</Text>
-              <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 2 }}>Capture les coureurs en direct</Text>
+              <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 2 }}>Capture les participants en direct</Text>
             </View>
             <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
               <Path d="m9 6 6 6-6 6" stroke={C.textSoft} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />

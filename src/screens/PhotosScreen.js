@@ -761,8 +761,8 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         : viewFilter === 'me'
           // L ancien texte parlait d une course deja courue — faux juste
           // apres une inscription, et il n indiquait pas quoi faire.
-          ? 'Trouve ta course : dès que les photographes envoient leurs photos,\nWill reconnaît ton visage et les dépose ici.'
-          : 'Les photos arrivent quand les photographes les envoient,\nsouvent dans les heures qui suivent la course.'}
+          ? 'Trouve ton event : dès que les photographes envoient leurs photos,\nWill reconnaît ton visage et les dépose ici.'
+          : 'Les photos arrivent quand les photographes les envoient,\nsouvent dans les heures qui suivent l\u2019event.'}
       actionLabel={viewFilter === 'favs' ? null : 'Trouver un event'}
       onAction={viewFilter === 'favs' ? null : onFindEvent}
     />
@@ -924,7 +924,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         <EtatVideWill
           variante="photos"
           titre={'Pas encore\nde photos'}
-          sousTexte={"Les photos arrivent quand les photographes les envoient :\nsouvent dans les heures qui suivent la course,\nparfois le lendemain."}
+          sousTexte={"Les photos arrivent quand les photographes les envoient :\nsouvent dans les heures qui suivent l’event,\nparfois le lendemain."}
           actionLabel="Trouver un event"
           onAction={onFindEvent}
         />

@@ -784,7 +784,7 @@ export function PhotoViewerModal({
               hitSlop={16}
               style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
               accessibilityRole="button"
-              accessibilityLabel="Partager cette course"
+              accessibilityLabel="Partager cette photo"
             >
               <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
                 <Path

@@ -235,7 +235,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
           <Path d="M12 8v5M12 16h.01" stroke="#92400E" strokeWidth={1.8} strokeLinecap="round" />
         </Svg>
         <Text style={{ fontFamily: 'Montserrat', color: '#92400E', fontSize: 12, flex: 1 }}>
-          Mode preview : tu vois toutes les photos, même celles prises avant le départ.{'\n'}Les coureurs ne voient que les photos après l'heure de leur course.
+          Mode preview : tu vois toutes les photos, même celles prises avant le départ.{'\n'}Les participants ne voient que les photos après l'heure de leur épreuve.
         </Text>
       </View>
 

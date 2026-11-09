@@ -22,7 +22,7 @@ export const LABEL_CASE_CONSENT =
 // PAS repassees en reconnaissance faciale quand un selfie arrive apres coup.
 // Le coureur doit donc le savoir AU MOMENT du selfie, sans etre alarme.
 export const PHRASE_SELFIE_AVANT_COURSE =
-  "Dépose ton selfie avant ou pendant ta course : Will analyse les photos à leur arrivée, celles déjà envoyées par les photographes ne sont pas réanalysées. Tu peux toujours les retrouver dans la galerie de l'event, ou en cherchant ton dossard.";
+  "Dépose ton selfie avant ou pendant ton event : Will analyse les photos à leur arrivée, celles déjà envoyées par les photographes ne sont pas réanalysées. Tu peux toujours les retrouver dans la galerie de l'event, ou en cherchant ton dossard.";
 
 // `style` est fourni par l appelant : les deux ecrans n ont pas la meme
 // typographie de corps de texte.

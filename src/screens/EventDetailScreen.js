@@ -659,8 +659,8 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           </Text>
           <Text style={{ color: C.text, fontSize: 12, fontFamily: 'Montserrat-Medium', textAlign: 'center', marginTop: 6, lineHeight: 17 }}>
             {upcoming
-              ? "Vérifie ta connexion. Cette course n'a pas encore eu lieu : il est normal qu'il n'y ait pas encore de photos."
-              : 'Vérifie ta connexion : les photos de cette course existent peut-être déjà.'}
+              ? "Vérifie ta connexion. Cet event n'a pas encore eu lieu : il est normal qu'il n'y ait pas encore de photos."
+              : 'Vérifie ta connexion : les photos de cet event existent peut-être déjà.'}
           </Text>
           <TouchableOpacity
             onPress={loadPhotos}
@@ -726,7 +726,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     }
     // Une course deja courue qui n a recu aucune photo ne doit pas lire
     // « Reviens le jour de l event » : ce jour est passe.
-    return <EtatVidePhotos sousTexte="Aucun photographe n'a encore envoyé de photo pour cette course." />;
+    return <EtatVidePhotos sousTexte="Aucun photographe n'a encore envoyé de photo pour cet event." />;
   };
 
   const renderFooter = () => {
