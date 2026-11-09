@@ -232,15 +232,35 @@ export const api = {
       return r.ok;
     } catch { return false; }
   },
-  async deletePushToken(runnerToken) {
+  // Le jeton identifie l appareil a decrocher. Sans lui le worker retire
+  // TOUS les appareils du compte : se deconnecter de l Android couperait les
+  // notifications de l iPhone reste connecte.
+  async deletePushToken(runnerToken, expoToken) {
     try {
       await fetch(`${API_URL}/runner/push-token`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${runnerToken}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${runnerToken}` },
+        body: JSON.stringify(expoToken ? { token: expoToken } : {}),
       });
     } catch {}
   },
 };
+
+// Le jeton Expo de CET appareil. Sert au logout : sans lui le worker
+// decroche tous les appareils du compte. getExpoPushTokenAsync est
+// idempotent — c est deja l appel que fait ensurePushRegistered.
+export async function jetonPushLocal() {
+  try {
+    if (!Device.isDevice) return null;
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return null;
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId
+      || Constants?.easConfig?.projectId;
+    if (!projectId) return null;
+    const tokenObj = await Notifications.getExpoPushTokenAsync({ projectId });
+    return tokenObj?.data || null;
+  } catch { return null; }
+}
 
 // E2 -- wrapper unique pour (a) silent re-register au boot si deja autorise,
 // (b) ask + register apres premier follow. Idempotent : iOS ne re-affiche

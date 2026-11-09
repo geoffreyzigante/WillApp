@@ -205,7 +205,7 @@ import {
   migrateSensitiveKeysToSecureStore,
   BIOMETRIC_CONSENT_KEY,
 } from './src/services/secureStore';
-import { api, apiFetch, ensurePushRegistered, uploadSelfieToR2, loadSelfieDataUri } from './src/services/api';
+import { api, apiFetch, ensurePushRegistered, jetonPushLocal, uploadSelfieToR2, loadSelfieDataUri } from './src/services/api';
 import { modeChipStyleApp, modeChipTextStyleApp, selfieDotColor } from './src/utils/styleHelpers';
 import { Icon } from './src/components/Icon';
 import { PasswordInput } from './src/components/PasswordInput';
@@ -9050,7 +9050,7 @@ function App() {
     // E2 — best-effort : decroche le token push avant de perdre le bearer.
     // Sinon ce device continuerait de recevoir des notifs apres logout.
     const tk = runnerSession?.token;
-    if (tk) { api.deletePushToken(tk); }
+    if (tk) { jetonPushLocal().then(jeton => api.deletePushToken(tk, jeton)); }
     setRunnerSession(null);
     setSelfieUri(null);
     // Purge in-memory uniquement : les caches @will_follows_<uid> et
