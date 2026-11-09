@@ -50,7 +50,7 @@
         "android.permission.WAKE_LOCK",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "package": "com.geoffreyzigante.will",
+      "package": "com.will.photos",
       "googleServicesFile": "./google-services.json",
       "intentFilters": [
         {
