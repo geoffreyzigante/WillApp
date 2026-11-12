@@ -3,7 +3,7 @@
     "name": "WillApp",
     "slug": "WillApp",
     "scheme": "will",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -87,9 +87,7 @@
       "googleIosClientId": "980068791050-ft6rjv57ps938hg2s8lj3etbur5117eo.apps.googleusercontent.com"
     },
     "owner": "geoffreyzigante",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.1.0",
     "updates": {
       "url": "https://u.expo.dev/8e0d828b-39bb-4fa3-99a9-98e2712493d8"
     },
