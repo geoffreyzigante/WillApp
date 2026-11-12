@@ -1226,6 +1226,52 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     eventConfig.camera?.staticGuardWindowMs,
   ]);
 
+  // ── ANTI-REBOND ENTRE RAFALES ──────────────────────────────────────────
+  // Constate en event le 10/11/2026 : l ecran photographe devenait insensible
+  // aux appuis alors que la preview continuait de bouger. La preview est
+  // native, elle survit a tout ; les appuis, eux, passent par le thread JS.
+  //
+  // Or rien ne bornait la REPRISE des rafales. La garde anti-scene-statique
+  // ci-dessus ne bloque qu une scene quasi immobile (spread < 0.05 sur 1 s).
+  // Une personne qui reste dans la bande centrale EN BOUGEANT un peu -- un
+  // badaud, un signaleur, un participant qui marche -- y echappe. A 10 fps,
+  // onHumansDetectedJS relance alors captureBurstLoop des qu elle rend la
+  // main : 15 prises, ecriture disque, commit de queue, re-dispatch, en
+  // continu. Le thread JS n a plus de fenetre pour traiter un tap.
+  //
+  // Le palier : un minimum de temps entre la FIN d une rafale et le debut de
+  // la suivante. 250 ms est choisi pour ne perdre personne -- un participant
+  // a 3 m/s traverse la bande centrale (30 % du cadre) en 300 a 600 ms, et a
+  // cette vitesse deux membres d un meme peloton n entrent pas dans la zone
+  // a moins de 250 ms l un de l autre. La cadence de relance passe de ~10/s
+  // a 4/s au maximum.
+  //
+  // Reglable sans build : camera.burstCooldownMs dans la config event. 0
+  // restaure exactement le comportement d avant.
+  const dernFinRafaleRef = useRef(0);
+  const burstCooldownRef = useRef(250);
+  useEffect(() => {
+    burstCooldownRef.current = eventConfig.camera?.burstCooldownMs ?? 250;
+  }, [eventConfig.camera?.burstCooldownMs]);
+  // Compteurs de session. Sans eux, le prochain event redonnerait une
+  // impression et pas un chiffre : c est ce compteur qui dira si 250 ms
+  // suffit, s il faut monter, ou si le palier ne sert a rien.
+  const rafalesRef = useRef({ lancees: 0, refusees: 0 });
+  function cooldownBloque() {
+    const ms = burstCooldownRef.current;
+    if (ms <= 0) return false;
+    const depuis = Date.now() - dernFinRafaleRef.current;
+    if (depuis >= ms) return false;
+    const r = rafalesRef.current;
+    r.refusees += 1;
+    // Une ligne toutes les 25 pour ne pas noyer le journal : le tampon fait
+    // 800 lignes et doit rester lisible apres l event.
+    if (r.refusees % 25 === 0) {
+      console.log(`[burst] cooldown ${ms}ms : ${r.refusees} relances refusees, ${r.lancees} rafales lancees`);
+    }
+    return true;
+  }
+
   // Alimente la trace du plus grand visage. Appelee a CHAQUE frame analysee,
   // y compris pendant une rafale : sinon la trace aurait des trous et le
   // deplacement serait sous-estime.
@@ -1681,6 +1727,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       // Scene immobile : on ne relance pas. Kill switch /config
       // camera.staticGuardEnabled=false pour revenir au comportement d'avant.
       if (staticSceneBlocks()) return;
+      // Anti-rebond : laisse une fenetre au thread JS entre deux rafales,
+      // sinon les appuis ne sont plus traites. camera.burstCooldownMs=0
+      // pour revenir au comportement d avant.
+      if (cooldownBloque()) return;
+      rafalesRef.current.lancees += 1;
       captureBurstLoop();
     }),
     [],
@@ -4159,42 +4210,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       Animated.timing(headerSlideY, { toValue: 0, duration: 300, useNativeDriver: true }),
       Animated.timing(footerSlideY, { toValue: 0, duration: 300, useNativeDriver: true }),
     ]).start();
-    // Auto-armement de la capture. Cible : benevole pose son doigt sur
-    // aucun bouton, la capture demarre seule ~1s apres le login. Gardes :
-    // - camera permission requise (sinon armer = fond rouge sans photos).
-    // - batterie ok (le useEffect batterie plus bas desarmera si <10%).
-    // Delai 900ms : laisse VisionCamera terminer son isActive=true initial.
-    const armTimer = setTimeout(() => {
-      if (!hasPermission) return;
-      if (isAutoArmedRef.current) return;
-      isAutoArmedRef.current = true;
-      setIsAutoArmed(true);
-      setAutoArmToastAt(Date.now());
-      console.log('[auto] auto-arm at mount (photographerScreen)');
-    }, 900);
+    // L auto-armement est RETIRE (user, 12/11/2026, apres l event du 10).
+    // La capture s armait seule 900 ms apres l arrivee sur l ecran, et se
+    // re-armait des que la permission camera tombait. Consequence : des
+    // rafales partaient avant que le benevole ait cadre quoi que ce soit, et
+    // personne n avait decide de les declencher. La capture attend desormais
+    // un appui explicite sur « Go! » (onCapturePress).
     return () => {
-      clearTimeout(armTimer);
       stopSession();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // Auto-arm rattrapage : si la permission camera n a pas ete accordee au
-  // mount, l auto-arm ci-dessus est skip. On re-tente des que hasPermission
-  // bascule a true (benevole autorise ensuite via l Alert systeme).
-  useEffect(() => {
-    if (!hasPermission) return;
-    if (isAutoArmedRef.current) return;
-    isAutoArmedRef.current = true;
-    setIsAutoArmed(true);
-    setAutoArmToastAt(Date.now());
-    console.log('[auto] auto-arm after permission granted');
-  }, [hasPermission]);
-  // Auto-hide toast auto-arm 3.2s apres son affichage.
-  useEffect(() => {
-    if (!autoArmToastAt) return;
-    const t = setTimeout(() => setAutoArmToastAt(0), 3200);
-    return () => clearTimeout(t);
-  }, [autoArmToastAt]);
 
   // ─── Alimentation criticalKind (LOT 1.2) ───────────────────────────────
   // Listener natif thermal (iOS). Idempotent, cleanup au unmount.
@@ -4387,6 +4413,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       console.log(`[burst] launched ${shotsInBurst} shots in ${dt}ms (${reason}), inFlight=${inFlightSetRef.current.size}`);
     } finally {
       burstLoopRef.current = false;
+      // Depart du compte a rebours anti-rebond : la FIN de la rafale, pas son
+      // debut. Posee dans le finally pour que toute sortie -- y compris une
+      // exception -- arme le palier.
+      dernFinRafaleRef.current = Date.now();
     }
   }
 
@@ -5379,10 +5409,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             <Text style={{ fontFamily: 'Montserrat', color: P.label, fontSize: 17 }}>›</Text>
           </TouchableOpacity>
 
-          {/* Le libelle suit l etat reel : la capture s arme toute seule au
-              bout de 900 ms, donc « Stop » est le cas nominal. « Go! »
-              n apparait qu apres un arret manuel ou une mise en pause
-              automatique (batterie, disque). */}
+          {/* Le libelle suit l etat reel. Depuis le retrait de l auto-
+              armement (12/11/2026), « Go! » est le cas nominal a l arrivee
+              sur l ecran : rien ne capture avant cet appui. « Stop »
+              apparait capture armee ; elle peut aussi etre mise en pause
+              automatiquement (batterie, disque). */}
           <TouchableOpacity
             onPress={onCapturePress}
             activeOpacity={0.8}
@@ -5649,56 +5680,59 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             />
           )}
         </View>
-      </Modal>
-
-      {/* ─── Viewer fullscreen ─── ouvert quand on tape une vignette de la
-          sheet. Tap n'importe ou (ou X) pour fermer. Source : photo.url
-          (pleine resolution via /photo-jpeg pour HEIC). */}
-      <Modal
-        visible={!!galleryViewerPhoto}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setGalleryViewerPhoto(null)}
-      >
-        <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => setGalleryViewerPhoto(null)}
-            style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
-          >
-            {galleryViewerPhoto && (
-              <ExpoImage
-                source={{ uri: galleryViewerPhoto.url }}
-                // Le 1200 px WebP (~120 Ko, deja en cache CDN) s affiche
-                // tout de suite ; le 2400 px prend le relais quand il arrive.
-                // Sur 4G le plein ecran s ouvre en < 1 s au lieu de 3-5.
-                placeholder={galleryViewerPhoto.thumb_lg_url
-                  ? { uri: galleryViewerPhoto.thumb_lg_url }
-                  : (galleryViewerPhoto.thumb_md_url ? { uri: galleryViewerPhoto.thumb_md_url } : undefined)}
-                placeholderContentFit="contain"
-                style={{ width: '100%', height: '100%' }}
-                contentFit="contain"
-                cachePolicy="memory-disk"
-                transition={200}
-              />
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setGalleryViewerPhoto(null)}
-            hitSlop={10}
-            style={{
-              position: 'absolute', top: 54, right: 16,
-              width: 36, height: 36, borderRadius: 18,
-              backgroundColor: 'rgba(0,0,0,0.55)',
-              alignItems: 'center', justifyContent: 'center',
-            }}
-            accessibilityLabel="Fermer"
-          >
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-              <Path d="M6 6l12 12M18 6L6 18" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
-            </Svg>
-          </TouchableOpacity>
-        </View>
+        {/* ─── Viewer fullscreen ─── IMBRIQUE dans la sheet. iOS refuse de
+            presenter deux modales soeurs simultanement : le viewer etait un
+            FRERE de la sheet, donc le tap sur une vignette ne faisait rien
+            du tout (constate en event le 10/11/2026). Imbrique, il se
+            presente par-dessus la sheet. Tap n importe ou (ou X) pour
+            fermer. Source : photo.url (pleine resolution via /photo-jpeg
+            pour HEIC). */}
+        <Modal
+          visible={!!galleryViewerPhoto}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setGalleryViewerPhoto(null)}
+        >
+          <View style={{ flex: 1, backgroundColor: '#000' }}>
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => setGalleryViewerPhoto(null)}
+              style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+            >
+              {galleryViewerPhoto && (
+                <ExpoImage
+                  source={{ uri: galleryViewerPhoto.url }}
+                  // Le 1200 px WebP (~120 Ko, deja en cache CDN) s affiche
+                  // tout de suite ; le 2400 px prend le relais quand il arrive.
+                  // Sur 4G le plein ecran s ouvre en < 1 s au lieu de 3-5.
+                  placeholder={galleryViewerPhoto.thumb_lg_url
+                    ? { uri: galleryViewerPhoto.thumb_lg_url }
+                    : (galleryViewerPhoto.thumb_md_url ? { uri: galleryViewerPhoto.thumb_md_url } : undefined)}
+                  placeholderContentFit="contain"
+                  style={{ width: '100%', height: '100%' }}
+                  contentFit="contain"
+                  cachePolicy="memory-disk"
+                  transition={200}
+                />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setGalleryViewerPhoto(null)}
+              hitSlop={10}
+              style={{
+                position: 'absolute', top: 54, right: 16,
+                width: 36, height: 36, borderRadius: 18,
+                backgroundColor: 'rgba(0,0,0,0.55)',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+              accessibilityLabel="Fermer"
+            >
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                <Path d="M6 6l12 12M18 6L6 18" stroke="#fff" strokeWidth={2.2} strokeLinecap="round" />
+              </Svg>
+            </TouchableOpacity>
+          </View>
+        </Modal>
       </Modal>
 
       {/* CriticalAlert overlay : perm camera / stockage / batterie / thermal /
@@ -5710,8 +5744,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
         onAction={() => {}}
       />
 
-      {/* Toast auto-armement : s affiche 3s au mount de l ecran photographe
-          quand la capture demarre automatiquement. Pose dans l espace
+      {/* Toast auto-armement — MORT depuis le retrait de l auto-armement
+          (12/11/2026) : autoArmToastAt n est plus jamais pose, le bloc ne
+          s affiche donc plus. Conserve tel quel, sans sa condition, le jour
+          ou un toast « capture armee » serait souhaite sur appui.
+          Historique : s affichait 3s au mount de l ecran photographe
+          quand la capture demarrait automatiquement. Pose dans l espace
           elastique SOUS les commandes : c est la seule zone qui n appartient
           a personne. Cale sur CONTROLS_TOP, pas sur un bottom fixe — l ancien
           `bottom: 190` datait de la geometrie precedente et recouvrait les
