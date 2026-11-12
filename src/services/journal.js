@@ -19,9 +19,12 @@
 // Module PUR au sens ou il n importe rien : la cible est injectee, ce qui le
 // rend testable hors React Native.
 
-// Plafond du tampon. 800 lignes couvrent largement un passage de course, et
-// bornent la memoire : a 200 octets par ligne, ~160 Ko.
-const MAX_LIGNES = 800;
+// Plafond du tampon. 800 lignes ne couvraient PAS un envoi : en capture
+// dense le tampon tourne en moins d une minute, et les lignes disparaissaient
+// avant d avoir ete poussees au serveur. 3000 lignes a ~200 octets font
+// ~600 Ko, negligeable a cote d une seule photo de 2,5 Mo, et tiennent
+// plusieurs minutes meme au plus fort du debit.
+const MAX_LIGNES = 3000;
 // Une ligne tronquee reste lisible ; une ligne de 40 000 caracteres — un
 // objet serialise par erreur — fait ramer l ecran et mange le tampon.
 const MAX_LONGUEUR = 600;
@@ -125,10 +128,18 @@ export function viderJournal() {
 
 // Rendu texte pour l export. Horodatage local en heure:minute:seconde.mmm :
 // c est ce qui permet de recouper une ligne avec un passage observe.
+// opts.depuisN : ne rend que les lignes dont le numero est STRICTEMENT
+// superieur. C est ce qui permet au telephone de n envoyer au serveur que
+// les lignes nouvelles depuis son dernier envoi accepte, au lieu de
+// re-expedier tout son tampon a chaque fois — l historique cote serveur
+// serait sinon fait de 95 % de doublons.
 export function journalVersTexte(opts = {}) {
-  const lignes = opts.filtre || opts.niveaux
+  let lignes = opts.filtre || opts.niveaux
     ? lignesJournal(opts).slice().reverse()
     : tampon;
+  if (Number.isFinite(opts.depuisN)) {
+    lignes = lignes.filter(l => l.n > opts.depuisN);
+  }
   const out = [];
   for (const l of lignes) {
     const d = new Date(l.t);

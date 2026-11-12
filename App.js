@@ -2700,7 +2700,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       try {
         const derniere = lignesJournal({ limite: 1 })[0];
         if (!derniere || derniere.n === dernierJournalPousseRef.current) return;
-        const texte = journalVersTexte();
+        // DELTA, pas le tampon entier (12/11/2026). Le serveur archive
+        // desormais chaque envoi dans son propre objet au lieu d ecraser une
+        // cle unique : lui renvoyer les 3000 memes lignes a chaque passage
+        // ferait un historique de doublons. On n envoie que ce qui est
+        // nouveau depuis le dernier envoi ACCEPTE — si un envoi echoue, le
+        // pointeur ne bouge pas et les lignes repartent au suivant.
+        const texte = journalVersTexte({ depuisN: dernierJournalPousseRef.current });
         if (!texte) return;
         const r = await photographerApiFetch(
           `/photographer/journal?eventCode=${encodeURIComponent(session.event.code)}`,
@@ -2711,8 +2717,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     };
     // Premier envoi rapide (10 s apres l ouverture : le temps que le demarrage
     // ait logue quelque chose d utile), puis cadence de croisiere.
+    // 20 s et non 60 : le tampon est circulaire, et une minute de capture
+    // dense suffisait a le faire tourner avant l envoi. Le delta rend ces
+    // envois tres legers, donc les rapprocher ne coute presque rien.
     const t0 = setTimeout(pousser, 10000);
-    const id = setInterval(pousser, 60000);
+    const id = setInterval(pousser, 20000);
     return () => { clearTimeout(t0); clearInterval(id); };
   }, [session?.token]);
 
