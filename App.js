@@ -243,7 +243,8 @@ import { PhotosScreen } from './src/screens/PhotosScreen';
 import { AppHeader } from './src/components/AppHeader';
 import { EventDetailScreen } from './src/screens/EventDetailScreen';
 import { PhotoViewerModal } from './src/components/modals/PhotoViewerModal';
-import { PIN_REGEX, isValidPin, generateRandomPin } from './src/utils/pin';
+import { PIN_REGEX, isValidPin, isKnownPin, generateRandomPin } from './src/utils/pin';
+import { useLongueurPinAPoser } from './src/utils/usePinLength';
 import { PinInputRow } from './src/components/PinInputRow';
 import { PinDisplay } from './src/components/PinDisplay';
 import { Haptics } from './src/services/haptics';
@@ -5888,6 +5889,17 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
   const [startTime, setStartTime] = useState(''); // "HH:MM"
   const [photographerPwd, setPhotographerPwd] = useState('');
   const [revealPwd, setRevealPwd] = useState(false);
+  // Longueur du PIN a POSER, annoncee par le serveur (4, puis 6 apres la
+  // bascule). Les PIN deja en place gardent la leur : cf src/utils/pin.js.
+  const pinLen = useLongueurPinAPoser(visible);
+  // Le PIN propose a l ouverture est tire avant que le serveur ait repondu,
+  // donc a 4 chiffres. Si la longueur en vigueur est autre, on en retire un :
+  // sinon le formulaire s ouvre sur un PIN qu il refusera a la fin.
+  useEffect(() => {
+    if (!visible || editEvent) return;
+    setPassword((p) => (isValidPin(p, pinLen) ? p : generateRandomPin(pinLen)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinLen, visible]);
   const [postalCode, setPostalCode] = useState('');
   const [city, setCity] = useState('');
   const [citySuggestions, setCitySuggestions] = useState([]);
@@ -6171,7 +6183,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
         setCoverImage(editEvent.cover_image || null);
         setPendingCoverLocal(null);
       } else {
-        setName(''); setCode(''); setPassword(generateRandomPin());
+        setName(''); setCode(''); setPassword(generateRandomPin(pinLen));
         setEventDate(null); setEventDateEnd(null); setDateTbd(false);
         setStartTime(''); setPhotographerPwd(''); setRevealPwd(false);
         setPostalCode(''); setCity(''); setCitySuggestions([]);
@@ -6347,7 +6359,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
   const step3Ok = emailAdminFormat && emailOk && hasPublicContact && (isEdit || !!code?.trim());
   // Step 4 (PIN photographe) : 4 chiffres exactement, obligatoire en creation.
   // En edition, le PIN s'edite via le drill-down — etape inexistante dans le wizard.
-  const step4Ok = isEdit || isValidPin(password);
+  const step4Ok = isEdit || isValidPin(password, pinLen);
   // Step 5 (cover) est toujours valide — la cover est optionnelle, le bouton
   // "Ajouter plus tard" passe directement à la soumission sans upload.
   const step5Ok = true;
@@ -6397,7 +6409,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
   // ne pouvait plus se connecter le jour J.
   const canSubmit = !busy && compteOk && (isEdit
     ? (step1Ok && step2Ok && step3Ok && step4Ok)
-    : (step1Ok && locationOk && !!code?.trim() && distancesOk && isValidPin(password)));
+    : (step1Ok && locationOk && !!code?.trim() && distancesOk && isValidPin(password, pinLen)));
 
   // Le wizard a cede la place a une page unique : goStep, tryNext et la
   // glissiere n avaient plus de raison d etre.
@@ -6408,7 +6420,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
   const champsVersion = [
     !!name?.trim(), !!eventType, dateOk, /^\d{5}$/.test(postalCode), !!city?.trim(),
     distances.length > 0, !!address?.trim(), !!(coverImage || pendingCoverLocal),
-    !!website?.trim(), !!phone?.trim(), isValidPin(password),
+    !!website?.trim(), !!phone?.trim(), isValidPin(password, pinLen),
     !!estimatedParticipants, !!message?.trim(),
   ];
   const pourcentageRempli = Math.round(
@@ -6422,7 +6434,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
     const manque = !step1Ok
       || !locationOk
       || !distancesOk
-      || !isValidPin(password)
+      || !isValidPin(password, pinLen)
       // Le code de l event derive du nom : un nom sans aucun caractere
       // latin donnait un slug vide et un bouton qui ne faisait rien.
       || !code?.trim();
@@ -6984,26 +6996,26 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     </View>
                     <View style={rowSeparatorStyle} />
                     <View style={[rowStyle, { gap: 0 }]}>
-                      <TouchableOpacity onPress={() => setRevealPwd(v => !v)} disabled={!isValidPin(photographerPwd)} style={{ flex: 1, alignItems: 'center', paddingVertical: 4, opacity: isValidPin(photographerPwd) ? 1 : 0.4 }}>
+                      <TouchableOpacity onPress={() => setRevealPwd(v => !v)} disabled={!isKnownPin(photographerPwd)} style={{ flex: 1, alignItems: 'center', paddingVertical: 4, opacity: isKnownPin(photographerPwd) ? 1 : 0.4 }}>
                         <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>{revealPwd ? 'Masquer' : 'Afficher'}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={async () => {
-                          if (!isValidPin(photographerPwd)) return;
+                          if (!isKnownPin(photographerPwd)) return;
                           // Pas de Clipboard natif (expo-clipboard pas installé) — on
                           // passe par Share qui propose Copier dans la share-sheet iOS.
                           try { await Share.share({ message: photographerPwd }); }
                           catch (e) { console.warn('[event] partage PIN :', e?.message || e); }
                         }}
-                        disabled={!isValidPin(photographerPwd)}
-                        style={{ flex: 1, alignItems: 'center', paddingVertical: 10, opacity: isValidPin(photographerPwd) ? 1 : 0.4 }}
+                        disabled={!isKnownPin(photographerPwd)}
+                        style={{ flex: 1, alignItems: 'center', paddingVertical: 10, opacity: isKnownPin(photographerPwd) ? 1 : 0.4 }}
                       >
                         {/* Le bouton disait « Copier » alors qu il ouvre une
                             feuille de partage. */}
                         <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Partager</Text>
                       </TouchableOpacity>
                       <TouchableOpacity onPress={() => ouvrirChamp('photographer_password')} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
-                        <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>{isValidPin(photographerPwd) ? 'Modifier' : 'Définir'}</Text>
+                        <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>{isKnownPin(photographerPwd) ? 'Modifier' : 'Définir'}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -7163,15 +7175,16 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                 <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderRadius: 18, padding: 24 }}>
                   <Text style={{ fontSize: 18, fontFamily: 'Montserrat-SemiBold', color: C.text, marginBottom: 4 }}>Code PIN photographe</Text>
                   <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: C.textSoft, marginBottom: 22, lineHeight: 18 }}>
-                    4 chiffres à transmettre à tes photographes le jour J.
+                    {pinLen} chiffres à transmettre à tes photographes le jour J.
                   </Text>
                   <PinInputRow
                     value={photographerPwd}
                     onChange={setPhotographerPwd}
                     autoFocus
+                    length={pinLen}
                   />
                   <TouchableOpacity
-                    onPress={() => setPhotographerPwd(generateRandomPin())}
+                    onPress={() => setPhotographerPwd(generateRandomPin(pinLen))}
                     style={{ alignSelf: 'center', marginTop: 18, paddingVertical: 8 }}
                   >
                     <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Générer aléatoirement</Text>
@@ -7185,18 +7198,18 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={async () => {
-                        if (!isValidPin(photographerPwd)) { Alert.alert('Code PIN', 'Le code PIN doit être composé de 4 chiffres.'); return; }
+                        if (!isValidPin(photographerPwd, pinLen)) { Alert.alert('Code PIN', `Le code PIN doit être composé de ${pinLen} chiffres.`); return; }
                         const ok = await savePartial({ photographer_password: photographerPwd });
                         if (ok) { validerChamp(); setRevealPwd(false); }
                       }}
-                      disabled={!isValidPin(photographerPwd) || partialBusy}
+                      disabled={!isValidPin(photographerPwd, pinLen) || partialBusy}
                       style={{
                         flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center',
-                        backgroundColor: isValidPin(photographerPwd) ? C.primary : '#e9e4f9',
+                        backgroundColor: isValidPin(photographerPwd, pinLen) ? C.primary : '#e9e4f9',
                         opacity: partialBusy ? 0.6 : 1,
                       }}
                     >
-                      {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: isValidPin(photographerPwd) ? '#fff' : '#A89CB8', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Confirmer</Text>}
+                      {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: isValidPin(photographerPwd, pinLen) ? '#fff' : '#A89CB8', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Confirmer</Text>}
                     </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
@@ -7886,7 +7899,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                   
                     <Text style={formSectionStyle.heading}>Code PIN photographe</Text>
                     <Text style={[formSectionStyle.subheading, { fontSize: 13, marginBottom: 22, marginLeft: 4, lineHeight: 18 }]}>
-                      4 chiffres à transmettre à tes photographes le jour J. Ils l'utiliseront pour se connecter à ton event sur l'app Will.
+                      {pinLen} chiffres à transmettre à tes photographes le jour J. Ils l'utiliseront pour se connecter à ton event sur l'app Will.
                     </Text>
                     {!isEdit && (
                       <>
@@ -7895,16 +7908,17 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                           onChange={setPassword}
                           autoFocus={false}
                           focusTrigger={0}
-                          error={showErr[4] && !isValidPin(password)}
+                          length={pinLen}
+                          error={showErr[4] && !isValidPin(password, pinLen)}
                         />
                         <TouchableOpacity
-                          onPress={() => setPassword(generateRandomPin())}
+                          onPress={() => setPassword(generateRandomPin(pinLen))}
                           style={{ alignSelf: 'center', marginTop: 18, paddingVertical: 8, paddingHorizontal: 14 }}
                         >
                           <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Générer aléatoirement</Text>
                         </TouchableOpacity>
-                        {showErr[4] && !isValidPin(password) && (
-                          <Text style={[errStyle, { textAlign: 'center', marginTop: 6 }]}>Le code PIN doit être composé de 4 chiffres</Text>
+                        {showErr[4] && !isValidPin(password, pinLen) && (
+                          <Text style={[errStyle, { textAlign: 'center', marginTop: 6 }]}>Le code PIN doit être composé de {pinLen} chiffres</Text>
                         )}
                       </>
                     )}

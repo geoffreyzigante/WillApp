@@ -64,6 +64,15 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   const [manualEvent, setManualEvent] = useState(null);
   const [codeLoading, setCodeLoading] = useState(false);
   const [codeError, setCodeError] = useState('');
+  // Nombre de cases du PIN : celui de l event CHOISI. Le serveur l annonce
+  // dans pin_length (4 pour les events d avant le 12/11/2026, 6 ensuite).
+  // Absent — liste en cache, serveur plus ancien — on reste a 4.
+  const eventChoisi = code
+    ? ((events || []).find(e => e && e.code === code)
+        || (searchExtra && searchExtra.code === code ? searchExtra : null)
+        || (manualEvent && manualEvent.code === code ? manualEvent : null))
+    : null;
+  const longueurPinEvent = eventChoisi && Number(eventChoisi.pin_length) === 6 ? 6 : 4;
 
   useEffect(() => {
     if (visible) {
@@ -450,6 +459,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         onChange={(v) => { setPassword(v); if (pinError) setPinError(''); }}
                         autoFocus={false}
                         useNumpad
+                        length={longueurPinEvent}
                         error={!!pinError}
                         onComplete={(full) => {
                           doLogin(full);

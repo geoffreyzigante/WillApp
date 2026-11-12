@@ -1,6 +1,11 @@
-// Composant input PIN : 4 cases numeriques separees, auto-focus + auto-advance.
+// Composant input PIN : cases numeriques separees, auto-focus + auto-advance.
 // Utilise dans le wizard de creation (step 4), l'edition drill-down, et le
-// login photographe. La prop `onComplete` declenche au remplissage 4eme case.
+// login photographe. La prop `onComplete` declenche au remplissage de la
+// derniere case.
+//
+// `length` : 4 ou 6 cases (cf src/utils/pin.js — les deux longueurs
+// coexistent). A 6, les cases sont plus etroites pour tenir sur un ecran de
+// 320 pt : 6 x 46 + 5 x 8 = 316.
 //
 // 2 variantes :
 //   - default (useNumpad=false) : 4 TextInput natifs, clavier system iOS
@@ -13,9 +18,12 @@ import Svg, { Path } from 'react-native-svg';
 import { C } from '../constants/colors';
 import { Haptics } from '../services/haptics';
 
-export function PinInputRow({ value, onChange, onComplete, autoFocus = true, focusTrigger = 0, error = false, size = 'lg', useNumpad = false }) {
-  const inputs = useRef([null, null, null, null]);
-  const digits = String(value || '').padEnd(4, ' ').split('').slice(0, 4).map(c => c === ' ' ? '' : c);
+export function PinInputRow({ value, onChange, onComplete, autoFocus = true, focusTrigger = 0, error = false, size = 'lg', useNumpad = false, length = 4 }) {
+  const n = Number(length) === 6 ? 6 : 4;
+  const cases = Array.from({ length: n }, (_, i) => i);
+  const complet = (s) => s.length === n && /^\d+$/.test(s);
+  const inputs = useRef([]);
+  const digits = String(value || '').padEnd(n, ' ').split('').slice(0, n).map(c => c === ' ' ? '' : c);
   const shake = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -55,8 +63,8 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
     // derniere case remplie.
     const joined = next.map(c => (c && /\d/.test(c) ? c : ' ')).join('').replace(/\s+$/, '');
     onChange(joined);
-    if (d && i < 3) inputs.current[i + 1]?.focus();
-    if (joined.length === 4 && /^\d{4}$/.test(joined) && onComplete) {
+    if (d && i < n - 1) inputs.current[i + 1]?.focus();
+    if (complet(joined) && onComplete) {
       setTimeout(() => onComplete(joined), 80);
     }
   };
@@ -70,9 +78,10 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
     }
   };
 
-  const boxW = size === 'lg' ? 60 : 52;
-  const boxH = size === 'lg' ? 68 : 60;
-  const fontSize = size === 'lg' ? 30 : 26;
+  const boxW = n === 6 ? (size === 'lg' ? 46 : 42) : (size === 'lg' ? 60 : 52);
+  const boxH = n === 6 ? (size === 'lg' ? 58 : 52) : (size === 'lg' ? 68 : 60);
+  const fontSize = n === 6 ? (size === 'lg' ? 26 : 22) : (size === 'lg' ? 30 : 26);
+  const gap = n === 6 ? 8 : 12;
 
   // Mode pad custom : pas de TextInput (donc pas de clavier system, donc
   // pas de KeyboardAvoidingView qui fait sauter la modal). 4 Views read-only
@@ -81,10 +90,10 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
     const pressDigit = (d) => {
       try { Haptics?.selectionAsync?.(); } catch {}
       const cur = String(value || '');
-      if (cur.length >= 4) return;
+      if (cur.length >= n) return;
       const next = cur + String(d);
       onChange(next);
-      if (next.length === 4 && /^\d{4}$/.test(next) && onComplete) {
+      if (complet(next) && onComplete) {
         setTimeout(() => onComplete(next), 80);
       }
     };
@@ -96,8 +105,8 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
     };
     return (
       <View>
-        <Animated.View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, transform: [{ translateX: shake }] }}>
-          {[0, 1, 2, 3].map(i => {
+        <Animated.View style={{ flexDirection: 'row', justifyContent: 'center', gap, transform: [{ translateX: shake }] }}>
+          {cases.map(i => {
             const filled = !!digits[i];
             return (
               <View
@@ -175,8 +184,8 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
   }
 
   return (
-    <Animated.View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, transform: [{ translateX: shake }] }}>
-      {[0, 1, 2, 3].map(i => {
+    <Animated.View style={{ flexDirection: 'row', justifyContent: 'center', gap, transform: [{ translateX: shake }] }}>
+      {cases.map(i => {
         const filled = !!digits[i];
         return (
           <TextInput

@@ -1,15 +1,16 @@
 // Affichage PIN en lecture seule (detail event organizer, masque/reveal).
-// 4 chiffres gros, espaces 10px, monospace violet.
+// Chiffres gros, espaces 10px, monospace violet. 4 ou 6 chiffres selon
+// l epoque de l event (cf src/utils/pin.js).
 
 import React from 'react';
 import { View, Text, Platform } from 'react-native';
 import { C } from '../constants/colors';
-import { isValidPin } from '../utils/pin';
+import { isKnownPin } from '../utils/pin';
 
 export function PinDisplay({ pin, masked = true }) {
-  const valid = isValidPin(pin);
+  const valid = isKnownPin(pin);
   const chars = valid ? String(pin).split('') : ['', '', '', ''];
-  const display = masked ? ['•', '•', '•', '•'] : chars;
+  const display = masked ? chars.map(() => '•') : chars;
   return (
     <View style={{ flexDirection: 'row', gap: 10 }}>
       {display.map((c, i) => (

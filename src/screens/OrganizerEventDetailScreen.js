@@ -19,7 +19,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, colorForType } from '../constants/colors';
 import { displayEventType } from '../utils/format';
-import { isValidPin } from '../utils/pin';
+import { isKnownPin } from '../utils/pin';
 import { PinDisplay } from '../components/PinDisplay';
 import { completionOf, billingLabel } from '../utils/eventCompletion';
 
@@ -88,7 +88,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
   // « Partagé » s affichait meme quand l utilisateur annulait : Share.share
   // resout aussi sur dismissedAction.
   const copyPin = async () => {
-    if (!isValidPin(photographerPwd)) return;
+    if (!isKnownPin(photographerPwd)) return;
     try {
       const res = await Share.share({ message: photographerPwd });
       if (res?.action === Share.sharedAction) {
@@ -338,7 +338,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
             <Text style={{ fontSize: 16, fontFamily: 'Montserrat-SemiBold', color: C.text }}>Code PIN photographe</Text>
             <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: C.textSoft, marginTop: 2 }}>À transmettre à tes photographes le jour J</Text>
             <View style={{ marginTop: 14, alignItems: 'center' }}>
-              {isValidPin(photographerPwd) ? (
+              {isKnownPin(photographerPwd) ? (
                 <TouchableOpacity onPress={onEdit} activeOpacity={0.6}>
                   <PinDisplay pin={photographerPwd} masked={false} />
                 </TouchableOpacity>
@@ -347,7 +347,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
                   <Text style={{ color: C.primary, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Définir</Text>
                 </TouchableOpacity>
               )}
-              {isValidPin(photographerPwd) ? (
+              {isKnownPin(photographerPwd) ? (
                 <TouchableOpacity onPress={copyPin} hitSlop={8} style={{ marginTop: 12 }}>
                   <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-Medium' }}>
                     {copied ? 'Partagé' : 'Partager le code'}
