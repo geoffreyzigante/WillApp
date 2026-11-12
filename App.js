@@ -859,6 +859,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // jour à CHAQUE frame (count>0 OU count=0) -- sert de condition d'arrêt
   // à la boucle de capture (visage sorti = stop immédiat).
   const faceInZoneRef = useRef(false);
+  // Nombre de visages filtres par la zone a la derniere frame analysee.
+  // faceInZoneRef ne disait que "il y a quelqu un" ; en peloton la difference
+  // entre 1 et 30 personnes est precisement ce qu il faut savoir.
+  const visagesEnZoneRef = useRef(0);
   // Incrémenté à chaque dispatch onHumansDetectedJS (count=0 OU >0). Permet
   // à la boucle d'attendre une analyse FRAÎCHE post-capture avant de
   // décider de relancer (le frame processor peut se figer ~100-400ms
@@ -1260,6 +1264,11 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   function cooldownBloque() {
     const ms = burstCooldownRef.current;
     if (ms <= 0) return false;
+    // Peloton : aucun palier. Le palier existe pour rendre la main au thread
+    // JS quand une rafale se relance en boucle sur une personne qui stationne
+    // dans la zone. Quand un groupe defile, chaque relance sert a quelqu un
+    // de nouveau — l espacer, c est perdre les derniers du paquet.
+    if (visagesEnZoneRef.current >= 2) return false;
     const depuis = Date.now() - dernFinRafaleRef.current;
     if (depuis >= ms) return false;
     const r = rafalesRef.current;
@@ -1594,6 +1603,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       frameSeqRef.current += 1;
       lastFrameAtRef.current = Date.now();
       faceInZoneRef.current = count > 0;
+      visagesEnZoneRef.current = count;
       updateFaceTrail(count, bigX, bigY);
       // Signe de vie : suit le plus grand visage vu, en zone ou non. C est
       // precisement ce qui distingue « je ne vois personne » de « je vois
@@ -4299,6 +4309,39 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // détection figée sans qu'on l'ait remarqué).
   const MAX_BURST_SHOTS = 15;
 
+  // ── PELOTON ────────────────────────────────────────────────────────────
+  // Constate a l event du 10/11/2026 : 200 photos pour 1000 personnes, tout
+  // le monde passant en peloton.
+  //
+  // Le tri local n y est pour rien : des que >= 2 visages sont dans la zone,
+  // le reducer bascule en "mode multi" et garde TOUT (qualityReducer.js
+  // :318). La perte est donc a la PRISE, et MAX_BURST_SHOTS en est la cause
+  // directe : 15 photos a 5-7 ph/s, c est ~2,5 s de rafale. Ce plafond a ete
+  // dimensionne pour UN coureur, dont la presence en zone depasse rarement
+  // 3 s — son role est d empecher l emballement sur une scene figee.
+  // Un peloton, lui, met bien plus de 2,5 s a defiler : la rafale s arretait
+  // en plein milieu du paquet, et les derniers passaient sans photo.
+  //
+  // Le plafond devient donc fonction du nombre de visages reellement vus :
+  // seul un vrai groupe le leve. Une scene figee a un seul visage garde son
+  // plafond de 15, donc la protection d origine est intacte.
+  //
+  // 60 photos = ~10 s de rafale continue, de quoi couvrir un paquet entier.
+  // Ce n est PAS la borne qui compte en pratique : la boucle s arrete de
+  // toute facon des que la zone se vide, et les gardes de contre-pression
+  // (file >= 1000, disque >= 5 Go) restent au-dessus de tout.
+  //
+  // Reglable sans build : camera.burstCapPeloton. L egaler a 15 restaure
+  // exactement le comportement d avant.
+  const burstCapPelotonRef = useRef(60);
+  useEffect(() => {
+    const v = Number(eventConfig.camera?.burstCapPeloton);
+    burstCapPelotonRef.current = Number.isFinite(v) && v >= 1 ? Math.floor(v) : 60;
+  }, [eventConfig.camera?.burstCapPeloton]);
+  function capRafale() {
+    return visagesEnZoneRef.current >= 2 ? burstCapPelotonRef.current : MAX_BURST_SHOTS;
+  }
+
   // Cadence rafale pipelinée : on lance takePhoto SANS attendre la resolution
   // de la precedente. MAX_IN_FLIGHT borne le nombre de takePhoto AVFoundation
   // en vol simultanement. Avec speed mode, AVFoundation processe les captures
@@ -4347,7 +4390,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     try {
       while (
         faceInZoneRef.current &&
-        shotsInBurst < MAX_BURST_SHOTS &&
+        shotsInBurst < capRafale() &&
         isMountedRef.current &&
         isAutoArmedRef.current &&
         isDetectionEnabledRef.current
@@ -4415,7 +4458,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       }
       const dt = Date.now() - burstStartedAt;
       const reason = !faceInZoneRef.current ? 'face-left-zone'
-                   : shotsInBurst >= MAX_BURST_SHOTS ? 'max-burst-cap'
+                   : shotsInBurst >= capRafale() ? 'max-burst-cap'
                    : (queueRef.current.length + inFlightSetRef.current.size) >= MAX_TOTAL_IN_PIPELINE ? 'backpressure-queue'
                    : pendingDirSizeBytesCached() > STORAGE_WARN_BYTES ? 'backpressure-disk'
                    : 'disarmed';
