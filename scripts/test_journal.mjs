@@ -8,7 +8,7 @@
 
 import {
   installerJournal, desinstallerJournal, ajouterLigne,
-  lignesJournal, journalVersTexte, viderJournal, statsJournal,
+  lignesJournal, journalVersTexte, viderJournal, statsJournal, MAX_LIGNES,
 } from '../src/services/journal.js';
 
 let ko = 0;
@@ -74,10 +74,16 @@ console.log('\n[TEST 3] Aucun argument ne peut faire lever');
 console.log('\n[TEST 4] Le tampon est borne, en nombre comme en longueur');
 {
   viderJournal();
-  for (let i = 0; i < 2000; i++) ajouterLigne('log', [`ligne ${i}`]);
+  // On depasse le plafond quel qu il soit : le test porte sur le fait que le
+  // tampon est BORNE, pas sur une valeur precise. L ancienne version codait
+  // 800 en dur et cassait la CI des que le plafond bougeait, alors que le
+  // comportement teste, lui, etait intact.
+  const total = MAX_LIGNES + 500;
+  for (let i = 0; i < total; i++) ajouterLigne('log', [`ligne ${i}`]);
   const n = lignesJournal().length;
-  assert(n <= 800, `au plus 800 lignes gardees (got ${n})`);
-  assert(lignesJournal()[0].texte === 'ligne 1999', 'la plus recente est en tete');
+  assert(n <= MAX_LIGNES, `au plus MAX_LIGNES (${MAX_LIGNES}) lignes gardees (got ${n})`);
+  assert(n > 0, `le tampon n est pas vide apres elagage (got ${n})`);
+  assert(lignesJournal()[0].texte === `ligne ${total - 1}`, 'la plus recente est en tete');
 
   viderJournal();
   ajouterLigne('log', ['x'.repeat(5000)]);
@@ -111,6 +117,32 @@ console.log('\n[TEST 6] Export texte horodate, dans l ordre chronologique');
   assert(lignes[0].includes('premiere'), 'ordre chronologique a l export');
   assert(/^\d{2}:\d{2}:\d{2}\.\d{3} /.test(lignes[0]), 'horodatage en tete');
   assert(lignes[1].includes('!'), 'le niveau warn est marque');
+}
+
+console.log('\n[TEST 7] Export delta : seulement les lignes nouvelles');
+{
+  // C est ce qui permet au telephone de n envoyer au serveur que ce qui a
+  // change depuis son dernier envoi accepte. Un bug ici ne casse rien de
+  // visible : il remplit juste l historique serveur de doublons, ou pire,
+  // saute des lignes en silence.
+  viderJournal();
+  ajouterLigne('log', ['une']);
+  ajouterLigne('log', ['deux']);
+  const apresDeux = lignesJournal({ limite: 1 })[0].n;
+  ajouterLigne('log', ['trois']);
+  ajouterLigne('log', ['quatre']);
+
+  const delta = journalVersTexte({ depuisN: apresDeux });
+  const l = delta.split('\n');
+  assert(l.length === 2, `deux lignes nouvelles (got ${l.length})`);
+  assert(l[0].includes('trois') && l[1].includes('quatre'), 'ce sont les bonnes, dans l ordre');
+  assert(!delta.includes('une') && !delta.includes('deux'), 'les lignes deja envoyees ne repartent pas');
+
+  const derniere = lignesJournal({ limite: 1 })[0].n;
+  assert(journalVersTexte({ depuisN: derniere }) === '', 'rien de neuf -> chaine vide, donc aucun envoi');
+
+  // Sans depuisN le comportement d avant est intact : l export complet.
+  assert(journalVersTexte().split('\n').length === 4, 'sans depuisN, export complet');
 }
 
 console.log(ko === 0 ? '\n✓ Le journal ne peut pas casser ce qu il observe.\n' : `\n✗ ${ko} assertion(s) KO.\n`);

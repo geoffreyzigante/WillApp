@@ -24,7 +24,7 @@
 // avant d avoir ete poussees au serveur. 3000 lignes a ~200 octets font
 // ~600 Ko, negligeable a cote d une seule photo de 2,5 Mo, et tiennent
 // plusieurs minutes meme au plus fort du debit.
-const MAX_LIGNES = 3000;
+export const MAX_LIGNES = 3000;
 // Une ligne tronquee reste lisible ; une ligne de 40 000 caracteres — un
 // objet serialise par erreur — fait ramer l ecran et mange le tampon.
 const MAX_LONGUEUR = 600;
