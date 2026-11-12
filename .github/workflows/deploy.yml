@@ -60,14 +60,25 @@ jobs:
           node-version: 20
           cache: npm
 
+      # npm ci, pas npm install (audit B10) : ci installe EXACTEMENT le
+      # lockfile et verifie les empreintes. install pouvait resoudre une
+      # version plus recente, donc une dependance compromise en amont, dans
+      # le job meme qui publie vers tout le parc installe.
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
+      # Version epinglee (audit B10) : @latest executait a chaque publication
+      # un binaire que personne n avait relu. A monter volontairement.
       - name: Install EAS CLI
-        run: npm install -g eas-cli@latest
+        run: npm install -g eas-cli@18.7.0
 
       - name: Publish update
-        run: eas update --branch "${{ inputs.canal }}" --message "${{ github.event.head_commit.message || github.sha }}"
+        # Les valeurs passent par l environnement, jamais interpolees dans la
+        # ligne de commande : un message de commit contenant des guillemets
+        # et un point-virgule s executerait sinon dans ce job, a cote du jeton.
+        run: eas update --branch "$CANAL" --message "$MESSAGE"
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: 1
+          CANAL: ${{ inputs.canal }}
+          MESSAGE: ${{ github.event.head_commit.message || github.sha }}
