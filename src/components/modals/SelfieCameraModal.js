@@ -253,14 +253,18 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   // 275 pt de haut deborde de 17 pt sur la bande basse, le menton du guide
   // passant sous le bouton. La hauteur disponible entre la safe area et l arc
   // de la bande est donc la seconde borne.
-  const dispoH = (bandeY - BOMBE - 12) - (topInset + 8);
+  // Bas autorise pour l ovale : au-dessus du BOUTON (qui chevauche le sommet de
+  // l arc), pas seulement au-dessus de l arc. Avant, le menton du guide passait
+  // sous le bouton sur iOS comme sur Android.
+  const basOvale = bandeY - BOMBE - PASTILLE / 2 + 6 - 14;
+  const dispoH = basOvale - (topInset + 8 + 30);
   const hParLargeur = Math.max(210, Math.min(300, winW * 0.62)) * (340 / 260);
   const OVAL_H = Math.round(Math.max(200, Math.min(hParLargeur, dispoH)));
   const OVAL_W = Math.round(OVAL_H * (260 / 340));
 
   const cyIdeal = winH / 2;
-  const cyMax = bandeY - BOMBE - OVAL_H / 2 - 12;
-  const cyMin = OVAL_H / 2 + topInset + 8;
+  const cyMax = basOvale - OVAL_H / 2;
+  const cyMin = OVAL_H / 2 + topInset + 8 + 30;
   const cy = Math.max(cyMin, Math.min(cyIdeal, cyMax));
 
   // Decalage entre le centre de l ovale et celui de l image. Le « cover »
