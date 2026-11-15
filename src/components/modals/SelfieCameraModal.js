@@ -191,6 +191,15 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   // donnait un apercu pixelise sur le telephone de test (15/11, essais A a F :
   // seul le format par defaut etait net).
   const [busy, setBusy] = useState(false);
+  // Apres « Reprendre », la capture auto est suspendue quelques secondes : le
+  // visage est toujours cadre, elle repartait aussitot et la revue revenait
+  // sans qu on ait eu le temps de se replacer (15/11, « Reprendre ne marche pas »).
+  const [autoPause, setAutoPause] = useState(false);
+  useEffect(() => {
+    if (!autoPause) return undefined;
+    const t = setTimeout(() => setAutoPause(false), 4000);
+    return () => clearTimeout(t);
+  }, [autoPause]);
   const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
   const cameraPermissionDenied = hasRequestedCameraPermission && !hasPermission;
   const requestCameraPermission = async () => {
@@ -603,7 +612,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   // Declenchement automatique : le cadrage doit rester bon pendant tout le
   // remplissage de l anneau. Le moindre ecart annule et remet a zero.
   useEffect(() => {
-    const pret = etat === 'ok' && !busy && !apercu && visible;
+    const pret = etat === 'ok' && !busy && !apercu && visible && !autoPause;
     if (!pret) {
       if (minuterie.current) { clearTimeout(minuterie.current); minuterie.current = null; }
       anneau.stopAnimation();
@@ -615,7 +624,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     return () => {
       if (minuterie.current) { clearTimeout(minuterie.current); minuterie.current = null; }
     };
-  }, [etat, busy, apercu, visible, anneau]);
+  }, [etat, busy, apercu, visible, anneau, autoPause]);
 
   // Fermeture / reouverture : on repart d un etat propre.
   useEffect(() => {
@@ -747,15 +756,15 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
           }}
         >
           <TouchableOpacity
-            onPress={() => { setApercu(null); setEtat('rien'); etatRef.current = 'rien'; }}
+            onPress={() => { setAutoPause(true); setApercu(null); setEtat('rien'); etatRef.current = 'rien'; }}
               activeOpacity={0.85}
               style={{
                 flex: 1, height: 50, borderRadius: 12,
-                backgroundColor: 'rgba(255,255,255,0.28)',
+                backgroundColor: '#fff',
                 alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Reprendre</Text>
+              <Text style={{ color: VIOLET, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Reprendre</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => { const u = apercu; setApercu(null); onCaptured?.(u); }}
