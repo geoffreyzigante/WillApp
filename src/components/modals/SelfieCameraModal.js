@@ -71,6 +71,10 @@ const PASTILLE = 96;
 // Bandeau de mesure a l ecran (n / rempl / ecart / yaw / roll). Seuils cales,
 // on le laisse a false ; le repasser a true pour un nouveau calage terrain.
 const DEBUG_GUIDAGE = false;
+// Filet de securite du declencheur : sans un seul « ok » du guidage pendant
+// ce delai, on considere que la detection ne mord pas sur ce telephone et le
+// bouton rose passe quand meme (cf. shoot).
+const DELAI_SECOURS = 6000;
 
 const VIOLET = '#7B2FFF';
 const ROSE = '#f4a6ff';
@@ -273,6 +277,12 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   const [apercu, setApercu] = useState(null);
   const etatRef = useRef('rien');
   const mesureRef = useRef('');
+  // Bandeau de mesure : eteint par defaut, allume par un appui long de 2 s
+  // dans le coin haut gauche (pour un calage terrain sans nouveau build).
+  const [debug, setDebug] = useState(DEBUG_GUIDAGE);
+  const debugRef = useRef(DEBUG_GUIDAGE);
+  // Date du dernier cadrage « ok » (ou de l ouverture de la camera).
+  const dernierOkRef = useRef(Date.now());
 
   const anneau = useRef(new Animated.Value(0)).current;      // 0 -> 1
   const flash = useRef(new Animated.Value(0)).current;
@@ -309,7 +319,16 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
 
   const shoot = useCallback(async () => {
     if (!cameraRef.current || busy) return;
-    if (etatRef.current !== 'ok') { refuserCapture(); return; }
+    // Filet de securite (constat Android du 2026-11-15 : selfie impossible).
+    // Le refus ci-dessous suppose que le guidage sait dire « ok ». Sur un
+    // telephone ou la detection ne mord pas — plugin absent, visage jamais
+    // vu, seuils non cales — il ne le dit jamais, et l inscription restait
+    // bloquee sans issue. Passe DELAI_SECOURS sans un seul « ok », le
+    // declencheur passe donc quand meme : c est le chemin de secours promis
+    // en tete de fichier. Le serveur verifie de toute facon qu il y a un
+    // visage au depot.
+    const detectionMuette = Date.now() - dernierOkRef.current > DELAI_SECOURS;
+    if (etatRef.current !== 'ok' && !detectionMuette) { refuserCapture(); return; }
     setBusy(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -338,7 +357,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   // Analyse -> etat. Appelee ~6 fois par seconde depuis le worklet ; on ne
   // re-rend que sur changement reel d etat.
   const onAnalyseJS = useMemo(
-    () => Worklets.createRunOnJS((n, remplissage, ecart, pose, yaw, roll) => {
+    () => Worklets.createRunOnJS((n, remplissage, ecart, pose, yaw, roll, bufLong, bufCourt) => {
       let e;
       if (n === 0) e = 'rien';
       else if (n > 1) e = 'plusieurs';
@@ -347,14 +366,16 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       else if (ecart > ECART_MAX) e = 'decentre';
       else if (pose === 1 && (yaw > YAW_MAX || roll > ROLL_MAX)) e = 'profil';
       else e = 'ok';
+      if (e === 'ok') dernierOkRef.current = Date.now();
       if (etatRef.current !== e) {
         etatRef.current = e;
         setEtat(e);
       }
-      if (DEBUG_GUIDAGE) {
+      if (debugRef.current) {
         const txt =
-          'n=' + n + '  rempl=' + remplissage.toFixed(2) + '  ecart=' + ecart.toFixed(2) +
-          (pose === 1 ? '  yaw=' + Math.round(yaw) + '  roll=' + Math.round(roll) : '  (pose absente)');
+          Platform.OS + '  etat=' + e + '  n=' + n + '  rempl=' + remplissage.toFixed(2) + '  ecart=' + ecart.toFixed(2) +
+          (pose === 1 ? '  yaw=' + Math.round(yaw) + '  roll=' + Math.round(roll) : '  (pose absente)') +
+          '  buf=' + Math.round(bufLong || 0) + 'x' + Math.round(bufCourt || 0);
         mesureRef.current = txt;
         setMesure(txt);
       }
@@ -366,7 +387,10 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   const skipSV = useMemo(() => Worklets.createSharedValue(0), []);
 
   useEffect(() => {
-    analyseActiveSV.value = !!(visible && cameraPrete && hasPermission && !apercu);
+    const active = !!(visible && cameraPrete && hasPermission && !apercu);
+    analyseActiveSV.value = active;
+    // Le delai du filet de securite court a partir du moment ou l on guide.
+    if (active) dernierOkRef.current = Date.now();
   }, [visible, cameraPrete, hasPermission, apercu, analyseActiveSV]);
 
   const frameProcessor = useFrameProcessor((frame) => {
@@ -465,7 +489,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
         roll = r0 > 90 ? 180 - r0 : r0;
       }
     }
-    onAnalyseJS(n, remplissage, ecart, pose, yaw, roll);
+    onAnalyseJS(n, remplissage, ecart, pose, yaw, roll, bufLong, bufCourt);
   }, [onAnalyseJS, analyseActiveSV, skipSV, winW, winH, OVAL_W, OVAL_H, decalageOval]);
 
   // Stabilisation de la consigne : 450 ms sans changement d etat avant de
@@ -722,13 +746,25 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
           </View>
         </TouchableOpacity>
 
-        {DEBUG_GUIDAGE && !apercu ? (
-          <Text style={{
+        {/* Appui long de 2 s dans le coin haut gauche : affiche ou masque
+            les mesures du guidage. Zone invisible, sans effet au toucher. */}
+        {!apercu ? (
+          <TouchableOpacity
+            activeOpacity={1}
+            delayLongPress={2000}
+            onLongPress={() => { debugRef.current = !debugRef.current; setDebug(debugRef.current); }}
+            style={{ position: 'absolute', top: 0, left: 0, width: 80, height: topInset + 80 }}
+          />
+        ) : null}
+
+        {debug && !apercu ? (
+          <Text pointerEvents="none" style={{
             position: 'absolute', top: topInset + 26, left: 12, right: 12,
-            textAlign: 'center', color: '#3b3446', fontSize: 11,
-            fontFamily: 'Montserrat',
+            textAlign: 'center', color: '#fff', fontSize: 11,
+            fontFamily: 'Montserrat', backgroundColor: 'rgba(0,0,0,0.55)',
+            paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, overflow: 'hidden',
           }}>
-            {mesure || 'mesure…'}
+            {mesure || 'mesure… (aucune analyse reçue)'}
           </Text>
         ) : null}
 
