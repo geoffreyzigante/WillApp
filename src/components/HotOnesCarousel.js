@@ -151,9 +151,23 @@ function WelcomeCard({ onSignup, onLogin }) {
         start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }}
         style={{ flex: 1, padding: 18, paddingTop: Platform.OS === 'android' ? 16 : 24, justifyContent: 'flex-start' }}
       >
-        <Text style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25) }}>
-          Un selfie.{'\n'}Toutes tes photos.
-        </Text>
+        {Platform.OS === 'android' ? (
+          // Android : lineHeight sous la hauteur naturelle de la police coupe la
+          // derniere ligne (voir lh()). Pour resserrer l interligne comme sur
+          // iOS, une Text par ligne, chacune a sa hauteur naturelle, rapprochees
+          // par une marge negative.
+          <View>
+            {['Un selfie.', 'Toutes tes', 'photos.'].map((ligne, i) => (
+              <Text key={ligne} style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25), marginTop: i === 0 ? 0 : -6 }}>
+                {ligne}
+              </Text>
+            ))}
+          </View>
+        ) : (
+          <Text style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25) }}>
+            Un selfie.{'\n'}Toutes tes photos.
+          </Text>
+        )}
         <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 12, lineHeight: 17, marginTop: Platform.OS === 'android' ? 8 : 12 }}>
           Crée ton compte, prends ton selfie et retrouve tes photos après chaque event.
         </Text>
