@@ -198,6 +198,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     { photoResolution: 'max' },
   ]);
   const [busy, setBusy] = useState(false);
+  const [infoPhoto, setInfoPhoto] = useState('');
   const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
   const cameraPermissionDenied = hasRequestedCameraPermission && !hasPermission;
   const requestCameraPermission = async () => {
@@ -379,6 +380,10 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       const path = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
       // Revue avant validation : rien n est transmis tant que l utilisateur
       // n a pas dit "Garder".
+      if (Platform.OS === 'android') {
+        const f = formatAndroid || {};
+        setInfoPhoto(`format ${f.videoWidth}x${f.videoHeight} · photo ${f.photoWidth}x${f.photoHeight} · recue ${photo.width}x${photo.height}`);
+      }
       setApercu(path);
     } catch (e) {
       Alert.alert('Erreur', e.message || String(e));
@@ -650,7 +655,11 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
         {apercu ? (
-          <ExpoImage source={{ uri: apercu }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <>
+            <ExpoImage source={{ uri: apercu }} style={StyleSheet.absoluteFill} contentFit="cover" />
+            {/* TEMPORAIRE : diagnostic qualite Android */}
+            {infoPhoto ? <Text pointerEvents="none" style={{ position: 'absolute', top: topInset + 8, left: 8, right: 8, color: '#fff', fontSize: 11, backgroundColor: 'rgba(0,0,0,0.55)', padding: 4 }}>{infoPhoto}</Text> : null}
+          </>
         ) : hasPermission && cameraPrete && device ? (
           <VisionCamera
             ref={cameraRef}
@@ -800,8 +809,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
               // Pas pret : la pastille s eteint sans disparaitre, pour rester
               // une cible identifiable plutot qu un fantome.
               opacity: busy || !hasPermission || !device ? 0.5 : 1,
-              borderWidth: etat === 'ok' ? 0 : 3,
-              borderColor: '#fff',
+              borderWidth: 0,
             }}
           />
         </Animated.View>

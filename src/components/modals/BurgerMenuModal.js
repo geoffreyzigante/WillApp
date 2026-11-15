@@ -15,7 +15,7 @@ import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, 
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { Canvas, Image as SkiaImage, Blur, Rect as SkiaRect } from '@shopify/react-native-skia';
-import { capturerPage, derniereErreur } from '../../services/capturePage';
+import { capturerPage } from '../../services/capturePage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import * as Updates from 'expo-updates';
@@ -170,12 +170,12 @@ export function BurgerMenuModal({
   // Android : photo de la page prise a l ouverture, floutee par Skia (expo-blur
   // ne voit rien a travers une Modal). Echec = on garde le voile sombre.
   const [fondFloute, setFondFloute] = useState(null);
-  const [errFlou, setErrFlou] = useState('');
+  const fondOp = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
     if (!visible) return undefined;
     let vivant = true;
-    capturerPage().then((img) => { if (!vivant) return; if (img) setFondFloute(img); else setErrFlou(derniereErreur || 'echec'); });
+    capturerPage().then((img) => { if (!vivant) return; if (img) { fondOp.setValue(0); setFondFloute(img); Animated.timing(fondOp, { toValue: 1, duration: 260, useNativeDriver: true }).start(); } });
     return () => { vivant = false; };
   }, [visible]);
   useEffect(() => { if (!monte) setFondFloute(null); }, [monte]);
@@ -251,18 +251,22 @@ export function BurgerMenuModal({
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose}>
           {Platform.OS === 'ios' ? (
             <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFillObject} />
-          ) : fondFloute ? (
-            <Canvas style={StyleSheet.absoluteFillObject}>
-              <SkiaImage image={fondFloute} x={0} y={0} width={Dimensions.get('window').width} height={Dimensions.get('window').height} fit="fill">
-                <Blur blur={14} />
-              </SkiaImage>
-              <SkiaRect x={0} y={0} width={Dimensions.get('window').width} height={Dimensions.get('window').height} color="rgba(15,7,35,0.32)" />
-            </Canvas>
           ) : (
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,7,35,0.45)' }]}>
-              {/* TEMPORAIRE : cause de l echec du flou Android */}
-              {errFlou ? <Text style={{ color: '#fff', fontSize: 11, margin: 12 }}>flou : {errFlou}</Text> : null}
-            </View>
+            <>
+              {/* En attendant la photo de la page : voile leger, pour ne pas
+                  assombrir puis eclaircir au moment ou le flou arrive. */}
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,7,35,0.2)' }]} />
+              {fondFloute ? (
+                <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: fondOp }]}>
+                  <Canvas style={StyleSheet.absoluteFillObject}>
+                    <SkiaImage image={fondFloute} x={0} y={0} width={Dimensions.get('window').width} height={Dimensions.get('window').height} fit="fill">
+                      <Blur blur={14} />
+                    </SkiaImage>
+                    <SkiaRect x={0} y={0} width={Dimensions.get('window').width} height={Dimensions.get('window').height} color="rgba(15,7,35,0.2)" />
+                  </Canvas>
+                </Animated.View>
+              ) : null}
+            </>
           )}
         </TouchableOpacity>
       </Animated.View>
