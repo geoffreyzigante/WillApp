@@ -187,11 +187,15 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   // « cover » recadre fortement sur un ecran 9:20 — l image parait zoomee. On
   // demande un format 16:9 pour garder le champ de vision du capteur. iOS garde
   // son format par defaut (calage deja valide).
+  // Qualite (user 2026-11-15, « image catastrophique ») : 1280x720 en apercu
+  // et 1920x1080 en photo, etires sur un ecran de 1080x2400, donnaient une
+  // image floue. On garde le 16:9 mais on prend la plus grande resolution
+  // disponible : 1080p minimum pour l apercu, maximum pour la photo.
   const formatAndroid = useCameraFormat(device, [
     { videoAspectRatio: 16 / 9 },
-    { videoResolution: { width: 1280, height: 720 } },
     { photoAspectRatio: 16 / 9 },
-    { photoResolution: { width: 1920, height: 1080 } },
+    { videoResolution: { width: 1920, height: 1080 } },
+    { photoResolution: 'max' },
   ]);
   const [busy, setBusy] = useState(false);
   const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
@@ -654,6 +658,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             device={device}
             isActive={visible}
             photo={true}
+            photoQualityBalance="quality"
             zoom={device.minZoom}
             format={Platform.OS === 'android' ? formatAndroid : undefined}
             resizeMode="cover"
