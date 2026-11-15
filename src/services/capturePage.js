@@ -5,15 +5,19 @@
 import { makeImageFromView } from '@shopify/react-native-skia';
 
 let racine = null;
+export let derniereErreur = '';
 
 export function setCaptureRoot(ref) { racine = ref; }
 
 export async function capturerPage() {
   try {
-    if (!racine || !racine.current) return null;
+    derniereErreur = '';
+    if (!racine || !racine.current) { derniereErreur = 'racine absente'; return null; }
     const img = await makeImageFromView(racine);
+    if (!img) derniereErreur = 'image nulle';
     return img || null;
   } catch (e) {
+    derniereErreur = String((e && e.message) || e);
     return null;
   }
 }

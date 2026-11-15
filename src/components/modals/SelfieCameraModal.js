@@ -794,9 +794,9 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
               backgroundColor: ROSE,
               // Pas pret : la pastille s eteint sans disparaitre, pour rester
               // une cible identifiable plutot qu un fantome.
-              opacity: busy || !hasPermission || !device ? 0.5 : (etat === 'ok' ? 1 : 0.42),
-              borderWidth: etat === 'ok' ? 0 : 2,
-              borderColor: 'rgba(255,255,255,0.65)',
+              opacity: busy || !hasPermission || !device ? 0.5 : 1,
+              borderWidth: etat === 'ok' ? 0 : 3,
+              borderColor: '#fff',
             }}
           />
         </Animated.View>
