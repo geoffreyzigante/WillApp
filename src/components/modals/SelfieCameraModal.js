@@ -654,6 +654,12 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
+        {/* TEMPORAIRE : diagnostic qualite Android, format reel de l apercu */}
+        {Platform.OS === 'android' && !apercu && formatAndroid ? (
+          <Text pointerEvents="none" style={{ position: 'absolute', top: topInset + 60, left: 8, right: 8, zIndex: 50, color: '#fff', fontSize: 10, backgroundColor: 'rgba(0,0,0,0.55)', padding: 3 }}>
+            {`video ${formatAndroid.videoWidth}x${formatAndroid.videoHeight} · photo ${formatAndroid.photoWidth}x${formatAndroid.photoHeight} · ${formatAndroid.minFps}-${formatAndroid.maxFps}fps · ecran ${Math.round(winW)}x${Math.round(winH)}`}
+          </Text>
+        ) : null}
         {apercu ? (
           <>
             <ExpoImage source={{ uri: apercu }} style={StyleSheet.absoluteFill} contentFit="cover" />
