@@ -14,6 +14,8 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Alert } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
+import { Canvas, Image as SkiaImage, Blur, Rect as SkiaRect } from '@shopify/react-native-skia';
+import { capturerPage } from '../../services/capturePage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import * as Updates from 'expo-updates';
@@ -165,6 +167,17 @@ export function BurgerMenuModal({
   // de l animation, comme le fait ProfileMenuModal.
   const [monte, setMonte] = useState(visible);
   useEffect(() => { if (visible) setMonte(true); }, [visible]);
+  // Android : photo de la page prise a l ouverture, floutee par Skia (expo-blur
+  // ne voit rien a travers une Modal). Echec = on garde le voile sombre.
+  const [fondFloute, setFondFloute] = useState(null);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    if (!visible) return undefined;
+    let vivant = true;
+    capturerPage().then((img) => { if (vivant && img) setFondFloute(img); });
+    return () => { vivant = false; };
+  }, [visible]);
+  useEffect(() => { if (!monte) setFondFloute(null); }, [monte]);
 
   useEffect(() => {
     if (!monte) return;
@@ -237,6 +250,13 @@ export function BurgerMenuModal({
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose}>
           {Platform.OS === 'ios' ? (
             <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFillObject} />
+          ) : fondFloute ? (
+            <Canvas style={StyleSheet.absoluteFillObject}>
+              <SkiaImage image={fondFloute} x={0} y={0} width={Dimensions.get('window').width} height={Dimensions.get('window').height} fit="fill">
+                <Blur blur={14} />
+              </SkiaImage>
+              <SkiaRect x={0} y={0} width={Dimensions.get('window').width} height={Dimensions.get('window').height} color="rgba(15,7,35,0.32)" />
+            </Canvas>
           ) : (
             <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,7,35,0.45)' }]} />
           )}
