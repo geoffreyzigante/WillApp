@@ -195,7 +195,8 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     { videoAspectRatio: 16 / 9 },
     { photoAspectRatio: 16 / 9 },
     { videoResolution: { width: 1920, height: 1080 } },
-    { photoResolution: 'max' },
+    // Sans flux photo, l apercu suit photoSize : on le cale sur 1080p.
+    { photoResolution: { width: 1920, height: 1080 } },
   ]);
   const [busy, setBusy] = useState(false);
   const [infoPhoto, setInfoPhoto] = useState('');
@@ -373,16 +374,21 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
         Animated.timing(flash, { toValue: 1, duration: 60, useNativeDriver: true }),
         Animated.timing(flash, { toValue: 0, duration: 220, useNativeDriver: true }),
       ]).start();
-      const photo = await cameraRef.current.takePhoto({
-        flash: 'off',
-        enableShutterSound: true,
-      });
+      // Android : trois flux (apercu + photo + analyse) font retomber l apercu
+      // en tres basse resolution sur beaucoup de telephones (capture du
+      // 15/11). On garde deux flux et on prend l instantane de l apercu.
+      const photo = Platform.OS === 'android'
+        ? await cameraRef.current.takeSnapshot({ quality: 95 })
+        : await cameraRef.current.takePhoto({
+            flash: 'off',
+            enableShutterSound: true,
+          });
       const path = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
       // Revue avant validation : rien n est transmis tant que l utilisateur
       // n a pas dit "Garder".
       if (Platform.OS === 'android') {
         const f = formatAndroid || {};
-        setInfoPhoto(`format ${f.videoWidth}x${f.videoHeight} · photo ${f.photoWidth}x${f.photoHeight} · recue ${photo.width}x${photo.height}`);
+        setInfoPhoto(`snapshot ${photo.width}x${photo.height} · niveau ${device && device.hardwareLevel}`);
       }
       setApercu(path);
     } catch (e) {
@@ -657,7 +663,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
         {/* TEMPORAIRE : diagnostic qualite Android, format reel de l apercu */}
         {Platform.OS === 'android' && !apercu && formatAndroid ? (
           <Text pointerEvents="none" style={{ position: 'absolute', top: topInset + 60, left: 8, right: 8, zIndex: 50, color: '#fff', fontSize: 10, backgroundColor: 'rgba(0,0,0,0.55)', padding: 3 }}>
-            {`video ${formatAndroid.videoWidth}x${formatAndroid.videoHeight} · photo ${formatAndroid.photoWidth}x${formatAndroid.photoHeight} · ${formatAndroid.minFps}-${formatAndroid.maxFps}fps · ecran ${Math.round(winW)}x${Math.round(winH)}`}
+            {`video ${formatAndroid.videoWidth}x${formatAndroid.videoHeight} · photo ${formatAndroid.photoWidth}x${formatAndroid.photoHeight} · ${formatAndroid.minFps}-${formatAndroid.maxFps}fps · ecran ${Math.round(winW)}x${Math.round(winH)} · niveau ${device && device.hardwareLevel}`}
           </Text>
         ) : null}
         {apercu ? (
@@ -672,7 +678,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             style={StyleSheet.absoluteFill}
             device={device}
             isActive={visible}
-            photo={true}
+            photo={Platform.OS !== 'android'}
             photoQualityBalance="quality"
             zoom={device.minZoom}
             format={Platform.OS === 'android' ? formatAndroid : undefined}
