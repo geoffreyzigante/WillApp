@@ -747,12 +747,15 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
 
         {/* Contenu de la bande : message pendant le guidage, choix a la revue.
             Les deux sont montes en permanence et se croisent en opacite. */}
-        <Animated.View
-          pointerEvents={apercu ? 'auto' : 'none'}
+        {/* Boutons de revue : montes seulement a la revue, dans une vue sans
+            opacite animee, au-dessus de tout (zIndex + elevation). Sur Android,
+            ni Reprendre ni Garder ne repondaient (15/11). */}
+        {apercu ? (
+        <View
           style={{
             position: 'absolute', bottom: bottomInset + 70, left: 24, right: 24,
             flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12,
-            opacity: bascule,
+            zIndex: 100, elevation: 100,
           }}
         >
           <TouchableOpacity
@@ -777,7 +780,8 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             >
               <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Garder</Text>
             </TouchableOpacity>
-        </Animated.View>
+        </View>
+        ) : null}
 
         {/* Declencheur manuel : pastille rose posee a cheval sur le sommet de
             la bande. La capture auto ne fait que devancer le geste — sur un
