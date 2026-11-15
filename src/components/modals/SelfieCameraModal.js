@@ -437,7 +437,28 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       onErreurJS(String(e && e.message ? e.message : e));
       return;
     }
-    const faces = res && res.faces ? res.faces : [];
+    const brutes = res && res.faces ? res.faces : [];
+    // ML Kit (Android) peut renvoyer deux boites pour un meme visage, ou une
+    // minuscule detection parasite. On ecarte les boites tres petites devant
+    // la plus grande et les doublons (centres confondus) avant de compter.
+    let aireMax = 0;
+    for (let i = 0; i < brutes.length; i++) {
+      const a0 = brutes[i].w * brutes[i].h;
+      if (a0 > aireMax) aireMax = a0;
+    }
+    const faces = [];
+    for (let i = 0; i < brutes.length; i++) {
+      const f0 = brutes[i];
+      if (f0.w * f0.h < aireMax * 0.25) continue;
+      let doublon = false;
+      for (let j = 0; j < faces.length; j++) {
+        const g0 = faces[j];
+        const dx0 = Math.abs(f0.cx - g0.cx);
+        const dy0 = Math.abs(f0.cy - g0.cy);
+        if (dx0 < Math.max(f0.w, g0.w) * 0.5 && dy0 < Math.max(f0.h, g0.h) * 0.5) { doublon = true; break; }
+      }
+      if (!doublon) faces.push(f0);
+    }
     const n = faces.length;
 
     // UN SEUL REFERENTIEL : le point ecran.
