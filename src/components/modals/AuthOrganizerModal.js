@@ -399,6 +399,7 @@ const fieldStyles = {
     paddingHorizontal: 16,
     paddingVertical: 0,
     margin: 0,
+    fontFamily: 'Montserrat',
     fontSize: 16,
     color: T.textStrong,
   },

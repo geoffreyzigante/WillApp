@@ -607,7 +607,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
 
         {countdown ? (
           <View style={{ position: 'absolute', bottom: 14, right: 16 }}>
-            <Text style={{ color: '#fff', fontSize: 28, fontWeight: '700', fontStyle: 'italic', letterSpacing: -0.8 }}>
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, fontStyle: 'italic', letterSpacing: -0.8 }}>
               {countdown}
             </Text>
           </View>

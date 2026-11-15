@@ -6468,7 +6468,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
     setCErreur('');
     submit();
   };
-  const errStyle = { color: C.error, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 };
+  const errStyle = { fontFamily: 'Montserrat', color: C.error, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 };
 
   // Le retour Android (et la croix) fermaient le formulaire et effacaient
   // tout le remplissage a la reouverture, sans un mot. On ne demande
