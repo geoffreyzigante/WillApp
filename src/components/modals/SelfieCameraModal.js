@@ -26,7 +26,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Modal, View, Text, TouchableOpacity, Dimensions, Animated, Platform, StyleSheet, Alert, Linking } from 'react-native';
-import { Camera as VisionCamera, useCameraPermission, useCameraDevice, useFrameProcessor } from 'react-native-vision-camera';
+import { Camera as VisionCamera, useCameraPermission, useCameraDevice, useCameraFormat, useFrameProcessor } from 'react-native-vision-camera';
 import { Worklets } from 'react-native-worklets-core';
 import { Image as ExpoImage } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -183,6 +183,16 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   // OnePlus…) et bloque le selfie sur ecran noir. iOS a toujours au moins un
   // wide-angle en caméra frontale, la contrainte etait redondante.
   const device = useCameraDevice('front');
+  // Android : sans format explicite, VisionCamera retient un 640x480 (4:3) que le
+  // « cover » recadre fortement sur un ecran 9:20 — l image parait zoomee. On
+  // demande un format 16:9 pour garder le champ de vision du capteur. iOS garde
+  // son format par defaut (calage deja valide).
+  const formatAndroid = useCameraFormat(device, [
+    { videoAspectRatio: 16 / 9 },
+    { videoResolution: { width: 1280, height: 720 } },
+    { photoAspectRatio: 16 / 9 },
+    { photoResolution: { width: 1920, height: 1080 } },
+  ]);
   const [busy, setBusy] = useState(false);
   const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
   const cameraPermissionDenied = hasRequestedCameraPermission && !hasPermission;
@@ -641,6 +651,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             isActive={visible}
             photo={true}
             zoom={device.minZoom}
+            format={Platform.OS === 'android' ? formatAndroid : undefined}
             resizeMode="cover"
             frameProcessor={frameProcessor}
           />
