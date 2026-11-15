@@ -8,7 +8,7 @@
 // limité aux 5 premières photos après shuffle pour borner la mémoire.
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Platform } from 'react-native';
 import Svg, { Path, Ellipse } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -149,21 +149,18 @@ function WelcomeCard({ onSignup, onLogin }) {
         colors={['#DB90FD', '#9A55F8', '#7234F5']}
         locations={[0, 0.2, 0.5]}
         start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }}
-        style={{ flex: 1, padding: 18, paddingTop: 24, justifyContent: 'flex-start' }}
+        style={{ flex: 1, padding: 18, paddingTop: Platform.OS === 'android' ? 16 : 24, justifyContent: 'flex-start' }}
       >
-        {/* Deux lignes, toujours : sur Android la police est plus large et
-            « Toutes tes photos. » passait a trois lignes, ce qui poussait les
-            boutons sur la mascotte. La taille se reduit pour tenir en 2. */}
-        <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75} style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25) }}>
+        <Text style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25) }}>
           Un selfie.{'\n'}Toutes tes photos.
         </Text>
-        <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 12, lineHeight: 17, marginTop: 12 }}>
+        <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 12, lineHeight: 17, marginTop: Platform.OS === 'android' ? 8 : 12 }}>
           Crée ton compte, prends ton selfie et retrouve tes photos après chaque event.
         </Text>
         {/* Maquette 2026-09-01 : les deux actions sur UNE ligne, separees
             d un filet vertical — Inscription blanc gras, Connexion rose
             regular, sans chevrons. */}
-        <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ marginTop: Platform.OS === 'android' ? 8 : 12, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity onPress={onSignup} hitSlop={10}>
             <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 }}>Inscription</Text>
           </TouchableOpacity>
@@ -174,7 +171,7 @@ function WelcomeCard({ onSignup, onLogin }) {
         </View>
         {/* Mascotte collee au bas de la carte, bord a bord. */}
         <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' }}>
-          <MascotteSelfie width={138} />
+          <MascotteSelfie width={Platform.OS === 'android' ? 118 : 138} />
         </View>
       </LinearGradient>
     </View>
