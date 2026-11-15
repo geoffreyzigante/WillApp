@@ -151,7 +151,10 @@ function WelcomeCard({ onSignup, onLogin }) {
         start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }}
         style={{ flex: 1, padding: 18, paddingTop: 24, justifyContent: 'flex-start' }}
       >
-        <Text style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25) }}>
+        {/* Deux lignes, toujours : sur Android la police est plus large et
+            « Toutes tes photos. » passait a trois lignes, ce qui poussait les
+            boutons sur la mascotte. La taille se reduit pour tenir en 2. */}
+        <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75} style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25) }}>
           Un selfie.{'\n'}Toutes tes photos.
         </Text>
         <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 12, lineHeight: 17, marginTop: 12 }}>
