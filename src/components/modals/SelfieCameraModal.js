@@ -198,8 +198,12 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     // Sans flux photo, l apercu suit photoSize : on le cale sur 1080p.
     { photoResolution: { width: 1920, height: 1080 } },
   ]);
+  const format720 = useCameraFormat(device, [{ videoAspectRatio: 16 / 9 }, { photoAspectRatio: 16 / 9 }, { videoResolution: { width: 1280, height: 720 } }, { photoResolution: { width: 1280, height: 720 } }]);
   const [busy, setBusy] = useState(false);
   const [infoPhoto, setInfoPhoto] = useState('');
+  // TEMPORAIRE : essais de configuration camera Android (toucher le bandeau).
+  const [modeCam, setModeCam] = useState(0);
+  const MODES_CAM = ['A actuel', 'B sans analyse', 'C texture-view', 'D format defaut', 'E defaut sans analyse', 'F 720p'];
   const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
   const cameraPermissionDenied = hasRequestedCameraPermission && !hasPermission;
   const requestCameraPermission = async () => {
@@ -662,9 +666,12 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       <View style={{ flex: 1, backgroundColor: '#000' }}>
         {/* TEMPORAIRE : diagnostic qualite Android, format reel de l apercu */}
         {Platform.OS === 'android' && !apercu && formatAndroid ? (
-          <Text pointerEvents="none" style={{ position: 'absolute', top: topInset + 60, left: 8, right: 8, zIndex: 50, color: '#fff', fontSize: 10, backgroundColor: 'rgba(0,0,0,0.55)', padding: 3 }}>
-            {`video ${formatAndroid.videoWidth}x${formatAndroid.videoHeight} · photo ${formatAndroid.photoWidth}x${formatAndroid.photoHeight} · ${formatAndroid.minFps}-${formatAndroid.maxFps}fps · ecran ${Math.round(winW)}x${Math.round(winH)} · niveau ${device && device.hardwareLevel}`}
-          </Text>
+          <TouchableOpacity activeOpacity={0.8} onPress={() => setModeCam((m) => (m + 1) % MODES_CAM.length)}
+            style={{ position: 'absolute', top: topInset + 60, left: 8, right: 8, zIndex: 50, backgroundColor: 'rgba(0,0,0,0.7)', padding: 6 }}>
+            <Text style={{ color: '#fff', fontSize: 11 }}>
+              {`MODE ${MODES_CAM[modeCam]} (toucher pour changer) · video ${formatAndroid.videoWidth}x${formatAndroid.videoHeight} · ${winW | 0}x${winH | 0} · niveau ${device && device.hardwareLevel}`}
+            </Text>
+          </TouchableOpacity>
         ) : null}
         {apercu ? (
           <>
@@ -674,6 +681,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
           </>
         ) : hasPermission && cameraPrete && device ? (
           <VisionCamera
+            key={'cam' + modeCam}
             ref={cameraRef}
             style={StyleSheet.absoluteFill}
             device={device}
@@ -681,9 +689,10 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             photo={Platform.OS !== 'android'}
             photoQualityBalance="quality"
             zoom={device.minZoom}
-            format={Platform.OS === 'android' ? formatAndroid : undefined}
+            format={Platform.OS === 'android' ? (modeCam === 3 || modeCam === 4 ? undefined : (modeCam === 5 ? format720 : formatAndroid)) : undefined}
+            androidPreviewViewType={modeCam === 2 ? 'texture-view' : 'surface-view'}
             resizeMode="cover"
-            frameProcessor={frameProcessor}
+            frameProcessor={Platform.OS === 'android' && (modeCam === 1 || modeCam === 4) ? undefined : frameProcessor}
           />
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#1A1426' }}>
