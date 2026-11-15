@@ -185,7 +185,7 @@ function WelcomeCard({ onSignup, onLogin }) {
         </View>
         {/* Mascotte collee au bas de la carte, bord a bord. */}
         <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' }}>
-          <MascotteSelfie width={Platform.OS === 'android' ? 118 : 138} />
+          <MascotteSelfie width={Platform.OS === 'android' ? 134 : 138} />
         </View>
       </LinearGradient>
     </View>
