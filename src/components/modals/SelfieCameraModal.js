@@ -375,13 +375,15 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   // Analyse -> etat. Appelee ~6 fois par seconde depuis le worklet ; on ne
   // re-rend que sur changement reel d etat.
   const onAnalyseJS = useMemo(
-    () => Worklets.createRunOnJS((n, remplissage, ecart, pose, yaw, roll, bufLong, bufCourt, brutW, brutH) => {
+    () => Worklets.createRunOnJS((n, remplissage, ecart, pose, yaw, roll, bufLong, bufCourt, brutW, brutH, cxB, cyB, dHB, dVB) => {
       let e;
       if (n === 0) e = 'rien';
       else if (n > 1) e = 'plusieurs';
       else if (remplissage < REMPLISSAGE_MIN) e = 'loin';
       else if (remplissage > REMPLISSAGE_MAX) e = 'pres';
-      else if (ecart > ECART_MAX) e = 'decentre';
+      // Android : la mesure de centrage n est pas encore calee (ecart ~0,49 avec
+      // un visage centre), on ne s en sert pas en attendant le releve du bandeau.
+      else if (!ANDROID_ML && ecart > ECART_MAX) e = 'decentre';
       else if (pose === 1 && (yaw > YAW_MAX || roll > ROLL_MAX)) e = 'profil';
       else e = 'ok';
       if (e === 'ok') { dernierOkRef.current = Date.now(); refusRef.current = 0; }
@@ -395,6 +397,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
           (pose === 1 ? '  yaw=' + Math.round(yaw) + '  roll=' + Math.round(roll) : '  (pose absente)') +
           '  buf=' + Math.round(bufLong || 0) + 'x' + Math.round(bufCourt || 0) +
           '  w=' + (brutW || 0).toFixed(2) + ' h=' + (brutH || 0).toFixed(2) +
+          '  c=' + (cxB || 0).toFixed(2) + ',' + (cyB || 0).toFixed(2) + '  dH=' + Math.round(dHB || 0) + ' dV=' + Math.round(dVB || 0) +
           '  ecran=' + Math.round(Dimensions.get('window').width) + 'x' + Math.round(Dimensions.get('window').height);
         mesureRef.current = txt;
         setMesure(txt);
@@ -493,6 +496,10 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     let roll = 0;
     let brutW = 0;
     let brutH = 0;
+    let cxB = 0;
+    let cyB = 0;
+    let dHB = 0;
+    let dVB = 0;
     for (let i = 0; i < n; i++) {
       const f = faces[i];
       // APPARIEMENT DETERMINE A L EXECUTION.
@@ -546,6 +553,10 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
         const dv2 = -dBrut - decalageOval;
         const dV = Math.abs(dv1) < Math.abs(dv2) ? dv1 : dv2;
         ecart = Math.sqrt(dH * dH + dV * dV) / OVAL_H;
+        cxB = f.cx;
+        cyB = f.cy;
+        dHB = dH;
+        dVB = dV;
         // Champs absents sur les builds anterieurs : pose reste a 0 et le
         // critere d orientation est simplement ignore.
         pose = f.pose === 1 ? 1 : 0;
@@ -555,7 +566,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
         roll = r0 > 90 ? 180 - r0 : r0;
       }
     }
-    onAnalyseJS(n, remplissage, ecart, pose, yaw, roll, bufLong, bufCourt, brutW, brutH);
+    onAnalyseJS(n, remplissage, ecart, pose, yaw, roll, bufLong, bufCourt, brutW, brutH, cxB, cyB, dHB, dVB);
   }, [onAnalyseJS, onErreurJS, analyseActiveSV, skipSV, winW, winH, OVAL_W, OVAL_H, decalageOval]);
 
   // Stabilisation de la consigne : 450 ms sans changement d etat avant de
