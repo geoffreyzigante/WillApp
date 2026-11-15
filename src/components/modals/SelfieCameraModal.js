@@ -26,7 +26,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Modal, View, Text, TouchableOpacity, Dimensions, Animated, Platform, StyleSheet, Alert, Linking } from 'react-native';
-import { Camera as VisionCamera, useCameraPermission, useCameraDevice, useCameraFormat, useFrameProcessor } from 'react-native-vision-camera';
+import { Camera as VisionCamera, useCameraPermission, useCameraDevice, useFrameProcessor } from 'react-native-vision-camera';
 import { Worklets } from 'react-native-worklets-core';
 import { Image as ExpoImage } from 'expo-image';
 import * as Haptics from 'expo-haptics';
@@ -187,23 +187,10 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   // « cover » recadre fortement sur un ecran 9:20 — l image parait zoomee. On
   // demande un format 16:9 pour garder le champ de vision du capteur. iOS garde
   // son format par defaut (calage deja valide).
-  // Qualite (user 2026-11-15, « image catastrophique ») : 1280x720 en apercu
-  // et 1920x1080 en photo, etires sur un ecran de 1080x2400, donnaient une
-  // image floue. On garde le 16:9 mais on prend la plus grande resolution
-  // disponible : 1080p minimum pour l apercu, maximum pour la photo.
-  const formatAndroid = useCameraFormat(device, [
-    { videoAspectRatio: 16 / 9 },
-    { photoAspectRatio: 16 / 9 },
-    { videoResolution: { width: 1920, height: 1080 } },
-    // Sans flux photo, l apercu suit photoSize : on le cale sur 1080p.
-    { photoResolution: { width: 1920, height: 1080 } },
-  ]);
-  const format720 = useCameraFormat(device, [{ videoAspectRatio: 16 / 9 }, { photoAspectRatio: 16 / 9 }, { videoResolution: { width: 1280, height: 720 } }, { photoResolution: { width: 1280, height: 720 } }]);
+  // Android : on laisse le format par defaut. Un format 16:9 force (1080p)
+  // donnait un apercu pixelise sur le telephone de test (15/11, essais A a F :
+  // seul le format par defaut etait net).
   const [busy, setBusy] = useState(false);
-  const [infoPhoto, setInfoPhoto] = useState('');
-  // TEMPORAIRE : essais de configuration camera Android (toucher le bandeau).
-  const [modeCam, setModeCam] = useState(0);
-  const MODES_CAM = ['A actuel', 'B sans analyse', 'C texture-view', 'D format defaut', 'E defaut sans analyse', 'F 720p'];
   const [hasRequestedCameraPermission, setHasRequestedCameraPermission] = useState(false);
   const cameraPermissionDenied = hasRequestedCameraPermission && !hasPermission;
   const requestCameraPermission = async () => {
@@ -390,10 +377,6 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       const path = photo.path.startsWith('file://') ? photo.path : `file://${photo.path}`;
       // Revue avant validation : rien n est transmis tant que l utilisateur
       // n a pas dit "Garder".
-      if (Platform.OS === 'android') {
-        const f = formatAndroid || {};
-        setInfoPhoto(`snapshot ${photo.width}x${photo.height} · niveau ${device && device.hardwareLevel}`);
-      }
       setApercu(path);
     } catch (e) {
       Alert.alert('Erreur', e.message || String(e));
@@ -664,35 +647,17 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
-        {/* TEMPORAIRE : diagnostic qualite Android, format reel de l apercu */}
-        {Platform.OS === 'android' && !apercu && formatAndroid ? (
-          <TouchableOpacity activeOpacity={0.8} onPress={() => setModeCam((m) => (m + 1) % MODES_CAM.length)}
-            style={{ position: 'absolute', top: topInset + 60, left: 8, right: 8, zIndex: 50, backgroundColor: 'rgba(0,0,0,0.7)', padding: 6 }}>
-            <Text style={{ color: '#fff', fontSize: 11 }}>
-              {`MODE ${MODES_CAM[modeCam]} (toucher pour changer) · video ${formatAndroid.videoWidth}x${formatAndroid.videoHeight} · ${winW | 0}x${winH | 0} · niveau ${device && device.hardwareLevel}`}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-        {apercu ? (
-          <>
-            <ExpoImage source={{ uri: apercu }} style={StyleSheet.absoluteFill} contentFit="cover" />
-            {/* TEMPORAIRE : diagnostic qualite Android */}
-            {infoPhoto ? <Text pointerEvents="none" style={{ position: 'absolute', top: topInset + 8, left: 8, right: 8, color: '#fff', fontSize: 11, backgroundColor: 'rgba(0,0,0,0.55)', padding: 4 }}>{infoPhoto}</Text> : null}
-          </>
-        ) : hasPermission && cameraPrete && device ? (
+        {hasPermission && cameraPrete && device ? (
           <VisionCamera
-            key={'cam' + modeCam}
             ref={cameraRef}
             style={StyleSheet.absoluteFill}
             device={device}
-            isActive={visible}
+            isActive={visible && !apercu}
             photo={Platform.OS !== 'android'}
             photoQualityBalance="quality"
             zoom={device.minZoom}
-            format={Platform.OS === 'android' ? (modeCam === 3 || modeCam === 4 ? undefined : (modeCam === 5 ? format720 : formatAndroid)) : undefined}
-            androidPreviewViewType={modeCam === 2 ? 'texture-view' : 'surface-view'}
             resizeMode="cover"
-            frameProcessor={Platform.OS === 'android' && (modeCam === 1 || modeCam === 4) ? undefined : frameProcessor}
+            frameProcessor={frameProcessor}
           />
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: '#1A1426' }}>
@@ -715,6 +680,11 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             )}
           </View>
         )}
+        {/* Revue : l image se pose PAR-DESSUS la camera, qui reste montee (en pause).
+            Demonter puis remonter la camera Android bloquait « Reprendre ». */}
+        {apercu ? (
+          <ExpoImage source={{ uri: apercu }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        ) : null}
 
         {/* Habillage revue (vert), pose dessous : c est lui qu on decouvre
             quand l habillage de guidage s efface. */}
