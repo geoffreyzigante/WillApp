@@ -31,7 +31,7 @@ import { Worklets } from 'react-native-worklets-core';
 import { Image as ExpoImage } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import Svg, { Defs, Mask, Rect, Ellipse, Path, Polygon } from 'react-native-svg';
-import { detectHumans } from '../../services/frameProcessors';
+import { detectHumans, humanDetectorPlugin } from '../../services/frameProcessors';
 import { s } from '../../constants/styles';
 
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
@@ -75,6 +75,11 @@ const DEBUG_GUIDAGE = false;
 // ce delai, on considere que la detection ne mord pas sur ce telephone et le
 // bouton rose passe quand meme (cf. shoot).
 const DELAI_SECOURS = 6000;
+// TEMPORAIRE (calage Android, 2026-11-15) : le bandeau de mesure s affiche
+// d office sur Android, ou le guidage n a jamais ete cale sur appareil. A
+// repasser a DEBUG_GUIDAGE seul une fois les seuils verifies — l app Android
+// n est pas encore publiee, personne d autre ne le voit.
+const DEBUG_DEFAUT = DEBUG_GUIDAGE || Platform.OS === 'android';
 
 const VIOLET = '#7B2FFF';
 const ROSE = '#f4a6ff';
@@ -279,8 +284,10 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   const mesureRef = useRef('');
   // Bandeau de mesure : eteint par defaut, allume par un appui long de 2 s
   // dans le coin haut gauche (pour un calage terrain sans nouveau build).
-  const [debug, setDebug] = useState(DEBUG_GUIDAGE);
-  const debugRef = useRef(DEBUG_GUIDAGE);
+  const [debug, setDebug] = useState(DEBUG_DEFAUT);
+  const debugRef = useRef(DEBUG_DEFAUT);
+  // Appuis refuses depuis le dernier « ok » : le deuxieme passe (cf. shoot).
+  const refusRef = useRef(0);
   // Date du dernier cadrage « ok » (ou de l ouverture de la camera).
   const dernierOkRef = useRef(Date.now());
 
@@ -328,7 +335,17 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     // en tete de fichier. Le serveur verifie de toute facon qu il y a un
     // visage au depot.
     const detectionMuette = Date.now() - dernierOkRef.current > DELAI_SECOURS;
-    if (etatRef.current !== 'ok' && !detectionMuette) { refuserCapture(); return; }
+    // Et on ne fait pas attendre six secondes quelqu un qui insiste : le
+    // premier appui hors cadrage secoue la consigne, le deuxieme prend la
+    // photo. Constat du 2026-11-15 sur Android : « le telephone tremble mais
+    // rien ne se passe » — un refus sans issue se lit comme une panne.
+    const insiste = refusRef.current >= 1;
+    if (etatRef.current !== 'ok' && !detectionMuette && !insiste) {
+      refusRef.current += 1;
+      refuserCapture();
+      return;
+    }
+    refusRef.current = 0;
     setBusy(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -357,7 +374,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   // Analyse -> etat. Appelee ~6 fois par seconde depuis le worklet ; on ne
   // re-rend que sur changement reel d etat.
   const onAnalyseJS = useMemo(
-    () => Worklets.createRunOnJS((n, remplissage, ecart, pose, yaw, roll, bufLong, bufCourt) => {
+    () => Worklets.createRunOnJS((n, remplissage, ecart, pose, yaw, roll, bufLong, bufCourt, brutW, brutH) => {
       let e;
       if (n === 0) e = 'rien';
       else if (n > 1) e = 'plusieurs';
@@ -366,7 +383,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       else if (ecart > ECART_MAX) e = 'decentre';
       else if (pose === 1 && (yaw > YAW_MAX || roll > ROLL_MAX)) e = 'profil';
       else e = 'ok';
-      if (e === 'ok') dernierOkRef.current = Date.now();
+      if (e === 'ok') { dernierOkRef.current = Date.now(); refusRef.current = 0; }
       if (etatRef.current !== e) {
         etatRef.current = e;
         setEtat(e);
@@ -375,10 +392,23 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
         const txt =
           Platform.OS + '  etat=' + e + '  n=' + n + '  rempl=' + remplissage.toFixed(2) + '  ecart=' + ecart.toFixed(2) +
           (pose === 1 ? '  yaw=' + Math.round(yaw) + '  roll=' + Math.round(roll) : '  (pose absente)') +
-          '  buf=' + Math.round(bufLong || 0) + 'x' + Math.round(bufCourt || 0);
+          '  buf=' + Math.round(bufLong || 0) + 'x' + Math.round(bufCourt || 0) +
+          '  w=' + (brutW || 0).toFixed(2) + ' h=' + (brutH || 0).toFixed(2) +
+          '  ecran=' + Math.round(Dimensions.get('window').width) + 'x' + Math.round(Dimensions.get('window').height);
         mesureRef.current = txt;
         setMesure(txt);
       }
+    }),
+    [],
+  );
+
+  // Erreur du detecteur (plugin absent, exception native) : remontee au
+  // bandeau de mesure plutot que perdue dans le worklet.
+  const onErreurJS = useMemo(
+    () => Worklets.createRunOnJS((msg) => {
+      if (!debugRef.current) return;
+      const t = 'ERREUR analyse : ' + msg;
+      if (mesureRef.current !== t) { mesureRef.current = t; setMesure(t); }
     }),
     [],
   );
@@ -390,7 +420,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     const active = !!(visible && cameraPrete && hasPermission && !apercu);
     analyseActiveSV.value = active;
     // Le delai du filet de securite court a partir du moment ou l on guide.
-    if (active) dernierOkRef.current = Date.now();
+    if (active) { dernierOkRef.current = Date.now(); refusRef.current = 0; }
   }, [visible, cameraPrete, hasPermission, apercu, analyseActiveSV]);
 
   const frameProcessor = useFrameProcessor((frame) => {
@@ -400,7 +430,13 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     // guidage fluide et laissent le CPU tranquille.
     skipSV.value = (skipSV.value + 1) % 5;
     if (skipSV.value !== 0) return;
-    const res = detectHumans(frame, { zoneWidthPercent: 1, axis: 'midX', humans: false });
+    let res = null;
+    try {
+      res = detectHumans(frame, { zoneWidthPercent: 1, axis: 'midX', humans: false });
+    } catch (e) {
+      onErreurJS(String(e && e.message ? e.message : e));
+      return;
+    }
     const faces = res && res.faces ? res.faces : [];
     const n = faces.length;
 
@@ -433,6 +469,8 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     let pose = 0;
     let yaw = 0;
     let roll = 0;
+    let brutW = 0;
+    let brutH = 0;
     for (let i = 0; i < n; i++) {
       const f = faces[i];
       // APPARIEMENT DETERMINE A L EXECUTION.
@@ -460,6 +498,8 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       const r = rW > rH ? rW : rH;
       if (r > remplissage) {
         remplissage = r;
+        brutW = f.w;
+        brutH = f.h;
         // Ecart a l OVALE, pas au centre de l image. Le centre suit le meme
         // appariement que la taille : cx va avec w, cy avec h, ce sont les
         // deux axes de la meme boite.
@@ -489,8 +529,8 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
         roll = r0 > 90 ? 180 - r0 : r0;
       }
     }
-    onAnalyseJS(n, remplissage, ecart, pose, yaw, roll, bufLong, bufCourt);
-  }, [onAnalyseJS, analyseActiveSV, skipSV, winW, winH, OVAL_W, OVAL_H, decalageOval]);
+    onAnalyseJS(n, remplissage, ecart, pose, yaw, roll, bufLong, bufCourt, brutW, brutH);
+  }, [onAnalyseJS, onErreurJS, analyseActiveSV, skipSV, winW, winH, OVAL_W, OVAL_H, decalageOval]);
 
   // Stabilisation de la consigne : 450 ms sans changement d etat avant de
   // remplacer la phrase, et un fondu plutot qu une coupe.
@@ -764,7 +804,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
             fontFamily: 'Montserrat', backgroundColor: 'rgba(0,0,0,0.55)',
             paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, overflow: 'hidden',
           }}>
-            {mesure || 'mesure… (aucune analyse reçue)'}
+            {mesure || ('plugin=' + (humanDetectorPlugin ? 'oui' : 'NON') + ' · aucune analyse reçue')}
           </Text>
         ) : null}
 
