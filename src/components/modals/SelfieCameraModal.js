@@ -80,7 +80,7 @@ const DELAI_SECOURS = 6000;
 // d office sur Android, ou le guidage n a jamais ete cale sur appareil. A
 // repasser a DEBUG_GUIDAGE seul une fois les seuils verifies — l app Android
 // n est pas encore publiee, personne d autre ne le voit.
-const DEBUG_DEFAUT = DEBUG_GUIDAGE || Platform.OS === 'android';
+const DEBUG_DEFAUT = DEBUG_GUIDAGE;
 
 const VIOLET = '#7B2FFF';
 const ROSE = '#f4a6ff';
