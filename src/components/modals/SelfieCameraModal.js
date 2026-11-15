@@ -45,6 +45,7 @@ const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
 // remplit l ovale a l oeil donne donc une boite d environ 80 % de sa largeur
 // et 75 % de sa hauteur. Ces deux fractions sont anatomiques, pas materielles :
 // elles valent sur tous les telephones.
+const ANDROID_ML = Platform.OS === 'android';
 const CIBLE_PART_W = 0.80;
 const CIBLE_PART_H = 0.75;
 // Tolerance autour de la cible. Large volontairement : trop pres degrade moins
@@ -510,13 +511,17 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       const bW = f.w * bufCourt * ech;
       const ecartA = aW > 0 ? Math.abs(aH / aW - 1.3) : 9;
       const ecartB = bW > 0 ? Math.abs(bH / bW - 1.3) : 9;
-      const lectureA = ecartA <= ecartB;
+      // Android (ML Kit) : releve sur appareil (capture du 15/11), w est la
+      // largeur portrait et h la hauteur, donc lecture B. La boite englobe les
+      // cheveux (aspect ~1,8, pas 1,3) : l heuristique d aspect se trompe, et
+      // la hauteur ne sert pas de critere, seule la largeur compte.
+      const lectureA = ANDROID_ML ? false : ecartA <= ecartB;
       const hPt = lectureA ? aH : bH;
       const wPt = lectureA ? aW : bW;
       // Part de la cible atteinte, sur l axe le plus contraignant.
       const rW = wPt / (OVAL_W * CIBLE_PART_W);
       const rH = hPt / (OVAL_H * CIBLE_PART_H);
-      const r = rW > rH ? rW : rH;
+      const r = ANDROID_ML || rW > rH ? rW : rH;
       if (r > remplissage) {
         remplissage = r;
         brutW = f.w;
