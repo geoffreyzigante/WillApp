@@ -52,6 +52,11 @@ const CIBLE_PART_H = 0.75;
 // la reconnaissance que trop loin, et un etau serre bloquerait l inscription.
 const REMPLISSAGE_MIN = 0.86;
 const REMPLISSAGE_MAX = 1.22;
+// Plancher des chemins de secours (6 s sans « ok », deuxieme appui). Ils sont
+// la pour une detection muette ou mal calee, pas pour valider un visage vu
+// de loin : sous ce remplissage le serveur refuse le selfie (visage < 30 % de
+// l image) APRES la creation du compte. Constat Android du 2026-11-19.
+const REMPLISSAGE_PLANCHER = 0.6;
 // Ecart de centrage tolere, en fraction de la hauteur de l ovale.
 const ECART_MAX = 0.18;
 
@@ -311,6 +316,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
   const refusRef = useRef(0);
   // Date du dernier cadrage « ok » (ou de l ouverture de la camera).
   const dernierOkRef = useRef(Date.now());
+  const remplRef = useRef(1);
 
   const anneau = useRef(new Animated.Value(0)).current;      // 0 -> 1
   const flash = useRef(new Animated.Value(0)).current;
@@ -356,6 +362,12 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
     // en tete de fichier. Le serveur verifie de toute facon qu il y a un
     // visage au depot.
     const detectionMuette = Date.now() - dernierOkRef.current > DELAI_SECOURS;
+    // Visage bien vu mais clairement trop loin : aucun passe-droit.
+    if (etatRef.current === 'loin' && remplRef.current < REMPLISSAGE_PLANCHER) {
+      refusRef.current += 1;
+      refuserCapture();
+      return;
+    }
     // Et on ne fait pas attendre six secondes quelqu un qui insiste : le
     // premier appui hors cadrage secoue la consigne, le deuxieme prend la
     // photo. Constat du 2026-11-15 sur Android : « le telephone tremble mais
@@ -411,6 +423,7 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       else if (!ANDROID_ML && ecart > ECART_MAX) e = 'decentre';
       else if (pose === 1 && (yaw > YAW_MAX || roll > ROLL_MAX)) e = 'profil';
       else e = 'ok';
+      remplRef.current = remplissage;
       if (e === 'ok') { dernierOkRef.current = Date.now(); refusRef.current = 0; }
       if (etatRef.current !== e) {
         etatRef.current = e;

@@ -8507,6 +8507,8 @@ function App() {
   // modale reste ouverte apres la creation du compte (etape selfie), on ne
   // peut donc pas rejouer l action tout de suite.
   const pendingApresInscriptionRef = useRef(null);
+  const infoEmailApresInscriptionRef = useRef(false);
+  const selfieRefuseInscriptionRef = useRef(false);
   // Recherche par dossard : state lifte au root pour rendre la pill
   // au-dessus du degrade blanc du footer (zIndex 5 root-level). Tant que la
   // pill etait dans EventDetailScreen, elle restait coincee sous le degrade.
@@ -8938,6 +8940,8 @@ function App() {
       // on la rejoue a la fermeture de la modale (cf. onClose de
       // AuthRunnerModal, plus bas).
       pendingApresInscriptionRef.current = pendingActionRef.current;
+      infoEmailApresInscriptionRef.current = stored?.profile?.email_verified !== true;
+      selfieRefuseInscriptionRef.current = false;
       pendingActionRef.current = null;
       // Atterrissage : par defaut l Accueil (un compte tout neuf ne suit
       // aucun event, l onglet Photos ne lui montrerait qu un ecran vide).
@@ -9897,7 +9901,14 @@ function App() {
       if (e?.code === 'face_too_small') {
         setSelfieUri(null);
         oublierSelfieLocal();
-        Alert.alert('Visage trop petit', e.userMessage || 'Approche-toi de la caméra pour remplir l\'ovale.');
+        Alert.alert(
+          'Visage trop petit',
+          e.userMessage || 'Approche-toi de la caméra pour remplir l\'ovale.',
+          [
+            { text: 'Plus tard', style: 'cancel' },
+            { text: 'Reprendre mon selfie', onPress: () => setSelfieModal(true) },
+          ],
+        );
         return;
       }
       // Audit coureur 1 — l echec posait un etat 'failed' que rien n affichait
@@ -10353,6 +10364,9 @@ function App() {
                   scrollToTopSignal={homeScrollSignal}
                   cartTotal={cartGlobalTotal}
                   onOpenPanier={() => setPanierModalVisible(true)}
+                  runnerApiFetch={runnerApiFetch}
+                  runnerUserId={runnerSession?.profile?.userId}
+                  isActive={bottomTab === 'home'}
                 />
               </View>
               <View style={{ width: SCREEN_W }}>
@@ -11030,6 +11044,19 @@ function App() {
           const aRejouer = pendingApresInscriptionRef.current;
           pendingApresInscriptionRef.current = null;
           if (aRejouer) setTimeout(() => aRejouer(), 350);
+          // Compte tout juste cree : on dit qu il faut valider l adresse.
+          // Une seule alerte a la fois — si le selfie a ete refuse, c est
+          // elle qui parle (le bandeau de l Accueil porte l info ensuite).
+          if (infoEmailApresInscriptionRef.current) {
+            infoEmailApresInscriptionRef.current = false;
+            setTimeout(() => {
+              if (selfieRefuseInscriptionRef.current) { selfieRefuseInscriptionRef.current = false; return; }
+              Alert.alert(
+                'Confirme ton adresse email',
+                'On t’a envoyé un email avec un lien. Clique dessus pour valider ton adresse (pense à regarder tes spams).',
+              );
+            }, 700);
+          }
         }}
         onSuccess={handleAuthSuccess}
         onSelfieSaved={async (uri, creds) => {
@@ -11053,20 +11080,37 @@ function App() {
             if (e?.code === 'face_too_small') {
               setSelfieUri(null);
               oublierSelfieLocal();
-              Alert.alert('Visage trop petit', e.userMessage || "Approche-toi de la caméra pour remplir l'ovale.");
+              // L ecran d inscription est encore ouvert (il se ferme juste
+              // apres) : une Alert posee par-dessus pendant sa fermeture
+              // laissait l ecran fige. On attend qu il soit parti, puis on
+              // propose de reprendre le selfie sur-le-champ.
+              selfieRefuseInscriptionRef.current = true;
+              setTimeout(() => {
+                Alert.alert(
+                  'Visage trop petit',
+                  e.userMessage || "Approche-toi de la caméra pour remplir l'ovale.",
+                  [
+                    { text: 'Plus tard', style: 'cancel' },
+                    { text: 'Reprendre mon selfie', onPress: () => setSelfieModal(true) },
+                  ],
+                );
+              }, 700);
               return;
             }
             // Audit coureur 1 — un selfie perdu a l inscription laissait le
             // coureur persuade d avoir tout fait. On le dit, et on propose de
             // relancer l envoi sans lui redemander une photo.
-            Alert.alert(
-              'Selfie non envoyé',
-              e?.userMessage || "Ton selfie n'est pas arrivé sur nos serveurs. Sans lui, Will ne peut pas te reconnaître sur les photos.",
-              [
-                { text: 'Plus tard', style: 'cancel' },
-                { text: "Réessayer l'envoi", onPress: () => { runSelfieUploadRef.current?.(uri); } },
-              ],
-            );
+            selfieRefuseInscriptionRef.current = true;
+            setTimeout(() => {
+              Alert.alert(
+                'Selfie non envoyé',
+                e?.userMessage || "Ton selfie n'est pas arrivé sur nos serveurs. Sans lui, Will ne peut pas te reconnaître sur les photos.",
+                [
+                  { text: 'Plus tard', style: 'cancel' },
+                  { text: "Réessayer l'envoi", onPress: () => { runSelfieUploadRef.current?.(uri); } },
+                ],
+              );
+            }, 700);
           }
         }}
         onAskNotifications={async (jetonRecu) => {

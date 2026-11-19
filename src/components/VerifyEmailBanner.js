@@ -118,13 +118,13 @@ export function VerifyEmailBanner({ runnerApiFetch, isAuthed, isActive = true })
     // Violet sur pillBg mesure 4,75:1 — au-dessus du seuil de 4,5:1 exige
     // pour du texte courant.
     <View style={{
-      backgroundColor: C.pillBg, marginBottom: 10, borderRadius: 999,
+      backgroundColor: C.pillBg, marginBottom: 10, borderRadius: 18,
       paddingLeft: 16, paddingRight: 8, paddingVertical: 11,
       flexDirection: 'row', alignItems: 'center', gap: 10,
     }}>
       <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: C.pinkPillActive }} />
-      <Text style={{ flex: 1, fontFamily: 'Montserrat-SemiBold', fontSize: 13, color: C.primary }}>
-        Confirme ton adresse
+      <Text style={{ flex: 1, fontFamily: 'Montserrat-SemiBold', fontSize: 13, lineHeight: 17, color: C.primary }}>
+        Valide ton adresse email : clique le lien reçu par mail
       </Text>
       <TouchableOpacity
         onPress={handleResend}

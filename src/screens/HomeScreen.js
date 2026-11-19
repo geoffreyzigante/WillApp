@@ -3,6 +3,7 @@
 // Favoris avec indicateur slide anime, barre de recherche toggable, liste
 // EventCard ou empty state pedagogique (deconnecte + tab favoris).
 
+import { VerifyEmailBanner } from '../components/VerifyEmailBanner';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Animated, Keyboard, Pressable, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -21,7 +22,7 @@ import { isUpcoming } from '../utils/format';
 import { API_URL } from '../constants/api';
 import { lh } from '../constants/typo';
 
-export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, cartTotal = 0, onOpenPanier, headerH = 0 }) {
+export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, cartTotal = 0, onOpenPanier, headerH = 0, runnerApiFetch, runnerUserId, isActive = true }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   // Event resolu par code exact via /public-events/{code}. Couvre les events
@@ -261,6 +262,14 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
       {/* Header retire : il est maintenant rendu UNE FOIS dans App.js
           (AppHeader.js) au-dessus du tab container -> aucun re-mount au
           switch Accueil <-> Photos. */}
+
+      {/* Validation de l adresse email : meme bandeau que l onglet Photos,
+          pour qu un compte tout neuf voie l info des l arrivee. */}
+      {isAuthed && runnerApiFetch ? (
+        <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
+          <VerifyEmailBanner runnerApiFetch={runnerApiFetch} isAuthed={!!runnerUserId} isActive={isActive} />
+        </View>
+      ) : null}
 
       {/* Carrousel "Galerie ouverte" : derniers events passes avec photos. */}
       <HotOnesCarousel

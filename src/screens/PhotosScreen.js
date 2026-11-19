@@ -754,15 +754,15 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       titre={viewFilter === 'favs'
         ? 'Pas encore\nde favoris'
         : viewFilter === 'me'
-          ? 'Pas encore\nde photos de toi'
+          ? 'Aucune photo de toi\npour le moment'
           : 'Pas encore\nde photos'}
       sousTexte={viewFilter === 'favs'
         ? 'Ajoute tes photos favorites,\nde toi ou de tes amis'
         : viewFilter === 'me'
           // L ancien texte parlait d une course deja courue — faux juste
           // apres une inscription, et il n indiquait pas quoi faire.
-          ? 'Trouve ton event : dès que les photographes envoient leurs photos,\nWill reconnaît ton visage et les dépose ici.'
-          : 'Les photos arrivent quand les photographes les envoient,\nsouvent dans les heures qui suivent l\u2019event.'}
+          ? 'Les photographes envoient leurs photos au fil de la journée :\nelles arrivent généralement dans les heures\nqui suivent l\u2019arrivée.'
+          : 'Les photographes envoient leurs photos au fil de la journée :\nelles arrivent généralement dans les heures\nqui suivent l\u2019arrivée.'}
       actionLabel={viewFilter === 'favs' ? null : 'Trouver un event'}
       onAction={viewFilter === 'favs' ? null : onFindEvent}
     />
@@ -923,8 +923,8 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         // simplement le faux etat vide d un cas a l autre.
         <EtatVideWill
           variante="photos"
-          titre={'Pas encore\nde photos'}
-          sousTexte={"Les photos arrivent quand les photographes les envoient :\nsouvent dans les heures qui suivent l’event,\nparfois le lendemain."}
+          titre={'Aucune photo de toi\npour le moment'}
+          sousTexte={'Les photographes envoient leurs photos au fil de la journée :\nelles arrivent généralement dans les heures\nqui suivent l\u2019arrivée.'}
           actionLabel="Trouver un event"
           onAction={onFindEvent}
         />
