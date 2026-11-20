@@ -172,7 +172,7 @@ function WelcomeCard({ onSignup, onLogin }) {
             regular, sans chevrons. */}
         <View style={{ marginTop: Platform.OS === 'android' ? 8 : 12, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <TouchableOpacity onPress={onSignup} hitSlop={10}>
-            <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 }}>Inscription</Text>
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 }}>Créer mon compte</Text>
           </TouchableOpacity>
           <View style={{ width: 1, height: 15, backgroundColor: 'rgba(255,255,255,0.45)' }} />
           <TouchableOpacity onPress={onLogin} hitSlop={10}>
