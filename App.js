@@ -7567,7 +7567,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
             >
           {/* Meme entete degradee que les ecrans Connexion / Inscription :
               c est le meme moment du parcours — on entre quelque part. */}
-          <GrainViolet style={{ paddingHorizontal: 22, paddingTop: 74, paddingBottom: 22 }}>
+          <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={{ paddingHorizontal: 22, paddingTop: 74, paddingBottom: 22 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <TouchableOpacity
                 onPress={fermerAvecGarde}

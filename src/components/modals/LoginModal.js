@@ -237,7 +237,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   return (
     <Modal visible={visible} onRequestClose={onClose} animationType="slide" presentationStyle="fullScreen">
       <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
-        <GrainViolet style={{ paddingHorizontal: 24, paddingTop: padHaut, paddingBottom: 24 }}>
+        <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={{ paddingHorizontal: 24, paddingTop: padHaut, paddingBottom: 24 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
             <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontFamily: 'Montserrat', color: '#4a4458', fontSize: 22, lineHeight: lh(22, 24, 'Montserrat') }}>✕</Text>

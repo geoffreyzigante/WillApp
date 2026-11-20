@@ -597,7 +597,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
         {/* Entete degrade (identique au header du menu) : croix, titre et
             onglets Connexion/Inscription y vivent desormais — le blanc du
             formulaire ne commence qu en dessous. */}
-        <GrainViolet style={{
+        <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={{
             paddingHorizontal: 24,
             paddingTop: replierEntete ? (insets.top || StatusBar.currentHeight || 20) : padHaut,
             paddingBottom: mode === 'forgot' ? 26 : 0,

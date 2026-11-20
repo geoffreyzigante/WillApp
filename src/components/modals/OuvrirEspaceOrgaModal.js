@@ -48,7 +48,7 @@ export function OuvrirEspaceOrgaModal({ visible, onClose, onOuvrir, busy = false
       <View style={{ flex: 1, backgroundColor: '#fff' }}>
         {/* Meme entete que le formulaire et que les ecrans d auth : c est la
             meme porte, elle doit se reconnaitre. */}
-        <GrainViolet style={{ paddingHorizontal: 22, paddingTop: padHaut, paddingBottom: 26 }}>
+        <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={{ paddingHorizontal: 22, paddingTop: padHaut, paddingBottom: 26 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity
               onPress={onClose}

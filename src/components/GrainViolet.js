@@ -15,6 +15,8 @@ import React, { useState } from 'react';
 import { View, Image, StyleSheet } from 'react-native';
 
 const GRAIN = require('../../assets/hero-noise.png');
+const FLEUR_G = require('../../assets/hero-fl-l.webp');
+const FLEUR_D = require('../../assets/hero-fl-r.webp');
 const TUILE = 128;
 
 function GrainPave({ largeur, hauteur }) {
@@ -36,7 +38,9 @@ function GrainPave({ largeur, hauteur }) {
   return <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>{tuiles}</View>;
 }
 
-export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, ...reste }) {
+// fleur : { taille, haut, gauche | droite } -> la fleur de marque en degrade lilas (hero-fl-l
+// du site), posee en coin sous le contenu et rognee par le bord de la carte.
+export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, fleur, ...reste }) {
   const [taille, setTaille] = useState({ w: 0, h: 0 });
   const surLayout = (e) => {
     const { width, height } = e.nativeEvent.layout;
@@ -46,6 +50,16 @@ export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, ...r
   return (
     <View {...reste} onLayout={surLayout} style={[{ backgroundColor: color, overflow: 'hidden' }, style]}>
       <GrainPave largeur={taille.w} hauteur={taille.h} />
+      {fleur ? (
+        <Image
+          source={fleur.droite != null ? FLEUR_D : FLEUR_G}
+          pointerEvents="none"
+          style={[
+            { position: 'absolute', width: fleur.taille, height: fleur.taille, top: fleur.haut },
+            fleur.droite != null ? { right: fleur.droite } : { left: fleur.gauche },
+          ]}
+        />
+      ) : null}
       {children}
     </View>
   );

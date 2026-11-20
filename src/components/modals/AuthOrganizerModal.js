@@ -204,7 +204,7 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
   return (
     <Modal visible={visible} onRequestClose={onClose} animationType="slide" presentationStyle="fullScreen">
       <View style={{ flex: 1, backgroundColor: T.bg }}>
-        <GrainViolet style={{ paddingHorizontal: 24, paddingTop: padHaut }}>
+        <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={{ paddingHorizontal: 24, paddingTop: padHaut }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
             <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>✕</Text>

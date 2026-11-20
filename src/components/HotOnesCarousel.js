@@ -146,7 +146,7 @@ function WelcomeCard({ onSignup, onLogin }) {
           (#DB90FD), violet #7234F5 dominant ; titre et lien secondaire en
           rose charte pinkPill (#F4A6FF, pipe sur la maquette) ; icone photo
           blanche en tete ; chevrons sur les deux actions. */}
-      <GrainViolet style={{ flex: 1, padding: 18, paddingTop: Platform.OS === 'android' ? 16 : 24, justifyContent: 'flex-start' }}>
+      <GrainViolet fleur={{ taille: 170, droite: -62, haut: -72 }} style={{ flex: 1, padding: 18, paddingTop: Platform.OS === 'android' ? 16 : 24, justifyContent: 'flex-start' }}>
         {Platform.OS === 'android' ? (
           // Android : lineHeight sous la hauteur naturelle de la police coupe la
           // derniere ligne (voir lh()). Pour resserrer l interligne comme sur

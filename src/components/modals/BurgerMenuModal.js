@@ -293,7 +293,7 @@ export function BurgerMenuModal({
                     du tiroir, qui etait vide aux deux tiers. L avatar y vit
                     desormais — avant il flottait a droite de deux lignes de
                     texte sans appartenir a l une ni a l autre. */}
-                <GrainViolet style={styles.hero} onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}>
+                <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={styles.hero} onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}>
                   <TouchableOpacity
                     onPress={selfieUri ? fire(onViewSelfie) : empiler(onOpenAccount)}
                     activeOpacity={0.85}
@@ -409,7 +409,7 @@ export function BurgerMenuModal({
               <>
                 {/* Meme bandeau qu en connecte : il porte la promesse au lieu
                     d un logo pose sur du vide. */}
-                <GrainViolet style={styles.hero} onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}>
+                <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={styles.hero} onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}>
                   <View style={{ marginBottom: 16 }}>
                     <Icon.Logo width={62} color="#FFFFFF" />
                   </View>
