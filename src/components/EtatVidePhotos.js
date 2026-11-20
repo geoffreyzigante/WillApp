@@ -4,7 +4,6 @@
 // deja absente ici.
 import React from 'react';
 import { View, Text } from 'react-native';
-import { IlluPasDePhotos } from './IlluPasDePhotos';
 import { C } from '../constants/colors';
 import { lh } from '../constants/typo';
 
@@ -25,11 +24,10 @@ export function EtatVidePhotos({
     <View style={[{
       paddingVertical: 40, paddingHorizontal: 24, alignItems: 'center',
     }, style]}>
-      <IlluPasDePhotos height={illuHeight} />
       <Text style={{
         color: '#C9B6FF', fontSize: 18, lineHeight: lh(18, 22),
         fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2,
-        textAlign: 'center', marginTop: 14,
+        textAlign: 'center',
       }}>
         {texte}
       </Text>

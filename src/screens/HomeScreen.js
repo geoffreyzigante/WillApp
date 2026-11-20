@@ -12,7 +12,6 @@ import { Icon } from '../components/Icon';
 import { LinearGradient } from 'expo-linear-gradient';
 import { EtatVideWill } from '../components/EtatVideWill';
 import { Haptics } from '../services/haptics';
-import { IlluPasDePhotos } from '../components/IlluPasDePhotos';
 import { EventCard } from '../components/EventCard';
 import { HotOnesCarousel } from '../components/HotOnesCarousel';
 import { RefreshableScrollView } from '../components/loaders';
@@ -465,12 +464,11 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
           ) : (
           <View style={{
             paddingVertical: 40,
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14,
+            alignItems: 'center', justifyContent: 'center',
           }}>
-            <IlluPasDePhotos height={72} />
-            <View style={{ alignItems: 'flex-start', gap: 3, flexShrink: 1 }}>
+            <View style={{ alignItems: 'center', gap: 3, flexShrink: 1 }}>
               <Text style={{
-                color: '#C9B6FF', fontSize: 18,
+                color: '#C9B6FF', fontSize: 18, textAlign: 'center',
                 fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2,
               }}>
                 {tab === 'upcoming' ? 'Aucun événement à venir' : 'Aucun événement passé'}
