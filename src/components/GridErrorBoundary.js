@@ -27,7 +27,7 @@ export class GridErrorBoundary extends React.Component {
           <Text style={{ fontFamily: 'Montserrat', color: 'rgba(123,47,255,0.3)', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
             {this.state.error?.message || 'Erreur de rendu inattendue.'}
           </Text>
-          <TouchableOpacity onPress={this.reset} style={{ backgroundColor: '#7B2FFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10 }}>
+          <TouchableOpacity onPress={this.reset} style={{ backgroundColor: '#7B2FFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12 }}>
             <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>Réessayer</Text>
           </TouchableOpacity>
         </View>

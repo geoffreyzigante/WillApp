@@ -944,7 +944,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           flex: 1, backgroundColor: 'rgba(26,20,38,0.5)',
           justifyContent: 'center', padding: 24,
         }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 22 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 18, padding: 22 }}>
             <Text style={{
               fontSize: 17, fontFamily: 'Montserrat-Bold', color: '#1A1426',
               marginBottom: 10, textAlign: 'center',

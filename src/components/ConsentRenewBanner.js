@@ -72,7 +72,7 @@ export function ConsentRenewBanner({ runnerApiFetch, isAuthed }) {
       backgroundColor: isUrgent ? '#FEE4E2' : '#FFF3D6',
       // Meme largeur que son frere VerifyEmailBanner et que le contenu de
       // l ecran : le parent pose deja le retrait lateral.
-      marginBottom: 10, borderRadius: 16,
+      marginBottom: 10, borderRadius: 18,
       padding: 14, borderWidth: 1, borderColor: isUrgent ? '#FDA29B' : '#FED98C',
       flexDirection: 'row', alignItems: 'center', gap: 10,
     }}>

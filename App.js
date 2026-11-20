@@ -5601,7 +5601,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             <TouchableOpacity
               onPress={partagerJournal}
               style={{
-                flex: 1, height: 42, borderRadius: 10, backgroundColor: P.brand,
+                flex: 1, height: 42, borderRadius: 12, backgroundColor: P.brand,
                 alignItems: 'center', justifyContent: 'center',
               }}
             >
@@ -5617,7 +5617,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 ]);
               }}
               style={{
-                width: 96, height: 42, borderRadius: 10,
+                width: 96, height: 42, borderRadius: 12,
                 backgroundColor: 'rgba(255,255,255,0.12)',
                 alignItems: 'center', justifyContent: 'center',
               }}
@@ -5688,7 +5688,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               </Text>
               <TouchableOpacity
                 onPress={fetchMyPhotos}
-                style={{ backgroundColor: C.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 }}
+                style={{ backgroundColor: C.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 18 }}
               >
                 <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Réessayer</Text>
               </TouchableOpacity>
@@ -10567,7 +10567,7 @@ function App() {
                 left: -48,
                 top: 0, bottom: 0,
                 width: 40,
-                borderRadius: 16,
+                borderRadius: 18,
                 overflow: 'hidden',
                 borderWidth: StyleSheet.hairlineWidth,
                 borderColor: 'rgba(255,255,255,0.9)',

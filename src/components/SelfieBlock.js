@@ -73,7 +73,7 @@ export function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, upl
               </Text>
             </View>
           </View>
-          <View style={{ marginTop: 12, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}>
+          <View style={{ marginTop: 12, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 10, alignItems: 'center' }}>
             <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>Faire mon selfie maintenant</Text>
           </View>
         </GrainViolet>

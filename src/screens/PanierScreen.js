@@ -60,7 +60,7 @@ export function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onC
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
         {total === 0 ? (
-          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 36, alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 18, padding: 36, alignItems: 'center' }}>
             <View style={{
               width: 56, height: 56, borderRadius: 999,
               backgroundColor: '#F2EDFD',
@@ -87,7 +87,7 @@ export function PanierScreen({ allEvents = [], onOpenEvent, isActive = true, onC
             const meta = eventsMap.get(code) || { name: code, event_date: '' };
             const dateLabel = meta.event_date ? formatDateLong(meta.event_date, meta.event_date_end) : '';
             return (
-              <View key={code} style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 12 }}>
+              <View key={code} style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
                   <View style={{ flex: 1, paddingRight: 12 }}>
                     <Text style={{ fontFamily: 'Montserrat-ExtraBold', fontSize: 16, color: C.text, letterSpacing: -0.2 }} numberOfLines={2}>

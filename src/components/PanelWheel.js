@@ -87,7 +87,7 @@ export function PanelWheel({ items, selectedIndex, onChange }) {
         pointerEvents="none"
         style={{
           position: 'absolute', left: 12, right: 12, top: PAD_V,
-          height: WHEEL_ITEM_H, borderRadius: 10, backgroundColor: P.wheelBand,
+          height: WHEEL_ITEM_H, borderRadius: 12, backgroundColor: P.wheelBand,
         }}
       />
 

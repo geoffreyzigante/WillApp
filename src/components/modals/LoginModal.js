@@ -413,7 +413,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         activeOpacity={0.9}
                         style={{
                           backgroundColor: tint,
-                          borderRadius: 16,
+                          borderRadius: 18,
                           paddingHorizontal: 16,
                           paddingVertical: 14,
                           marginBottom: 10,

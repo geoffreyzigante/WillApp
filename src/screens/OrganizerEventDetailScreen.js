@@ -219,7 +219,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
             </View>
           ) : null}
           {/* Bandeau colore */}
-          <View style={{ height: 180, marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', backgroundColor: tint, position: 'relative' }}>
+          <View style={{ height: 180, marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: tint, position: 'relative' }}>
             {event.cover_image ? (
               <ExpoImage source={{ uri: event.cover_image }} style={{ position: 'absolute', width: '100%', height: '100%' }} contentFit="cover" />
             ) : null}

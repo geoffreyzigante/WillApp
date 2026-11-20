@@ -32,7 +32,7 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
             activeOpacity={0.85}
             style={{
               backgroundColor: '#faf9ff',
-              borderRadius: 16,
+              borderRadius: 18,
               padding: 16,
               marginBottom: 12,
               flexDirection: 'row',
@@ -67,7 +67,7 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
             activeOpacity={0.85}
             style={{
               backgroundColor: '#faf9ff',
-              borderRadius: 16,
+              borderRadius: 18,
               padding: 16,
               marginBottom: 8,
               flexDirection: 'row',

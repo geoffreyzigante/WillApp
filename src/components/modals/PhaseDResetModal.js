@@ -14,7 +14,7 @@ export function PhaseDResetModal({ visible, onClose }) {
         justifyContent: 'center', padding: 24,
       }}>
         <View style={{
-          backgroundColor: '#fff', borderRadius: 20, padding: 24,
+          backgroundColor: '#fff', borderRadius: 18, padding: 24,
           shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 20,
           // Android n applique pas les shadow* : elevation est son equivalent.
           elevation: 20,

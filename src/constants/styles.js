@@ -40,18 +40,18 @@ export const s = StyleSheet.create({
   welcome: { fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 18, color: C.text },
   welcomeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 18, marginBottom: 18 },
 
-  selfieDoneBanner: { backgroundColor: C.white, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 8, borderWidth: 1, borderColor: C.primaryLight },
+  selfieDoneBanner: { backgroundColor: C.white, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 8, borderWidth: 1, borderColor: C.primaryLight },
   selfieCheckCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.pinkPill, alignItems: 'center', justifyContent: 'center' },
   selfieDoneTitle: { fontSize: 15, color: C.primary, fontFamily: 'AVEstiana', fontStyle: 'normal' },
   selfieDoneSub: { fontFamily: 'Montserrat', fontSize: 12, color: C.textSoft, marginTop: 2, lineHeight: 16 },
   selfieDelete: { padding: 6 },
 
-  selfieCard: { borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 8 },
+  selfieCard: { borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', minHeight: 110, marginBottom: 8 },
   // Utilise le nom PostScript natif 'AVEstiana-Bold' (vs alias 'AVEstiana')
   // pour que iOS resolve le font sans ambiguite weight / style.
   selfieTitle: { color: '#fff', fontSize: 24, fontFamily: 'AVEstiana-Bold', lineHeight: lh(24, 28) },
   selfieSub: { fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 12.5, lineHeight: 17 },
-  selfieAvatar: { width: 68, height: 68, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  selfieAvatar: { width: 68, height: 68, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
 
   eventPick: { backgroundColor: C.white, borderRadius: 14, padding: 14, marginTop: 8 },
   eventPickName: { fontFamily: 'Montserrat-SemiBold', fontSize: 15, color: C.text },
@@ -65,7 +65,7 @@ export const s = StyleSheet.create({
 
   empty: { fontFamily: 'Montserrat', textAlign: 'center', color: C.textSoft, marginTop: 24, fontSize: 14 },
 
-  eventCard: { height: 110, borderRadius: 16, overflow: 'hidden', marginBottom: 10, backgroundColor: '#222', justifyContent: 'center' },
+  eventCard: { height: 110, borderRadius: 18, overflow: 'hidden', marginBottom: 10, backgroundColor: '#222', justifyContent: 'center' },
   eventCardCenter: { paddingHorizontal: 16, zIndex: 2 },
   eventDate: { color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 11, opacity: 0.9, marginBottom: 6, textTransform: 'none' },
   eventName: { color: '#fff', fontSize: 20, fontFamily: 'AVEstiana', fontStyle: 'normal', marginBottom: 2 },
@@ -92,7 +92,7 @@ export const s = StyleSheet.create({
   modalCancel: { padding: 14, alignItems: 'center', marginTop: 12 },
   modalCancelText: { color: C.textSoft, fontFamily: 'Montserrat-SemiBold' },
 
-  btnPrimary: { backgroundColor: C.primary, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 16 },
+  btnPrimary: { backgroundColor: C.primary, padding: 16, borderRadius: 18, alignItems: 'center', marginTop: 16 },
   btnPrimaryText: { color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 },
   btnSecondary: { backgroundColor: C.white, padding: 14, borderRadius: 14, alignItems: 'center', marginTop: 10 },
   btnSecondaryText: { color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 },

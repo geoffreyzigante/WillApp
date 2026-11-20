@@ -44,7 +44,7 @@ export function EtatVideWill({
           // change, un etat vide ne porte pas un bouton pleine largeur.
           style={{
             marginTop: 18, paddingHorizontal: 24, paddingVertical: 14,
-            borderRadius: 16, backgroundColor: C.primary,
+            borderRadius: 18, backgroundColor: C.primary,
           }}
         >
           <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 }}>

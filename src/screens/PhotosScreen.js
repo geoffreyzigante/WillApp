@@ -774,7 +774,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         style={{
           flexDirection: 'row',
           backgroundColor: C.pillBg,
-          borderRadius: 16,
+          borderRadius: 18,
           padding: 4,
           alignItems: 'center',
           position: 'relative',
@@ -1074,7 +1074,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         activeOpacity={0.85}
         style={{
           width: 40, height: 40,
-          borderRadius: 16,
+          borderRadius: 18,
           overflow: 'hidden',
           borderWidth: 0.5,
           borderColor: 'rgba(255,255,255,0.9)',

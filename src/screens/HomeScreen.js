@@ -290,7 +290,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
             flex: 1,
             flexDirection: 'row',
             backgroundColor: C.pillBg,
-            borderRadius: 16,
+            borderRadius: 18,
             padding: 4,
             alignItems: 'center',
             position: 'relative',
@@ -338,7 +338,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
           accessibilityState={{ selected: suivisActif }}
           accessibilityLabel={suivisActif ? 'Afficher tous les events' : 'Afficher seulement les events suivis'}
           style={{
-            width: 40, height: 40, borderRadius: 16,
+            width: 40, height: 40, borderRadius: 18,
             backgroundColor: suivisActif ? C.primary : C.pillBg,
             alignItems: 'center', justifyContent: 'center',
           }}
@@ -357,7 +357,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
           }}
           activeOpacity={0.85}
           style={{
-            width: 40, height: 40, borderRadius: 16,
+            width: 40, height: 40, borderRadius: 18,
             backgroundColor: searchOpen ? C.primary : C.pillBg,
             alignItems: 'center', justifyContent: 'center',
           }}
@@ -379,7 +379,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
           ref={searchBarRef}
           style={{
             backgroundColor: '#fff',
-            borderRadius: 16,
+            borderRadius: 18,
             borderWidth: 1.5,
             borderColor: '#E5E0FF',
             marginBottom: 8,
@@ -502,7 +502,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
                     onPress={() => onOpenOrgRole && onOpenOrgRole('create')}
                     style={{
                       backgroundColor: '#EDE7FF',
-                      borderRadius: 16,
+                      borderRadius: 18,
                       paddingVertical: 22,
                       paddingHorizontal: 22,
                       marginBottom: 8,
@@ -540,7 +540,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
                     style={{
                       height: 108,
                       backgroundColor: '#EDE7FF',
-                      borderRadius: 16,
+                      borderRadius: 18,
                       marginBottom: 8,
                       opacity: 0.6,
                     }}
@@ -568,7 +568,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
         activeOpacity={0.85}
         style={{
           width: 40, height: 40,
-          borderRadius: 16,
+          borderRadius: 18,
           overflow: 'hidden',
           borderWidth: 0.5,
           borderColor: 'rgba(255,255,255,0.9)',

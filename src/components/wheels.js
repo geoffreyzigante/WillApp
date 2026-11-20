@@ -110,7 +110,7 @@ export function FilterWheel({ items, activeKey, onChange, accent, bg, marginRigh
               position: 'absolute',
               top: 3, bottom: 3,
               left: padH, width: WHEEL_ITEM_W,
-              backgroundColor: accent, borderRadius: 10,
+              backgroundColor: accent, borderRadius: 12,
             }}
           />
           <ReAnimatedFlatList
@@ -202,7 +202,7 @@ export function RaceDropdown({ items, activeKey, onChange, accent, bg, compact =
         <TouchableOpacity activeOpacity={1} onPress={() => setOpen(false)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', paddingHorizontal: 24 }}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{
             backgroundColor: '#fff',
-            borderRadius: 16,
+            borderRadius: 18,
             paddingVertical: 6,
             maxHeight: 360,
             shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 8 },
@@ -220,7 +220,7 @@ export function RaceDropdown({ items, activeKey, onChange, accent, bg, compact =
                       paddingHorizontal: 16, paddingVertical: 12,
                       backgroundColor: isActive ? accent : 'transparent',
                       marginHorizontal: 4, marginVertical: 1,
-                      borderRadius: 10,
+                      borderRadius: 12,
                     }}
                   >
                     <Text numberOfLines={1} ellipsizeMode="tail" style={{

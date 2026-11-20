@@ -52,7 +52,7 @@ export default function FramingGuide({
         height: rect.height,
         left: rect.marginH,
         right: rect.marginH,
-        borderRadius: 16,
+        borderRadius: 18,
         overflow: 'hidden',
       }}
     >
@@ -104,7 +104,7 @@ export default function FramingGuide({
           style={{
             position: 'absolute', left: 12, right: 12, bottom: 12,
             backgroundColor: 'rgba(0,0,0,0.6)',
-            borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12,
+            borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12,
           }}
         >
           <Text style={{ color: '#FFB020', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>

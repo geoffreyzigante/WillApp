@@ -43,6 +43,6 @@ export const authStyles = StyleSheet.create({
 
 // Cartes section "card" pour les profile menus (Runner + Organizer).
 export const profileCardStyles = StyleSheet.create({
-  card: { backgroundColor: '#faf9ff', borderRadius: 16, padding: 16, marginBottom: 12 },
+  card: { backgroundColor: '#faf9ff', borderRadius: 18, padding: 16, marginBottom: 12 },
   label: { color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold' },
 });

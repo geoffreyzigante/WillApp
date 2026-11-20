@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
   link: {
     paddingVertical: 8,
     paddingHorizontal: 8,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   linkMutedText: {
     color: '#6c5b8c',
