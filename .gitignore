@@ -61,3 +61,6 @@ Claude outputs/
 *.aab
 *.apk
 .eas
+.sim
+.sim-android.png
+.sim-ios.png

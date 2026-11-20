@@ -5,21 +5,56 @@
 // Les deux fichiers hero-noise.png / hero-noise@2x.png sont identiques : le
 // @2x impose une tuile de 128 pt sur les ecrans Retina, comme background-size
 // 128px sur le site.
+//
+// Android : resizeMode="repeat" ne repete pas (l'image est posee une seule
+// fois, a sa taille, puis le reste de la surface reste uni : constate sur la
+// carte d'accueil, grain coupe a 256 pt). On pave donc a la main avec des
+// tuiles de 128 pt mesurees sur la taille reelle du bloc.
 
-import React from 'react';
-import { View, Image, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Image, StyleSheet, Platform } from 'react-native';
 
 const GRAIN = require('../../assets/hero-noise.png');
+const TUILE = 128;
 
-export function GrainViolet({ style, children, color = '#7B2FFF', ...reste }) {
+function GrainPave({ largeur, hauteur }) {
+  if (!largeur || !hauteur) return null;
+  const cols = Math.ceil(largeur / TUILE);
+  const lignes = Math.ceil(hauteur / TUILE);
+  const tuiles = [];
+  for (let j = 0; j < lignes; j++) {
+    for (let i = 0; i < cols; i++) {
+      tuiles.push(
+        <Image
+          key={`${i}-${j}`}
+          source={GRAIN}
+          style={{ position: 'absolute', left: i * TUILE, top: j * TUILE, width: TUILE, height: TUILE }}
+        />
+      );
+    }
+  }
+  return <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>{tuiles}</View>;
+}
+
+export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, ...reste }) {
+  const [taille, setTaille] = useState({ w: 0, h: 0 });
+  const surLayout = (e) => {
+    const { width, height } = e.nativeEvent.layout;
+    setTaille((t) => (Math.abs(t.w - width) < 1 && Math.abs(t.h - height) < 1 ? t : { w: width, h: height }));
+    if (onLayout) onLayout(e);
+  };
   return (
-    <View {...reste} style={[{ backgroundColor: color, overflow: 'hidden' }, style]}>
-      <Image
-        source={GRAIN}
-        resizeMode="repeat"
-        pointerEvents="none"
-        style={StyleSheet.absoluteFillObject}
-      />
+    <View {...reste} onLayout={surLayout} style={[{ backgroundColor: color, overflow: 'hidden' }, style]}>
+      {Platform.OS === 'android' ? (
+        <GrainPave largeur={taille.w} hauteur={taille.h} />
+      ) : (
+        <Image
+          source={GRAIN}
+          resizeMode="repeat"
+          pointerEvents="none"
+          style={StyleSheet.absoluteFillObject}
+        />
+      )}
       {children}
     </View>
   );

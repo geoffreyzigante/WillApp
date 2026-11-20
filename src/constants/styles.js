@@ -79,9 +79,9 @@ export const s = StyleSheet.create({
   gridImg: { flex: 1, borderRadius: 12 },
 
   bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'transparent', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start', gap: 38, paddingTop: 12, paddingHorizontal: 12, zIndex: 6 },
-  navBtn: { alignItems: 'center', justifyContent: 'flex-start', gap: 4, minWidth: 60 },
+  navBtn: { alignItems: 'center', justifyContent: 'flex-start', gap: 4, minWidth: 78 },
   navIconWrap: { height: 26, alignItems: 'center', justifyContent: 'center' },
-  navLabel: { fontFamily: 'Montserrat-Medium', fontSize: 12, color: C.text, marginTop: 2 },
+  navLabel: { fontFamily: 'Montserrat-Medium', fontSize: 12, color: C.text, marginTop: 2, minWidth: 78, textAlign: 'center' },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   // maxHeight garde la safe area top libre (status bar / notch) même clavier ouvert.
