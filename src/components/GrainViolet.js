@@ -6,13 +6,13 @@
 // @2x impose une tuile de 128 pt sur les ecrans Retina, comme background-size
 // 128px sur le site.
 //
-// Android : resizeMode="repeat" ne repete pas (l'image est posee une seule
+// Android ET iOS : resizeMode="repeat" ne repete pas (l'image est posee une seule
 // fois, a sa taille, puis le reste de la surface reste uni : constate sur la
 // carte d'accueil, grain coupe a 256 pt). On pave donc a la main avec des
 // tuiles de 128 pt mesurees sur la taille reelle du bloc.
 
 import React, { useState } from 'react';
-import { View, Image, StyleSheet, Platform } from 'react-native';
+import { View, Image, StyleSheet } from 'react-native';
 
 const GRAIN = require('../../assets/hero-noise.png');
 const TUILE = 128;
@@ -45,16 +45,7 @@ export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, ...r
   };
   return (
     <View {...reste} onLayout={surLayout} style={[{ backgroundColor: color, overflow: 'hidden' }, style]}>
-      {Platform.OS === 'android' ? (
-        <GrainPave largeur={taille.w} hauteur={taille.h} />
-      ) : (
-        <Image
-          source={GRAIN}
-          resizeMode="repeat"
-          pointerEvents="none"
-          style={StyleSheet.absoluteFillObject}
-        />
-      )}
+      <GrainPave largeur={taille.w} hauteur={taille.h} />
       {children}
     </View>
   );
