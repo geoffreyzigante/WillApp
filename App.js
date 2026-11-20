@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { GrainViolet } from './src/components/GrainViolet';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView,
   Image, Modal, Alert, ActivityIndicator, FlatList, Dimensions, RefreshControl,
@@ -7566,12 +7567,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
             >
           {/* Meme entete degradee que les ecrans Connexion / Inscription :
               c est le meme moment du parcours — on entre quelque part. */}
-          <LinearGradient
-            colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{ paddingHorizontal: 22, paddingTop: 74, paddingBottom: 22 }}
-          >
+          <GrainViolet style={{ paddingHorizontal: 22, paddingTop: 74, paddingBottom: 22 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <TouchableOpacity
                 onPress={fermerAvecGarde}
@@ -7595,7 +7591,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
             <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, lineHeight: 21, color: 'rgba(255,255,255,0.92)', textAlign: 'center', marginTop: 10 }}>
               Rends tes photos accessibles{'\n'}à tous les participants
             </Text>
-          </LinearGradient>
+          </GrainViolet>
 
               <View style={{ paddingHorizontal: 22, paddingTop: 22 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>

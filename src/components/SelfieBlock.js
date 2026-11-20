@@ -6,6 +6,7 @@
 //   - default            -> CTA gradient violet "Tes photos, sans avoir a les chercher"
 
 import React from 'react';
+import { GrainViolet } from './GrainViolet';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -58,12 +59,7 @@ export function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, upl
   if (missing) {
     return (
       <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
-        <LinearGradient
-          colors={['#8B3FFF', '#5A1FCC']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[s.selfieCard, { borderWidth: 2, borderColor: C.warning, flexDirection: 'column', alignItems: 'stretch' }]}
-        >
+        <GrainViolet style={[s.selfieCard, { borderWidth: 2, borderColor: C.warning, flexDirection: 'column', alignItems: 'stretch' }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <View style={[s.selfieAvatar, { width: 56, height: 56, borderRadius: 14 }]}>
               <Icon.User size={32} color="#FFFFFF" />
@@ -80,13 +76,13 @@ export function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, upl
           <View style={{ marginTop: 12, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}>
             <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>Faire mon selfie maintenant</Text>
           </View>
-        </LinearGradient>
+        </GrainViolet>
       </TouchableOpacity>
     );
   }
   return (
     <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
-      <LinearGradient colors={['#8B3FFF', '#5A1FCC']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.selfieCard}>
+      <GrainViolet style={s.selfieCard}>
         <View style={{ flex: 1 }}>
           <Text style={s.selfieTitle}>Tes photos, sans avoir à les chercher</Text>
           <Text style={s.selfieSub}>Un selfie avant le départ, et Will reconnaît ton visage sur tous tes events.</Text>
@@ -101,7 +97,7 @@ export function SelfieBlock({ selfieUri, onPress, onDelete, missing = false, upl
             <Path d="M4.47,9.36c.85,1.23,2.11,2.43,3.06,3.26.73.64,1.82.64,2.55,0,.94-.82,2.21-2.03,3.06-3.26H4.47Z" />
           </Svg>
         </View>
-      </LinearGradient>
+      </GrainViolet>
     </TouchableOpacity>
   );
 }

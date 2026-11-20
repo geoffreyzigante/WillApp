@@ -12,6 +12,7 @@
 //   - forgot : email -> POST /runner/forgot-password
 
 import React, { useState, useEffect, useRef } from 'react';
+import { GrainViolet } from '../GrainViolet';
 import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Keyboard,
   KeyboardAvoidingView, ActivityIndicator, Platform, Linking, Alert, StatusBar,
@@ -596,16 +597,11 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
         {/* Entete degrade (identique au header du menu) : croix, titre et
             onglets Connexion/Inscription y vivent desormais — le blanc du
             formulaire ne commence qu en dessous. */}
-        <LinearGradient
-          colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
+        <GrainViolet style={{
             paddingHorizontal: 24,
             paddingTop: replierEntete ? (insets.top || StatusBar.currentHeight || 20) : padHaut,
             paddingBottom: mode === 'forgot' ? 26 : 0,
-          }}
-        >
+          }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: replierEntete ? 8 : 18 }}>
             {/* Etape 2 : le chevron revient a l email au lieu de fermer --
                 une faute de frappe se corrige sans tout recommencer. */}
@@ -711,7 +707,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
               </TouchableOpacity>
             </View>
           ) : null}
-        </LinearGradient>
+        </GrainViolet>
 
         {/* Clavier iOS : le ScrollView ci-dessous porte
             automaticallyAdjustKeyboardInsets, le mecanisme natif, qui

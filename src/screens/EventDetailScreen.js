@@ -485,40 +485,35 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             {/* Trois lignes sont devenues deux (user 2026-10-20) : le lieu
                 suit la date, le type suit le nom. La hero perd la hauteur
                 d une ligne sans rien perdre de son contenu. */}
-            <Text style={s.eventDate} numberOfLines={1}>
-              {formatDateLongMinuscule(event.event_date, event.event_date_end)}
-              {cityLabel(event.location) ? `  ·  ${cityLabel(event.location)}` : ''}
+            {/* Meme ecriture que le hero du site : date en capitales espacees,
+                titre, puis « lieu | type » sur une ligne, sans pastille. */}
+            <Text style={[s.eventDate, { fontSize: 12, letterSpacing: 1.4, opacity: 1 }]} numberOfLines={1}>
+              {formatDateLong(event.event_date, event.event_date_end)}
             </Text>
-            {/* La pastille est imbriquee DANS le titre, pas posee a cote :
-                en rangee flex, un titre sur deux lignes la repoussait au
-                centre vertical du bloc. Ici elle suit le dernier mot, et
-                passe a la ligne avec lui. React Native autorise une View
-                dans un Text ; le decalage vertical la pose sur la ligne de
-                base plutot que sur le haut des capitales. */}
             <Text
               style={[s.eventName, { fontSize: 22, lineHeight: 27 }]}
               numberOfLines={2}
               ellipsizeMode="tail"
             >
               {event.name}
-              {event.event_type ? (
-                <Text>
-                  {'  '}
-                  <View style={{
-                    backgroundColor: 'rgba(255,255,255,0.22)',
-                    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
-                    transform: [{ translateY: 2 }],
-                  }}>
-                    {/* 11 et non 10 : plancher de lisibilite Apple. Le type
-                        se reconnait plus qu il ne se lit, mais rien ne
-                        justifiait de rester sous le seuil. */}
-                    <Text style={{ color: '#fff', fontSize: 11, fontFamily: 'Montserrat-SemiBold' }}>
-                      {displayEventType(event.event_type)}
-                    </Text>
-                  </View>
-                </Text>
-              ) : null}
             </Text>
+            {(cityLabel(event.location) || event.event_type) ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                {cityLabel(event.location) ? (
+                  <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-Medium', flexShrink: 1 }} numberOfLines={1}>
+                    {cityLabel(event.location)}
+                  </Text>
+                ) : null}
+                {(cityLabel(event.location) && event.event_type) ? (
+                  <View style={{ width: 1, height: 14, marginHorizontal: 12, backgroundColor: 'rgba(255,255,255,0.45)' }} />
+                ) : null}
+                {event.event_type ? (
+                  <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-Medium' }} numberOfLines={1}>
+                    {displayEventType(event.event_type)}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
             {(mapQuery || event.website) ? (
               <>
                 <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginTop: 14, marginBottom: 12 }} />

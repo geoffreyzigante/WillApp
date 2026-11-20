@@ -12,6 +12,7 @@
 // haut a gauche, titre AVEstiana violet, tout en violet (rose abandonne).
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { GrainViolet } from '../GrainViolet';
 import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
   KeyboardAvoidingView, ActivityIndicator, Alert, StatusBar,
@@ -236,12 +237,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   return (
     <Modal visible={visible} onRequestClose={onClose} animationType="slide" presentationStyle="fullScreen">
       <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
-        <LinearGradient
-          colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ paddingHorizontal: 24, paddingTop: padHaut, paddingBottom: 24 }}
-        >
+        <GrainViolet style={{ paddingHorizontal: 24, paddingTop: padHaut, paddingBottom: 24 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
             <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontFamily: 'Montserrat', color: '#4a4458', fontSize: 22, lineHeight: lh(22, 24, 'Montserrat') }}>✕</Text>
@@ -262,7 +258,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
           <Text style={{ fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.75)', fontSize: 13, textAlign: 'center' }}>
             {role === 'photographer' ? 'Sélectionne ton événement et entre ton code PIN' : 'Connecte-toi à ton événement'}
           </Text>
-        </LinearGradient>
+        </GrainViolet>
 
         {/* Clavier iOS : le ScrollView ci-dessous porte
             automaticallyAdjustKeyboardInsets, le mecanisme natif, qui

@@ -14,6 +14,7 @@
 // seul geste, c est une page d entree, pas un tiroir.
 
 import React, { useState } from 'react';
+import { GrainViolet } from '../GrainViolet';
 import {
   Modal, View, Text, TouchableOpacity, ActivityIndicator,
   useWindowDimensions, StatusBar,
@@ -47,12 +48,7 @@ export function OuvrirEspaceOrgaModal({ visible, onClose, onOuvrir, busy = false
       <View style={{ flex: 1, backgroundColor: '#fff' }}>
         {/* Meme entete que le formulaire et que les ecrans d auth : c est la
             meme porte, elle doit se reconnaitre. */}
-        <LinearGradient
-          colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ paddingHorizontal: 22, paddingTop: padHaut, paddingBottom: 26 }}
-        >
+        <GrainViolet style={{ paddingHorizontal: 22, paddingTop: padHaut, paddingBottom: 26 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity
               onPress={onClose}
@@ -74,7 +70,7 @@ export function OuvrirEspaceOrgaModal({ visible, onClose, onOuvrir, busy = false
           }}>
             Rends tes photos accessibles{'\n'}à tous les participants
           </Text>
-        </LinearGradient>
+        </GrainViolet>
 
         <View style={{ flex: 1, paddingTop: 28, paddingBottom: insets.bottom }}>
           <View style={{ marginTop: 8, paddingHorizontal: 34 }}>

@@ -9,6 +9,7 @@
 // rose distinctif est abandonne : tout en violet.
 
 import React, { useState, useEffect } from 'react';
+import { GrainViolet } from '../GrainViolet';
 import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
   KeyboardAvoidingView, ActivityIndicator, StatusBar,
@@ -203,12 +204,7 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
   return (
     <Modal visible={visible} onRequestClose={onClose} animationType="slide" presentationStyle="fullScreen">
       <View style={{ flex: 1, backgroundColor: T.bg }}>
-        <LinearGradient
-          colors={['#7B2FFF', '#9E5BFF', '#D67CF8']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ paddingHorizontal: 24, paddingTop: padHaut }}
-        >
+        <GrainViolet style={{ paddingHorizontal: 24, paddingTop: padHaut }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
             <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>✕</Text>
@@ -248,7 +244,7 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
               );
             })}
           </View>
-        </LinearGradient>
+        </GrainViolet>
 
         {/* Clavier iOS : le ScrollView ci-dessous porte
             automaticallyAdjustKeyboardInsets, le mecanisme natif, qui

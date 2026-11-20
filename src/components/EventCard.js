@@ -45,29 +45,20 @@ export function EventCard({ event, onPress, isFollowing, onToggleFollow, style }
       ) : null}
       <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={StyleSheet.absoluteFillObject} />
       <View style={s.eventCardCenter} pointerEvents="none">
-        <Text style={s.eventDate}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
+        <Text style={[s.eventDate, { letterSpacing: 1.1, opacity: 1 }]}>{formatDateLong(event.event_date, event.event_date_end)}</Text>
         <Text style={[s.eventName, { lineHeight: 22 }]} numberOfLines={2} ellipsizeMode="tail">{event.name}</Text>
-        <Text style={s.eventLocation}>{cityLabel(event.location)}</Text>
-      </View>
-      {event.event_type ? (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            bottom: 8,
-            right: 8,
-            backgroundColor: '#fff',
-            paddingHorizontal: 8,
-            paddingVertical: 2,
-            borderRadius: 999,
-            zIndex: 3,
-          }}
-        >
-          <Text style={{ color: tint, fontSize: 10, fontFamily: 'Montserrat-SemiBold' }}>
-            {displayEventType(event.event_type)}
-          </Text>
+        {/* « lieu | type » sur une ligne, comme les cartes du site : le type
+            n a plus de pastille. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+          <Text style={[s.eventLocation, { marginTop: 0, color: '#fff', flexShrink: 1 }]} numberOfLines={1}>{cityLabel(event.location)}</Text>
+          {event.event_type ? (
+            <>
+              <View style={{ width: 1, height: 13, marginHorizontal: 10, backgroundColor: 'rgba(255,255,255,0.45)' }} />
+              <Text style={[s.eventLocation, { marginTop: 0, color: '#fff' }]} numberOfLines={1}>{displayEventType(event.event_type)}</Text>
+            </>
+          ) : null}
         </View>
-      ) : null}
+      </View>
       {onToggleFollow && (
         <TouchableOpacity
           onPress={onToggleFollow}

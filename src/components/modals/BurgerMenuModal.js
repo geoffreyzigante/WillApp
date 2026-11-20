@@ -11,6 +11,7 @@
 // suivante (modal stacking iOS, cf feedback_rn_modal_stacking).
 
 import React, { useRef, useEffect, useState } from 'react';
+import { GrainViolet } from '../GrainViolet';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Alert } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
@@ -292,13 +293,7 @@ export function BurgerMenuModal({
                     du tiroir, qui etait vide aux deux tiers. L avatar y vit
                     desormais — avant il flottait a droite de deux lignes de
                     texte sans appartenir a l une ni a l autre. */}
-                <LinearGradient
-                  colors={['#D67CF8', '#9E5BFF', '#7B2FFF']}
-                  start={{ x: 1, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.hero}
-                  onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}
-                >
+                <GrainViolet style={styles.hero} onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}>
                   <TouchableOpacity
                     onPress={selfieUri ? fire(onViewSelfie) : empiler(onOpenAccount)}
                     activeOpacity={0.85}
@@ -328,7 +323,7 @@ export function BurgerMenuModal({
                       ? 'Selfie enregistré — on te reconnaît sur les photos'
                       : 'Dépose ton selfie : Will reconnaît ton visage'}
                   </Text>
-                </LinearGradient>
+                </GrainViolet>
 
                 <Animated.View style={{ flex: 1, opacity: contenuOpacity, transform: [{ translateX: contenuX }] }}>
                 <MenuRow
@@ -414,13 +409,7 @@ export function BurgerMenuModal({
               <>
                 {/* Meme bandeau qu en connecte : il porte la promesse au lieu
                     d un logo pose sur du vide. */}
-                <LinearGradient
-                  colors={['#D67CF8', '#9E5BFF', '#7B2FFF']}
-                  start={{ x: 1, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.hero}
-                  onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}
-                >
+                <GrainViolet style={styles.hero} onLayout={(e) => setHeroH(e.nativeEvent.layout.height)}>
                   <View style={{ marginBottom: 16 }}>
                     <Icon.Logo width={62} color="#FFFFFF" />
                   </View>
@@ -435,7 +424,7 @@ export function BurgerMenuModal({
                       seconde. « binaire » = le bundle livre avec l app,
                       « maj du ... » = une mise a jour OTA appliquee. */}
                   <Text style={styles.heroVersion}>{libelleVersion()}</Text>
-                </LinearGradient>
+                </GrainViolet>
 
                 <Animated.View style={{ flex: 1, opacity: contenuOpacity, transform: [{ translateX: contenuX }] }}>
                 <View style={styles.authSection}>

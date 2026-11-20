@@ -8,6 +8,7 @@
 // limité aux 5 premières photos après shuffle pour borner la mémoire.
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { GrainViolet } from './GrainViolet';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Platform } from 'react-native';
 import Svg, { Path, Ellipse } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
@@ -145,12 +146,7 @@ function WelcomeCard({ onSignup, onLogin }) {
           (#DB90FD), violet #7234F5 dominant ; titre et lien secondaire en
           rose charte pinkPill (#F4A6FF, pipe sur la maquette) ; icone photo
           blanche en tete ; chevrons sur les deux actions. */}
-      <LinearGradient
-        colors={['#DB90FD', '#9A55F8', '#7234F5']}
-        locations={[0, 0.2, 0.5]}
-        start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }}
-        style={{ flex: 1, padding: 18, paddingTop: Platform.OS === 'android' ? 16 : 24, justifyContent: 'flex-start' }}
-      >
+      <GrainViolet style={{ flex: 1, padding: 18, paddingTop: Platform.OS === 'android' ? 16 : 24, justifyContent: 'flex-start' }}>
         {Platform.OS === 'android' ? (
           // Android : lineHeight sous la hauteur naturelle de la police coupe la
           // derniere ligne (voir lh()). Pour resserrer l interligne comme sur
@@ -187,7 +183,7 @@ function WelcomeCard({ onSignup, onLogin }) {
         <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' }}>
           <MascotteSelfie width={Platform.OS === 'android' ? 134 : 138} />
         </View>
-      </LinearGradient>
+      </GrainViolet>
     </View>
   );
 }
