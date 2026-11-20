@@ -149,7 +149,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
     if (st === 'paid') return { label: 'En ligne', color: C.success, bg: '#D1FAE5' };
     if (st === 'rejected') return { label: 'Refusé', color: C.error, bg: '#FEE2E2' };
     // Repli : jamais le slug technique brut dans le badge.
-    return { label: 'En cours', color: C.textSoft, bg: '#f5f3ff' };
+    return { label: 'En cours', color: C.textSoft, bg: C.fondApp };
   };
 
   return (

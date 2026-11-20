@@ -894,11 +894,11 @@ export function PhotoViewerModal({
                     activeOpacity={0.85}
                     style={{
                       paddingVertical: 12, paddingHorizontal: 28, borderRadius: 999,
-                      backgroundColor: inCart ? '#16A34A' : '#7B2FFF',
+                      backgroundColor: inCart ? '#16A34A' : C.primary,
                       alignItems: 'center', justifyContent: 'center',
                       flexDirection: 'row', gap: 8,
                       minWidth: 220,
-                      shadowColor: inCart ? '#16A34A' : '#7B2FFF', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
+                      shadowColor: inCart ? '#16A34A' : C.primary, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
                       elevation: 6,
                     }}
                     accessibilityLabel={inCart ? 'Retirer du panier' : 'Ajouter au panier'}
@@ -932,11 +932,11 @@ export function PhotoViewerModal({
                 activeOpacity={0.85}
                 style={{
                   paddingVertical: 12, paddingHorizontal: 28, borderRadius: 999,
-                  backgroundColor: '#7B2FFF',
+                  backgroundColor: C.primary,
                   alignItems: 'center', justifyContent: 'center',
                   flexDirection: 'row', gap: 8,
                   opacity: busy ? 0.65 : 1, minWidth: 200,
-                  shadowColor: '#7B2FFF', shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
+                  shadowColor: C.primary, shadowOpacity: 0.35, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
                   elevation: 6,
                 }}
                 accessibilityLabel="Télécharger la photo"

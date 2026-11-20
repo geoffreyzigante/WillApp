@@ -163,7 +163,7 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
                     activeOpacity={0.5}
                     style={{
                       width: 64, height: 64, borderRadius: 32,
-                      backgroundColor: '#f5f3ff',
+                      backgroundColor: C.fondApp,
                       alignItems: 'center', justifyContent: 'center',
                     }}
                   >

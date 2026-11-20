@@ -293,7 +293,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                       value={searchQuery}
                       onChangeText={setSearchQuery}
                       placeholder="Rechercher un event"
-                      placeholderTextColor="#A89CB8"
+                      placeholderTextColor={C.muted}
                       autoCapitalize="none"
                       autoCorrect={false}
                       style={{ fontFamily: 'Montserrat',
@@ -309,7 +309,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         value={codeInput}
                         onChangeText={(v) => { setCodeInput(v); if (codeError) setCodeError(''); }}
                         placeholder="Code event"
-                        placeholderTextColor="#A89CB8"
+                        placeholderTextColor={C.muted}
                         autoCapitalize="none"
                         autoCorrect={false}
                         returnKeyType="go"
@@ -371,7 +371,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         }}
                       >
                         <Text style={{
-                          color: codeInput.trim() ? C.primary : '#8b83a0',
+                          color: codeInput.trim() ? C.primary : C.muted,
                           fontSize: 14, fontFamily: 'Montserrat-SemiBold',
                         }}>
                           {codeLoading ? '…' : 'Ouvrir'}
@@ -391,7 +391,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 <View style={{ marginBottom: 12 }}>
                   {upcomingSearched.length === 0 && (
                     <View style={{ padding: 24, alignItems: 'center' }}>
-                      <Text style={{ fontFamily: 'Montserrat', color: '#8b83a0', fontSize: 13 }}>
+                      <Text style={{ fontFamily: 'Montserrat', color: C.muted, fontSize: 13 }}>
                         {upcoming.length === 0
                           ? 'Aucun événement à venir'
                           : 'Aucun résultat pour cette recherche'}
@@ -480,14 +480,14 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 <Text style={{ color: C.text, fontSize: 14, fontFamily: 'Montserrat-SemiBold', marginBottom: 6 }}>
                   {resetMode === 'reset-request' ? 'Réinitialiser ton mot de passe' : 'Vérifier le code reçu'}
                 </Text>
-                <Text style={{ fontFamily: 'Montserrat', color: '#8b83a0', fontSize: 12, marginBottom: 14 }}>
+                <Text style={{ fontFamily: 'Montserrat', color: C.muted, fontSize: 12, marginBottom: 14 }}>
                   {resetMode === 'reset-request'
                     ? `Un code à 6 chiffres sera envoyé à l'email enregistré pour cet événement.`
                     : `Code envoyé à l'email de l'organisateur. Valable 15 minutes.`}
                 </Text>
                 <TextInput
                   placeholder="Code de l'événement"
-                  placeholderTextColor="#A89CB8"
+                  placeholderTextColor={C.muted}
                   value={code}
                   onChangeText={setCode}
                   autoCapitalize="none"
@@ -498,7 +498,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   <>
                     <TextInput
                       placeholder="Code reçu (6 chiffres)"
-                      placeholderTextColor="#A89CB8"
+                      placeholderTextColor={C.muted}
                       value={resetCode}
                       onChangeText={setResetCode}
                       keyboardType="number-pad"
@@ -508,7 +508,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                     />
                     <TextInput
                       placeholder="Nouveau mot de passe"
-                      placeholderTextColor="#A89CB8"
+                      placeholderTextColor={C.muted}
                       value={resetNewPassword}
                       onChangeText={setResetNewPassword}
                       secureTextEntry
@@ -521,7 +521,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
               <>
                 <TextInput
                   placeholder="Code de l'événement"
-                  placeholderTextColor="#A89CB8"
+                  placeholderTextColor={C.muted}
                   value={code}
                   onChangeText={setCode}
                   autoCapitalize="none"
@@ -529,7 +529,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 />
                 <TextInput
                   placeholder="Mot de passe"
-                  placeholderTextColor="#A89CB8"
+                  placeholderTextColor={C.muted}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
@@ -569,7 +569,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   hitSlop={6}
                   style={{ alignItems: 'center', paddingVertical: 10, marginTop: 4 }}
                 >
-                  <Text style={{ fontFamily: 'Montserrat', color: '#8b83a0', fontSize: 13 }}>Annuler</Text>
+                  <Text style={{ fontFamily: 'Montserrat', color: C.muted, fontSize: 13 }}>Annuler</Text>
                 </TouchableOpacity>
               </>
             ) : role === 'photographer' ? null : (
@@ -584,7 +584,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 8,
                 }}
               >
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: (code && password) ? '#fff' : '#8b83a0', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Continuer</Text>}
+                {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: (code && password) ? '#fff' : C.muted, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Continuer</Text>}
               </TouchableOpacity>
             )}
           </ScrollView>

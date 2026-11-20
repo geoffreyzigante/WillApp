@@ -930,7 +930,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         />
       ) : photos.length === 0 && anySearching ? (
         <View style={{ paddingVertical: 40, alignItems: 'center', paddingHorizontal: 24 }}>
-          <SpinningLoader size={26} color="#7B2FFF" />
+          <SpinningLoader size={26} color={C.primary} />
           <Text style={{ color: '#5E1AD6', fontSize: 13, marginTop: 12, textAlign: 'center', fontFamily: 'Montserrat-SemiBold' }}>
             Will recherche tes photos…
           </Text>

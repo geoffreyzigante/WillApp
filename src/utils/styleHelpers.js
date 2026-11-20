@@ -9,9 +9,9 @@ import { C } from '../constants/colors';
 export const modeChipStyleApp = (active) => ({
   paddingHorizontal: 10, paddingVertical: 5,
   borderRadius: 999,
-  backgroundColor: active ? '#7B2FFF' : 'transparent',
+  backgroundColor: active ? C.primary : 'transparent',
   borderWidth: 1,
-  borderColor: active ? '#7B2FFF' : '#d8d4e0',
+  borderColor: active ? C.primary : '#d8d4e0',
 });
 
 export const modeChipTextStyleApp = (active) => ({

@@ -19,7 +19,7 @@ export function PinDisplay({ pin, masked = true }) {
           style={{
             fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
             fontSize: 28, 
-            color: valid ? C.primary : '#A89CB8',
+            color: valid ? C.primary : C.muted,
             minWidth: 22, textAlign: 'center',
           }}
         >

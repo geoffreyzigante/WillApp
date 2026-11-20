@@ -5671,7 +5671,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             </View>
             <Text style={{
               fontFamily: 'AVEstiana', fontStyle: 'normal',
-              fontSize: 30, color: '#7B2FFF', textAlign: 'center', marginBottom: 16,
+              fontSize: 30, color: C.primary, textAlign: 'center', marginBottom: 16,
             }}>
               Mes photos{myPhotos.length > 0 ? ` (${myPhotos.length})` : ''}
             </Text>
@@ -5679,7 +5679,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
           {myPhotosLoading && myPhotos.length === 0 ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <ActivityIndicator color="#7B2FFF" />
+              <ActivityIndicator color={C.primary} />
             </View>
           ) : myPhotosError && myPhotos.length === 0 ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
@@ -5688,7 +5688,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               </Text>
               <TouchableOpacity
                 onPress={fetchMyPhotos}
-                style={{ backgroundColor: '#7B2FFF', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 }}
+                style={{ backgroundColor: C.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20 }}
               >
                 <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Réessayer</Text>
               </TouchableOpacity>
@@ -5723,7 +5723,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 <RefreshControl
                   refreshing={myPhotosLoading}
                   onRefresh={fetchMyPhotos}
-                  tintColor="#7B2FFF"
+                  tintColor={C.primary}
                 />
               }
               contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
@@ -7194,7 +7194,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                   <View style={{ flexDirection: 'row', gap: 10, marginTop: 22 }}>
                     <TouchableOpacity
                       onPress={annulerChamp}
-                      style={{ flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: '#f5f3ff' }}
+                      style={{ flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: C.fondApp }}
                     >
                       <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
                     </TouchableOpacity>
@@ -7211,7 +7211,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         opacity: partialBusy ? 0.6 : 1,
                       }}
                     >
-                      {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: isValidPin(photographerPwd, pinLen) ? '#fff' : '#A89CB8', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Confirmer</Text>}
+                      {partialBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: isValidPin(photographerPwd, pinLen) ? '#fff' : C.muted, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Confirmer</Text>}
                     </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
@@ -7238,7 +7238,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     keyboardType="number-pad"
                     maxLength={5}
                     placeholder="75001"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={C.muted}
                     style={{ fontFamily: 'Montserrat', paddingVertical: 14, paddingHorizontal: 16, fontSize: 16, color: C.text }}
                   />
                 </View>
@@ -7253,7 +7253,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     value={city}
                     onChangeText={setCity}
                     placeholder="Paris"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={C.muted}
                     style={{ fontFamily: 'Montserrat', paddingVertical: 14, paddingHorizontal: 16, fontSize: 16, color: C.text }}
                   />
                 </View>
@@ -7373,10 +7373,10 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     style={{
                       flexDirection: 'row', alignItems: 'center',
                       paddingVertical: 14, paddingHorizontal: 16,
-                      backgroundColor: listed === val ? '#F5F3FF' : '#fff',
+                      backgroundColor: listed === val ? C.fondApp : '#fff',
                       borderRadius: 12,
                       borderWidth: 1,
-                      borderColor: listed === val ? '#7B2FFF' : '#E5E5EA',
+                      borderColor: listed === val ? C.primary : '#E5E5EA',
                       marginBottom: 10,
                     }}
                   >
@@ -7384,7 +7384,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                       {val ? 'Listé' : 'Non listé'}
                     </Text>
                     {listed === val ? (
-                      <Text style={{ color: '#7B2FFF', fontFamily: 'Montserrat-SemiBold', fontSize: 18 }}>✓</Text>
+                      <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 18 }}>✓</Text>
                     ) : null}
                   </TouchableOpacity>
                 ))}
@@ -7482,25 +7482,25 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         placeholder={d.label_only ? 'Nom de l\u2019épreuve' : (eventType || 'Type')}
                         placeholderTextColor="rgba(26,10,62,0.35)"
                         maxLength={40}
-                        style={{ fontFamily: 'Montserrat', height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', paddingHorizontal: 12, color: C.text, fontSize: 14 }}
+                        style={{ fontFamily: 'Montserrat', height: 38, borderRadius: 8, backgroundColor: C.fondApp, paddingHorizontal: 12, color: C.text, fontSize: 14 }}
                       />
                     </View>
                     <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-end' }}>
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4 }}>DISTANCE</Text>
-                        <TouchableOpacity onPress={() => setKmPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
+                        <TouchableOpacity onPress={() => setKmPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: C.fondApp, alignItems: 'center', justifyContent: 'center' }}>
                           <Text style={{ fontFamily: 'Montserrat', color: d.km ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.km ? `${d.km} km` : '—'}</Text>
                         </TouchableOpacity>
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4 }}>DÉPART</Text>
-                        <TouchableOpacity onPress={() => setTimePickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
+                        <TouchableOpacity onPress={() => setTimePickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: C.fondApp, alignItems: 'center', justifyContent: 'center' }}>
                           <Text style={{ fontFamily: 'Montserrat', color: d.time ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.time || '—'}</Text>
                         </TouchableOpacity>
                       </View>
                       <View style={{ flex: 1.2 }}>
                         <Text style={{ color: 'rgba(26,10,62,0.45)', fontSize: 10, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4 }}>DÉNIVELÉ</Text>
-                        <TouchableOpacity onPress={() => setElevPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' }}>
+                        <TouchableOpacity onPress={() => setElevPickerIdx(idx)} style={{ height: 38, borderRadius: 8, backgroundColor: C.fondApp, alignItems: 'center', justifyContent: 'center' }}>
                           <Text style={{ fontFamily: 'Montserrat', color: d.elevation ? C.text : 'rgba(26,10,62,0.35)', fontSize: 14 }}>{d.elevation || '—'}</Text>
                         </TouchableOpacity>
                       </View>
@@ -7599,7 +7599,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                 <View style={{ flex: 1, height: 1, backgroundColor: '#efeaf8' }} />
               </View>
               <Text style={formSectionStyle.heading}>Nom de l'event *</Text>
-                    <TextInput placeholder="Ex : Trail des Violettes" placeholderTextColor="#A89CB8" value={name} onChangeText={setName} style={formSectionStyle.input} />
+                    <TextInput placeholder="Ex : Trail des Violettes" placeholderTextColor={C.muted} value={name} onChangeText={setName} style={formSectionStyle.input} />
                     {showErr[1] && !name?.trim() && <Text style={errStyle}>Champ requis</Text>}
 
                     <Text style={formSectionStyle.heading}>Type d'épreuve *</Text>
@@ -7631,7 +7631,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                       onPress={() => setShowCalendar(true)}
                       style={[formSectionStyle.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
                     >
-                      <Text style={{ fontFamily: 'Montserrat', color: (eventDate || dateTbd) ? C.text : '#A89CB8', fontSize: 15 }}>
+                      <Text style={{ fontFamily: 'Montserrat', color: (eventDate || dateTbd) ? C.text : C.muted, fontSize: 15 }}>
                         {eventDate
                           ? formatDateForForm(
                               isoJourLocal(eventDate),
@@ -7682,7 +7682,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         <Text style={formSectionStyle.heading}>Code postal *</Text>
                         <TextInput
                           placeholder="27400"
-                          placeholderTextColor="#A89CB8"
+                          placeholderTextColor={C.muted}
                           value={postalCode}
                           onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
                           keyboardType="number-pad"
@@ -7699,7 +7699,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                             vrai champ, la liste ne fait que le remplir. */}
                         <TextInput
                           placeholder="Louviers"
-                          placeholderTextColor="#A89CB8"
+                          placeholderTextColor={C.muted}
                           value={city}
                           onChangeText={setCity}
                           autoCapitalize="words"
@@ -7716,7 +7716,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     {citySuggestions.length > 0 && !city && (
                       <ScrollView
                         ref={blocVilleRef}
-                        style={{ maxHeight: 140, marginBottom: 8, borderRadius: 12, backgroundColor: '#f5f3ff' }}
+                        style={{ maxHeight: 140, marginBottom: 8, borderRadius: 12, backgroundColor: C.fondApp }}
                         keyboardShouldPersistTaps="handled"
                         nestedScrollEnabled
                       >
@@ -7736,7 +7736,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     <Text style={formSectionStyle.heading}>Participants estimés</Text>
                     <TextInput
                       placeholder="500"
-                      placeholderTextColor="#A89CB8"
+                      placeholderTextColor={C.muted}
                       value={estimatedParticipants}
                       onChangeText={(v) => setEstimatedParticipants(v.replace(/\D/g, '').slice(0, 6))}
                       keyboardType="number-pad"
@@ -7770,7 +7770,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                             value={d.label}
                             onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
                             placeholder={d.label_only ? 'Nom de l\u2019épreuve' : (eventType || 'Type')}
-                            placeholderTextColor="#A89CB8"
+                            placeholderTextColor={C.muted}
                             maxLength={40}
                             style={[formSectionStyle.input, { marginBottom: 0 }]}
                           />
@@ -7779,19 +7779,19 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                           <View style={{ flex: 1 }}>
                             <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DISTANCE</Text>
                             <TouchableOpacity onPress={() => setKmPickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
-                              <Text style={{ fontFamily: 'Montserrat', color: d.km ? C.text : '#A89CB8', fontSize: 15 }}>{d.km ? `${d.km} km` : '—'}</Text>
+                              <Text style={{ fontFamily: 'Montserrat', color: d.km ? C.text : C.muted, fontSize: 15 }}>{d.km ? `${d.km} km` : '—'}</Text>
                             </TouchableOpacity>
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉPART</Text>
                             <TouchableOpacity onPress={() => setTimePickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
-                              <Text style={{ fontFamily: 'Montserrat', color: d.time ? C.text : '#A89CB8', fontSize: 15 }}>{d.time || '—'}</Text>
+                              <Text style={{ fontFamily: 'Montserrat', color: d.time ? C.text : C.muted, fontSize: 15 }}>{d.time || '—'}</Text>
                             </TouchableOpacity>
                           </View>
                           <View style={{ flex: 1.2 }}>
                             <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉNIVELÉ</Text>
                             <TouchableOpacity onPress={() => setElevPickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
-                              <Text style={{ fontFamily: 'Montserrat', color: d.elevation ? C.text : '#A89CB8', fontSize: 15 }}>{d.elevation || '—'}</Text>
+                              <Text style={{ fontFamily: 'Montserrat', color: d.elevation ? C.text : C.muted, fontSize: 15 }}>{d.elevation || '—'}</Text>
                             </TouchableOpacity>
                           </View>
                         </View>
@@ -7802,7 +7802,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     ))}
                     <TouchableOpacity
                       onPress={addDistance}
-                      style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 12, backgroundColor: '#f5f3ff', marginBottom: 8 }}
+                      style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 12, backgroundColor: C.fondApp, marginBottom: 8 }}
                     >
                       <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>+ Ajouter une épreuve</Text>
                     </TouchableOpacity>
@@ -7818,17 +7818,17 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -8, marginBottom: 8, marginLeft: 4, lineHeight: 16 }]}>
                       Email interne pour la validation de ton event et les messages d'admin Will. NON affiché publiquement.
                     </Text>
-                    <TextInput placeholder="Email administratif *" placeholderTextColor="#A89CB8" value={contactAdmin} onChangeText={setContactAdmin} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
+                    <TextInput placeholder="Email administratif *" placeholderTextColor={C.muted} value={contactAdmin} onChangeText={setContactAdmin} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
                     {showErr[3] && !emailAdminFormat && <Text style={errStyle}>Email administratif invalide</Text>}
 
                     <Text style={[formSectionStyle.heading, { marginTop: 12 }]}>Contact public</Text>
                     <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -8, marginBottom: 8, marginLeft: 4, lineHeight: 16 }]}>
                       Au moins UNE info parmi email, téléphone et site web. Affichées sur la page publique de ton événement.
                     </Text>
-                    <TextInput placeholder="Email de contact public" placeholderTextColor="#A89CB8" value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
+                    <TextInput placeholder="Email de contact public" placeholderTextColor={C.muted} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
                     {showErr[3] && contact?.trim() && !emailPublicFormat && <Text style={errStyle}>Email public invalide</Text>}
-                    <TextInput placeholder="Téléphone" placeholderTextColor="#A89CB8" value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
-                    <TextInput placeholder="Site web" placeholderTextColor="#A89CB8" value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
+                    <TextInput placeholder="Téléphone" placeholderTextColor={C.muted} value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
+                    <TextInput placeholder="Site web" placeholderTextColor={C.muted} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
                     {showErr[3] && !hasPublicContact && <Text style={errStyle}>Renseigne au moins une info de contact public.</Text>}
                   
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 12 }}>
@@ -7838,7 +7838,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     <Text style={formSectionStyle.heading}>Adresse de départ</Text>
                     <TextInput
                       placeholder="Place Ernest Thorel, Louviers"
-                      placeholderTextColor="#A89CB8"
+                      placeholderTextColor={C.muted}
                       value={address}
                       onChangeText={setAddress}
                       style={formSectionStyle.input}
@@ -7847,7 +7847,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     <Text style={formSectionStyle.heading}>Description</Text>
                     <TextInput
                       placeholder="Parcours, ambiance, ravitaillements, ce qu'il faut savoir avant de venir…"
-                      placeholderTextColor="#A89CB8"
+                      placeholderTextColor={C.muted}
                       value={message}
                       onChangeText={setMessage}
                       multiline
@@ -7981,7 +7981,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                               value={cPrenom}
                               onChangeText={setCPrenom}
                               placeholder="Camille"
-                              placeholderTextColor="#A89CB8"
+                              placeholderTextColor={C.muted}
                               autoCapitalize="words"
                               textContentType="givenName"
                               style={formSectionStyle.input}
@@ -7993,7 +7993,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                               value={cNom}
                               onChangeText={setCNom}
                               placeholder="Durand"
-                              placeholderTextColor="#A89CB8"
+                              placeholderTextColor={C.muted}
                               autoCapitalize="words"
                               textContentType="familyName"
                               style={formSectionStyle.input}
@@ -8006,7 +8006,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         value={cEmail}
                         onChangeText={setCEmail}
                         placeholder="camille@monclub.fr"
-                        placeholderTextColor="#A89CB8"
+                        placeholderTextColor={C.muted}
                         keyboardType="email-address"
                         autoCapitalize="none"
                         autoCorrect={false}
@@ -8021,7 +8021,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                           value={cMdp}
                           onChangeText={setCMdp}
                           placeholder={modeCompte === 'existing' ? 'Ton mot de passe Will' : '8 caractères minimum'}
-                          placeholderTextColor="#A89CB8"
+                          placeholderTextColor={C.muted}
                           secureTextEntry={!cVoirMdp}
                           autoCapitalize="none"
                           autoCorrect={false}
@@ -8059,7 +8059,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                             value={cMdp2}
                             onChangeText={setCMdp2}
                             placeholder="Retape ton mot de passe"
-                            placeholderTextColor="#A89CB8"
+                            placeholderTextColor={C.muted}
                             secureTextEntry={!cVoirMdp}
                             autoCapitalize="none"
                             autoCorrect={false}
@@ -10256,7 +10256,7 @@ function App() {
             close (cf useEffect [openedEvent] qui clear au callback de fin
             d anim), permettant a EventDetailScreen de glisser vers la
             gauche au lieu de disparaitre instantanement. */}
-        <View style={{ width: SCREEN_W, height: '100%', backgroundColor: '#F5F3FF' }}>
+        <View style={{ width: SCREEN_W, height: '100%', backgroundColor: C.fondApp }}>
           {/* edges lateraux seulement : l encart vertical est deja pose par le
               SafeAreaView de la racine. Imbriquer deux SafeAreaView le compte
               DEUX FOIS — c est le grand vide observe entre le header et le

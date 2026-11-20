@@ -316,12 +316,12 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
               {profile && editing && (
                 <View style={drawer.section}>
                   <TextInput
-                    placeholder="Prénom" placeholderTextColor="#A89CB8"
+                    placeholder="Prénom" placeholderTextColor={C.muted}
                     value={firstName} onChangeText={setFirstName}
                     style={authStyles.input}
                   />
                   <TextInput
-                    placeholder="Nom" placeholderTextColor="#A89CB8"
+                    placeholder="Nom" placeholderTextColor={C.muted}
                     value={lastName} onChangeText={setLastName}
                     style={authStyles.input}
                   />
@@ -329,7 +329,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                     onPress={() => setShowDobPicker(true)}
                     style={[authStyles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
                   >
-                    <Text style={{ fontFamily: 'Montserrat', color: dateOfBirth ? C.text : '#A89CB8', fontSize: 15 }}>
+                    <Text style={{ fontFamily: 'Montserrat', color: dateOfBirth ? C.text : C.muted, fontSize: 15 }}>
                       {dateOfBirth ? formatDobFr(dateOfBirth) : 'Date de naissance'}
                     </Text>
                     <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12 }}>Modifier</Text>
@@ -377,7 +377,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <TouchableOpacity
                       onPress={() => setEditing(false)}
-                      style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: '#f5f3ff' }}
+                      style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.fondApp }}
                     >
                       <Text style={{ color: C.text, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
                     </TouchableOpacity>
@@ -420,17 +420,17 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                     Changer mon mot de passe
                   </Text>
                   <PasswordInput
-                    placeholder="Mot de passe actuel" placeholderTextColor="#A89CB8"
+                    placeholder="Mot de passe actuel" placeholderTextColor={C.muted}
                     value={currentPwd} onChangeText={setCurrentPwd}
                     style={authStyles.input}
                   />
                   <PasswordInput
-                    placeholder="Nouveau mot de passe (8 car. min)" placeholderTextColor="#A89CB8"
+                    placeholder="Nouveau mot de passe (8 car. min)" placeholderTextColor={C.muted}
                     value={newPwd} onChangeText={setNewPwd}
                     style={authStyles.input}
                   />
                   <PasswordInput
-                    placeholder="Confirmer le nouveau" placeholderTextColor="#A89CB8"
+                    placeholder="Confirmer le nouveau" placeholderTextColor={C.muted}
                     value={pwdConfirm} onChangeText={setPwdConfirm}
                     style={authStyles.input}
                   />
@@ -438,7 +438,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <TouchableOpacity
                       onPress={() => { setChangingPwd(false); setCurrentPwd(''); setNewPwd(''); setPwdConfirm(''); setPwdError(''); }}
-                      style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: '#f5f3ff' }}
+                      style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.fondApp }}
                     >
                       <Text style={{ color: C.text, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
                     </TouchableOpacity>

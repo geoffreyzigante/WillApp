@@ -44,7 +44,7 @@ export function SubModalInputText({ visible, title, value, onChangeText, placeho
             value={value || ''}
             onChangeText={onChangeText}
             placeholder={placeholder}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={C.muted}
             keyboardType={keyboardType}
             autoCapitalize={autoCapitalize}
             secureTextEntry={!!secureTextEntry}

@@ -34,6 +34,8 @@ export const C = {
   // gris moyen ; les placeholders et etats vides utilisent #A89CB8 en dur.
   textSoft: '#5a5468',
   white: '#FFFFFF',
+  // Gris des placeholders, icones et textes desactives (unifie #A89CB8 / #8B83A0 / #9CA3AF).
+  muted: '#A89CB8',
   pillBg: '#EFE7FF',
   pinkPill: T.couleur.rose,
   pinkPillText: '#FFFFFF',

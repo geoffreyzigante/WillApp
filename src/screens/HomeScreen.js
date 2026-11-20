@@ -426,7 +426,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               style={{ paddingHorizontal: 16, paddingVertical: 11, justifyContent: 'center' }}
             >
               <Text style={{
-                color: codeInput.trim() ? C.primary : '#A89CB8',
+                color: codeInput.trim() ? C.primary : C.muted,
                 fontSize: 14, fontFamily: 'Montserrat-SemiBold',
               }}>
                 {codeLoading ? '…' : 'Ouvrir'}
@@ -521,7 +521,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <Text style={{
-                        color: '#7B2FFF',
+                        color: C.primary,
                         fontFamily: 'Montserrat',
                         fontSize: 13,
                         
@@ -529,7 +529,7 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
                         Lancer mon event
                       </Text>
                       <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                        <Path d="m9 18 6-6-6-6" stroke="#7B2FFF" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+                        <Path d="m9 18 6-6-6-6" stroke={C.primary} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
                       </Svg>
                     </View>
                   </TouchableOpacity>

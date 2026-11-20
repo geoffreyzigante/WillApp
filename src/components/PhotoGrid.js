@@ -82,9 +82,9 @@ export const PhotoCell = React.memo(function PhotoCell({ photo, size, onPress, s
         {errored && (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 }}>
             <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-              <Path d="M3 16l5-5 4 4 3-3 6 6M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" stroke="#9ca3af" strokeWidth={1.5} />
+              <Path d="M3 16l5-5 4 4 3-3 6 6M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" stroke={C.muted} strokeWidth={1.5} />
             </Svg>
-            <Text style={{ color: '#9ca3af', fontSize: 9, fontFamily: 'Montserrat-SemiBold' }}>Recharger</Text>
+            <Text style={{ color: C.muted, fontSize: 9, fontFamily: 'Montserrat-SemiBold' }}>Recharger</Text>
           </View>
         )}
       </View>
@@ -228,9 +228,9 @@ export function PhotoGridItem({ p, i, photos, onPress, showHearts, fav, onToggle
       ) : (
         <View style={[s.gridImg, { alignItems: 'center', justifyContent: 'center', gap: 4 }]}>
           <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-            <Path d="M3 16l5-5 4 4 3-3 6 6M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" stroke="#9ca3af" strokeWidth={1.5} />
+            <Path d="M3 16l5-5 4 4 3-3 6 6M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" stroke={C.muted} strokeWidth={1.5} />
           </Svg>
-          <Text style={{ color: '#9ca3af', fontSize: 9, fontFamily: 'Montserrat-SemiBold' }}>Recharger</Text>
+          <Text style={{ color: C.muted, fontSize: 9, fontFamily: 'Montserrat-SemiBold' }}>Recharger</Text>
         </View>
       )}
       {/* Etoile favori : indicateur READ-ONLY uniquement pour les photos deja

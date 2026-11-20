@@ -23,7 +23,7 @@ export function PhotosStepRow({ num, text, done = false }) {
             <Path d="M20 6L9 17l-5-5" />
           </Svg>
         ) : (
-          <Text style={{ color: '#7B2FFF', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>{num}</Text>
+          <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>{num}</Text>
         )}
       </View>
       <Text style={{ fontFamily: 'Montserrat', flex: 1, color: '#1A1426', fontSize: 14 }}>{text}</Text>
