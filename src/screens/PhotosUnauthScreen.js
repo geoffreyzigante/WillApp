@@ -97,7 +97,7 @@ export function PhotosUnauthScreen({ onSignup, onLogin }) {
           activeOpacity={0.88}
           style={{ paddingVertical: 14, paddingHorizontal: 48, borderRadius: 14, backgroundColor: C.primary, alignItems: 'center', alignSelf: 'center' }}
         >
-          <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Inscription</Text>
+          <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Créer mon compte</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={onLogin}

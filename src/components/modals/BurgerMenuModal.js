@@ -16,6 +16,12 @@ import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, 
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { Canvas, Image as SkiaImage, Blur, Rect as SkiaRect } from '@shopify/react-native-skia';
+
+// Le canvas Skia (GL) fait planter l'emulateur Android a l'ouverture du menu
+// (SIGSEGV dans libEGL_emulation.so, eglSwapBuffers, constate le 2026-11-21).
+// Sur emulateur on garde le voile simple ; les vrais telephones gardent le flou.
+const EST_EMULATEUR = Platform.OS === 'android' &&
+  /sdk_gphone|emulator|generic|goldfish|ranchu/i.test(`${Platform.constants?.Model || ''} ${Platform.constants?.Fingerprint || ''} ${Platform.constants?.Brand || ''}`);
 import { capturerPage } from '../../services/capturePage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
@@ -257,7 +263,7 @@ export function BurgerMenuModal({
               {/* En attendant la photo de la page : voile leger, pour ne pas
                   assombrir puis eclaircir au moment ou le flou arrive. */}
               <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,7,35,0.2)' }]} />
-              {fondFloute ? (
+              {fondFloute && !EST_EMULATEUR ? (
                 <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: fondOp }]}>
                   <Canvas style={StyleSheet.absoluteFillObject}>
                     <SkiaImage image={fondFloute} x={0} y={0} width={Dimensions.get('window').width} height={Dimensions.get('window').height} fit="fill">
@@ -432,7 +438,7 @@ export function BurgerMenuModal({
                     <Text style={styles.ctaPrimaryText}>Connexion</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.ctaSecondary} onPress={fire(onOpenAuthSignup)}>
-                    <Text style={styles.ctaSecondaryText}>Inscription</Text>
+                    <Text style={styles.ctaSecondaryText}>Créer mon compte</Text>
                   </TouchableOpacity>
                 </View>
 
