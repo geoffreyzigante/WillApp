@@ -8,7 +8,7 @@
 // (Inscription plein + Connexion en aplat leger).
 
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
 // Voir App.js : SafeAreaView de react-native est inerte sur Android.
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -64,12 +64,19 @@ export function PhotosUnauthScreen({ onSignup, onLogin }) {
         <View style={{ marginBottom: 20, marginHorizontal: -24, alignSelf: 'stretch' }}>
           <IlluPhotos />
         </View>
-        <Text style={{
-          fontSize: 26, fontFamily: 'AVEstiana', fontStyle: 'normal', color: C.primary,
-          textAlign: 'center', marginBottom: 22, lineHeight: lh(26, 30),
-        }}>
-          Tes photos avant même{'\n'}la ligne d'arrivée
-        </Text>
+        {/* Une Text par ligne : sur Android, une Text a deux lignes dont le
+            lineHeight est sous la hauteur de la police coupe la derniere
+            (cf. HotOnesCarousel, lh()). */}
+        <View style={{ marginBottom: 22, alignItems: 'center' }}>
+          {['Tes photos avant même', "la ligne d'arrivée"].map((ligne, i) => (
+            <Text key={ligne} style={{
+              fontSize: 26, fontFamily: 'AVEstiana', fontStyle: 'normal', color: C.primary,
+              textAlign: 'center', lineHeight: lh(26, 30), marginTop: i === 0 ? 0 : (Platform.OS === 'android' ? -4 : 0),
+            }}>
+              {ligne}
+            </Text>
+          ))}
+        </View>
 
         {/* Les 3 etapes : a plat, separees par de courts filets centres. */}
         <View style={{ alignSelf: 'stretch', marginBottom: 24 }}>
