@@ -1,0 +1,37 @@
+# Build natif Android via EAS — MANUEL.
+# Lance depuis GitHub > Actions > "Build Android" > Run workflow.
+# preview = APK installable directement ; production = .aab pour le Play Store.
+# Reutilise le secret EXPO_TOKEN deja utilise par l OTA (deploy.yml).
+name: Build Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      profil:
+        description: "Profil EAS"
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+
+jobs:
+  build:
+    name: EAS Build Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install EAS CLI
+        run: npm install -g eas-cli@18.7.0
+      - name: Build
+        run: eas build --platform android --profile "$PROFIL" --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: 1
+          PROFIL: ${{ inputs.profil }}
