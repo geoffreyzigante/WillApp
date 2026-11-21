@@ -170,11 +170,10 @@ function WelcomeCard({ onSignup, onLogin }) {
         {/* Maquette 2026-09-01 : les deux actions sur UNE ligne, separees
             d un filet vertical — Inscription blanc gras, Connexion rose
             regular, sans chevrons. */}
-        <View style={{ marginTop: Platform.OS === 'android' ? 8 : 12, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ marginTop: Platform.OS === 'android' ? 8 : 12, flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
           <TouchableOpacity onPress={onSignup} hitSlop={10}>
             <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 }}>Créer mon compte</Text>
           </TouchableOpacity>
-          <View style={{ width: 1, height: 15, backgroundColor: 'rgba(255,255,255,0.45)' }} />
           <TouchableOpacity onPress={onLogin} hitSlop={10}>
             <Text style={{ color: C.pinkPill, fontFamily: 'Montserrat', fontSize: 15 }}>Connexion</Text>
           </TouchableOpacity>
