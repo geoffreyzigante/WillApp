@@ -63,8 +63,13 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
     // de selfie suivie de la reouverture du modal, le state uri local garde
     // l ancienne photo et la preview montre l ancien selfie.
     setUri(null);
+    // Lecture impossible (keychain / keystore indisponible) : par prudence on
+    // affiche l ecran de consentement, on ne le saute JAMAIS sans l avoir lu.
     Secure.getItem(BIOMETRIC_CONSENT_KEY).then(v => {
       setConsentGiven(!!v);
+      setConsentChecked(false);
+    }).catch(() => {
+      setConsentGiven(false);
       setConsentChecked(false);
     });
   }, [visible]);

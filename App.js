@@ -9101,12 +9101,24 @@ function App() {
     if (!propre) return;
     const connu = events.find((e) => e.code === propre);
     if (connu) { setBottomTab('home'); setOpenedEvent(connu); return; }
+    // Plus de retour muet : un lien ou un QR vers un event inconnu doit le
+    // dire, sinon le coureur croit que l app n a rien fait.
     try {
       const r = await fetch(`${API_URL}/public-events/${encodeURIComponent(propre)}`);
-      if (!r.ok) return;
+      if (r.status === 404 || r.status === 410) {
+        Alert.alert('Événement introuvable', 'Ce lien ne correspond à aucun événement Will.');
+        return;
+      }
+      if (!r.ok) {
+        Alert.alert('Événement indisponible', 'Impossible d\'ouvrir cet événement pour le moment. Réessaie dans un instant.');
+        return;
+      }
       const d = await r.json();
       if (d && d.code) { setBottomTab('home'); setOpenedEvent(d); }
-    } catch {}
+      else Alert.alert('Événement introuvable', 'Ce lien ne correspond à aucun événement Will.');
+    } catch {
+      Alert.alert('Pas de connexion', 'Impossible d\'ouvrir cet événement sans réseau. Vérifie ta connexion et réessaie.');
+    }
   }, [events]);
 
   const lireLienWill = useCallback((url) => {

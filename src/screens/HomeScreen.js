@@ -46,16 +46,26 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
     setCodeLoading(true);
     // Meme endpoint que la page /event/{code} du site : il ignore `listed`,
     // seul active=true est requis, donc il atteint les events masques.
+    // Seul un 404 / 410 veut dire « aucun evenement actif ». Une erreur
+    // serveur (5xx, 429, reponse illisible) est une panne, pas un code faux :
+    // le dire autrement ferait chercher une erreur de frappe qui n existe pas.
     fetch(`${API_URL}/public-events/${encodeURIComponent(raw)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((ev) => {
-        if (ev && ev.code) {
+      .then(async (r) => {
+        if (r.status === 404 || r.status === 410) return { introuvable: true };
+        if (!r.ok) return { panne: true };
+        const ev = await r.json().catch(() => null);
+        return ev && ev.code ? { ev } : { panne: true };
+      })
+      .then((res) => {
+        if (res.ev) {
           setCodeInput('');
           setSearchOpen(false);
           Keyboard.dismiss();
-          onOpenEvent(ev);
-        } else {
+          onOpenEvent(res.ev);
+        } else if (res.introuvable) {
           setCodeError('Aucun événement actif avec ce code.');
+        } else {
+          setCodeError('Le serveur ne répond pas pour le moment. Réessaie dans un instant.');
         }
       })
       .catch(() => setCodeError('Connexion impossible. Vérifie ton réseau.'))
