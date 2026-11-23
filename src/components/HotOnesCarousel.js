@@ -156,7 +156,7 @@ function WelcomeCard({ onSignup, onLogin }) {
             </TouchableOpacity>
           ))}
           {/* Filet blanc entre les deux moities (maquette user). */}
-          <View pointerEvents="none" style={{ position: 'absolute', left: '50%', marginLeft: -1, top: 11, bottom: 11, width: 2, borderRadius: 1, backgroundColor: '#fff' }} />
+          <View pointerEvents="none" style={{ position: 'absolute', left: '50%', marginLeft: -1, top: 15, bottom: 15, width: 2, borderRadius: 1, backgroundColor: '#fff' }} />
         </View>
       </GrainViolet>
     </View>
