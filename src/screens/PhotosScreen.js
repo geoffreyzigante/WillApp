@@ -53,6 +53,26 @@ const DELAI_MAX_MS = 15000;
 // deux minutes ; le tirer-pour-rafraichir force, lui, toujours.
 const FRAICHEUR_MS = 120000;
 
+// Etat vide de « Mes photos » : honnete. Le selfie n agit que VERS L AVANT,
+// Will ne cherche pas le coureur dans les photos deja publiees.
+const TEXTE_VIDE_MES_PHOTOS = 'Will te reconnaît sur les photos prises après ton selfie.\nTes photos arrivent ici dès qu’elles sont en ligne ;\ncelles déjà publiées avant ne sont pas recherchées.';
+
+// Attendre « Will recherche tes photos… » (et relancer 12 requetes) n a de
+// sens que pour un event en cours, dont le photographe envoie encore des
+// photos. Event termine ou pas encore commence : on n attend rien. Date
+// inconnue / format inattendu : comportement historique (on suppose en cours).
+function eventEnCours(ev) {
+  const debut = String(ev?.date || '').slice(0, 10);
+  const fin = String(ev?.dateEnd || ev?.date || '').slice(0, 10);
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  if (!iso.test(debut) || !iso.test(fin)) return true;
+  const d = new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  const auj = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+  return auj >= debut && auj <= fin;
+}
+
+
 export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, follows, onFindEvent, runnerApiFetch, runnerUserId, onOpenPhoto, photoFavoritesSet, onTogglePhotoFavorite, onRefreshFavorites, selfieSkipped = false, isActive = true, selfieUploadState = 'idle', onRetryUpload, headerH = 0, onNonVuesChange, refreshSignal = 0 }) {
   const scrollRef = useRef(null);
   const [showBackTop, setShowBackTop] = useState(false);
@@ -374,11 +394,23 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     controleurRef.current = controleur;
     const signal = controleur ? controleur.signal : undefined;
     let echecs = 0;
+    let favEchec = false;
     const [results, favFullResp] = await Promise.all([
       Promise.all(queryList.map(async (code) => {
         try {
           const r = await runnerApiFetch(`/personal-gallery/${encodeURIComponent(code)}`, { signal });
-          if (!r.ok) return { code, photos: [], paid: false, echec: true };
+          if (!r.ok) {
+            // Toute reponse non OK (5xx, 429...) est un ECHEC : elle ne doit
+            // jamais passer pour « aucune photo », sinon la galerie et le
+            // cache local seraient ecrases par du vide. Seuls 404 / 410
+            // (event disparu) valent « rien ici » : sinon un event supprime
+            // bloquerait indefiniment le rafraichissement de tous les autres.
+            if (r.status === 404 || r.status === 410) {
+              return { code, photos: [], paid: false, ev: null };
+            }
+            echecs += 1;
+            return { code, photos: [], paid: false, ev: null, echec: true };
+          }
           const data = await r.json();
           return {
             code,
@@ -399,10 +431,10 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       (async () => {
         try {
           const r = await runnerApiFetch('/runner/photo-favorites-full', { signal });
-          if (!r.ok) return [];
+          if (!r.ok) { favEchec = true; return []; }
           const d = await r.json();
           return Array.isArray(d?.photos) ? d.photos : [];
-        } catch { return []; }
+        } catch { favEchec = true; return []; }
       })(),
     ]);
     if (minuteur) clearTimeout(minuteur);
@@ -419,6 +451,15 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       setErreurChargement('reseau');
       return photosRef.current;
     }
+    // Echec PARTIEL (un event ou les favoris n ont pas repondu) : une liste
+    // fusionnee manquerait des photos, et l ecrire dans le cache local ferait
+    // disparaitre celles de l event en echec au prochain lancement. On garde
+    // donc la liste et le cache tels quels et on propose « Reessayer ».
+    if (echecs > 0 || favEchec) {
+      setLoading(false);
+      setErreurChargement('partiel');
+      return photosRef.current;
+    }
     setErreurChargement(null);
     const now = Date.now();
     const merged = [];
@@ -429,7 +470,8 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       if (list.length === 0) {
         const startedTs = started[code];
         const elapsed = startedTs ? (now - startedTs) : Infinity;
-        if (elapsed < 90000) searching = true;
+        // Attente (et polling) reservees a un event en cours : cf eventEnCours.
+        if (elapsed < 90000 && eventEnCours(ev)) searching = true;
         continue;
       }
       for (const p of list) {
@@ -761,7 +803,9 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         : viewFilter === 'me'
           // L ancien texte parlait d une course deja courue — faux juste
           // apres une inscription, et il n indiquait pas quoi faire.
-          ? 'Les photographes envoient leurs photos au fil de la journée :\nelles arrivent généralement dans les heures\nqui suivent l\u2019arrivée.'
+          // Honnete : le selfie n agit que vers l avant. Pas de promesse de
+          // recherche dans les photos deja publiees.
+          ? TEXTE_VIDE_MES_PHOTOS
           : 'Les photographes envoient leurs photos au fil de la journée :\nelles arrivent généralement dans les heures\nqui suivent l\u2019arrivée.'}
       actionLabel={viewFilter === 'favs' ? null : 'Trouver un event'}
       onAction={viewFilter === 'favs' ? null : onFindEvent}
@@ -885,12 +929,16 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         }}>
           <View style={{ flex: 1 }}>
             <Text style={{ fontFamily: 'Montserrat-Bold', color: '#7A1F1F', fontSize: 13 }}>
-              {erreurChargement === 'timeout' ? 'Chargement trop long' : 'Impossible de charger tes photos'}
+              {erreurChargement === 'timeout'
+                ? 'Chargement trop long'
+                : erreurChargement === 'partiel' ? 'Chargement incomplet' : 'Impossible de charger tes photos'}
             </Text>
             <Text style={{ fontFamily: 'Montserrat', color: '#7A1F1F', fontSize: 12, marginTop: 2, lineHeight: 16 }}>
               {erreurChargement === 'timeout'
                 ? "Le serveur n'a pas répondu en 15 secondes."
-                : 'Vérifie ta connexion.'}
+                : erreurChargement === 'partiel'
+                  ? "Certains de tes events n'ont pas répondu. Tes photos déjà affichées sont conservées."
+                  : 'Vérifie ta connexion.'}
             </Text>
           </View>
           <TouchableOpacity
@@ -916,6 +964,11 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           <SpinningLoader size={26} color="#c9beed" />
           <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 10 }}>Chargement…</Text>
         </View>
+      ) : (erreurChargement && photos.length === 0) ? (
+        // Chargement en echec et rien a montrer : le bandeau « Reessayer »
+        // ci-dessus suffit. Afficher en plus « Aucune photo de toi » serait
+        // un faux etat vide.
+        null
       ) : (!hasFollows && photos.length === 0) ? (
         // Et pas seulement « aucun suivi » : le cache local peut deja porter
         // des photos alors que la liste des events connus n est pas encore
@@ -924,7 +977,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         <EtatVideWill
           variante="photos"
           titre={'Aucune photo de toi\npour le moment'}
-          sousTexte={'Les photographes envoient leurs photos au fil de la journée :\nelles arrivent généralement dans les heures\nqui suivent l\u2019arrivée.'}
+          sousTexte={TEXTE_VIDE_MES_PHOTOS}
           actionLabel="Trouver un event"
           onAction={onFindEvent}
         />
