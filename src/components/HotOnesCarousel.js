@@ -165,7 +165,7 @@ function WelcomeCard({ onSignup, onLogin }) {
           </Text>
         )}
         <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 12, lineHeight: 17, marginTop: Platform.OS === 'android' ? 8 : 12 }}>
-          Crée ton compte, prends ton selfie et retrouve tes photos après chaque event.
+          Un compte, un selfie : retrouve tes photos après chaque event.
         </Text>
         {/* Maquette 2026-09-01 : les deux actions sur UNE ligne, separees
             d un filet vertical — Inscription blanc gras, Connexion rose
