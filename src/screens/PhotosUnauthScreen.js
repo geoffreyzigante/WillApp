@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { C } from '../constants/colors';
 import { lh } from '../constants/typo';
+import { CtaWill } from '../components/CtaWill';
 
 // Illu_Photos.svg (fourni par le user) : rangee de polaroids inclines,
 // rose au centre. Inline : net partout, livrable en OTA.
@@ -54,65 +55,61 @@ const ETAPES = [
   },
 ];
 
+// Pile de cartes numerotees (user 2026-11-23, proposition 5) : une couleur de la
+// charte par etape, qui se chevauchent legerement.
+const COULEURS = [
+  { bg: '#E8DEFF', fg: '#7B2FFF' },
+  { bg: '#F4A6FF', fg: '#3B0A96' },
+  { bg: '#7B2FFF', fg: '#FFFFFF' },
+];
+
 export function PhotosUnauthScreen({ onSignup, onLogin }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.fondApp }}>
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-start', alignItems: 'center', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24 }}
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-start', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ marginBottom: 20, marginHorizontal: -24, alignSelf: 'stretch' }}>
+        <View style={{ marginBottom: 20, marginHorizontal: -20, alignSelf: 'stretch' }}>
           <IlluPhotos />
         </View>
         {/* Une Text par ligne : sur Android, une Text a deux lignes dont le
             lineHeight est sous la hauteur de la police coupe la derniere
             (cf. HotOnesCarousel, lh()). */}
-        <View style={{ marginBottom: 22, alignItems: 'center' }}>
+        <View style={{ marginBottom: 20, alignItems: 'flex-start' }}>
           {['Tes photos avant même', "la ligne d'arrivée"].map((ligne, i) => (
             <Text key={ligne} style={{
               fontSize: 26, fontFamily: 'AVEstiana', fontStyle: 'normal', color: C.primary,
-              textAlign: 'center', lineHeight: lh(26, 30), marginTop: i === 0 ? 0 : (Platform.OS === 'android' ? -4 : 0),
+              textAlign: 'left', lineHeight: lh(26, 30), marginTop: i === 0 ? 0 : (Platform.OS === 'android' ? -4 : 0),
             }}>
               {ligne}
             </Text>
           ))}
         </View>
 
-        {/* Les 3 etapes : a plat, separees par de courts filets centres. */}
-        <View style={{ alignSelf: 'stretch', marginBottom: 24 }}>
-          {ETAPES.map(({ label, titre, texte }, i) => (
-            <View key={label} style={{ paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center' }}>
-              {i > 0 ? (
-                <View style={{ position: 'absolute', top: 0, left: '50%', marginLeft: -22, width: 44, height: 1, backgroundColor: 'rgba(26,10,62,0.12)' }} />
-              ) : null}
-              {/* Le moment (AVANT / PENDANT / APRES) coiffe l etape, il n est
-                  plus accole au titre : chaque bloc se lit de haut en bas. */}
-              <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 10.5, letterSpacing: 1.2, textTransform: 'uppercase', textAlign: 'center', marginBottom: 5 }}>
-                {label}
-              </Text>
-              <Text style={{ color: C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 14, textAlign: 'center' }}>{titre}</Text>
-              <Text style={{ color: C.textSoft, fontFamily: 'Montserrat-Medium', fontSize: 12.5, lineHeight: 18, marginTop: 5, textAlign: 'center' }}>
-                {texte}
-              </Text>
-            </View>
-          ))}
+        <View style={{ alignSelf: 'stretch', marginBottom: 28 }}>
+          {ETAPES.map(({ label, titre, texte }, i) => {
+            const { bg, fg } = COULEURS[i];
+            return (
+              <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: bg, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 18, marginTop: i === 0 ? 0 : -6 }}>
+                <Text style={{ color: fg, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 36, lineHeight: lh(36, 40), minWidth: 26 }}>{i + 1}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: fg, opacity: 0.85, fontFamily: 'Montserrat-SemiBold', fontSize: 10.5, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</Text>
+                  <Text style={{ color: fg, fontFamily: 'Montserrat-SemiBold', fontSize: 15, marginTop: 2 }}>{titre}</Text>
+                  <Text style={{ color: fg, opacity: 0.85, fontFamily: 'Montserrat-Medium', fontSize: 12.5, lineHeight: 17, marginTop: 2 }}>{texte}</Text>
+                </View>
+              </View>
+            );
+          })}
         </View>
 
-        {/* CTA au gabarit du menu (ctaPrimary / ctaSecondary). */}
-        <TouchableOpacity
-          onPress={onSignup}
-          activeOpacity={0.88}
-          style={{ paddingVertical: 14, paddingHorizontal: 48, borderRadius: 14, backgroundColor: C.primary, alignItems: 'center', alignSelf: 'center' }}
-        >
-          <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>S’inscrire</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={onLogin}
-          activeOpacity={0.85}
-          style={{ marginTop: 10, paddingVertical: 13, paddingHorizontal: 40, borderRadius: 14, backgroundColor: 'rgba(123,47,255,0.08)', alignItems: 'center', alignSelf: 'center' }}
-        >
-          <Text style={{ color: C.primary, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Connexion</Text>
-        </TouchableOpacity>
+        {/* CTA de la charte + Connexion en simple lien (comme la carte d'accueil). */}
+        <View style={{ alignItems: 'center', gap: 14 }}>
+          <CtaWill label="S’inscrire" onPress={onSignup} variante="violet" style={{ alignSelf: 'center' }} />
+          <TouchableOpacity onPress={onLogin} hitSlop={10}>
+            <Text style={{ color: C.primary, fontFamily: 'Montserrat-Medium', fontSize: 15 }}>Connexion</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
