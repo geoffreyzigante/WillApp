@@ -135,13 +135,13 @@ function WelcomeCard({ onSignup, onLogin }) {
           // par une marge negative.
           <View style={{ alignItems: 'flex-start' }}>
             {['Un selfie.', 'Toutes tes', 'photos.'].map((ligne, i) => (
-              <Text key={ligne} style={{ color: '#fff', fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25), marginTop: i === 0 ? 0 : -6, textAlign: 'left' }}>
+              <Text key={ligne} style={{ color: '#fff', fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 28, lineHeight: lh(28, 29), marginTop: i === 0 ? 0 : -7, textAlign: 'left' }}>
                 {ligne}
               </Text>
             ))}
           </View>
         ) : (
-          <Text style={{ color: '#fff', fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25), textAlign: 'left' }}>
+          <Text style={{ color: '#fff', fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 28, lineHeight: lh(28, 29), textAlign: 'left' }}>
             Un selfie.{'\n'}Toutes tes photos.
           </Text>
         )}
