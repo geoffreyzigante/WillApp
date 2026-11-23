@@ -151,12 +151,12 @@ function WelcomeCard({ onSignup, onLogin }) {
             colles en bas de la carte. Plus de mascotte. */}
         <View style={{ position: 'absolute', left: 18, right: 18, bottom: 18, flexDirection: 'row' }}>
           {[['S’inscrire', onSignup], ['Connexion', onLogin]].map(([label, onPress]) => (
-            <TouchableOpacity key={label} onPress={onPress} activeOpacity={0.85} style={{ flex: 1, height: 44, borderRadius: 14, backgroundColor: C.pinkPill, alignItems: 'center', justifyContent: 'center' }}>
+            <TouchableOpacity key={label} onPress={onPress} activeOpacity={0.85} style={{ flex: 1, height: 38, borderRadius: 13, backgroundColor: C.pinkPill, alignItems: 'center', justifyContent: 'center' }}>
               <Text numberOfLines={1} style={{ color: C.primary, fontFamily: 'Montserrat-Medium', fontSize: 15 }}>{label}</Text>
             </TouchableOpacity>
           ))}
           {/* Filet blanc entre les deux moities (maquette user). */}
-          <View pointerEvents="none" style={{ position: 'absolute', left: '50%', marginLeft: -1, top: 15, bottom: 15, width: 2, borderRadius: 1, backgroundColor: '#fff' }} />
+          <View pointerEvents="none" style={{ position: 'absolute', left: '50%', marginLeft: -0.5, top: 13, bottom: 13, width: 1, borderRadius: 0.5, backgroundColor: '#fff' }} />
         </View>
       </GrainViolet>
     </View>
