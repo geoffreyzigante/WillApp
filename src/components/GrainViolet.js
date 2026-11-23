@@ -19,7 +19,7 @@ const FLEUR_G = require('../../assets/hero-fl-l.webp');
 const FLEUR_D = require('../../assets/hero-fl-r.webp');
 const TUILE = 128;
 
-function GrainPave({ largeur, hauteur }) {
+function GrainPave({ largeur, hauteur, opacite = 1 }) {
   if (!largeur || !hauteur) return null;
   const cols = Math.ceil(largeur / TUILE);
   const lignes = Math.ceil(hauteur / TUILE);
@@ -35,12 +35,12 @@ function GrainPave({ largeur, hauteur }) {
       );
     }
   }
-  return <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>{tuiles}</View>;
+  return <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, { opacity: opacite }]}>{tuiles}</View>;
 }
 
 // fleur : { taille, haut, gauche | droite } -> la fleur de marque en degrade lilas (hero-fl-l
 // du site), posee en coin sous le contenu et rognee par le bord de la carte.
-export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, fleur, ...reste }) {
+export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, fleur, grain = 1, ...reste }) {
   const [taille, setTaille] = useState({ w: 0, h: 0 });
   const surLayout = (e) => {
     const { width, height } = e.nativeEvent.layout;
@@ -49,7 +49,7 @@ export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, fleu
   };
   return (
     <View {...reste} onLayout={surLayout} style={[{ backgroundColor: color, overflow: 'hidden' }, style]}>
-      <GrainPave largeur={taille.w} hauteur={taille.h} />
+      <GrainPave largeur={taille.w} hauteur={taille.h} opacite={grain} />
       {fleur ? (
         <Image
           source={fleur.droite != null ? FLEUR_D : FLEUR_G}
