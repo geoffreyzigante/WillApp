@@ -127,7 +127,7 @@ function WelcomeCard({ onSignup, onLogin }) {
           (#DB90FD), violet #7234F5 dominant ; titre et lien secondaire en
           rose charte pinkPill (#F4A6FF, pipe sur la maquette) ; icone photo
           blanche en tete ; chevrons sur les deux actions. */}
-      <GrainViolet fleur={{ taille: 170, droite: -62, haut: -72 }} style={{ flex: 1, padding: 18, paddingTop: Platform.OS === 'android' ? 16 : 24, justifyContent: 'flex-start', alignItems: 'center' }}>
+      <GrainViolet fleur={{ taille: 170, droite: -62, haut: -72 }} style={{ flex: 1, padding: 18, justifyContent: 'center', alignItems: 'center' }}>
         {Platform.OS === 'android' ? (
           // Android : lineHeight sous la hauteur naturelle de la police coupe la
           // derniere ligne (voir lh()). Pour resserrer l interligne comme sur
@@ -150,8 +150,8 @@ function WelcomeCard({ onSignup, onLogin }) {
         </Text>
         {/* S'inscrire = CTA de la charte (plus bas), Connexion = simple lien rose dessous ;
             tout le bloc est centre (user 2026-11-23). */}
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 18, alignItems: 'center', gap: 12 }}>
-          <CtaWill label="S’inscrire" onPress={onSignup} variante="pink" hauteur={34} />
+        <View style={{ alignItems: 'center', gap: 12, marginTop: 16 }}>
+          <CtaWill label="S’inscrire" onPress={onSignup} variante="pink" hauteur={34} style={{ alignSelf: 'center' }} />
           <TouchableOpacity onPress={onLogin} hitSlop={10}>
             <Text style={{ color: C.pinkPill, fontFamily: 'Montserrat-Medium', fontSize: 15 }}>Connexion</Text>
           </TouchableOpacity>
