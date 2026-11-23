@@ -29,6 +29,7 @@ import { extractBurstTs, extractIdx } from '../utils/photo';
 import { selfieDotColor } from '../utils/styleHelpers';
 import { Haptics } from '../services/haptics';
 import { lh } from '../constants/typo';
+import { GrainViolet } from '../components/GrainViolet';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -461,6 +462,28 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         />
       </View>
 
+      {/* Visiteur : meme bandeau que la fiche event du site (« Ne cherche plus
+          tes photos »). requireAuth ouvre la connexion, puis le selfie. */}
+      {!isAuthed && onOpenSelfie ? (
+        <View style={{ borderRadius: 18, overflow: 'hidden' }}>
+          <GrainViolet fleur={{ taille: 120, droite: -44, haut: -50 }} style={{ padding: 18, alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 18, fontFamily: 'AVEstiana-Bold', textAlign: 'center', lineHeight: lh(18, 22) }}>
+              Ne cherche plus tes photos
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontFamily: 'Montserrat-Medium', textAlign: 'center', marginTop: 4, lineHeight: 17 }}>
+              Un selfie suffit, Will te les envoie après l'event.
+            </Text>
+            <TouchableOpacity
+              onPress={onOpenSelfie}
+              activeOpacity={0.88}
+              style={{ marginTop: 12, paddingVertical: 11, paddingHorizontal: 22, borderRadius: 999, backgroundColor: C.pinkPill }}
+            >
+              <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Prendre mon selfie</Text>
+            </TouchableOpacity>
+          </GrainViolet>
+        </View>
+      ) : null}
+
       <View style={{ position: 'relative', zIndex: 1 }}>
         <View style={[s.eventCard, { marginBottom: 0, height: undefined }]}>
           <View style={[StyleSheet.absoluteFillObject, { backgroundColor: tint }]} />
@@ -666,7 +689,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
           </TouchableOpacity>
         </View>
       ) : upcoming && registreProgramme && !loading ? (
-        <EtatVidePhotos />
+        <EtatVidePhotos onPrevenir={onToggleFollow} dejaPrevenu={isAuthed && isFollowing} />
       ) : null}
     </View>
   );

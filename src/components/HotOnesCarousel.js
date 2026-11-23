@@ -154,13 +154,13 @@ function WelcomeCard({ onSignup, onLogin }) {
           // par une marge negative.
           <View>
             {['Un selfie.', 'Toutes tes', 'photos.'].map((ligne, i) => (
-              <Text key={ligne} style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25), marginTop: i === 0 ? 0 : -6 }}>
+              <Text key={ligne} style={{ color: '#fff', fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25), marginTop: i === 0 ? 0 : -6 }}>
                 {ligne}
               </Text>
             ))}
           </View>
         ) : (
-          <Text style={{ color: C.pinkPill, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25) }}>
+          <Text style={{ color: '#fff', fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25) }}>
             Un selfie.{'\n'}Toutes tes photos.
           </Text>
         )}

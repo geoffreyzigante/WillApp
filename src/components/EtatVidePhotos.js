@@ -3,7 +3,7 @@
 // sont pas reprises sur l app : elles reprenaient la grille photos, qui est
 // deja absente ici.
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { C } from '../constants/colors';
 import { lh } from '../constants/typo';
 
@@ -15,6 +15,10 @@ export function EtatVidePhotos({
   sousTexte = "Reviens le jour de l'event",
   illuHeight = 72,
   style = null,
+  // Comme le site (event/index.html #empty-prevenir) : le bouton suit l'event ;
+  // sans compte, l'appelant ouvre la connexion (requireAuth).
+  onPrevenir = null,
+  dejaPrevenu = false,
 }) {
   // Centre en colonne (user 2026-10-26) : la mascotte au-dessus, le texte
   // dessous, tout aligne sur le meme axe. En rangee, le bloc de texte etait
@@ -25,7 +29,7 @@ export function EtatVidePhotos({
       paddingVertical: 40, paddingHorizontal: 24, alignItems: 'center',
     }, style]}>
       <Text style={{
-        color: '#C9B6FF', fontSize: 18, lineHeight: lh(18, 22),
+        color: C.primary, fontSize: 18, lineHeight: lh(18, 22),
         fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2,
         textAlign: 'center',
       }}>
@@ -38,6 +42,19 @@ export function EtatVidePhotos({
         }}>
           {sousTexte}
         </Text>
+      ) : null}
+      {dejaPrevenu ? (
+        <Text style={{ color: C.textSoft, fontSize: 12, fontFamily: 'Montserrat-Medium', textAlign: 'center', marginTop: 14, lineHeight: 17 }}>
+          Tu seras prévenu dès qu'une photo de toi est reconnue.
+        </Text>
+      ) : onPrevenir ? (
+        <TouchableOpacity
+          onPress={onPrevenir}
+          activeOpacity={0.88}
+          style={{ marginTop: 14, paddingVertical: 13, paddingHorizontal: 28, borderRadius: 14, backgroundColor: C.primary }}
+        >
+          <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Préviens-moi</Text>
+        </TouchableOpacity>
       ) : null}
     </View>
   );
