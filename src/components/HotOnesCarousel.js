@@ -127,31 +127,34 @@ function WelcomeCard({ onSignup, onLogin }) {
           (#DB90FD), violet #7234F5 dominant ; titre et lien secondaire en
           rose charte pinkPill (#F4A6FF, pipe sur la maquette) ; icone photo
           blanche en tete ; chevrons sur les deux actions. */}
-      <GrainViolet fleur={{ taille: 170, droite: -62, haut: -72 }} style={{ flex: 1, padding: 18, paddingTop: Platform.OS === 'android' ? 16 : 24, justifyContent: 'flex-start' }}>
+      <GrainViolet fleur={{ taille: 170, droite: -62, haut: -72 }} style={{ flex: 1, padding: 18, paddingTop: Platform.OS === 'android' ? 16 : 24, justifyContent: 'flex-start', alignItems: 'center' }}>
         {Platform.OS === 'android' ? (
           // Android : lineHeight sous la hauteur naturelle de la police coupe la
           // derniere ligne (voir lh()). Pour resserrer l interligne comme sur
           // iOS, une Text par ligne, chacune a sa hauteur naturelle, rapprochees
           // par une marge negative.
-          <View>
+          <View style={{ alignItems: 'center' }}>
             {['Un selfie.', 'Toutes tes', 'photos.'].map((ligne, i) => (
-              <Text key={ligne} style={{ color: '#fff', fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25), marginTop: i === 0 ? 0 : -6 }}>
+              <Text key={ligne} style={{ color: '#fff', fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25), marginTop: i === 0 ? 0 : -6, textAlign: 'center' }}>
                 {ligne}
               </Text>
             ))}
           </View>
         ) : (
-          <Text style={{ color: '#fff', fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25) }}>
+          <Text style={{ color: '#fff', fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 24, lineHeight: lh(24, 25), textAlign: 'center' }}>
             Un selfie.{'\n'}Toutes tes photos.
           </Text>
         )}
-        <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 14, lineHeight: 19, marginTop: Platform.OS === 'android' ? 8 : 12 }}>
+        <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 14, lineHeight: 19, textAlign: 'center', marginTop: Platform.OS === 'android' ? 8 : 12 }}>
           Un compte, un selfie : retrouve tes photos après chaque event.
         </Text>
-        {/* CTA de la charte (user 2026-11-23) : « S'inscrire » en rose, « Connexion » en dessous. */}
-        <View style={{ position: 'absolute', left: 18, bottom: 18, gap: 10 }}>
-          <CtaWill label="S’inscrire" onPress={onSignup} variante="pink" />
-          <CtaWill label="Connexion" onPress={onLogin} variante="v7" />
+        {/* S'inscrire = CTA de la charte (plus bas), Connexion = simple lien rose dessous ;
+            tout le bloc est centre (user 2026-11-23). */}
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 18, alignItems: 'center', gap: 12 }}>
+          <CtaWill label="S’inscrire" onPress={onSignup} variante="pink" hauteur={34} />
+          <TouchableOpacity onPress={onLogin} hitSlop={10}>
+            <Text style={{ color: C.pinkPill, fontFamily: 'Montserrat-Medium', fontSize: 15 }}>Connexion</Text>
+          </TouchableOpacity>
         </View>
       </GrainViolet>
     </View>
