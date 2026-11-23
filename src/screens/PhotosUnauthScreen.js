@@ -15,6 +15,7 @@ import Svg, { Path } from 'react-native-svg';
 import { C } from '../constants/colors';
 import { lh } from '../constants/typo';
 import { CtaWill } from '../components/CtaWill';
+import { GrainViolet } from '../components/GrainViolet';
 
 // Illu_Photos.svg (fourni par le user) : rangee de polaroids inclines,
 // rose au centre. Inline : net partout, livrable en OTA.
@@ -91,14 +92,14 @@ export function PhotosUnauthScreen({ onSignup, onLogin }) {
           {ETAPES.map(({ label, titre, texte }, i) => {
             const { bg, fg } = COULEURS[i];
             return (
-              <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: bg, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 18, marginTop: i === 0 ? 0 : -6 }}>
+              <GrainViolet key={label} color={bg} style={{ flexDirection: 'row', alignItems: 'center', gap: 16, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 18, marginTop: i === 0 ? 0 : 12 }}>
                 <Text style={{ color: fg, fontFamily: 'AVEstiana', fontStyle: 'normal', fontSize: 36, lineHeight: lh(36, 40), minWidth: 26 }}>{i + 1}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: fg, opacity: 0.85, fontFamily: 'Montserrat-SemiBold', fontSize: 10.5, letterSpacing: 1, textTransform: 'uppercase' }}>{label}</Text>
                   <Text style={{ color: fg, fontFamily: 'Montserrat-SemiBold', fontSize: 15, marginTop: 2 }}>{titre}</Text>
                   <Text style={{ color: fg, opacity: 0.85, fontFamily: 'Montserrat-Medium', fontSize: 12.5, lineHeight: 17, marginTop: 2 }}>{texte}</Text>
                 </View>
-              </View>
+              </GrainViolet>
             );
           })}
         </View>
