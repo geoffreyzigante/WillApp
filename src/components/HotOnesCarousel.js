@@ -9,6 +9,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GrainViolet } from './GrainViolet';
+import { CtaWill } from './CtaWill';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Platform } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
@@ -147,16 +148,10 @@ function WelcomeCard({ onSignup, onLogin }) {
         <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 14, lineHeight: 19, marginTop: Platform.OS === 'android' ? 8 : 12 }}>
           Un compte, un selfie : retrouve tes photos après chaque event.
         </Text>
-        {/* Double CTA (user 2026-11-23) : deux moities roses egales, texte violet,
-            colles en bas de la carte. Plus de mascotte. */}
-        <View style={{ position: 'absolute', left: 18, right: 18, bottom: 18, flexDirection: 'row' }}>
-          {[['S’inscrire', onSignup], ['Connexion', onLogin]].map(([label, onPress]) => (
-            <TouchableOpacity key={label} onPress={onPress} activeOpacity={0.85} style={{ flex: 1, height: 38, borderRadius: 13, backgroundColor: C.pinkPill, alignItems: 'center', justifyContent: 'center' }}>
-              <Text numberOfLines={1} style={{ color: C.primary, fontFamily: 'Montserrat-Medium', fontSize: 15 }}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-          {/* Filet blanc entre les deux moities (maquette user). */}
-          <View pointerEvents="none" style={{ position: 'absolute', left: '50%', marginLeft: -0.5, top: 13, bottom: 13, width: 1, borderRadius: 0.5, backgroundColor: '#fff' }} />
+        {/* CTA de la charte (user 2026-11-23) : « S'inscrire » en rose, « Connexion » en dessous. */}
+        <View style={{ position: 'absolute', left: 18, bottom: 18, gap: 10 }}>
+          <CtaWill label="S’inscrire" onPress={onSignup} variante="pink" />
+          <CtaWill label="Connexion" onPress={onLogin} variante="v7" />
         </View>
       </GrainViolet>
     </View>
