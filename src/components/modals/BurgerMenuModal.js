@@ -578,8 +578,8 @@ const styles = StyleSheet.create({
   // Discret : c est un outil de diagnostic, pas une information produit.
   heroVersion: {
     fontFamily: 'Montserrat',
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.45)',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.75)',
     marginTop: 8,
   },
 
