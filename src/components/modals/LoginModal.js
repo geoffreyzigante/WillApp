@@ -42,9 +42,9 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
   const [resetCode, setResetCode] = useState('');
   const [resetNewPassword, setResetNewPassword] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
-  // PIN error UI (photographe) : shake + message inline. Plus de compteur
-  // tentatives ni de rate limit : le worker accepte les tentatives illimitees
-  // depuis 2026-06-27 (cf worker fix(auth) c1942d3).
+  // PIN error UI (photographe) : shake + message inline. Pas de compteur local,
+  // mais le worker pose un verrou apres trop d essais (429, « Trop de
+  // tentatives... ») : le message distingue ce cas du PIN simplement faux.
   const [pinError, setPinError] = useState('');
   const [pinErrorTick, setPinErrorTick] = useState(0);
   // Search : filtre client-side de la liste upcoming par nom/lieu.
@@ -159,12 +159,24 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
       const r = await api.login(code.trim(), pwd, role, 'photographer');
       setBusy(false);
       if (!r?.token) {
+        // Chaque refus a SA phrase : « PIN incorrect » n est vrai que pour
+        // un 401. Un event inactif, introuvable ou un verrou de tentatives
+        // ne se corrigent pas en retapant le code.
+        const st = r?.status;
+        let msg;
+        let effacerSaisie = false;
+        if (st === 429) msg = 'Trop d\'essais, réessaie dans quelques minutes';
+        else if (st === 403) msg = 'Cet événement n\'est pas actif';
+        else if (st === 404) msg = 'Événement introuvable';
+        else if (st === 401) { msg = role === 'photographer' ? 'Code PIN incorrect' : 'Identifiants invalides.'; effacerSaisie = true; }
+        else if (st >= 500) msg = 'Serveur indisponible, réessaie dans un instant';
+        else msg = r?.error || (role === 'photographer' ? 'Connexion impossible' : 'Identifiants invalides.');
         if (role === 'photographer') {
-          setPinError('Code PIN incorrect');
+          setPinError(msg);
           setPinErrorTick(t => t + 1);
-          setPassword('');
+          if (effacerSaisie) setPassword('');
         } else {
-          Alert.alert('Échec', 'Identifiants invalides.');
+          Alert.alert('Échec', msg);
         }
         return;
       }
@@ -172,7 +184,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
     } catch {
       setBusy(false);
       if (role === 'photographer') {
-        setPinError('Hors ligne');
+        setPinError('Pas de connexion');
         setPinErrorTick(t => t + 1);
       } else {
         Alert.alert(
