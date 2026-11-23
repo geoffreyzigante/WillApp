@@ -2431,21 +2431,24 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           }
         } catch (e) { console.warn('getActiveUploads', e?.message); }
       }
-      // Photos d'un autre event (ou sans eventCode) : on les purge silencieusement
-      // pour eviter qu'un photographe qui change d'event voie l'ancienne session.
+      // Photos d'un autre event (ou sans eventCode) : on ne les SUPPRIME
+      // JAMAIS en silence (c etaient des photos de course perdues sans un
+      // mot). Elles restent dans la file avec leur eventCode d origine :
+      // chaque item porte sa propre cle R2 ({eventCode}/...), drainQueue
+      // construit l URL depuis l item. Reconnecte sur le meme event, elles
+      // repartent ; sur un autre event le serveur repond 403 et l item finit
+      // 'failed' apres MAX_RETRIES, visible sur la ligne « X a renvoyer ».
+      // Meme regle que logoutPhotographer.
       const currentEvent = session?.event?.code;
       const cleaned = [];
-      const orphans = [];
+      let autresEvents = 0;
       for (const rawIt of arr) {
         // Migration : items legacy sans `processed` ont deja ete enhance/burn
         // par l'ancien pipeline -> on les marque processed:true.
         const it = rawIt.processed === undefined
           ? { ...rawIt, processed: true }
           : rawIt;
-        if (it.eventCode !== currentEvent) {
-          orphans.push(it);
-          continue;
-        }
+        if (it.eventCode !== currentEvent) autresEvents += 1;
         const fileExists = (() => {
           try { return new File(it.localUri).exists; } catch { return false; }
         })();
@@ -2467,12 +2470,6 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           cleaned.push(it);
         }
       }
-      // Suppression des fichiers physiques des orphelins (espace disque) +
-      // sidecar associe si processed:false.
-      for (const o of orphans) {
-        try { new File(o.localUri).delete(); } catch {}
-        if (o.processed === false && o.id) deleteSidecar(o.id);
-      }
       if (!alive) return;
       await commitQueue(cleaned);
       if (cleaned.length === 0) return;
@@ -2487,9 +2484,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       const lastTs = lastTsRaw ? parseInt(lastTsRaw, 10) : 0;
       const whenLabel = lastTs ? formatTimeAgo(lastTs) : 'de ta session précédente';
       const n = cleaned.length;
+      const noteAutres = autresEvents > 0
+        ? `\n\n${autresEvents} de ces photos appartiennent à un autre event : elles ne partiront que depuis cet event, sinon elles apparaîtront « à renvoyer ». Elles ne sont pas supprimées.`
+        : '';
       Alert.alert(
         'Photos en attente',
-        `Tu as ${n} photo${n > 1 ? 's' : ''} en attente d'upload (${whenLabel}). Reprendre maintenant ?`,
+        `Tu as ${n} photo${n > 1 ? 's' : ''} en attente d'upload (${whenLabel}). Reprendre maintenant ?${noteAutres}`,
         [
           { text: 'Plus tard', style: 'cancel' },
           { text: 'Reprendre', onPress: () => drainQueue() },
