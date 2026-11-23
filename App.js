@@ -551,38 +551,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // Resultat : l app tombait a la premiere autorisation, et seulement a
   // celle-la (au relancement tout marche, la permission etant deja acquise).
   // Un demi-battement suffit a laisser iOS terminer.
-  // ─── OTA : appliquer au lancement, pas au suivant ───────────────────────
-  // Par defaut, expo-updates demarre sur le bundle en cache et telecharge le
-  // nouveau en arriere-plan : il ne s active qu au lancement SUIVANT. En
-  // pratique personne ne fait la manoeuvre -- on ferme l app, le
-  // telechargement est tue, et la correction n arrive jamais. Trois heures
-  // perdues la-dessus le 19/10/2026.
-  //
-  // Ici on verifie une fois au demarrage et, si une mise a jour a ete
-  // recuperee, on recharge tout de suite. Le rechargement est quasi
-  // instantane (le bundle est deja sur le disque) et n arrive qu une fois
-  // par mise a jour.
-  //
-  // Jamais en dev : Metro sert deja le code, reloadAsync() couperait le
-  // rechargement a chaud.
-  useEffect(() => {
-    if (__DEV__) return;
-    let annule = false;
-    (async () => {
-      try {
-        const r = await Updates.checkForUpdateAsync();
-        if (annule || !r?.isAvailable) return;
-        const f = await Updates.fetchUpdateAsync();
-        if (annule || !f?.isNew) return;
-        await Updates.reloadAsync();
-      } catch {
-        // Hors ligne, canal absent, serveur muet : on reste sur le bundle
-        // en cache. Une mise a jour ratee ne doit jamais empecher l app de
-        // demarrer.
-      }
-    })();
-    return () => { annule = true; };
-  }, []);
+  // (L application des mises a jour OTA vit dans App() : elle etait posee
+  // ici, donc ne tournait que pour un photographe, et pouvait recharger
+  // l ecran en pleine prise de vue.)
 
   const [cameraPrete, setCameraPrete] = useState(false);
   useEffect(() => {
@@ -9423,6 +9394,60 @@ function App() {
   useEffect(() => {
     if (session?.token) photographerAuthHandledRef.current = false;
   }, [session?.token]);
+
+  // ─── OTA : appliquer au lancement, pas au suivant ───────────────────────
+  // Par defaut, expo-updates demarre sur le bundle en cache et telecharge le
+  // nouveau en arriere-plan : il ne s active qu au lancement SUIVANT. En
+  // pratique personne ne fait la manoeuvre -- on ferme l app, le
+  // telechargement est tue, et la correction n arrive jamais. Trois heures
+  // perdues la-dessus le 19/10/2026.
+  //
+  // On verifie une fois au demarrage et, si une mise a jour a ete recuperee,
+  // on recharge -- MAIS seulement si l utilisateur n est pas au milieu d un
+  // formulaire d inscription / connexion, d un selfie ou d une prise de vue :
+  // un rechargement la ferait perdre sa saisie. Sinon la mise a jour reste
+  // « prete » et s applique au prochain passage au premier plan (ou, a
+  // defaut, au prochain lancement : expo-updates l a deja telechargee).
+  //
+  // Jamais en dev : Metro sert deja le code, reloadAsync() couperait le
+  // rechargement a chaud.
+  const majPreteRef = useRef(false);
+  const occupeRef = useRef(false);
+  occupeRef.current = !!(
+    authModalVisible || loginRole || createEventModal || orgModal
+    || selfieModal || signupSelfieStep || inPhotographerMode
+    || suppressionOrgaVisible || ouvertureOrgaEnCours
+  );
+  const appliquerMajSiLibre = useCallback(async () => {
+    if (__DEV__ || !majPreteRef.current || occupeRef.current) return;
+    majPreteRef.current = false;
+    try { await Updates.reloadAsync(); } catch {}
+  }, []);
+  useEffect(() => {
+    if (__DEV__) return;
+    let annule = false;
+    (async () => {
+      try {
+        const r = await Updates.checkForUpdateAsync();
+        if (annule || !r?.isAvailable) return;
+        const f = await Updates.fetchUpdateAsync();
+        if (annule || !f?.isNew) return;
+        majPreteRef.current = true;
+        appliquerMajSiLibre();
+      } catch {
+        // Hors ligne, canal absent, serveur muet : on reste sur le bundle
+        // en cache. Une mise a jour ratee ne doit jamais empecher l app de
+        // demarrer.
+      }
+    })();
+    return () => { annule = true; };
+  }, [appliquerMajSiLibre]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (etat) => {
+      if (etat === 'active') appliquerMajSiLibre();
+    });
+    return () => sub.remove();
+  }, [appliquerMajSiLibre]);
 
   const handleRunnerAuthFailure = useCallback(() => {
     if (runnerAuthHandledRef.current) return;
