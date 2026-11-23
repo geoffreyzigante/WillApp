@@ -328,10 +328,10 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               adjustsFontSizeToFit rattrape le reste — vu sur Android le
               01/11 : « A venir » en gras sortait de sa pastille. */}
           <TouchableOpacity onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setTab('upcoming'); }} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
-            <Text style={[s.pillText, tab === 'upcoming' && s.pillTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit minimumFontScale={0.85}>À venir</Text>
+            <Text style={[s.pillText, { fontSize: 15 }, tab === 'upcoming' && s.pillTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit minimumFontScale={0.85}>À venir</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => { try { Haptics?.selectionAsync?.(); } catch {} setTab('past'); }} activeOpacity={0.85} style={{ flex: 1, alignItems: 'center', paddingVertical: 8, zIndex: 2 }}>
-            <Text style={[s.pillText, tab === 'past' && s.pillTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit minimumFontScale={0.85}>Passés</Text>
+            <Text style={[s.pillText, { fontSize: 15 }, tab === 'past' && s.pillTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit minimumFontScale={0.85}>Passés</Text>
           </TouchableOpacity>
         </View>
 
