@@ -175,11 +175,11 @@ function WelcomeCard({ onSignup, onLogin }) {
             <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 }}>Créer mon compte</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onLogin} hitSlop={10}>
-            <Text style={{ color: C.pinkPill, fontFamily: 'Montserrat', fontSize: 15 }}>Connexion</Text>
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 15, textDecorationLine: 'underline', opacity: 0.9 }}>Connexion</Text>
           </TouchableOpacity>
         </View>
         {/* Mascotte collee au bas de la carte, bord a bord. */}
-        <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' }}>
+        <View pointerEvents="none" style={{ position: 'absolute', bottom: -14, left: 0, right: 0, alignItems: 'center' }}>
           <MascotteSelfie width={Platform.OS === 'android' ? 134 : 138} />
         </View>
       </GrainViolet>
