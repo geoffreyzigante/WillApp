@@ -214,6 +214,21 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
   // compte ? ». Le jeton reste valable quelques minutes, largement de quoi
   // laisser l utilisateur repondre.
   const [oauthEnAttente, setOauthEnAttente] = useState(null);
+  // Compte existant dont l email n est pas encore confirme : le worker repond
+  // 403 EMAIL_NOT_VERIFIED au login. Contient l email concerne (ou null).
+  const [emailNonVerifie, setEmailNonVerifie] = useState(null);
+  // Etat du bouton « Renvoyer le lien » : { busy, ok, message }.
+  const [renvoi, setRenvoi] = useState({ busy: false, ok: false, message: '' });
+
+  // A chaque (re)ouverture : un mot de passe, un message ou une case CGU
+  // cochee d une session precedente ne doivent pas rester dans le formulaire.
+  useEffect(() => {
+    if (!visible) return;
+    setPassword(''); setPasswordConfirm(''); setShowPassword(false);
+    setInfo(''); setError(''); setBusy(false);
+    setCguAccepted(false);
+    setEmailNonVerifie(null); setRenvoi({ busy: false, ok: false, message: '' });
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -241,6 +256,34 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
     setPasswordConfirm('');
     setError(''); setInfo(''); setBusy(false); setForgotEmailSent(false); setShowPassword(false);
     setSessionOAuth(null); setOauthEnAttente(null);
+    setEmailNonVerifie(null); setRenvoi({ busy: false, ok: false, message: '' });
+  };
+
+  // Renvoi du lien de validation SANS jeton (un compte non confirme ne peut
+  // pas se connecter, donc n a pas de jeton). Le worker repond toujours
+  // { ok: true } (pas d oracle d existence), 400 si l email est invalide,
+  // 429 si on insiste. On n annonce l envoi que sur une reponse OK.
+  const renvoyerLien = async (adresse) => {
+    if (renvoi.busy) return;
+    setRenvoi({ busy: true, ok: false, message: '' });
+    try {
+      const r = await fetch(`${API_URL}/runner/verification/renvoyer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: adresse }),
+      });
+      if (r.ok) {
+        setRenvoi({ busy: false, ok: true, message: 'Lien envoyé. Regarde ta boîte mail (et les spams).' });
+        return;
+      }
+      const d = await r.json().catch(() => ({}));
+      const message = r.status === 429
+        ? 'Trop de demandes. Attends quelques minutes avant de redemander un lien.'
+        : (d?.error || "L'envoi a échoué. Réessaie dans un instant.");
+      setRenvoi({ busy: false, ok: false, message });
+    } catch {
+      setRenvoi({ busy: false, ok: false, message: 'Pas de connexion. Vérifie ton réseau et réessaie.' });
+    }
   };
 
   const pwdStrength = passwordStrength(password);
@@ -334,6 +377,8 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
 
   const submit = async () => {
     setError('');
+    setEmailNonVerifie(null);
+    setRenvoi({ busy: false, ok: false, message: '' });
     // Fin de parcours Apple : le compte existe deja cote serveur, il ne lui
     // manque que la date de naissance. On complete le profil, puis on
     // enchaine exactement comme une inscription classique (selfie, notifs).
@@ -486,7 +531,24 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await r.json();
+      // Reponse non JSON (502 de la passerelle, page HTML...) : jamais de
+      // « JSON Parse error » a l ecran, un message clair a la place.
+      const data = await r.json().catch(() => null);
+      if (!data) {
+        setError(r.ok
+          ? 'Réponse inattendue du serveur. Réessaie dans un instant.'
+          : 'Le serveur ne répond pas pour le moment. Réessaie dans un instant.');
+        setBusy(false);
+        return;
+      }
+      if (!r.ok && mode === 'login' && data.code === 'EMAIL_NOT_VERIFIED') {
+        // Le bon mot de passe a ete saisi : lui dire « identifiants
+        // incorrects » serait faux. On explique et on propose le renvoi.
+        setEmailNonVerifie(String(data.email || emailPropre));
+        setPassword('');
+        setBusy(false);
+        return;
+      }
       if (!r.ok && mode === 'login' && data.code === 'COMPTE_INCONNU') {
         // Pas de compte pour cet email : direction l inscription, email
         // conserve, plutot que « identifiants incorrects » en boucle. Meme
@@ -543,7 +605,11 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
       }
       reset();
     } catch (e) {
-      setError(e.message || 'Erreur réseau');
+      // Reseau coupe : le fetch leve « Network request failed » (en anglais).
+      const horsLigne = /network request failed/i.test(String(e?.message || ''));
+      setError(horsLigne
+        ? 'Pas de connexion. Vérifie ton réseau et réessaie.'
+        : 'Une erreur est survenue. Réessaie dans un instant.');
       setBusy(false);
     }
   };
@@ -1019,6 +1085,34 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
 
             {/* Erreur */}
             {error ? <Text style={{ fontFamily: 'Montserrat', color: '#ff6b6b', fontSize: 13, marginTop: 12 }}>{error}</Text> : null}
+
+            {/* Compte non confirme : ce n est pas un mauvais mot de passe. */}
+            {emailNonVerifie && mode === 'login' ? (
+              <View style={{ marginTop: 12, padding: 14, borderRadius: 12, backgroundColor: T.surface }}>
+                <Text style={{ fontFamily: 'Montserrat', color: T.textBody, fontSize: 13, lineHeight: 19 }}>
+                  Ton compte existe bien et ton mot de passe est correct. Il reste juste à confirmer ton adresse : clique sur le lien envoyé à {emailNonVerifie}, puis reviens te connecter.
+                </Text>
+                {renvoi.ok ? (
+                  <Text style={{ fontFamily: 'Montserrat-SemiBold', color: T.primary, fontSize: 13, marginTop: 10 }}>{renvoi.message}</Text>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      onPress={() => renvoyerLien(emailNonVerifie)}
+                      disabled={renvoi.busy}
+                      hitSlop={8}
+                      style={{ marginTop: 10, alignSelf: 'flex-start', opacity: renvoi.busy ? 0.6 : 1 }}
+                    >
+                      <Text style={{ fontFamily: 'Montserrat-SemiBold', color: T.primary, fontSize: 13 }}>
+                        {renvoi.busy ? 'Envoi…' : 'Renvoyer le lien'}
+                      </Text>
+                    </TouchableOpacity>
+                    {renvoi.message ? (
+                      <Text style={{ fontFamily: 'Montserrat', color: '#ff6b6b', fontSize: 13, marginTop: 6 }}>{renvoi.message}</Text>
+                    ) : null}
+                  </>
+                )}
+              </View>
+            ) : null}
 
             {/* Bouton Continuer + link changement de mode */}
             {!etapeSelfie && (
