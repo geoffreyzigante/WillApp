@@ -8345,6 +8345,25 @@ async function oublierSelfieLocal() {
   try { await AsyncStorage.removeItem('@will_selfie'); } catch {}
 }
 
+// Purge les caches locaux d un compte coureur (cles scopees par userId +
+// anciennes cles globales + horodatages de suivi). Appelee apres un effacement
+// serveur confirme : sans elle, un cache de photos ou d events suivis survivait
+// a la suppression et reapparaissait au compte suivant ou au rechargement.
+async function purgerCachesCoureur(uid, { avecFavoris = false } = {}) {
+  const cles = ['@will_follows', '@will_photos_cache', '@will_last_seen_burst_ts'];
+  if (uid) {
+    cles.push(`@will_photos_cache_${uid}`, `@will_known_events_${uid}`, `@will_follows_${uid}`);
+    if (avecFavoris) cles.push(`@will_photo_favorites_${uid}`);
+  }
+  if (avecFavoris) cles.push('@will_favorites');
+  try { await AsyncStorage.multiRemove(cles); } catch {}
+  try {
+    const toutes = await AsyncStorage.getAllKeys();
+    const suivis = (toutes || []).filter((k) => k.startsWith('@will_follow_started_'));
+    if (suivis.length > 0) await AsyncStorage.multiRemove(suivis);
+  } catch {}
+}
+
 // Sous-modal : viewport caméra custom avec masque rond circulaire.
 // Caméra avant en Vision Camera : grand angle natif explicite + viewport
 // dimensionné au ratio 4:3 du capteur pour éviter le crop/zoom apparent
@@ -8484,6 +8503,12 @@ function App() {
   const [runnerSession, setRunnerSession] = useState(null); // { token, profile }
   const [organizerSession, setOrganizerSession] = useState(null); // { token, profile }
   const [organizerProfileMenu, setOrganizerProfileMenu] = useState(false);
+  // Confirmation de suppression du compte organisateur : le worker exige le
+  // mot de passe pour les comptes a mot de passe (corps vide accepte pour un
+  // compte Apple / Google).
+  const [suppressionOrgaVisible, setSuppressionOrgaVisible] = useState(false);
+  const [suppressionOrgaPwd, setSuppressionOrgaPwd] = useState('');
+  const [suppressionOrgaBusy, setSuppressionOrgaBusy] = useState(false);
   const [organizerEventPhotosTarget, setOrganizerEventPhotosTarget] = useState(null);
   const [organizerEventDetailTarget, setOrganizerEventDetailTarget] = useState(null);
   // Bandeau « ton event est cree » pose sur la page de l event juste apres
@@ -9565,33 +9590,35 @@ function App() {
         { text: 'Annuler', style: 'cancel' },
         { text: 'Supprimer', style: 'destructive', onPress: async () => {
           const r = await api.deleteFaceData(runnerApiFetch);
-          if (r?.success) {
+          // 202 wipe_partiel : le serveur a deja supprime le selfie et le
+          // consentement, seule l empreinte reste a effacer (rejouee par le
+          // serveur). Le local doit donc etre nettoye comme pour un succes,
+          // mais on ne dit pas « c est fait ».
+          if (r?.success || r?.partiel) {
             // Cleanup local : selfie, follows, follow_started timestamps
             setSelfieUri(null);
             setFollows([]);
             const uid = runnerSession?.profile?.userId;
             await oublierSelfieLocal();
-            await AsyncStorage.removeItem('@will_follows').catch(() => {});
-            // Cache photos scope par userId : on supprime celui du user courant.
-            if (uid) await AsyncStorage.removeItem(`@will_photos_cache_${uid}`).catch(() => {});
-            // Legacy global cache (au cas ou il traine encore) :
-            await AsyncStorage.removeItem('@will_photos_cache').catch(() => {});
-            await AsyncStorage.removeItem('@will_last_seen_burst_ts').catch(() => {});
-            // Purge tous les @will_follow_started_* presents
-            try {
-              const allKeys = await AsyncStorage.getAllKeys();
-              const startedKeys = allKeys.filter(k => k.startsWith('@will_follow_started_'));
-              if (startedKeys.length > 0) await AsyncStorage.multiRemove(startedKeys);
-            } catch {}
+            await purgerCachesCoureur(uid);
             // L alerte affirmait « Ton consentement biometrique est retire »
             // sans jamais effacer la cle : l ecran RGPD n etait plus
             // represente au depot suivant. C est ce que fait deja la
             // suppression du selfie, quelques lignes plus bas.
             await Secure.removeItem(BIOMETRIC_CONSENT_KEY).catch(() => {});
             setProfileMenu(false);
-            Alert.alert('Empreinte faciale effacée', 'Ton consentement biométrique est retiré, ton selfie et ton empreinte faciale sont supprimés de nos serveurs. Tu peux redéposer un selfie quand tu veux.');
+            if (r?.partiel) {
+              Alert.alert(
+                'Effacement partiel',
+                "Ton selfie et ton consentement sont supprimés, mais l'effacement de l'empreinte faciale n'a pas abouti. Il sera rejoué automatiquement. Pour être sûr que tout est effacé, réessaie dans quelques minutes.",
+              );
+            } else {
+              Alert.alert('Empreinte faciale effacée', 'Ton consentement biométrique est retiré, ton selfie et ton empreinte faciale sont supprimés de nos serveurs. Tu peux redéposer un selfie quand tu veux.');
+            }
+          } else if (r?.network) {
+            Alert.alert('Pas de connexion', 'Vérifie ta connexion et réessaie.');
           } else {
-            Alert.alert('Erreur', r?.error || 'Impossible de supprimer. Reessaie.');
+            Alert.alert('Erreur', r?.error || 'Impossible de supprimer. Réessaie.');
           }
         }},
       ]
@@ -9614,13 +9641,19 @@ function App() {
               Alert.alert('Erreur', data.error || 'Impossible de supprimer le compte. Réessaie plus tard.');
               return;
             }
+            const uid = runnerSession?.profile?.userId;
             await Promise.all([
               Secure.removeItem('@will_runner'),
               Secure.removeItem(BIOMETRIC_CONSENT_KEY),
               oublierSelfieLocal(),
+              // Caches photos / events connus / suivis / favoris du compte :
+              // le serveur a tout efface, le telephone ne doit rien garder.
+              purgerCachesCoureur(uid, { avecFavoris: true }),
             ]);
             setRunnerSession(null);
             setSelfieUri(null);
+            setFollows([]);
+            setPhotoFavorites([]);
             Alert.alert('Compte supprimé', 'Toutes tes données ont été supprimées.');
           } catch (e) {
             Alert.alert('Erreur réseau', 'Vérifie ta connexion et réessaie.');
@@ -9638,25 +9671,55 @@ function App() {
       'Cette action est définitive. Ton profil organisateur et TOUS tes événements (photos, métadonnées, données biométriques associées) seront supprimés. Aucun retour en arrière possible.',
       [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer', style: 'destructive', onPress: async () => {
-          try {
-            const r = await organizerApiFetch(`/organizer/account`, { method: 'DELETE' });
-            if (!r.ok) {
-              const data = await r.json().catch(() => ({}));
-              Alert.alert('Erreur', data.error || 'Impossible de supprimer le compte. Réessaie plus tard.');
-              return;
-            }
-            await Secure.removeItem('@will_organizer');
-            setOrganizerSession(null);
-            setBottomTab('home');
-            Alert.alert('Compte supprimé', 'Toutes tes données et événements ont été supprimés.');
-          } catch (e) {
-            Alert.alert('Erreur réseau', 'Vérifie ta connexion et réessaie.');
-          }
+        { text: 'Supprimer', style: 'destructive', onPress: () => {
+          // Ouvre la saisie du mot de passe (modale commune, valable iOS et
+          // Android : Alert.prompt n existe pas sur Android). Delai : iOS ne
+          // presente pas une modale pendant que l alerte se ferme.
+          setSuppressionOrgaPwd('');
+          setTimeout(() => setSuppressionOrgaVisible(true), 350);
         }},
       ]
     );
   }, [organizerSession]);
+
+  const confirmerSuppressionOrga = useCallback(async () => {
+    if (suppressionOrgaBusy) return;
+    setSuppressionOrgaBusy(true);
+    try {
+      // Compte Apple / Google : pas de mot de passe, corps vide. Compte a mot
+      // de passe : { password }. Le worker renvoie 400 si le mot de passe manque.
+      const options = { method: 'DELETE' };
+      if (suppressionOrgaPwd) {
+        options.headers = { 'Content-Type': 'application/json' };
+        options.body = JSON.stringify({ password: suppressionOrgaPwd });
+      }
+      const r = await organizerApiFetch(`/organizer/account`, options);
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        let msg = data?.error;
+        if (!msg) {
+          if (r.status === 429) msg = 'Trop de tentatives. Réessaie dans quelques minutes.';
+          else if (r.status === 400 || r.status === 403) msg = 'Mot de passe requis ou incorrect.';
+          else msg = 'Impossible de supprimer le compte. Réessaie plus tard.';
+        }
+        // La modale reste ouverte : l utilisateur peut corriger sa saisie.
+        Alert.alert('Suppression impossible', msg);
+        return;
+      }
+      setSuppressionOrgaVisible(false);
+      setSuppressionOrgaPwd('');
+      await Secure.removeItem('@will_organizer');
+      setOrganizerSession(null);
+      setBottomTab('home');
+      Alert.alert('Compte supprimé', 'Toutes tes données et événements ont été supprimés.');
+    } catch (e) {
+      if (e?.message !== 'Session expirée') {
+        Alert.alert('Erreur réseau', 'Vérifie ta connexion et réessaie.');
+      }
+    } finally {
+      setSuppressionOrgaBusy(false);
+    }
+  }, [suppressionOrgaBusy, suppressionOrgaPwd, organizerApiFetch]);
 
   // Espace organisateur ouvert tout seul quand le compte du coureur connecte
   // le porte aussi. Le titulaire du jeton coureur EST le titulaire du compte :
@@ -9939,16 +10002,34 @@ function App() {
     // les photos A VENIR, mais elle n efface PAS l empreinte deja
     // enregistree. Le dire, plutot que de laisser croire que les deux
     // boutons rouges font la meme chose.
-    Alert.alert('Supprimer ton selfie ?', 'Ta photo de référence est supprimée et Will arrête de te reconnaître sur les nouvelles photos. L\'empreinte faciale déjà enregistrée, elle, n\'est pas effacée : pour cela, utilise « Effacer mon empreinte faciale ». Tu peux redéposer un selfie à tout moment.', [
+    // Ce que fait reellement DELETE /runner/selfie : il supprime la photo du
+    // selfie sur nos serveurs et vide la galerie perso mise en cache, il
+    // n efface PAS l empreinte faciale deja enregistree.
+    Alert.alert('Supprimer ton selfie ?', 'La photo de ton selfie est supprimée de nos serveurs et de ce téléphone, et ton consentement biométrique est retiré. Attention : l\'empreinte faciale déjà enregistrée n\'est pas effacée par cette action. Pour l\'effacer, utilise « Effacer mon empreinte faciale ». Tu peux redéposer un selfie à tout moment.', [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Supprimer', style: 'destructive', onPress: async () => {
         // 1. Supprime le selfie cote serveur en premier. Sinon le useEffect
         //    refetch (GET /runner/selfie) restaurerait la pastille verte
         //    instantanement apres le clear local.
+        //    Si l appel echoue, on N efface PAS le local en silence : le
+        //    selfie resterait sur le serveur alors que l app l affiche comme
+        //    supprime.
         if (runnerSession?.token) {
           try {
-            await runnerApiFetch(`/runner/selfie`, { method: 'DELETE' });
-          } catch (e) { console.warn('delete selfie', e?.message); }
+            const r = await runnerApiFetch(`/runner/selfie`, { method: 'DELETE' });
+            if (!r.ok) {
+              const data = await r.json().catch(() => ({}));
+              Alert.alert('Selfie non supprimé', data?.error || 'Impossible de supprimer ton selfie pour le moment. Réessaie.');
+              return;
+            }
+          } catch (e) {
+            console.warn('delete selfie', e?.message);
+            // Session expiree : l alerte dediee est deja affichee.
+            if (e?.message !== 'Session expirée') {
+              Alert.alert('Selfie non supprimé', 'Connexion impossible. Vérifie ton réseau et réessaie.');
+            }
+            return;
+          }
         }
         // 2. Clear local. RGPD : revoque aussi le consentement biometrique.
         await Promise.all([
@@ -10955,6 +11036,20 @@ function App() {
             }
             await ensurePushRegistered(t, { ask: true });
           }}
+        />
+
+        <SubModalInputText
+          visible={suppressionOrgaVisible}
+          title="Confirmer la suppression"
+          value={suppressionOrgaPwd}
+          onChangeText={setSuppressionOrgaPwd}
+          placeholder="Mot de passe (vide si compte Apple ou Google)"
+          autoCapitalize="none"
+          secureTextEntry
+          onClose={() => { setSuppressionOrgaVisible(false); setSuppressionOrgaPwd(''); }}
+          saveLabel="Supprimer mon compte"
+          onSave={confirmerSuppressionOrga}
+          busy={suppressionOrgaBusy}
         />
 
         <OrganizerProfileMenuModal

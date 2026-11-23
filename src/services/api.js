@@ -31,11 +31,26 @@ export async function apiFetch(path, options = {}, { onAuthFailure } = {}) {
     if (e?.name === 'AbortError') throw e;
     throw new Error('Connexion impossible. Vérifie ton réseau.');
   }
-  if (r.status === 401 && onAuthFailure) {
+  if (r.status === 401 && onAuthFailure && !(await est401MotDePasse(path, r))) {
     onAuthFailure();
     throw new Error('Session expirée');
   }
   return r;
+}
+
+// Un 401 qui vient d une saisie de mot de passe (changement de mot de passe,
+// « Mot de passe actuel incorrect ») n est PAS une session expiree : le jeton
+// est bon, c est la saisie qui est fausse. Deconnecter l utilisateur ici le
+// punirait d une faute de frappe. On laisse donc la reponse remonter telle
+// quelle pour que l UI affiche le message du serveur.
+async function est401MotDePasse(path, r) {
+  if (/\/change-password(\?|$)/.test(path)) return true;
+  try {
+    const corps = await r.clone().json();
+    return /mot de passe/i.test(String(corps?.error || ''));
+  } catch {
+    return false;
+  }
 }
 
 // Audit B15 -- Upload selfie sur R2, factorise pour permettre l usage depuis
@@ -208,12 +223,20 @@ export const api = {
     }
   },
   // Wipe biometrique chirurgical : supprime selfie + empreintes sans toucher au compte.
+  // 202 { error: 'wipe_partiel' } : une partie seulement a ete effacee cote
+  // serveur. On le renvoie comme { partiel: true } (jamais comme un succes,
+  // jamais avec l erreur brute) pour que l UI invite a reessayer.
   async deleteFaceData(runnerApiFetch) {
     try {
       const r = await runnerApiFetch(`/runner/face-data`, {
         method: 'DELETE',
       });
-      if (r.ok) return r.json();
+      if (r.status === 202) {
+        let corps = null;
+        try { corps = await r.json(); } catch {}
+        return { status: 202, partiel: true, error: '', detail: corps };
+      }
+      if (r.ok) return r.json().catch(() => ({}));
       let error = '';
       try { error = (await r.json())?.error || ''; } catch {}
       return { status: r.status, error };
@@ -236,11 +259,14 @@ export const api = {
   // TOUS les appareils du compte : se deconnecter de l Android couperait les
   // notifications de l iPhone reste connecte.
   async deletePushToken(runnerToken, expoToken) {
+    // Sans jeton local, ne RIEN envoyer : le corps vide ferait retirer les
+    // jetons de tous les appareils du compte.
+    if (!runnerToken || !expoToken) return;
     try {
       await fetch(`${API_URL}/runner/push-token`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${runnerToken}` },
-        body: JSON.stringify(expoToken ? { token: expoToken } : {}),
+        body: JSON.stringify({ token: expoToken }),
       });
     } catch {}
   },

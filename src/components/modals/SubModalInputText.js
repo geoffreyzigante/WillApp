@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { C } from '../../constants/colors';
 
-export function SubModalInputText({ visible, title, value, onChangeText, placeholder, keyboardType, autoCapitalize, secureTextEntry, multiline, maxLength, onClose, onSave, busy }) {
+export function SubModalInputText({ visible, title, value, onChangeText, placeholder, keyboardType, autoCapitalize, secureTextEntry, multiline, maxLength, onClose, onSave, busy, saveLabel = 'Enregistrer' }) {
   const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
     if (!visible) { setKbHeight(0); return; }
@@ -71,7 +71,7 @@ export function SubModalInputText({ visible, title, value, onChangeText, placeho
               opacity: busy ? 0.6 : 1,
             }}
           >
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Enregistrer</Text>}
+            {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>{saveLabel}</Text>}
           </TouchableOpacity>
         </View>
       </View>

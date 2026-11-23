@@ -104,7 +104,7 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
       });
-      const data = await r.json();
+      const data = await r.json().catch(() => ({}));
       if (!r.ok) { setPwdError(data.error || 'Erreur'); return; }
       if (data.token) onTokenRenouvele?.(data.token);
       setOldPwd(''); setNewPwd(''); setPwdConfirm('');
@@ -113,7 +113,7 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
         ? 'Ton nouveau mot de passe est actif. Les autres appareils ont été déconnectés.'
         : 'Ton nouveau mot de passe est actif.');
     } catch (e) {
-      setPwdError('Erreur réseau');
+      setPwdError(e?.message === 'Session expirée' ? '' : (e?.message || 'Erreur réseau'));
     } finally {
       setPwdBusy(false);
     }

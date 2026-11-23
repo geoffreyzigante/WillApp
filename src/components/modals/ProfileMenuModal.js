@@ -186,7 +186,9 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
           : 'Ton nouveau mot de passe est actif.',
       );
     } catch (e) {
-      setPwdError('Erreur réseau');
+      // Reseau coupe -> message d apiFetch ; session expiree -> deja annoncee
+      // par l alerte globale, on n ajoute pas un faux « Erreur réseau ».
+      setPwdError(e?.message === 'Session expirée' ? '' : (e?.message || 'Erreur réseau'));
     } finally {
       setPwdBusy(false);
     }
