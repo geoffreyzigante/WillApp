@@ -589,7 +589,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
     : loginEtape1 ? 'Suivant'
     : mode === 'login' ? 'Se connecter'
     : mode === 'forgot' ? (forgotEmailSent ? 'Email envoyé' : 'Recevoir le lien')
-    : 'Créer mon compte';
+    : 'S’inscrire';
 
   return (
     <Modal visible={visible} onRequestClose={onClose} onDismiss={onDismiss} animationType="slide" presentationStyle="fullScreen">
@@ -632,7 +632,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
               fontFamily: 'AVEstiana', fontStyle: 'normal',
               fontSize: 30, color: '#fff', textAlign: 'center', marginBottom: mode === 'forgot' ? 0 : 20,
             }}>
-              {mode === 'forgot' ? 'Mot de passe oublié' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'}
+              {mode === 'forgot' ? 'Mot de passe oublié' : mode === 'login' ? 'Se connecter' : 'S’inscrire'}
             </Text>
           )}
 
@@ -1090,7 +1090,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                 activeOpacity={0.9}
                 style={{ marginTop: 22, height: 50, borderRadius: 12, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center' }}
               >
-                <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>Créer mon compte</Text>
+                <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>S’inscrire</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setOauthEnAttente(null)} style={{ paddingVertical: 12, alignItems: 'center' }}>
                 <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 14, color: T.textMuted }}>Annuler</Text>

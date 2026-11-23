@@ -136,7 +136,7 @@ function WelcomeCard({ onSignup, onLogin }) {
   return (
     <View style={styles.card}>
       {/* Fidele a la maquette (2026-08-31) : violet plein de la charte,
-          pas d ornement, "Créer mon compte" souligne d un filet. */}
+          pas d ornement, "S’inscrire" souligne d un filet. */}
       {/* Ancre sur LE violet de l app (#7B2FFF — logo, boutons, onglets)
           pour que la carte soit exactement dans le meme violet que le
           reste de l accueil, avec un fondu vers la lavande du bandeau. */}
@@ -164,7 +164,7 @@ function WelcomeCard({ onSignup, onLogin }) {
             Un selfie.{'\n'}Toutes tes photos.
           </Text>
         )}
-        <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 12, lineHeight: 17, marginTop: Platform.OS === 'android' ? 8 : 12 }}>
+        <Text style={{ color: '#fff', fontFamily: 'Montserrat-Medium', fontSize: 14, lineHeight: 19, marginTop: Platform.OS === 'android' ? 8 : 12 }}>
           Un compte, un selfie : retrouve tes photos après chaque event.
         </Text>
         {/* Maquette 2026-09-01 : les deux actions sur UNE ligne, separees
@@ -172,7 +172,7 @@ function WelcomeCard({ onSignup, onLogin }) {
             regular, sans chevrons. */}
         <View style={{ marginTop: Platform.OS === 'android' ? 8 : 12, flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
           <TouchableOpacity onPress={onSignup} hitSlop={10}>
-            <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 }}>Créer mon compte</Text>
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 15 }}>S’inscrire</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onLogin} hitSlop={10}>
             <Text style={{ color: C.pinkPill, fontFamily: 'Montserrat-Medium', fontSize: 15 }}>Connexion</Text>

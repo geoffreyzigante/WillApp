@@ -438,7 +438,7 @@ export function BurgerMenuModal({
                     <Text style={styles.ctaPrimaryText}>Connexion</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.ctaSecondary} onPress={fire(onOpenAuthSignup)}>
-                    <Text style={styles.ctaSecondaryText}>Créer mon compte</Text>
+                    <Text style={styles.ctaSecondaryText}>S’inscrire</Text>
                   </TouchableOpacity>
                 </View>
 

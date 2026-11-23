@@ -367,7 +367,7 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
               >
                 {busy
                   ? <ActivityIndicator color="#fff" />
-                  : <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>{mode === 'login' ? 'Se connecter' : 'Créer mon compte'}</Text>}
+                  : <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>{mode === 'login' ? 'Se connecter' : 'S’inscrire'}</Text>}
               </TouchableOpacity>
 
               {/* Voies Apple et Google, sous le formulaire — meme regle que
