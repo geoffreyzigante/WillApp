@@ -149,12 +149,14 @@ function WelcomeCard({ onSignup, onLogin }) {
         </Text>
         {/* Double CTA (user 2026-11-23) : deux moities roses egales, texte violet,
             colles en bas de la carte. Plus de mascotte. */}
-        <View style={{ position: 'absolute', left: 18, right: 18, bottom: 18, flexDirection: 'row', gap: 3 }}>
+        <View style={{ position: 'absolute', left: 18, right: 18, bottom: 18, flexDirection: 'row' }}>
           {[['S’inscrire', onSignup], ['Connexion', onLogin]].map(([label, onPress]) => (
             <TouchableOpacity key={label} onPress={onPress} activeOpacity={0.85} style={{ flex: 1, height: 44, borderRadius: 14, backgroundColor: C.pinkPill, alignItems: 'center', justifyContent: 'center' }}>
               <Text numberOfLines={1} style={{ color: C.primary, fontFamily: 'Montserrat-Medium', fontSize: 15 }}>{label}</Text>
             </TouchableOpacity>
           ))}
+          {/* Filet blanc entre les deux moities (maquette user). */}
+          <View pointerEvents="none" style={{ position: 'absolute', left: '50%', marginLeft: -1, top: 11, bottom: 11, width: 2, borderRadius: 1, backgroundColor: '#fff' }} />
         </View>
       </GrainViolet>
     </View>
