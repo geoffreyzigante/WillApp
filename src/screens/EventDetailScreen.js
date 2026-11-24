@@ -557,7 +557,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                       variante="blanc"
                       icone={(
                         <Svg width={13} height={13} viewBox="0 0 12 12" fill="none">
-                          <Path d="M2 10L10 2M3.5 2H10v6.5" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                          <Path d="M2 10L10 2M3.5 2H10v6.5" stroke="#fff" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
                         </Svg>
                       )}
                       accessibilityLabel="Ouvrir le site de l organisateur"
@@ -684,7 +684,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             style={{ alignSelf: 'center', marginTop: 14 }}
             icone={(c) => (
               <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
-                <Path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5" stroke={c} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                <Path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5" stroke={c} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
               </Svg>
             )}
           />

@@ -23,7 +23,7 @@ export function CtaWill({ label, onPress, variante = 'pink', hauteur = 40, icone
       <View style={{ width: hauteur, height: hauteur, marginLeft: -2, borderRadius: r, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
         {icone ? icone(fg) : (
           <Svg width={17} height={10} viewBox="0 0 22 12" fill="none">
-            <Path d="M1 6h19M15.2 1.3L20.5 6l-5.3 4.7" stroke={fg} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+            <Path d="M1 6h19M15.2 1.3L20.5 6l-5.3 4.7" stroke={fg} strokeWidth={1.95} strokeLinecap="round" strokeLinejoin="round" />
           </Svg>
         )}
       </View>
@@ -31,6 +31,9 @@ export function CtaWill({ label, onPress, variante = 'pink', hauteur = 40, icone
   );
 }
 
+// Epaisseur des traits : tous les pictos des pastilles visent ~1,5 pt a l ecran
+// (strokeWidth = 1,5 / echelle du viewBox) ; le repere Itineraire (SVG fourni)
+// y est deja (anneau 1,7 sur 16,97 rendu en 15 pt).
 // Niveau 2 (CTA secondaire) : libelle sans fond + petite pastille qui porte
 // une fleche (par defaut) ou l icone passee en `icone`. Variantes :
 // 'violet' (sur clair), 'blanc' (sur image/couleur : pastille blanche translucide).
@@ -47,7 +50,7 @@ export function CtaWill2({ label, onPress, variante = 'violet', icone, taille = 
       <View style={{ width: taille, height: taille, borderRadius: Math.round(taille * 0.36), backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
         {icone || (
           <Svg width={15} height={9} viewBox="0 0 22 12" fill="none">
-            <Path d="M1 6h19M15.2 1.3L20.5 6l-5.3 4.7" stroke={ic} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+            <Path d="M1 6h19M15.2 1.3L20.5 6l-5.3 4.7" stroke={ic} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
           </Svg>
         )}
       </View>
