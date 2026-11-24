@@ -15,6 +15,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
+import { T } from '../../constants/tokens';
 import { authStyles } from '../../constants/formStyles';
 import { lh } from '../../constants/typo';
 
@@ -33,7 +34,7 @@ function Ligne({ label, value, dernier }) {
 }
 
 function Action({ label, onPress, ton = 'normal', dernier }) {
-  const couleur = ton === 'danger' ? '#C2413B' : ton === 'lien' ? C.primary : '#1a0a3e';
+  const couleur = ton === 'danger' ? T.couleur.erreur : ton === 'lien' ? C.primary : T.couleur.texte;
   return (
     <TouchableOpacity
       style={[compte.action, !dernier && compte.ligneSeparee]}
@@ -243,7 +244,7 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
                   value={pwdConfirm} onChangeText={setPwdConfirm}
                   style={authStyles.input}
                 />
-                {pwdError ? <Text style={{ fontFamily: 'Montserrat', color: '#ff6b6b', fontSize: 12, marginTop: 4 }}>{pwdError}</Text> : null}
+                {pwdError ? <Text style={{ fontFamily: 'Montserrat', color: T.couleur.erreur, fontSize: 12, marginTop: 4 }}>{pwdError}</Text> : null}
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                   <TouchableOpacity
                     onPress={() => { setChangingPwd(false); setOldPwd(''); setNewPwd(''); setPwdConfirm(''); setPwdError(''); }}
@@ -349,7 +350,7 @@ const drawer = StyleSheet.create({
   },
   hero: {
     paddingTop: 92,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     paddingBottom: 22,
     marginBottom: 4,
   },
@@ -364,15 +365,15 @@ const drawer = StyleSheet.create({
   heroName: { fontFamily: 'AVEstiana', fontSize: 24, color: '#FFFFFF', lineHeight: lh(24, 27) },
   heroStatus: { fontSize: 12.5, color: 'rgba(255,255,255,0.88)', marginTop: 4 },
   section: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: 18,
+    paddingTop: 22,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(26,10,62,0.07)',
+    borderBottomColor: T.couleur.filet,
   },
   secLabel: {
     fontSize: 11, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.1,
-    textTransform: 'uppercase', color: 'rgba(26,10,62,0.4)',
+    textTransform: 'uppercase', color: T.couleur.texteDoux,
     marginBottom: 10,
   },
 });
@@ -382,13 +383,13 @@ const compte = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingVertical: 11,
   },
-  ligneSeparee: { borderBottomWidth: 1, borderBottomColor: 'rgba(26,10,62,0.07)' },
-  ligneLabel: { fontFamily: 'Montserrat', fontSize: 14, color: 'rgba(26,10,62,0.45)' },
-  ligneValeur: { flex: 1, textAlign: 'right', fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: '#1a0a3e' },
+  ligneSeparee: { borderBottomWidth: 1, borderBottomColor: T.couleur.filet },
+  ligneLabel: { fontFamily: 'Montserrat', fontSize: 14, color: T.couleur.texteDoux },
+  ligneValeur: { flex: 1, textAlign: 'right', fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: T.couleur.texte },
   action: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 13,
   },
   actionLabel: { flex: 1, fontSize: 15, fontFamily: 'Montserrat-SemiBold' },
-  chevron: { fontFamily: 'Montserrat', fontSize: 18, color: 'rgba(26,10,62,0.35)' },
+  chevron: { fontFamily: 'Montserrat', fontSize: 18, color: T.couleur.champTexteFantome },
 });

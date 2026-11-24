@@ -17,6 +17,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { PasswordInput } from '../PasswordInput';
 import { C } from '../../constants/colors';
+import { T } from '../../constants/tokens';
 import { s } from '../../constants/styles';
 import { authStyles } from '../../constants/formStyles';
 import { lh } from '../../constants/typo';
@@ -60,7 +61,7 @@ function Ligne({ label, value, dernier }) {
 // droite) plutot qu un lien centre. Quatre liens centres de quatre couleurs
 // differentes empiles, c est ce qui faisait desordre.
 function Action({ label, onPress, ton = 'normal', dernier }) {
-  const couleur = ton === 'danger' ? '#C2413B' : ton === 'lien' ? C.primary : '#1a0a3e';
+  const couleur = ton === 'danger' ? T.couleur.erreur : ton === 'lien' ? C.primary : T.couleur.texte;
   return (
     <TouchableOpacity
       style={[compte.action, !dernier && compte.ligneSeparee]}
@@ -272,7 +273,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                         <Text style={compte.lien}>Ajouter</Text>
                       </TouchableOpacity>
                     ) : (
-                      <View style={{ flexDirection: 'row', gap: 18 }}>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
                         <TouchableOpacity onPress={() => setApercuSelfie((v) => !v)}>
                           <Text style={compte.lien}>{apercuSelfie ? 'Masquer' : 'Voir'}</Text>
                         </TouchableOpacity>
@@ -295,7 +296,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
 
                   {selfieUri && uploadState === 'failed' && (
                     <TouchableOpacity onPress={onRetryUpload} style={{ marginTop: 8 }}>
-                      <Text style={{ color: '#C2413B', fontFamily: 'Montserrat-SemiBold', fontSize: 12 }}>
+                      <Text style={{ color: T.couleur.erreur, fontFamily: 'Montserrat-SemiBold', fontSize: 12 }}>
                         Échec envoi · Réessayer
                       </Text>
                     </TouchableOpacity>
@@ -436,7 +437,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                     value={pwdConfirm} onChangeText={setPwdConfirm}
                     style={authStyles.input}
                   />
-                  {pwdError ? <Text style={{ fontFamily: 'Montserrat', color: '#ff6b6b', fontSize: 12, marginTop: 4 }}>{pwdError}</Text> : null}
+                  {pwdError ? <Text style={{ fontFamily: 'Montserrat', color: T.couleur.erreur, fontSize: 12, marginTop: 4 }}>{pwdError}</Text> : null}
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <TouchableOpacity
                       onPress={() => { setChangingPwd(false); setCurrentPwd(''); setNewPwd(''); setPwdConfirm(''); setPwdError(''); }}
@@ -573,7 +574,7 @@ const drawer = StyleSheet.create({
   // seul endroit. Il deborde les marges du contenu.
   hero: {
     paddingTop: 92,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     paddingBottom: 22,
     marginBottom: 4,
   },
@@ -592,18 +593,18 @@ const drawer = StyleSheet.create({
   // Sections a plat : les cartes #faf9ff empilaient un aplat par groupe sur
   // un fond deja clair, sans rien separer de plus qu un filet.
   section: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: 18,
+    paddingTop: 22,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(26,10,62,0.07)',
+    borderBottomColor: T.couleur.filet,
   },
   secLabel: {
     fontSize: 11, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.1,
-    textTransform: 'uppercase', color: 'rgba(26,10,62,0.4)',
+    textTransform: 'uppercase', color: T.couleur.texteDoux,
     marginBottom: 10,
   },
-  rowLabel: { fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: '#1a0a3e' },
+  rowLabel: { fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: T.couleur.texte },
 });
 
 const compte = StyleSheet.create({
@@ -611,19 +612,23 @@ const compte = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingVertical: 11,
   },
-  ligneSeparee: { borderBottomWidth: 1, borderBottomColor: 'rgba(26,10,62,0.07)' },
-  ligneLabel: { fontFamily: 'Montserrat', fontSize: 14, color: 'rgba(26,10,62,0.45)' },
-  ligneValeur: { flex: 1, textAlign: 'right', fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: '#1a0a3e' },
-  ligneValeur2: { fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: '#1a0a3e' },
+  ligneSeparee: { borderBottomWidth: 1, borderBottomColor: T.couleur.filet },
+  ligneLabel: { fontFamily: 'Montserrat', fontSize: 14, color: T.couleur.texteDoux },
+  ligneValeur: { flex: 1, textAlign: 'right', fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: T.couleur.texte },
+  ligneValeur2: { fontSize: 15, fontFamily: 'Montserrat-SemiBold', color: T.couleur.texte },
   selfieLigne: { flexDirection: 'row', alignItems: 'center' },
-  lien: { color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 },
-  aide: { fontFamily: 'Montserrat', marginTop: 8, fontSize: 12.5, lineHeight: 17, color: 'rgba(26,10,62,0.45)' },
+  lien: {
+    color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 13,
+    backgroundColor: T.couleur.primaireClair, borderRadius: 999,
+    paddingVertical: 7, paddingHorizontal: 14, overflow: 'hidden',
+  },
+  aide: { fontFamily: 'Montserrat', marginTop: 8, fontSize: 12.5, lineHeight: 17, color: T.couleur.texteDoux },
   action: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 13,
   },
   actionLabel: { flex: 1, fontSize: 15, fontFamily: 'Montserrat-SemiBold' },
-  chevron: { fontFamily: 'Montserrat', fontSize: 18, color: 'rgba(26,10,62,0.35)' },
+  chevron: { fontFamily: 'Montserrat', fontSize: 18, color: T.couleur.champTexteFantome },
 
   // Le retrait de 14 px vit DANS le conteneur (qui est masque a hauteur 0),
   // sinon il laissait un trou sous la ligne quand l apercu est ferme.
