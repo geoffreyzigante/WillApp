@@ -5,7 +5,7 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 import { C } from '../constants/colors';
-import { CtaWill } from './CtaWill';
+import { CtaWill2 } from './CtaWill';
 import { lh } from '../constants/typo';
 
 export function EtatVidePhotos({
@@ -49,7 +49,7 @@ export function EtatVidePhotos({
           Tu seras prévenu dès qu'une photo de toi est reconnue.
         </Text>
       ) : onPrevenir ? (
-        <CtaWill label="Préviens-moi" onPress={onPrevenir} variante="violet" style={{ alignSelf: 'center', marginTop: 14 }} />
+        <CtaWill2 label="Préviens-moi" onPress={onPrevenir} variante="violet" style={{ alignSelf: 'center', marginTop: 14 }} />
       ) : null}
     </View>
   );

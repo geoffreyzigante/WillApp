@@ -28,3 +28,27 @@ export function CtaWill({ label, onPress, variante = 'pink', hauteur = 40, style
     </TouchableOpacity>
   );
 }
+
+// Niveau 2 (CTA secondaire) : libelle sans fond + petite pastille qui porte
+// une fleche (par defaut) ou l icone passee en `icone`. Variantes :
+// 'violet' (sur clair), 'blanc' (sur image/couleur : pastille blanche translucide).
+const VARIANTES_N2 = {
+  violet: { fg: '#7B2FFF', bg: '#E3D4FF', ic: '#7B2FFF' },
+  blanc: { fg: '#FFFFFF', bg: 'rgba(255,255,255,0.28)', ic: '#FFFFFF' },
+};
+
+export function CtaWill2({ label, onPress, variante = 'violet', icone, taille = 28, style, ...reste }) {
+  const { fg, bg, ic } = VARIANTES_N2[variante] || VARIANTES_N2.violet;
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} accessibilityRole="button" accessibilityLabel={label} style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start' }, style]} {...reste}>
+      <Text style={{ color: fg, fontFamily: 'Montserrat-Medium', fontSize: 14 }}>{label}</Text>
+      <View style={{ width: taille, height: taille, borderRadius: Math.round(taille * 0.36), backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
+        {icone || (
+          <Svg width={15} height={9} viewBox="0 0 22 12" fill="none">
+            <Path d="M1 6h19M15.2 1.3L20.5 6l-5.3 4.7" stroke={ic} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}

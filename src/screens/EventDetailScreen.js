@@ -15,7 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { GridErrorBoundary } from '../components/GridErrorBoundary';
 import { EtatVidePhotos } from '../components/EtatVidePhotos';
-import { CtaWill } from '../components/CtaWill';
+import { CtaWill, CtaWill2 } from '../components/CtaWill';
 import { Icon } from '../components/Icon';
 import { SkeletonCell } from '../components/SkeletonCell';
 import { FavStar } from '../components/FavStar';
@@ -551,36 +551,28 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                     place. Le globe porte le sens. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   {event.website ? (
-                    <TouchableOpacity
+                    <CtaWill2
+                      label="Site"
                       onPress={openWebsite}
-                      activeOpacity={0.6}
-                      hitSlop={{ top: 8, bottom: 8 }}
-                      accessibilityRole="button"
+                      variante="blanc"
+                      icone={<Icon.Site size={15} color="#fff" />}
                       accessibilityLabel="Ouvrir le site de l organisateur"
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
-                    >
-                      <Icon.Site size={15} color="#fff" />
-                      <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-Medium' }}>Site</Text>
-                    </TouchableOpacity>
+                    />
                   ) : null}
                   {(mapQuery && event.website) ? (
-                    <View style={{ width: 1, height: 20, marginHorizontal: 22, backgroundColor: 'rgba(255,255,255,0.4)' }} />
+                    <View style={{ width: 1, height: 20, marginHorizontal: 16, backgroundColor: 'rgba(255,255,255,0.4)' }} />
                   ) : null}
                   {mapQuery ? (
-                    <TouchableOpacity
+                    <CtaWill2
+                      label="Itinéraire"
                       onPress={() => {
                         const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`;
                         Linking.openURL(url).catch(() => {});
                       }}
-                      activeOpacity={0.6}
-                      hitSlop={{ top: 8, bottom: 8 }}
-                      accessibilityRole="button"
+                      variante="blanc"
+                      icone={<Icon.Itineraire size={15} color="#fff" />}
                       accessibilityLabel={`Itineraire vers ${mapQuery}`}
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
-                    >
-                      <Icon.Itineraire size={15} color="#fff" />
-                      <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-Medium' }}>Itinéraire</Text>
-                    </TouchableOpacity>
+                    />
                   ) : null}
                 </View>
               </>
