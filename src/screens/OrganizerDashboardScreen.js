@@ -12,9 +12,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, AppState } from 'react-native';
-import { EventCard } from '../components/EventCard';
+import { Image as ExpoImage } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { CtaWill, CtaWill2 } from '../components/CtaWill';
-import { isUpcoming } from '../utils/format';
+import { isUpcoming, formatDateLong, cityLabel, displayEventType } from '../utils/format';
 import { T } from '../constants/tokens';
 import { RefreshableScrollView } from '../components/loaders';
 import { C, colorForType } from '../constants/colors';
@@ -230,59 +231,79 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
           const cd = decompte(e);
           const photosEnPremier = !!etat.passe || !!etat.enCours;
           return (
-            /* Un event = un bloc a la couleur de l event (comme sa card) :
-               card (nom, date, lieu) + avancement + statut + action, sans
-               boite blanche. 16 de vide entre deux events. */
+            /* Un event = un bloc a la couleur de l event : photo sur toute la
+               hauteur (moitie droite, fondu vers la couleur), nom, avancement,
+               statut en mots. Actions alignees sur une meme ligne :
+               Modifier (N2) a gauche, Photos / Mettre en ligne (N1) a droite. */
             <View key={e.code || i} style={{ marginBottom: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: colorForType(e.event_type) }}>
-              <View style={{ position: 'relative' }}>
-                <EventCard
-                  event={e}
-                  onPress={() => (onOpenEventDetail || onOpenEventPhotos)?.(e)}
-                  style={{ borderRadius: 0, marginBottom: 0 }}
-                />
-                {cd ? (
-                  /* Meme decompte que la hero de la fiche event, a 16 du bas
-                     de la card. */
-                  <View pointerEvents="none" style={{ position: 'absolute', bottom: 16, right: 16 }}>
-                    <Text style={{ color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, lineHeight: 28, includeFontPadding: false, textAlignVertical: 'center', letterSpacing: -0.8, transform: [{ skewX: '-14deg' }] }}>
+              {e.cover_image ? (
+                <>
+                  <ExpoImage
+                    source={{ uri: e.cover_image }}
+                    style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', right: 0 }}
+                    contentFit="cover"
+                    transition={200}
+                    cachePolicy="memory-disk"
+                  />
+                  <LinearGradient
+                    colors={[colorForType(e.event_type), colorForType(e.event_type) + '1A']}
+                    start={{ x: 0, y: 0.5 }}
+                    end={{ x: 1, y: 0.5 }}
+                    locations={[0.5, 1]}
+                    style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}
+                    pointerEvents="none"
+                  />
+                </>
+              ) : null}
+              <TouchableOpacity activeOpacity={0.9} onPress={() => (onOpenEventDetail || onOpenEventPhotos)?.(e)} style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }} />
+
+              <View pointerEvents="box-none" style={{ padding: 16 }}>
+                <View pointerEvents="none">
+                  <Text style={[s.eventDate, { letterSpacing: 1.1, opacity: 1 }]}>{formatDateLong(e.event_date, e.event_date_end)}</Text>
+                  <Text style={[s.eventName, { fontSize: 26, lineHeight: 28, marginBottom: 4 }]} numberOfLines={2} ellipsizeMode="tail">{e.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[s.eventLocation, { marginTop: 0, color: '#fff', flexShrink: 1 }]} numberOfLines={1}>{cityLabel(e.location)}</Text>
+                    {e.event_type ? (
+                      <>
+                        <View style={{ width: 1, height: 13, marginHorizontal: 10, backgroundColor: 'rgba(255,255,255,0.45)' }} />
+                        <Text style={[s.eventLocation, { marginTop: 0, color: '#fff' }]} numberOfLines={1}>{displayEventType(e.event_type)}</Text>
+                      </>
+                    ) : null}
+                  </View>
+                  {cd ? (
+                    /* Meme decompte que la hero de la fiche event. */
+                    <Text style={{ position: 'absolute', top: 0, right: 0, color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, lineHeight: 28, includeFontPadding: false, letterSpacing: -0.8, transform: [{ skewX: '-14deg' }] }}>
                       {cd}
                     </Text>
-                  </View>
-                ) : null}
-              </View>
-
-              <View style={{ paddingTop: 4, paddingHorizontal: 16, paddingBottom: 16 }}>
-                <Segments n={etat.n} />
-                {/* 1 nom + date (la card) · 2 statut en mots · 3 action. */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFFFFF' }} />
-                  <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 14, color: '#FFFFFF' }}>{etat.label}</Text>
+                  ) : null}
                 </View>
-                {etat.detail ? (
-                  <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 4, marginLeft: 16, lineHeight: 18 }}>{etat.detail}</Text>
-                ) : null}
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+                <View pointerEvents="none" style={{ marginTop: 22 }}>
+                  <Segments n={etat.n} />
+                  {/* 1 nom + date · 2 statut en mots · 3 action. */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFFFFF' }} />
+                    <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 14, color: '#FFFFFF' }}>{etat.label}</Text>
+                  </View>
+                  {etat.detail ? (
+                    <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 4, marginLeft: 16, lineHeight: 18 }}>{etat.detail}</Text>
+                  ) : null}
+                </View>
+
+                {/* Meme ligne, meme axe : Modifier (N2) a gauche, un seul N1 a droite. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 40, marginTop: 16 }}>
+                  <CtaWill2 label="Modifier" variante="blanc" onPress={() => onEditEvent?.(e)} style={{ alignSelf: 'center' }} />
                   {e.status === 'pending_payment' ? (
-                    <>
-                      {paying === e.code ? (
-                        <ActivityIndicator color="#FFFFFF" />
-                      ) : (
-                        <CtaWill label="Mettre en ligne" variante="white" onPress={() => pay(e)} />
-                      )}
-                      <CtaWill2 label="Modifier" variante="blanc" onPress={() => onEditEvent?.(e)} />
-                    </>
+                    paying === e.code ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <CtaWill label="Mettre en ligne" variante="white" onPress={() => pay(e)} style={{ alignSelf: 'center' }} />
+                    )
                   ) : photosEnPremier ? (
-                    <>
-                      <CtaWill label="Photos" variante="white" onPress={() => onOpenEventPhotos?.(e)} />
-                      <CtaWill2 label="Modifier" variante="blanc" onPress={() => onEditEvent?.(e)} />
-                    </>
-                  ) : (
-                    <>
-                      <CtaWill label="Modifier" variante="white" onPress={() => onEditEvent?.(e)} />
-                      {etat.erreur ? <CtaWill2 label="Supprimer" variante="blanc" onPress={() => deleteEvent(e)} /> : null}
-                    </>
-                  )}
+                    <CtaWill label="Photos" variante="white" onPress={() => onOpenEventPhotos?.(e)} style={{ alignSelf: 'center' }} />
+                  ) : etat.erreur ? (
+                    <CtaWill2 label="Supprimer" variante="blanc" onPress={() => deleteEvent(e)} style={{ alignSelf: 'center' }} />
+                  ) : null}
                 </View>
               </View>
             </View>
