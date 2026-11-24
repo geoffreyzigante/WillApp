@@ -611,8 +611,11 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         )}
 
         {countdown ? (
-          <View style={{ position: 'absolute', bottom: 14, right: 16 }}>
-            <Text style={{ color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, fontStyle: 'italic', letterSpacing: -0.8 }}>
+          /* Centre vertical aligne sur la rangee Site / Itineraire : sa hauteur
+             (28, la pastille du CTA) = celle de la ligne du decompte, et les
+             deux sont a 16 du bas (paddingVertical du hero). */
+          <View style={{ position: 'absolute', bottom: 16, right: 16 }}>
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, lineHeight: 28, includeFontPadding: false, textAlignVertical: 'center', fontStyle: 'italic', letterSpacing: -0.8 }}>
               {countdown}
             </Text>
           </View>
