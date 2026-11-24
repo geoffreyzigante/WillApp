@@ -619,7 +619,7 @@ const compte = StyleSheet.create({
   selfieLigne: { flexDirection: 'row', alignItems: 'center' },
   lien: {
     color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 13,
-    backgroundColor: T.couleur.primaireClair, borderRadius: 999,
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: T.couleur.primaireClair, borderRadius: 999,
     paddingVertical: 7, paddingHorizontal: 14, overflow: 'hidden',
   },
   aide: { fontFamily: 'Montserrat', marginTop: 8, fontSize: 12.5, lineHeight: 17, color: T.couleur.texteDoux },
