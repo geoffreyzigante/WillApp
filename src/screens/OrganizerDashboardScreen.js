@@ -229,13 +229,21 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
           const cd = decompte(e);
           const photosEnPremier = !!etat.passe || !!etat.enCours;
           return (
-            <View key={e.code || i} style={{ marginBottom: 16 }}>
+            /* Un event = un bloc : la card et sa bande de statut sont reunies
+               dans une meme carte blanche a bord arrondi et filet, avec 24 de
+               vide entre deux events. Avant, la bande blanche se confondait
+               avec le fond et l on ne voyait plus ou un event s arretait. */
+            <View key={e.code || i} style={{ marginBottom: 24, borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: T.couleur.filet }}>
               <View style={{ position: 'relative' }}>
-                <EventCard event={e} onPress={() => (onOpenEventDetail || onOpenEventPhotos)?.(e)} />
+                <EventCard
+                  event={e}
+                  onPress={() => (onOpenEventDetail || onOpenEventPhotos)?.(e)}
+                  style={{ borderRadius: 0, marginBottom: 0 }}
+                />
                 {cd ? (
                   /* Meme decompte que la hero de la fiche event, a 16 du bas
-                     de la card (+10 de marge basse de la card). */
-                  <View pointerEvents="none" style={{ position: 'absolute', bottom: 26, right: 16 }}>
+                     de la card. */
+                  <View pointerEvents="none" style={{ position: 'absolute', bottom: 16, right: 16 }}>
                     <Text style={{ color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, lineHeight: 28, includeFontPadding: false, textAlignVertical: 'center', letterSpacing: -0.8, transform: [{ skewX: '-14deg' }] }}>
                       {cd}
                     </Text>
@@ -243,7 +251,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                 ) : null}
               </View>
 
-              <View style={{ backgroundColor: '#FFFFFF', borderBottomLeftRadius: 18, borderBottomRightRadius: 18, marginTop: -12, paddingTop: 18, paddingHorizontal: 16, paddingBottom: 16 }}>
+              <View style={{ paddingTop: 16, paddingHorizontal: 16, paddingBottom: 16 }}>
                 <Segments n={etat.n} couleur={etat.couleur} />
                 {/* 1 nom + date (la card) · 2 statut en mots · 3 action. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
