@@ -272,8 +272,7 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
                   </View>
                 ) : null}
                 {onDeleteAccount ? (
-                  <View style={[drawer.section, { borderBottomWidth: 0 }]}>
-                    <Text style={drawer.secLabel}>Zone sensible</Text>
+                  <View style={[drawer.section, { borderBottomWidth: 0, paddingTop: 24 }]}>
                     <Action label="Supprimer mon compte" ton="danger" onPress={onDeleteAccount} dernier />
                   </View>
                 ) : null}

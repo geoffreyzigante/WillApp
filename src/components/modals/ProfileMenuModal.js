@@ -471,8 +471,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                       « Effacer mon empreinte faciale » est desormais la
                       SEULE formulation pour ce geste-la, ici comme dans les
                       alertes de confirmation. */}
-                  <View style={[drawer.section, { borderBottomWidth: 0 }]}>
-                    <Text style={drawer.secLabel}>Zone sensible</Text>
+                  <View style={[drawer.section, { borderBottomWidth: 0, paddingTop: 24 }]}>
                     {selfieUri ? (
                       <Action label="Supprimer mon selfie" ton="danger" onPress={onDelete} dernier />
                     ) : null}
