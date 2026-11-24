@@ -17,7 +17,7 @@ import { CtaWill, CtaWill2 } from '../components/CtaWill';
 import { isUpcoming } from '../utils/format';
 import { T } from '../constants/tokens';
 import { RefreshableScrollView } from '../components/loaders';
-import { C } from '../constants/colors';
+import { C, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
 
 
@@ -55,11 +55,12 @@ const decompte = (e) => {
 };
 
 // Barre de progression : 4 segments (cree, valide, en ligne, photos).
-function Segments({ n, couleur }) {
+// Barre d avancement en blanc sur la couleur de l event (bloc teinte).
+function Segments({ n }) {
   return (
     <View style={{ flexDirection: 'row', gap: 4, marginBottom: 14 }}>
       {[0, 1, 2, 3].map((i) => (
-        <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i < n ? couleur : T.couleur.filet }} />
+        <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i < n ? '#FFFFFF' : 'rgba(255,255,255,0.35)' }} />
       ))}
     </View>
   );
@@ -229,12 +230,10 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
           const cd = decompte(e);
           const photosEnPremier = !!etat.passe || !!etat.enCours;
           return (
-            /* Un event = un bloc : la card et sa bande de statut sont reunies
-               dans une meme carte blanche (ombre violette + liseré clair), 24 de
-               vide entre deux events. Avant, la bande blanche se confondait
-               avec le fond et l on ne voyait plus ou un event s arretait. */
-            <View key={e.code || i} style={{ marginBottom: 24, borderRadius: 18, backgroundColor: '#FFFFFF', shadowColor: T.couleur.primaire, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 4 }}>
-            <View style={{ borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: T.couleur.primaireClair }}>
+            /* Un event = un bloc a la couleur de l event (comme sa card) :
+               card (nom, date, lieu) + avancement + statut + action, sans
+               boite blanche. 16 de vide entre deux events. */
+            <View key={e.code || i} style={{ marginBottom: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: colorForType(e.event_type) }}>
               <View style={{ position: 'relative' }}>
                 <EventCard
                   event={e}
@@ -252,41 +251,40 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                 ) : null}
               </View>
 
-              <View style={{ paddingTop: 16, paddingHorizontal: 16, paddingBottom: 16 }}>
-                <Segments n={etat.n} couleur={etat.couleur} />
+              <View style={{ paddingTop: 4, paddingHorizontal: 16, paddingBottom: 16 }}>
+                <Segments n={etat.n} />
                 {/* 1 nom + date (la card) · 2 statut en mots · 3 action. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: etat.erreur ? T.couleur.erreur : etat.couleur === T.couleur.attente.texte ? T.couleur.attente.texte : (etat.passe || etat.n >= 3) ? C.success : etat.couleur }} />
-                  <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 14, color: etat.erreur ? T.couleur.erreur : T.couleur.texte }}>{etat.label}</Text>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFFFFF' }} />
+                  <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 14, color: '#FFFFFF' }}>{etat.label}</Text>
                 </View>
                 {etat.detail ? (
-                  <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: T.couleur.texteDoux, marginTop: 4, marginLeft: 16, lineHeight: 18 }}>{etat.detail}</Text>
+                  <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 4, marginLeft: 16, lineHeight: 18 }}>{etat.detail}</Text>
                 ) : null}
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
                   {e.status === 'pending_payment' ? (
                     <>
                       {paying === e.code ? (
-                        <ActivityIndicator color={C.primary} />
+                        <ActivityIndicator color="#FFFFFF" />
                       ) : (
-                        <CtaWill label="Mettre en ligne" variante="violet" onPress={() => pay(e)} />
+                        <CtaWill label="Mettre en ligne" variante="white" onPress={() => pay(e)} />
                       )}
-                      <CtaWill2 label="Modifier" onPress={() => onEditEvent?.(e)} />
+                      <CtaWill2 label="Modifier" variante="blanc" onPress={() => onEditEvent?.(e)} />
                     </>
                   ) : photosEnPremier ? (
                     <>
-                      <CtaWill label="Photos" variante="violet" onPress={() => onOpenEventPhotos?.(e)} />
-                      <CtaWill2 label="Modifier" onPress={() => onEditEvent?.(e)} />
+                      <CtaWill label="Photos" variante="white" onPress={() => onOpenEventPhotos?.(e)} />
+                      <CtaWill2 label="Modifier" variante="blanc" onPress={() => onEditEvent?.(e)} />
                     </>
                   ) : (
                     <>
-                      <CtaWill label="Modifier" variante="violet" onPress={() => onEditEvent?.(e)} />
-                      {etat.erreur ? <CtaWill2 label="Supprimer" variante="erreur" onPress={() => deleteEvent(e)} /> : null}
+                      <CtaWill label="Modifier" variante="white" onPress={() => onEditEvent?.(e)} />
+                      {etat.erreur ? <CtaWill2 label="Supprimer" variante="blanc" onPress={() => deleteEvent(e)} /> : null}
                     </>
                   )}
                 </View>
               </View>
-            </View>
             </View>
           );
         })
