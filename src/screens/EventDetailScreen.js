@@ -555,7 +555,11 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                       label="Site"
                       onPress={openWebsite}
                       variante="blanc"
-                      icone={<Icon.Site size={15} color="#fff" />}
+                      icone={(
+                        <Svg width={13} height={13} viewBox="0 0 12 12" fill="none">
+                          <Path d="M2 10L10 2M3.5 2H10v6.5" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                        </Svg>
+                      )}
                       accessibilityLabel="Ouvrir le site de l organisateur"
                     />
                   ) : null}
