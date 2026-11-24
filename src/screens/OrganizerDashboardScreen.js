@@ -230,10 +230,11 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
           const photosEnPremier = !!etat.passe || !!etat.enCours;
           return (
             /* Un event = un bloc : la card et sa bande de statut sont reunies
-               dans une meme carte blanche a bord arrondi et filet, avec 24 de
+               dans une meme carte blanche (ombre violette + liseré clair), 24 de
                vide entre deux events. Avant, la bande blanche se confondait
                avec le fond et l on ne voyait plus ou un event s arretait. */
-            <View key={e.code || i} style={{ marginBottom: 24, borderRadius: 18, overflow: 'hidden', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: T.couleur.filet }}>
+            <View key={e.code || i} style={{ marginBottom: 24, borderRadius: 18, backgroundColor: '#FFFFFF', shadowColor: T.couleur.primaire, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 4 }}>
+            <View style={{ borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: T.couleur.primaireClair }}>
               <View style={{ position: 'relative' }}>
                 <EventCard
                   event={e}
@@ -285,6 +286,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                   )}
                 </View>
               </View>
+            </View>
             </View>
           );
         })
