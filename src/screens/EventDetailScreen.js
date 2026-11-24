@@ -611,11 +611,14 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         )}
 
         {countdown ? (
+          /* Italique simulee par skewX : aucune police Montserrat italique n est
+             embarquee, iOS synthetise l oblique mais Android l ignore (texte
+             droit). skewX donne le meme rendu des deux cotes, ~ celui du site. */
           /* Centre vertical aligne sur la rangee Site / Itineraire : sa hauteur
              (28, la pastille du CTA) = celle de la ligne du decompte, et les
              deux sont a 16 du bas (paddingVertical du hero). */
           <View style={{ position: 'absolute', bottom: 16, right: 16 }}>
-            <Text style={{ color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, lineHeight: 28, includeFontPadding: false, textAlignVertical: 'center', fontStyle: 'italic', letterSpacing: -0.8 }}>
+            <Text style={{ color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, lineHeight: 28, includeFontPadding: false, textAlignVertical: 'center', letterSpacing: -0.8, transform: [{ skewX: '-14deg' }] }}>
               {countdown}
             </Text>
           </View>
