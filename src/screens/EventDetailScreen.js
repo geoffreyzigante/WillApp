@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { GridErrorBoundary } from '../components/GridErrorBoundary';
 import { EtatVidePhotos } from '../components/EtatVidePhotos';
+import { CtaWill } from '../components/CtaWill';
 import { Icon } from '../components/Icon';
 import { SkeletonCell } from '../components/SkeletonCell';
 import { FavStar } from '../components/FavStar';
@@ -473,13 +474,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
             <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontFamily: 'Montserrat-Medium', textAlign: 'center', marginTop: 4, lineHeight: 17 }}>
               Un selfie suffit, Will te les envoie après l'event.
             </Text>
-            <TouchableOpacity
-              onPress={onOpenSelfie}
-              activeOpacity={0.88}
-              style={{ marginTop: 12, paddingVertical: 11, paddingHorizontal: 22, borderRadius: 999, backgroundColor: C.pinkPill }}
-            >
-              <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Prendre mon selfie</Text>
-            </TouchableOpacity>
+            <CtaWill label="Prendre mon selfie" onPress={onOpenSelfie} variante="pink" style={{ alignSelf: 'center', marginTop: 12 }} />
           </GrainViolet>
         </View>
       ) : null}
