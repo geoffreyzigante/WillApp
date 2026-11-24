@@ -7009,6 +7009,42 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                       </Text>
                     </View>
                   </View>
+
+                  {/* ───── SUPPRESSION ───── La suppression vit ici, plus sur
+                      la liste des events : on ne supprime pas d un geste
+                      sans le vouloir. */}
+                  <View style={[sectionCardStyle, { marginTop: 24 }]}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        Alert.alert(
+                          'Supprimer cet événement ?',
+                          `"${editEvent?.name || ''}" sera définitivement supprimé, ainsi que toutes ses photos. Cette action est irréversible.`,
+                          [
+                            { text: 'Annuler', style: 'cancel' },
+                            {
+                              text: 'Supprimer',
+                              style: 'destructive',
+                              onPress: async () => {
+                                try {
+                                  const r = await organizerApiFetch(`/organizer/event/${editEvent.code}`, { method: 'DELETE' });
+                                  if (r.ok) { onCreated?.(); onClose(); }
+                                  else {
+                                    const data = await r.json().catch(() => ({}));
+                                    Alert.alert('Erreur', data.error || 'Échec de la suppression');
+                                  }
+                                } catch (err) {
+                                  Alert.alert('Erreur', err.message);
+                                }
+                              },
+                            },
+                          ]
+                        );
+                      }}
+                      style={[rowStyle, { justifyContent: 'center', paddingVertical: 16 }]}
+                    >
+                      <Text style={{ color: C.error, fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>Supprimer cet événement</Text>
+                    </TouchableOpacity>
+                  </View>
                 </>
               )}
             </ScrollView>

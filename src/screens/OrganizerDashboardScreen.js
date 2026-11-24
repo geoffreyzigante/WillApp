@@ -160,34 +160,6 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
     );
   };
 
-  const deleteEvent = (e) => {
-    Alert.alert(
-      'Supprimer cet événement ?',
-      `"${e.name}" sera définitivement supprimé, ainsi que toutes ses photos. Cette action est irréversible.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const r = await organizerApiFetch(`/organizer/event/${e.code}`, {
-                method: 'DELETE',
-              });
-              if (r.ok) reload();
-              else {
-                const data = await r.json();
-                Alert.alert('Erreur', data.error || 'Échec de la suppression');
-              }
-            } catch (err) {
-              Alert.alert('Erreur', err.message);
-            }
-          },
-        },
-      ]
-    );
-  };
-
   // Etat affiche sous la card : phrase de statut, nombre de segments, couleur,
   // detail eventuel. Un event en ligne dont la date est passee est « Terminé ».
   const etatEvent = (e) => {
@@ -301,8 +273,6 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                     )
                   ) : photosEnPremier ? (
                     <CtaWill label="Photos" variante="white" onPress={() => onOpenEventPhotos?.(e)} style={{ alignSelf: 'center' }} />
-                  ) : etat.erreur ? (
-                    <CtaWill2 label="Supprimer" variante="blanc" onPress={() => deleteEvent(e)} style={{ alignSelf: 'center' }} />
                   ) : null}
                 </View>
               </View>
