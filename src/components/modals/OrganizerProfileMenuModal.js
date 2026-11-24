@@ -366,10 +366,8 @@ const drawer = StyleSheet.create({
   heroStatus: { fontSize: 12.5, color: 'rgba(255,255,255,0.88)', marginTop: 4 },
   section: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(26,10,62,0.07)',
+    paddingTop: 20,
+    paddingBottom: 14,
   },
   secLabel: {
     fontSize: 11, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.1,

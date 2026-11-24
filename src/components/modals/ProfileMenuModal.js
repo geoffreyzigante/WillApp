@@ -474,18 +474,18 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
                   <View style={[drawer.section, { borderBottomWidth: 0 }]}>
                     <Text style={drawer.secLabel}>Zone sensible</Text>
                     {selfieUri ? (
-                      <Action label="Supprimer mon selfie" ton="danger" onPress={onDelete} />
+                      <Action label="Supprimer mon selfie" ton="danger" onPress={onDelete} dernier />
                     ) : null}
                     {selfieUri ? (
-                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, lineHeight: 15, marginTop: -4, marginBottom: 10 }}>
+                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, lineHeight: 15, marginTop: -4, marginBottom: 14 }}>
                         Retire ta photo de référence. Will arrête de te reconnaître sur les nouvelles photos.
                       </Text>
                     ) : null}
                     {onDeleteFaceData ? (
-                      <Action label="Effacer mon empreinte faciale" ton="danger" onPress={onDeleteFaceData} />
+                      <Action label="Effacer mon empreinte faciale" ton="danger" onPress={onDeleteFaceData} dernier />
                     ) : null}
                     {onDeleteFaceData ? (
-                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, lineHeight: 15, marginTop: -4, marginBottom: 10 }}>
+                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, lineHeight: 15, marginTop: -4, marginBottom: 14 }}>
                         Efface aussi l'empreinte déjà enregistrée sur tous les events. Définitif.
                       </Text>
                     ) : null}
@@ -594,10 +594,8 @@ const drawer = StyleSheet.create({
   // un fond deja clair, sans rien separer de plus qu un filet.
   section: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(26,10,62,0.07)',
+    paddingTop: 20,
+    paddingBottom: 14,
   },
   secLabel: {
     fontSize: 11, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.1,
