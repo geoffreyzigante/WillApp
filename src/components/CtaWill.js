@@ -35,7 +35,7 @@ export function CtaWill({ label, onPress, variante = 'pink', hauteur = 40, icone
 // une fleche (par defaut) ou l icone passee en `icone`. Variantes :
 // 'violet' (sur clair), 'blanc' (sur image/couleur : pastille blanche translucide).
 const VARIANTES_N2 = {
-  violet: { fg: '#7B2FFF', bg: '#E3D4FF', ic: '#7B2FFF' },
+  violet: { fg: '#3B0A96', bg: '#E3D4FF', ic: '#3B0A96' },
   blanc: { fg: '#FFFFFF', bg: 'rgba(255,255,255,0.28)', ic: '#FFFFFF' },
 };
 
