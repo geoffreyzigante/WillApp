@@ -670,13 +670,17 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
               ? "Vérifie ta connexion. Cet event n'a pas encore eu lieu : il est normal qu'il n'y ait pas encore de photos."
               : 'Vérifie ta connexion : les photos de cet event existent peut-être déjà.'}
           </Text>
-          <TouchableOpacity
+          <CtaWill
+            label="Réessayer"
             onPress={loadPhotos}
-            activeOpacity={0.85}
-            style={{ marginTop: 14, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 999, backgroundColor: C.primary }}
-          >
-            <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>Réessayer</Text>
-          </TouchableOpacity>
+            variante="violet"
+            style={{ alignSelf: 'center', marginTop: 14 }}
+            icone={(c) => (
+              <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+                <Path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5" stroke={c} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            )}
+          />
         </View>
       ) : upcoming && registreProgramme && !loading ? (
         <EtatVidePhotos onPrevenir={onToggleFollow} dejaPrevenu={isAuthed && isFollowing} />

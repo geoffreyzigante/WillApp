@@ -12,7 +12,7 @@ const VARIANTES = {
   white: { bg: '#FFFFFF', fg: '#5E1AD6' },
 };
 
-export function CtaWill({ label, onPress, variante = 'pink', hauteur = 40, style }) {
+export function CtaWill({ label, onPress, variante = 'pink', hauteur = 40, icone, style }) {
   const { bg, fg } = VARIANTES[variante] || VARIANTES.pink;
   const r = Math.round(hauteur * 0.35);
   return (
@@ -21,9 +21,11 @@ export function CtaWill({ label, onPress, variante = 'pink', hauteur = 40, style
         <Text style={{ color: fg, fontFamily: 'Montserrat-Medium', fontSize: 14 }}>{label}</Text>
       </View>
       <View style={{ width: hauteur, height: hauteur, marginLeft: -2, borderRadius: r, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
-        <Svg width={17} height={10} viewBox="0 0 22 12" fill="none">
-          <Path d="M1 6h19M15.2 1.3L20.5 6l-5.3 4.7" stroke={fg} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-        </Svg>
+        {icone ? icone(fg) : (
+          <Svg width={17} height={10} viewBox="0 0 22 12" fill="none">
+            <Path d="M1 6h19M15.2 1.3L20.5 6l-5.3 4.7" stroke={fg} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+          </Svg>
+        )}
       </View>
     </TouchableOpacity>
   );
