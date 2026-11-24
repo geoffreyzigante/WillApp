@@ -411,7 +411,7 @@ export function ProfileMenuModal({ visible, onClose, onBack, selfieUri, onView, 
               {profile && !editing && !changingPwd && (
                 <View style={drawer.section}>
                   <Text style={drawer.secLabel}>Réglages</Text>
-                  <Action label="Modifier mes infos" onPress={() => setEditing(true)} />
+                  <Action label="Modifier mes infos" onPress={() => setEditing(true)} dernier />
                   <Action label="Modifier mon mot de passe" onPress={() => setChangingPwd(true)} dernier />
                 </View>
               )}
@@ -596,6 +596,8 @@ const drawer = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(26,10,62,0.07)',
   },
   secLabel: {
     fontSize: 11, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.1,

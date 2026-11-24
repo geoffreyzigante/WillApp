@@ -368,6 +368,8 @@ const drawer = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(26,10,62,0.07)',
   },
   secLabel: {
     fontSize: 11, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.1,
