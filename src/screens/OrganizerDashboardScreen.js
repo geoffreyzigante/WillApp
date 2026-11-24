@@ -12,11 +12,58 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, AppState } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 import { EventCard } from '../components/EventCard';
+import { CtaWill, CtaWill2 } from '../components/CtaWill';
+import { isUpcoming } from '../utils/format';
+import { T } from '../constants/tokens';
 import { RefreshableScrollView } from '../components/loaders';
 import { C } from '../constants/colors';
 import { s } from '../constants/styles';
+
+
+// Ordre de la liste, sans onglets : les a venir (le plus proche en tete), puis
+// les passes (le plus recent en tete), puis les events sans date. Meme regle
+// que /public-events.
+const cleDate = (e) => e.event_date_end || e.event_date || '';
+const groupe = (e) => {
+  const d = cleDate(e);
+  if (!d) return 2;
+  return isUpcoming(e.event_date, e.event_date_end) ? 0 : 1;
+};
+const comparerEvents = (a, b) => {
+  const ga = groupe(a); const gb = groupe(b);
+  if (ga !== gb) return ga - gb;
+  if (ga === 0) return (a.event_date || '').localeCompare(b.event_date || '');
+  if (ga === 1) return cleDate(b).localeCompare(cleDate(a));
+  return String(a.name || '').localeCompare(String(b.name || ''));
+};
+
+// Decompte : memes trois etats que la hero de la fiche event (J-X, GO !,
+// rien apres l event).
+const decompte = (e) => {
+  if (!e.event_date) return null;
+  const start = new Date(e.event_date);
+  if (isNaN(start.getTime())) return null;
+  start.setHours(0, 0, 0, 0);
+  const end = e.event_date_end ? new Date(e.event_date_end) : new Date(e.event_date);
+  if (isNaN(end.getTime())) end.setTime(start.getTime());
+  end.setHours(0, 0, 0, 0);
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  if (t < start) return `J-${Math.round((start - t) / 86400000)}`;
+  if (t <= end) return 'GO !';
+  return null;
+};
+
+// Barre de progression : 4 segments (cree, valide, en ligne, photos).
+function Segments({ n, couleur }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 4, marginBottom: 14 }}>
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i < n ? couleur : T.couleur.filet }} />
+      ))}
+    </View>
+  );
+}
 
 export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout, onCreateEvent, onEditEvent, onOpenProfile, onOpenEventPhotos, onOpenEventDetail, onOpenOrgRole, refreshKey = 0, headerH = 0 }) {
   const [events, setEvents] = useState([]);
@@ -29,9 +76,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
     try {
       const r = await organizerApiFetch(`/organizer/my-events`);
       const data = await r.json();
-      const sorted = Array.isArray(data)
-        ? [...data].sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''))
-        : [];
+      const sorted = Array.isArray(data) ? [...data].sort(comparerEvents) : [];
       setEvents(sorted);
     } catch {} finally { setLoading(false); }
   };
@@ -141,15 +186,21 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
     );
   };
 
-  const statusInfo = (st) => {
-    if (st === 'pending') return { label: 'En cours de validation', color: C.warning, bg: '#FEF3C7' };
-    if (st === 'validated') return { label: 'En cours d\'activation', color: '#8B5CF6', bg: '#EDE9FE' };
-    if (st === 'pending_payment') return { label: 'À régler', color: '#EC4899', bg: '#FCE7F3' };
-    if (st === 'free') return { label: 'En ligne · gratuit', color: C.success, bg: '#D1FAE5' };
-    if (st === 'paid') return { label: 'En ligne', color: C.success, bg: '#D1FAE5' };
-    if (st === 'rejected') return { label: 'Refusé', color: C.error, bg: '#FEE2E2' };
-    // Repli : jamais le slug technique brut dans le badge.
-    return { label: 'En cours', color: C.textSoft, bg: C.fondApp };
+  // Etat affiche sous la card : phrase de statut, nombre de segments, couleur,
+  // detail eventuel. Un event en ligne dont la date est passee est « Terminé ».
+  const etatEvent = (e) => {
+    const st = e.status;
+    const passe = !!cleDate(e) && !isUpcoming(e.event_date, e.event_date_end);
+    if (st === 'pending') return { label: 'En validation', n: 1, couleur: T.couleur.attente.texte, detail: "L'équipe Will revient vers toi sous 24 h." };
+    if (st === 'validated') return { label: "En cours d'activation", n: 2, couleur: C.primary };
+    if (st === 'pending_payment') return { label: 'À régler', n: 2, couleur: C.primary };
+    if (st === 'rejected') return { label: 'Demande non retenue', n: 1, couleur: T.couleur.erreur, erreur: true, detail: e.rejected_motif || '' };
+    if (st === 'free' || st === 'paid') {
+      if (passe) return { label: 'Terminé', n: 4, couleur: C.primary, passe: true };
+      const cd = decompte(e);
+      return { label: st === 'free' ? 'En ligne · gratuit' : 'En ligne', n: 3, couleur: C.primary, detail: cd === 'GO !' ? '' : 'Les photos arrivent le jour J', enCours: cd === 'GO !' };
+    }
+    return { label: 'En cours', n: 1, couleur: C.primary };
   };
 
   return (
@@ -159,10 +210,6 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
           orga/photo faisait doublon — l avatar ouvrait le compte que le
           burger ouvre deja, et le changement d espace vit maintenant dans
           "Autres espaces" du menu. Il ne reste que le titre. */}
-      <View style={{ paddingTop: 4, paddingBottom: 6, alignItems: 'center' }}>
-        <Text style={[s.welcome, { color: C.primary, fontSize: 17 }]}>Mes events</Text>
-      </View>
-
       <View style={{ height: 14 }} />
 
       {loading ? (
@@ -178,89 +225,56 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
         </View>
       ) : (
         events.map((e, i) => {
-          const info = statusInfo(e.status);
+          const etat = etatEvent(e);
+          const cd = decompte(e);
+          const photosEnPremier = !!etat.passe || !!etat.enCours;
           return (
-            <View key={i} style={{ marginBottom: 16 }}>
+            <View key={e.code || i} style={{ marginBottom: 16 }}>
               <View style={{ position: 'relative' }}>
                 <EventCard event={e} onPress={() => (onOpenEventDetail || onOpenEventPhotos)?.(e)} />
-                <View style={{
-                  position: 'absolute',
-                  top: 10, right: 10,
-                  backgroundColor: info.bg,
-                  paddingHorizontal: 10, paddingVertical: 5,
-                  borderRadius: 8,
-                  zIndex: 10,
-                }}>
-                  <Text style={{ color: info.color, fontSize: 11, fontFamily: 'Montserrat-SemiBold' }}>{info.label}</Text>
-                </View>
+                {cd ? (
+                  /* Meme decompte que la hero de la fiche event, a 16 du bas
+                     de la card (+10 de marge basse de la card). */
+                  <View pointerEvents="none" style={{ position: 'absolute', bottom: 26, right: 16 }}>
+                    <Text style={{ color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, lineHeight: 28, includeFontPadding: false, textAlignVertical: 'center', letterSpacing: -0.8, transform: [{ skewX: '-14deg' }] }}>
+                      {cd}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
-              <View style={{ backgroundColor: '#FFFFFF', borderBottomLeftRadius: 18, borderBottomRightRadius: 18, marginTop: -12, paddingTop: 18, paddingHorizontal: 12, paddingBottom: 12 }}>
-                {/* Un refus sans explication est pire qu un refus : le motif
-                    saisi par l admin est affiche ici, sous l event. */}
-                {e.status === 'rejected' && (
-                  <View style={{ backgroundColor: '#FEE2E2', borderRadius: 12, padding: 12, marginBottom: 8 }}>
-                    <Text style={{ color: C.error, fontSize: 13, fontFamily: 'Montserrat-SemiBold', marginBottom: e.rejected_motif ? 4 : 0 }}>
-                      Demande non retenue
-                    </Text>
-                    {e.rejected_motif ? (
-                      <Text style={{ color: '#7f1d1d', fontSize: 13, fontFamily: 'Montserrat', lineHeight: 18 }}>
-                        {e.rejected_motif}
-                      </Text>
-                    ) : null}
-                  </View>
-                )}
-                {e.status === 'pending' && (
-                  <Text style={{ color: C.textSoft, fontSize: 12, fontFamily: 'Montserrat', marginBottom: 8, textAlign: 'center' }}>
-                    L'équipe Will revient vers toi sous 24 h.
-                  </Text>
-                )}
-                {e.status === 'pending_payment' && (
-                  <TouchableOpacity
-                    onPress={() => pay(e)}
-                    disabled={paying === e.code}
-                    style={{ backgroundColor: C.pinkPill, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 8, opacity: paying === e.code ? 0.6 : 1 }}
-                  >
-                    {paying === e.code ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Mettre en ligne</Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-
-                {/* Deux actions de meme rang, a plat : trois boutons cernes
-                    d un filet dont un rouge donnaient autant de poids a
-                    "Supprimer" qu au reste. La suppression passe en icone
-                    discrete a droite — elle est deja protegee par une
-                    confirmation. */}
+              <View style={{ backgroundColor: '#FFFFFF', borderBottomLeftRadius: 18, borderBottomRightRadius: 18, marginTop: -12, paddingTop: 18, paddingHorizontal: 16, paddingBottom: 16 }}>
+                <Segments n={etat.n} couleur={etat.couleur} />
+                {/* 1 nom + date (la card) · 2 statut en mots · 3 action. */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <TouchableOpacity
-                    onPress={() => onEditEvent?.(e)}
-                    style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1EBFF' }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Modifier</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => onOpenEventPhotos?.(e)}
-                    style={{ flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1EBFF' }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Photos</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => deleteEvent(e)}
-                    style={{ width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}
-                    hitSlop={6}
-                    activeOpacity={0.7}
-                    accessibilityLabel="Supprimer l'événement"
-                  >
-                    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                      <Path d="M4 7h16M10 4h4M6 7l1 13h10l1-13M10 11v6M14 11v6"
-                        stroke="rgba(26,10,62,0.4)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-                    </Svg>
-                  </TouchableOpacity>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: etat.erreur ? T.couleur.erreur : etat.couleur === T.couleur.attente.texte ? T.couleur.attente.texte : (etat.passe || etat.n >= 3) ? C.success : etat.couleur }} />
+                  <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 14, color: etat.erreur ? T.couleur.erreur : T.couleur.texte }}>{etat.label}</Text>
+                </View>
+                {etat.detail ? (
+                  <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: T.couleur.texteDoux, marginTop: 4, marginLeft: 16, lineHeight: 18 }}>{etat.detail}</Text>
+                ) : null}
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+                  {e.status === 'pending_payment' ? (
+                    <>
+                      {paying === e.code ? (
+                        <ActivityIndicator color={C.primary} />
+                      ) : (
+                        <CtaWill label="Mettre en ligne" variante="violet" onPress={() => pay(e)} />
+                      )}
+                      <CtaWill2 label="Modifier" onPress={() => onEditEvent?.(e)} />
+                    </>
+                  ) : photosEnPremier ? (
+                    <>
+                      <CtaWill label="Photos" variante="violet" onPress={() => onOpenEventPhotos?.(e)} />
+                      <CtaWill2 label="Modifier" onPress={() => onEditEvent?.(e)} />
+                    </>
+                  ) : (
+                    <>
+                      <CtaWill label="Modifier" variante="violet" onPress={() => onEditEvent?.(e)} />
+                      {etat.erreur ? <CtaWill2 label="Supprimer" variante="erreur" onPress={() => deleteEvent(e)} /> : null}
+                    </>
+                  )}
                 </View>
               </View>
             </View>
