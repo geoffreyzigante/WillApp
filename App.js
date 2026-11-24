@@ -4756,15 +4756,22 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // on pousse tout ce qui reste vers la session d arriere-plan (qui finit
     // meme app fermee), sans bloquer l ecran. Fire-and-forget, on quitte tout
     // de suite. Rien n est perdu : la file est persistante.
-    if ((queueStats?.pending || 0) > 0) {
-      (async () => {
-        try { await BackgroundUploaderModule?.beginProtectedWindow?.(); } catch {}
-        try { await processQueue(); } catch {}
-        try { await drainQueue(); } catch {}
-        try { await BackgroundUploaderModule?.endProtectedWindow?.(); } catch {}
-      })();
-    }
+    // On quitte D'ABORD (la camera est demontee, la transition se termine),
+    // puis on lance le flush apres un court delai : le lancer en meme temps
+    // que le demontage de la camera chargeait le fil JS (notation, copies
+    // legeres, uploads) pile pendant la transition et figeait l ecran.
+    const aVider = (queueStats?.pending || 0) > 0;
     proceed();
+    if (aVider) {
+      setTimeout(() => {
+        (async () => {
+          try { await BackgroundUploaderModule?.beginProtectedWindow?.(); } catch {}
+          try { await processQueue(); } catch {}
+          try { await drainQueue(); } catch {}
+          try { await BackgroundUploaderModule?.endProtectedWindow?.(); } catch {}
+        })();
+      }, 1200);
+    }
   }
 
   // ─── GEOMETRIE DU CADRE ────────────────────────────────────────────────
