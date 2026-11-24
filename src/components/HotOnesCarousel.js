@@ -152,7 +152,7 @@ function WelcomeCard({ onSignup, onLogin }) {
             tout le bloc est centre (user 2026-11-23). */}
         <View style={{ alignItems: 'flex-start', gap: 12, marginTop: 16 }}>
           <CtaWill label="S’inscrire" onPress={onSignup} variante="pink" hauteur={34} style={{ alignSelf: 'flex-start' }} />
-          <TouchableOpacity onPress={onLogin} hitSlop={10}>
+          <TouchableOpacity onPress={onLogin} hitSlop={10} style={{ marginLeft: 17 }}>
             <Text style={{ color: C.pinkPill, fontFamily: 'Montserrat-Medium', fontSize: 15 }}>Connexion</Text>
           </TouchableOpacity>
         </View>
