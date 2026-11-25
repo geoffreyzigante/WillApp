@@ -555,6 +555,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // l ecran en pleine prise de vue.)
 
   const [cameraPrete, setCameraPrete] = useState(false);
+  // Derniere alerte « camera arretee » : une erreur VisionCamera peut se
+  // repeter en rafale, une alerte par minute suffit.
+  const derniereErreurCameraRef = useRef(0);
   useEffect(() => {
     if (!hasPermission) { setCameraPrete(false); return; }
     // Permission deja accordee au lancement : aucun delai, rien ne bascule.
@@ -4973,6 +4976,19 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           videoStabilizationMode={videoStabilizationMode}
           exposure={cameraExposure}
           enableLocation={false}
+          // Sans onError, une camera coupee (appel, autre app, erreur
+          // materielle) laissait un apercu noir et Go! d apparence active,
+          // sans un mot (audit du 25/11). On desarme et on le dit.
+          onError={(e) => {
+            console.warn('[camera] erreur', e?.code, e?.message);
+            isAutoArmedRef.current = false;
+            setIsAutoArmed(false);
+            const maintenant = Date.now();
+            if (maintenant - derniereErreurCameraRef.current > 60000) {
+              derniereErreurCameraRef.current = maintenant;
+              Alert.alert('Caméra arrêtée', "La caméra s'est interrompue (appel, autre app…). Touche Go! pour relancer la capture.");
+            }
+          }}
         />
 
         {apercuAttenue && (
@@ -5675,7 +5691,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             </View>
           ) : (
             <FlatList
-              data={myPhotos.slice(0, 60)}
+              // Plus de slice(0, 60) : le titre annonce N photos, la liste
+              // les montre toutes (FlatList virtualise).
+              data={myPhotos}
               keyExtractor={(item) => item.key}
               numColumns={3}
               renderItem={({ item }) => (
