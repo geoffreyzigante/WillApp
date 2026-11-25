@@ -4813,9 +4813,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
   // Ligne de compteurs, partagee entre le bandeau sous le cadre et le
   // panneau Infos.
-  const aRenvoyer = lostCount + (queueStats?.failed || 0);
+  // « à renvoyer » = echecs definitifs, rejouables. Les photos perdues
+  // (fichier disparu) ne se renvoient pas : comptees a part (audit 25/11).
+  const aRenvoyer = queueStats?.failed || 0;
   const compteursTexte = `${uploadedCount} sauvegardée${uploadedCount > 1 ? 's' : ''} · ${pendingCount} en attente`
-    + (aRenvoyer > 0 ? ` · ${aRenvoyer} à renvoyer` : '');
+    + (aRenvoyer > 0 ? ` · ${aRenvoyer} à renvoyer` : '')
+    + (lostCount > 0 ? ` · ${lostCount} perdue${lostCount > 1 ? 's' : ''}` : '');
 
   // Voyant de luminosite : toujours visible (le handoff en fait une pastille
   // permanente), contrairement a l ancienne pill qui n apparaissait qu en
@@ -5187,10 +5190,12 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               <Text style={{ color: P.labelPanel, fontSize: 12, fontFamily: 'Montserrat-SemiBold' }}>
                 {compteursTexte}
               </Text>
-              {(lostCount + (queueStats?.failed || 0)) > 0 && (
-                <Text style={{ color: P.danger, fontSize: 12, fontFamily: 'Montserrat-SemiBold', marginTop: 3 }}>
-                  {lostCount + (queueStats?.failed || 0)} à renvoyer
-                </Text>
+              {aRenvoyer > 0 && (
+                <TouchableOpacity onPress={() => { retryAllFailed().catch(() => {}); }} hitSlop={{ top: 8, bottom: 8 }}>
+                  <Text style={{ color: P.danger, fontSize: 12, fontFamily: 'Montserrat-SemiBold', marginTop: 3 }}>
+                    {aRenvoyer} à renvoyer · Renvoyer maintenant
+                  </Text>
+                </TouchableOpacity>
               )}
               {/* Capacite du telephone — visible en permanence, sans
                   distinction de moment (avant / pendant / apres). */}
