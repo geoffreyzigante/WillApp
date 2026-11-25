@@ -1100,6 +1100,8 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
                         eventCode: p?.eventCode || null,
                         eventTitle: nom,
                         eventDate: dateBrute ? formatDateLong(dateBrute, dateFin) : null,
+                        eventDateIso: dateBrute || null,
+                        eventDateFinIso: dateFin || null,
                         eventType: type,
                       });
                     }}

@@ -56,7 +56,7 @@ export function PhotoViewerModal({
   allowDelete, onDelete,
   photoFavoritesSet, onTogglePhotoFavorite,
   onTogglePhotoVisibility,
-  origin, eventTitle, eventDate, eventType,
+  origin, eventTitle, eventDate, eventDateIso, eventDateFinIso, eventType,
   photosForSale = false, eventCode = null,
 }) {
   const [busy, setBusy] = useState(false);
@@ -379,17 +379,31 @@ export function PhotoViewerModal({
   const sousTitre = useMemo(() => {
     const bouts = [];
     const ts = currentPhoto?.id ? extractBurstTs(currentPhoto.id) : 0;
-    const quand = ts > 0 ? new Date(ts) : (currentPhoto?.takenAt ? new Date(currentPhoto.takenAt) : null);
+    let quand = ts > 0 ? new Date(ts) : (currentPhoto?.takenAt ? new Date(currentPhoto.takenAt) : null);
+    // Galerie importee apres coup : la cle porte l heure de l import, pas
+    // celle de la prise de vue (Trail des Violettes, 29 mars, affichait
+    // « 25 juin »). Hors des dates de l event (marge d un jour avant, deux
+    // apres), on affiche la date de l event plutot qu une date fausse.
+    if (quand && eventDateIso) {
+      const debut = new Date(eventDateIso); debut.setHours(0, 0, 0, 0);
+      const fin = new Date(eventDateFinIso || eventDateIso); fin.setHours(23, 59, 59, 999);
+      if (!isNaN(debut.getTime()) && !isNaN(fin.getTime())
+          && (quand.getTime() < debut.getTime() - 86400000 || quand.getTime() > fin.getTime() + 2 * 86400000)) {
+        quand = null;
+      }
+    }
     if (quand && !isNaN(quand.getTime())) {
       bouts.push(`${quand.getDate()} ${MOIS_FR[quand.getMonth()]} ${quand.getFullYear()} · ${String(quand.getHours()).padStart(2, '0')}:${String(quand.getMinutes()).padStart(2, '0')}`);
     } else if (eventDate) {
-      bouts.push(eventDate);
+      // formatDateLong rend des capitales (cartes d event) ; le sous-titre
+      // de la visionneuse est en bas de casse, comme « 25 juin 2026 · 15:19 ».
+      bouts.push(String(eventDate).toLowerCase());
     }
     // "par Will" retire du sous-titre : la mention en surimpression sur la
     // photo (ou le watermark en payant) porte deja le credit — deux mentions
     // Will sur le meme ecran (constate user 2026-08-31).
     return bouts.join(' · ');
-  }, [currentPhoto, eventDate]);
+  }, [currentPhoto, eventDate, eventDateIso, eventDateFinIso]);
 
   const download = async () => {
     if (!currentPhoto?.uri || busy) return;

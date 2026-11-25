@@ -157,6 +157,8 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         onTogglePhotoVisibility: handleTogglePublish,
         eventTitle: event?.name,
         eventDate: event?.event_date ? formatDateLong(event.event_date, event.event_date_end) : null,
+        eventDateIso: event?.event_date || null,
+        eventDateFinIso: event?.event_date_end || null,
       });
     }
   };

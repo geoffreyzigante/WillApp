@@ -11263,6 +11263,8 @@ function App() {
         origin={openedPhoto?.origin}
         eventTitle={openedPhoto?.eventTitle}
         eventDate={openedPhoto?.eventDate}
+        eventDateIso={openedPhoto?.eventDateIso}
+        eventDateFinIso={openedPhoto?.eventDateFinIso}
         eventType={openedPhoto?.eventType}
         photosForSale={!!openedPhoto?.photosForSale}
         eventCode={openedPhoto?.eventCode || null}
