@@ -7,6 +7,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { PhotosStepRow } from './PhotosStepRow';
+import { C } from '../constants/colors';
 
 export function PhotosEmptyState({ selfieUri, onFindEvent }) {
   return (
@@ -33,7 +34,7 @@ export function PhotosEmptyState({ selfieUri, onFindEvent }) {
         Suis un event pour{'\n'}recevoir tes photos
       </Text>
       <Text style={{ fontFamily: 'Montserrat',
-        fontSize: 14, color: 'rgba(123,47,255,0.3)', lineHeight: 20,
+        fontSize: 14, color: C.textSoft, lineHeight: 20,
         textAlign: 'center', marginBottom: 22,
         paddingHorizontal: 12,
       }}>

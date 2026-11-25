@@ -13,7 +13,7 @@
 import Constants from 'expo-constants';
 import React, { useRef, useEffect, useState } from 'react';
 import { GrainViolet } from '../GrainViolet';
-import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Alert } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Alert, StatusBar } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -247,6 +247,9 @@ export function BurgerMenuModal({
 
   return (
     <Modal visible={monte} transparent animationType="none" onRequestClose={onClose}>
+      {/* Heure et batterie posees sur l entete violet : en clair tant que le
+          menu est ouvert, en sombre des qu il se ferme. */}
+      {visible && <StatusBar barStyle="light-content" animated />}
       <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: backdropOpacity }]}>
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose}>
           {Platform.OS === 'ios' ? (

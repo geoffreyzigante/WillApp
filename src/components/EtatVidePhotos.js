@@ -2,8 +2,9 @@
 // (event/index.html .photos-empty-legende). Les cases fantomes du site ne
 // sont pas reprises sur l app : elles reprenaient la grille photos, qui est
 // deja absente ici.
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { C } from '../constants/colors';
 import { CtaWill2 } from './CtaWill';
 import { lh } from '../constants/typo';
@@ -21,6 +22,19 @@ export function EtatVidePhotos({
   onPrevenir = null,
   dejaPrevenu = false,
 }) {
+  // « Tu seras prevenu » n est vrai que si les notifications sont accordees.
+  // Sans elles, la promesse etait fausse (compte de test du 25/11 : suivi
+  // actif, notifications « Non »). null = pas encore lu : on n affirme rien.
+  const [notifsOk, setNotifsOk] = useState(null);
+  useEffect(() => {
+    if (!dejaPrevenu) return undefined;
+    let vivant = true;
+    Notifications.getPermissionsAsync()
+      .then((p) => { if (vivant) setNotifsOk(p?.status === 'granted'); })
+      .catch(() => { if (vivant) setNotifsOk(false); });
+    return () => { vivant = false; };
+  }, [dejaPrevenu]);
+
   // Centre en colonne (user 2026-10-26) : la mascotte au-dessus, le texte
   // dessous, tout aligne sur le meme axe. En rangee, le bloc de texte etait
   // cale a gauche de la mascotte et son titre tenait sur une seule ligne tres
@@ -44,9 +58,11 @@ export function EtatVidePhotos({
           {sousTexte}
         </Text>
       ) : null}
-      {dejaPrevenu ? (
+      {dejaPrevenu ? (notifsOk === null ? null :
         <Text style={{ color: C.textSoft, fontSize: 12, fontFamily: 'Montserrat-Medium', textAlign: 'center', marginTop: 14, lineHeight: 17 }}>
-          Tu seras prévenu dès qu'une photo de toi est reconnue.
+          {notifsOk === false
+            ? "Tes photos arriveront ici. Active les notifications dans Mon compte pour être prévenu."
+            : "Tu seras prévenu dès qu'une photo de toi est reconnue."}
         </Text>
       ) : onPrevenir ? (
         <CtaWill2 label="Préviens-moi" onPress={onPrevenir} variante="violet" style={{ alignSelf: 'center', marginTop: 14 }} />

@@ -1057,7 +1057,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
                   alignItems: 'center',
                 }}
               >
-                <Text style={{ color: 'rgba(123,47,255,0.3)', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
+                <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => { setShowUnfollowConfirm(false); onToggleFollow(); }}

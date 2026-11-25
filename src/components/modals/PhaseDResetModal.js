@@ -5,6 +5,7 @@
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { C } from '../../constants/colors';
 
 export function PhaseDResetModal({ visible, onClose }) {
   return (
@@ -37,7 +38,7 @@ export function PhaseDResetModal({ visible, onClose }) {
             Reconnaissance Will, version 2
           </Text>
           <Text style={{ fontFamily: 'Montserrat',
-            fontSize: 14, color: 'rgba(123,47,255,0.3)', lineHeight: 20,
+            fontSize: 14, color: C.textSoft, lineHeight: 20,
             textAlign: 'center', marginBottom: 22,
           }}>
             <Text style={{ fontFamily: 'Montserrat-SemiBold', color: '#1A1426' }}>Un seul selfie</Text> suffit désormais pour recevoir tes photos sur tous les events Will. Consentement valable 12 mois renouvelables. Tu peux le retirer à tout moment depuis ton profil.

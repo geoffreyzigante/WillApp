@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import { C } from '../constants/colors';
 
 export class GridErrorBoundary extends React.Component {
   constructor(props) {
@@ -24,7 +25,7 @@ export class GridErrorBoundary extends React.Component {
           <Text style={{ color: '#1a1a1a', fontSize: 16, fontFamily: 'Montserrat-SemiBold', marginBottom: 8, textAlign: 'center' }}>
             Impossible d'afficher cette page
           </Text>
-          <Text style={{ fontFamily: 'Montserrat', color: 'rgba(123,47,255,0.3)', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+          <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
             {this.state.error?.message || 'Erreur de rendu inattendue.'}
           </Text>
           <TouchableOpacity onPress={this.reset} style={{ backgroundColor: '#7B2FFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12 }}>
