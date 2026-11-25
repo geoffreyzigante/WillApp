@@ -8698,11 +8698,15 @@ function App() {
     if (Platform.OS !== 'android') return undefined;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (openedEvent) { setOpenedEvent(null); return true; }
+      // Ecran photos de l orga : on le ferme d abord. Changer d onglet sans
+      // le vider laissait un ecran blanc (le footer est masque tant que
+      // organizerEventPhotosTarget est pose) — audit du 25/11.
+      if (organizerEventPhotosTarget) { setOrganizerEventPhotosTarget(null); return true; }
       if (bottomTab !== 'home') { setBottomTab('home'); return true; }
       return false;
     });
     return () => sub.remove();
-  }, [openedEvent, bottomTab]);
+  }, [openedEvent, bottomTab, organizerEventPhotosTarget]);
 
   // Splash overlay JS : ecran blanc avec icone fleur Will centree
   // (LoadingIcon, meme que pull-to-refresh) qui prend le relais du
@@ -10645,7 +10649,9 @@ function App() {
           onEdit={() => {
             const e = organizerEventDetailTarget;
             setOrganizerEventDetailTarget(null);
-            setEditEventTarget(e);
+            // La fiche est une pageSheet : presenter l edition pendant
+            // qu elle se ferme echoue en silence sur iOS (audit du 25/11).
+            setTimeout(() => setEditEventTarget(e), 350);
           }}
           onOpenPhotos={() => {
             const e = organizerEventDetailTarget;
@@ -11163,19 +11169,6 @@ function App() {
           }}
         />
 
-        <SubModalInputText
-          visible={suppressionOrgaVisible}
-          title="Confirmer la suppression"
-          value={suppressionOrgaPwd}
-          onChangeText={setSuppressionOrgaPwd}
-          placeholder="Mot de passe (vide si compte Apple ou Google)"
-          autoCapitalize="none"
-          secureTextEntry
-          onClose={() => { setSuppressionOrgaVisible(false); setSuppressionOrgaPwd(''); }}
-          saveLabel="Supprimer mon compte"
-          onSave={confirmerSuppressionOrga}
-          busy={suppressionOrgaBusy}
-        />
 
         <OrganizerProfileMenuModal
           onTokenRenouvele={(token) => {
@@ -11194,9 +11187,26 @@ function App() {
           compteUnifie={compteUnifie}
           onLogout={logoutOrganizer}
           onUpdate={updateOrganizerProfile}
-          onDeleteAccount={() => { setOrganizerProfileMenu(false); setBurgerMenu(false); deleteOrganizerAccount(); }}
+          onDeleteAccount={() => { setOrganizerProfileMenu(false); setBurgerMenu(false); setTimeout(() => deleteOrganizerAccount(), 300); }}
         />
       </BurgerMenuModal>
+
+      {/* Hors du menu : le menu est referme avant la confirmation, et une
+          saisie enfant d une modale fermee ne s affichait jamais (audit du
+          25/11). */}
+      <SubModalInputText
+        visible={suppressionOrgaVisible}
+        title="Confirmer la suppression"
+        value={suppressionOrgaPwd}
+        onChangeText={setSuppressionOrgaPwd}
+        placeholder="Mot de passe (vide si compte Apple ou Google)"
+        autoCapitalize="none"
+        secureTextEntry
+        onClose={() => { setSuppressionOrgaVisible(false); setSuppressionOrgaPwd(''); }}
+        saveLabel="Supprimer mon compte"
+        onSave={confirmerSuppressionOrga}
+        busy={suppressionOrgaBusy}
+      />
 
 
       <SelfieViewerModal

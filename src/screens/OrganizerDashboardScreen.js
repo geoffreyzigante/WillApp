@@ -166,6 +166,9 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
   const etatEvent = (e) => {
     const st = e.status;
     const passe = !!cleDate(e) && !isUpcoming(e.event_date, e.event_date_end);
+    // Un brouillon remonte aussi en status « pending » : il n est relu par
+    // personne tant qu il n est pas soumis (audit du 25/11).
+    if (e.is_draft === true) return { label: 'Brouillon · à compléter', n: 1, couleur: T.couleur.attente.texte, detail: 'Complète-le et envoie-le : il sera validé ensuite.' };
     if (st === 'pending') return { label: 'En validation', n: 1, couleur: T.couleur.attente.texte, detail: "L'équipe Will revient vers toi sous 24 h." };
     if (st === 'validated') return { label: "En cours d'activation", n: 2, couleur: C.primary };
     if (st === 'pending_payment') return { label: 'À régler', n: 2, couleur: C.primary };

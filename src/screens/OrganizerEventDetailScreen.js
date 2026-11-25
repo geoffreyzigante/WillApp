@@ -336,7 +336,11 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
           {/* Code PIN photographe — en clair, comme sur le web */}
           <View style={{ marginHorizontal: 16, marginTop: 28 }}>
             <Text style={{ fontSize: 16, fontFamily: 'Montserrat-SemiBold', color: C.text }}>Code PIN photographe</Text>
-            <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: C.textSoft, marginTop: 2 }}>À transmettre à tes photographes le jour J</Text>
+            <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: C.textSoft, marginTop: 2 }}>
+              {/* Avant validation, le PIN est refuse par le serveur : le dire
+                  ici evite un « introuvable » le jour J (audit du 25/11). */}
+              {isReady ? 'À transmettre à tes photographes le jour J' : 'Il marchera dès que ton event sera validé'}
+            </Text>
             <View style={{ marginTop: 14, alignItems: 'center' }}>
               {isKnownPin(photographerPwd) ? (
                 <TouchableOpacity onPress={onEdit} activeOpacity={0.6}>

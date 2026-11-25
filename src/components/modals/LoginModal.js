@@ -166,7 +166,8 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
         let msg;
         let effacerSaisie = false;
         if (st === 429) msg = 'Trop d\'essais, réessaie dans quelques minutes';
-        else if (st === 403) msg = 'Cet événement n\'est pas actif';
+        // Le worker dit pourquoi (pas encore valide / pas encore active).
+        else if (st === 403) msg = r?.error || 'Cet événement n\'est pas encore validé';
         else if (st === 404) msg = 'Événement introuvable';
         else if (st === 401) { msg = role === 'photographer' ? 'Code PIN incorrect' : 'Identifiants invalides.'; effacerSaisie = true; }
         else if (st >= 500) msg = 'Serveur indisponible, réessaie dans un instant';
