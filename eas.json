@@ -26,6 +26,14 @@
       "android": {
         "buildType": "app-bundle"
       }
+    },
+    "mesure": {
+      "extends": "preview",
+      "channel": "mesure",
+      "env": {
+        "EXPO_PUBLIC_MESURE_CAPTURE": "1",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      }
     }
   },
   "submit": {

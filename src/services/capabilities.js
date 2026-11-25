@@ -32,6 +32,7 @@
 import { Platform, NativeModules } from 'react-native';
 import { hasBackgroundUploader } from './backgroundUploader';
 import { hasThermalMonitor } from './thermalMonitor';
+import { MESURE_CAPTURE } from './mesureCapture';
 
 // ─── Modules exposes via NativeModules (detection immediate) ───────────────
 
@@ -102,7 +103,9 @@ export const caps = {
   // le portage sera fait. Aucune ligne a changer ce jour-la, et surtout
   // aucun `Platform.OS === 'ios'` dispersé dans l interface.
   get photographerMode() {
-    return frameProcessors.detectHumans && frameProcessors.readExposure;
+    // Build de test « mesure » seulement : on ouvre le mode sans readExposure
+    // pour pouvoir le mesurer sur Android (cf. services/mesureCapture.js).
+    return frameProcessors.detectHumans && (frameProcessors.readExposure || MESURE_CAPTURE);
   },
 };
 

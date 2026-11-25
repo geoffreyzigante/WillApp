@@ -119,6 +119,8 @@ import {
 } from './src/services/lightCopy';
 // Auto-calibration de la latence de capture : remplace le `rt / 3` devine.
 import { creerCalibrateur } from './src/services/latencyCalibrator';
+import { MESURE_CAPTURE } from './src/services/mesureCapture';
+import * as Device from 'expo-device';
 // Suffixe d identifiant d upload marquant la voie legere. Doit rester un
 // motif impossible dans un id d item (les ids sont alphanumeriques).
 const LIGHT_ID_SUFFIX = '#light';
@@ -997,6 +999,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // pourrait lire a chaque frame, mais le bridge worklet -> JS reste a 1 Hz
   // suffit largement pour un voyant et evite des renders inutiles.
   const isoTickSV = useMemo(() => Worklets.createSharedValue(0), []);
+  // Phase 0 (build « mesure » seulement) : compteurs de cadence et de duree
+  // de detection, vides toutes les 2 s dans le journal. Cf. mesureCapture.js.
+  const mT0SV = useMemo(() => Worklets.createSharedValue(0), []);
+  const mFramesSV = useMemo(() => Worklets.createSharedValue(0), []);
+  const mAnalysesSV = useMemo(() => Worklets.createSharedValue(0), []);
+  const mDetSumSV = useMemo(() => Worklets.createSharedValue(0), []);
+  const mDetMaxSV = useMemo(() => Worklets.createSharedValue(0), []);
   // Largeur zone de capture (fraction 0..1) lue par le plugin Swift pour
   // filtrer les humains hors-bande. Mise a jour quand eventConfig change.
   const zoneSV = useMemo(() => Worklets.createSharedValue(0.3), []);
@@ -1155,6 +1164,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   const onExposureSampleJS = useMemo(
     () => Worklets.createRunOnJS((sample) => {
       pushLiveExposureSample(sample);
+    }),
+    [],
+  );
+
+  // Phase 0 : une ligne de journal toutes les 2 s (build « mesure » seulement).
+  const onMesureJS = useMemo(
+    () => Worklets.createRunOnJS((frames, analyses, detSum, detMax, dtMs) => {
+      const s = dtMs / 1000;
+      const modele = `${Device.manufacturer || ''} ${Device.modelName || ''}`.trim();
+      console.log(`[mesure] ${Platform.OS} ${modele} camera=${(frames / s).toFixed(1)} i/s `
+        + `analyse=${(analyses / s).toFixed(1)} i/s detection moy=${analyses ? (detSum / analyses).toFixed(1) : '-'} ms max=${detMax} ms`);
     }),
     [],
   );
@@ -2178,6 +2198,17 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     // Lecture seule de la metadata EXIF du buffer, ~qq us, ne bloque rien.
     // En meme temps : push du cap shutter adaptatif au natif (no-op si meme
     // cap+label que precedent, dedupe interne au WillShutterController).
+    if (MESURE_CAPTURE) {
+      const maintenant = Date.now();
+      if (mT0SV.value === 0) mT0SV.value = maintenant;
+      mFramesSV.value += 1;
+      const ecoule = maintenant - mT0SV.value;
+      if (ecoule >= 2000) {
+        onMesureJS(mFramesSV.value, mAnalysesSV.value, mDetSumSV.value, mDetMaxSV.value, ecoule);
+        mT0SV.value = maintenant;
+        mFramesSV.value = 0; mAnalysesSV.value = 0; mDetSumSV.value = 0; mDetMaxSV.value = 0;
+      }
+    }
     isoTickSV.value = (isoTickSV.value + 1) % 30;
     if (isoTickSV.value === 0) {
       const exp = readExposure(frame, {
@@ -2201,11 +2232,18 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     const skipMod = idleModeSV.value === 1 ? 6 : 3;
     frameSkipSV.value = (frameSkipSV.value + 1) % skipMod;
     if (frameSkipSV.value !== 0) return;
+    const debutDetection = MESURE_CAPTURE ? Date.now() : 0;
     const result = detectHumans(frame, {
       zoneWidthPercent: zoneSV.value,
       axis: 'midX',
       humans: modeInstantSV.value === 1,
     });
+    if (MESURE_CAPTURE) {
+      const duree = Date.now() - debutDetection;
+      mAnalysesSV.value += 1;
+      mDetSumSV.value += duree;
+      if (duree > mDetMaxSV.value) mDetMaxSV.value = duree;
+    }
     const count = result?.count ?? 0;
     // v2 du plugin : on reduit les bbox DANS le worklet. Deux sorties :
     //
@@ -2317,7 +2355,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       }
     }
     onHumansDetectedJS(count, bx, by, ba, flat);
-  }, [onHumansDetectedJS, onExposureSampleJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV, idleModeSV, isAutoArmedSV, isDetectionEnabledSV, modeInstantSV]);
+  }, [onHumansDetectedJS, onExposureSampleJS, onMesureJS, frameSkipSV, isoTickSV, zoneSV, capSecondsSV, brightnessLabelSV, idleModeSV, isAutoArmedSV, isDetectionEnabledSV, modeInstantSV, mT0SV, mFramesSV, mAnalysesSV, mDetSumSV, mDetMaxSV]);
 
   // === Mode offline-first : queue persistante ===
   // - Photos copiées dans Paths.document/will_pending/ (survit au kill app)
