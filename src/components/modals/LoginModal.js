@@ -15,7 +15,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { GrainViolet } from '../GrainViolet';
 import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView,
-  KeyboardAvoidingView, ActivityIndicator, Alert, StatusBar,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, StatusBar,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { C, colorForType } from '../../constants/colors';
@@ -278,7 +278,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
             focalise. Un behavior="padding" ici compensait une seconde
             fois : le champ sortait par le haut de l ecran. Voir
             CLAUDE.md, « Clavier iOS ». */}
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={undefined}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? undefined : 'height'}>
           <ScrollView
             style={{ backgroundColor: '#ffffff' }}
             keyboardShouldPersistTaps="handled"

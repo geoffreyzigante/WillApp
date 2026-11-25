@@ -21,6 +21,7 @@ import {
   Modal, View, Text, TouchableOpacity, FlatList, Dimensions, Platform,
   StatusBar, AppState, Alert, ActivityIndicator, StyleSheet, Share,
 } from 'react-native';
+import { Linking } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import * as MediaLibrary from 'expo-media-library';
 import { Paths, File } from 'expo-file-system';
@@ -398,7 +399,12 @@ export function PhotoViewerModal({
     try {
       const perm = await MediaLibrary.requestPermissionsAsync(true);
       if (!perm.granted) {
-        Alert.alert('Permission refusée', 'Autorise l\'accès aux photos pour sauvegarder dans la pellicule.');
+        // iOS ne redemande jamais : sans lien vers les reglages, le
+        // telechargement restait bloque pour de bon (audit du 25/11).
+        Alert.alert('Accès aux photos refusé', 'Autorise l\'accès aux photos pour sauvegarder dans la pellicule.', [
+          { text: 'Plus tard', style: 'cancel' },
+          { text: 'Ouvrir les réglages', onPress: () => Linking.openSettings() },
+        ]);
         return;
       }
       const net = await NetInfo.fetch().catch(() => null);

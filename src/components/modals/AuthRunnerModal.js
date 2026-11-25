@@ -781,7 +781,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
             focalise. Un behavior="padding" ici compensait une seconde
             fois : le champ sortait par le haut de l ecran. Voir
             CLAUDE.md, « Clavier iOS ». */}
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={undefined}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? undefined : 'height'}>
           <ScrollView
             style={{ backgroundColor: T.bg }}
             keyboardShouldPersistTaps="handled"

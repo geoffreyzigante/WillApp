@@ -10,6 +10,7 @@
 //   paid -> regle, en ligne
 //   rejected -> refuse par admin
 
+import { lh } from '../constants/typo';
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, AppState } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
@@ -232,7 +233,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
               <View pointerEvents="box-none" style={{ padding: 16 }}>
                 <View pointerEvents="none">
                   <Text style={[s.eventDate, { letterSpacing: 1.1, opacity: 1 }]}>{formatDateLong(e.event_date, e.event_date_end)}</Text>
-                  <Text style={[s.eventName, { fontSize: 26, lineHeight: 28, marginBottom: 4 }]} numberOfLines={2} ellipsizeMode="tail">{e.name}</Text>
+                  <Text style={[s.eventName, { fontSize: 26, lineHeight: lh(26, 28), marginBottom: 4 }]} numberOfLines={2} ellipsizeMode="tail">{e.name}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={[s.eventLocation, { marginTop: 0, color: '#fff', flexShrink: 1 }]} numberOfLines={1}>{cityLabel(e.location)}</Text>
                     {e.event_type ? (

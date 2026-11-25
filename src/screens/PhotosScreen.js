@@ -892,7 +892,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         }}>
           {toastPhase === 'searching' && <SpinningLoader size={14} color="#c9beed" />}
           <Text style={{ color: '#c9beed', fontSize: 14, fontFamily: 'Montserrat-Medium' }}>
-            {toastPhase === 'searching' ? 'Recherche…' : (refreshToast || '')}
+            {toastPhase === 'searching' ? 'Mise à jour…' : (refreshToast || '')}
           </Text>
         </Animated.View>
       )}
@@ -983,12 +983,14 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
         />
       ) : photos.length === 0 && anySearching ? (
         <View style={{ paddingVertical: 40, alignItems: 'center', paddingHorizontal: 24 }}>
-          <SpinningLoader size={26} color={C.primary} />
-          <Text style={{ color: '#5E1AD6', fontSize: 13, marginTop: 12, textAlign: 'center', fontFamily: 'Montserrat-SemiBold' }}>
-            Will recherche tes photos…
+          {/* Pas de « Will recherche tes photos… » : suivre un event ne lance
+              aucune recherche. La reconnaissance tourne a l arrivee de chaque
+              photo (audit du 25/11). */}
+          <Text style={{ color: '#5E1AD6', fontSize: 13, textAlign: 'center', fontFamily: 'Montserrat-SemiBold' }}>
+            Tes photos arrivent au fil de l'envoi
           </Text>
           <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: 4, textAlign: 'center', lineHeight: 17 }}>
-            Cela peut prendre quelques secondes après l'upload du photographe.
+            Will les ajoute ici dès que les photographes les envoient.
           </Text>
         </View>
       ) : photos.length === 0 ? (
