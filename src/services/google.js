@@ -58,6 +58,24 @@ function configurer() {
 
 export const GOOGLE_ANNULE = 'GOOGLE_ANNULE';
 
+// Les erreurs du SDK sont techniques et en anglais (« Your app is missing
+// support for the following URL schemes… », avec un lien de doc) : elles
+// s affichaient telles quelles sous le champ email (capture du 25/11). On
+// garde le detail dans la console et on montre une phrase utile.
+function erreurLisible(e) {
+  console.warn('[google] connexion', e?.code, e?.message);
+  const code = e?.code;
+  const { statusCodes } = Google || {};
+  const msg = code === statusCodes?.PLAY_SERVICES_NOT_AVAILABLE
+    ? 'Les services Google ne sont pas disponibles sur ce téléphone. Connecte-toi avec ton email.'
+    : code === statusCodes?.IN_PROGRESS
+      ? 'Une connexion Google est déjà en cours.'
+      : "La connexion avec Google n'a pas abouti. Réessaie, ou connecte-toi avec ton email.";
+  const err = new Error(msg);
+  err.cause = e;
+  return err;
+}
+
 function annulation() {
   const err = new Error('Connexion Google annulée');
   err.code = GOOGLE_ANNULE;
@@ -71,7 +89,9 @@ export async function connexionGoogle() {
   const { GoogleSignin, statusCodes } = Google;
 
   if (Platform.OS === 'android') {
-    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    } catch (e) { throw erreurLisible(e); }
   }
 
   // On deconnecte d abord : sans ca, un compte deja choisi reconnecte en
@@ -85,7 +105,7 @@ export async function connexionGoogle() {
   } catch (e) {
     const code = e?.code;
     if (code === statusCodes?.SIGN_IN_CANCELLED || code === '-5' || code === -5) throw annulation();
-    throw e;
+    throw erreurLisible(e);
   }
 
   // SDK >= 13 : { type: 'success' | 'cancelled', data }. Avant : l objet nu.

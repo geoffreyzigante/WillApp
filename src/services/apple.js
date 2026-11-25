@@ -43,7 +43,12 @@ export async function connexionApple() {
       err.code = APPLE_ANNULE;
       throw err;
     }
-    throw e;
+    // Erreur technique du SDK (en anglais) : detail en console, phrase utile
+    // a l ecran, comme pour Google.
+    console.warn('[apple] connexion', e?.code, e?.message);
+    const lisible = new Error("La connexion avec Apple n'a pas abouti. Réessaie, ou connecte-toi avec ton email.");
+    lisible.cause = e;
+    throw lisible;
   });
   if (!cred?.identityToken) throw new Error("Apple n'a pas renvoyé de jeton.");
   return {
