@@ -8551,6 +8551,8 @@ function App() {
   // pill etait dans EventDetailScreen, elle restait coincee sous le degrade.
   // Le fetch debounced + le rendu de la pill sont plus bas (apres eventInPanel).
   const [bibQuery, setBibQuery] = useState('');
+  // Champ dossard de la barre flottante : le bandeau d un event passe y renvoie.
+  const bibInputRef = useRef(null);
   const [bibResults, setBibResults] = useState(null);
   const [bibSearching, setBibSearching] = useState(false);
   const [bibKeyboardH, setBibKeyboardH] = useState(0);
@@ -10444,6 +10446,7 @@ function App() {
                     bibQuery={bibQuery}
                     bibResults={bibResults}
                     bibSearching={bibSearching}
+                    onChercherDossard={() => bibInputRef.current?.focus()}
                     photoFavoritesSet={photoFavoritesSet}
                     isAuthed={!!runnerSession}
                     selfieUploadState={selfieUploadState}
@@ -10781,6 +10784,7 @@ function App() {
                 </Svg>
               </View>
               <TextInput
+                ref={bibInputRef}
                 value={bibQuery}
                 onChangeText={(v) => setBibQuery(v.replace(/\D/g, '').slice(0, 5))}
                 placeholder="Numéro de dossard"

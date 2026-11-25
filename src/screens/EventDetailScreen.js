@@ -77,7 +77,7 @@ function majusculePremiere(t) {
   return v.charAt(0).toUpperCase() + v.slice(1);
 }
 
-function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange, sortDesc = true, favOnly = false }) {
+function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, onChercherDossard, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange, sortDesc = true, favOnly = false }) {
   const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -138,6 +138,24 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // les vrais filtres (signale le 25 nov 2026). Tant qu on ne sait pas, on
   // ne montre ni l un ni l autre.
   const registreProgramme = !loading && photos.length === 0;
+
+  // Bandeau visiteur, meme regle que le site (event/index.html, selfieMasque,
+  // 25 nov 2026). Le selfie n agit que vers l avant : la reconnaissance tourne
+  // a l arrivee de la photo, jamais a celle du selfie.
+  //   - a venir : le selfie, c est la promesse du produit ;
+  //   - passe, photos deja en ligne : le dossard seul. Un selfie ne
+  //     retrouverait aucune d elles, « Un selfie suffit » etait faux ;
+  //   - passe, pas encore de photo : le selfie reste vrai (le photographe
+  //     envoie souvent le lendemain) ;
+  //   - passe, en cours de chargement : rien, plutot qu un bandeau qui
+  //     changerait sous les yeux.
+  const bandeau = upcoming
+    ? { titre: 'Ne cherche plus tes photos', texte: "Un selfie suffit, Will te les envoie après l'event.", dossard: false }
+    : loading
+      ? null
+      : photos.length > 0
+        ? (onChercherDossard ? { titre: 'Retrouve tes photos', texte: 'Entre ton dossard pour les voir.', dossard: true } : null)
+        : { titre: 'Tes photos arrivent bientôt', texte: 'Dépose ton selfie maintenant : Will te reconnaîtra sur les photos à leur arrivée.', dossard: false };
 
   const countdown = (() => {
     if (!event.event_date) return null;
@@ -469,18 +487,33 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
         />
       </View>
 
-      {/* Visiteur : meme bandeau que la fiche event du site (« Ne cherche plus
-          tes photos »). requireAuth ouvre la connexion, puis le selfie. */}
-      {!isAuthed && onOpenSelfie ? (
+      {/* Visiteur : meme bandeau que la fiche event du site. requireAuth
+          ouvre la connexion, puis le selfie. */}
+      {!isAuthed && onOpenSelfie && bandeau ? (
         <View style={{ borderRadius: 18, overflow: 'hidden' }}>
           <GrainViolet fleur={{ taille: 120, droite: -44, haut: -50 }} style={{ padding: 18, alignItems: 'center' }}>
             <Text style={{ color: '#fff', fontSize: 18, fontFamily: 'AVEstiana-Bold', textAlign: 'center', lineHeight: lh(18, 22) }}>
-              Ne cherche plus tes photos
+              {bandeau.titre}
             </Text>
             <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontFamily: 'Montserrat-Medium', textAlign: 'center', marginTop: 4, lineHeight: 17 }}>
-              Un selfie suffit, Will te les envoie après l'event.
+              {bandeau.texte}
             </Text>
-            <CtaWill label="Prendre mon selfie" onPress={onOpenSelfie} variante="pink" style={{ alignSelf: 'center', marginTop: 12 }} />
+            {bandeau.dossard ? (
+              <CtaWill
+                label="Chercher mon dossard"
+                onPress={onChercherDossard}
+                variante="pink"
+                style={{ alignSelf: 'center', marginTop: 12 }}
+                icone={(fg) => (
+                  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                    <Path d="M21 21l-4.35-4.35" stroke={fg} strokeWidth={2.2} strokeLinecap="round" />
+                    <Path d="M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15z" stroke={fg} strokeWidth={2.2} />
+                  </Svg>
+                )}
+              />
+            ) : (
+              <CtaWill label="Prendre mon selfie" onPress={onOpenSelfie} variante="pink" style={{ alignSelf: 'center', marginTop: 12 }} />
+            )}
           </GrainViolet>
         </View>
       ) : null}
