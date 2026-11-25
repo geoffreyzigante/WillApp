@@ -455,12 +455,16 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     // fusionnee manquerait des photos, et l ecrire dans le cache local ferait
     // disparaitre celles de l event en echec au prochain lancement. On garde
     // donc la liste et le cache tels quels et on propose « Reessayer ».
-    if (echecs > 0 || favEchec) {
+    // Exception (audit du 25/11) : rien encore a l ecran. Garder une liste
+    // vide cachait les events qui ont repondu ; on les montre, sans toucher
+    // au cache local, et le bandeau « Reessayer » reste.
+    const partiel = echecs > 0 || favEchec;
+    if (partiel && photosRef.current.length > 0) {
       setLoading(false);
       setErreurChargement('partiel');
       return photosRef.current;
     }
-    setErreurChargement(null);
+    setErreurChargement(partiel ? 'partiel' : null);
     const now = Date.now();
     const merged = [];
     const seenIds = new Set();
@@ -528,7 +532,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     setAnySearching(searching);
     setLoading(false);
     setVisibleCount(30);
-    AsyncStorage.setItem(photosCacheKey, JSON.stringify(merged)).catch(() => {});
+    if (!partiel) AsyncStorage.setItem(photosCacheKey, JSON.stringify(merged)).catch(() => {});
     // Prefetch tous les thumbnails (cap 250) pour garantir que le 3 onglets
     // (Moi / Favoris / Tous) sont 100% cached avant le 1er scroll. Memory-disk
     // policy : si la photo est deja cached, c est instant. Sinon download en

@@ -77,7 +77,7 @@ function majusculePremiere(t) {
   return v.charAt(0).toUpperCase() + v.slice(1);
 }
 
-function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, onChercherDossard, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange, sortDesc = true, favOnly = false }) {
+function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, selfieUri, onDeleteSelfie, onOpenProfile, onOpenPhoto, isFollowing, onToggleFollow, runnerFirstName, bibQuery = '', bibResults = null, bibSearching = false, bibErreur = false, onChercherDossard, photoFavoritesSet = null, isAuthed = false, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, onPhotosCountChange, onScrolledChange, sortDesc = true, favOnly = false }) {
   const isFav = (id) => isAuthed && !!photoFavoritesSet?.has(id);
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -881,10 +881,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       return (
         <View style={{ paddingVertical: 40, paddingHorizontal: 24, alignItems: 'center' }}>
           <Text style={{ color: C.text, fontSize: 14, fontFamily: 'Montserrat-SemiBold', textAlign: 'center', marginBottom: 6 }}>
-            Aucune photo trouvée pour le dossard {bibQuery.trim()}
+            {bibErreur ? 'Recherche impossible pour le moment' : `Aucune photo trouvée pour le dossard ${bibQuery.trim()}`}
           </Text>
           <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
-            Scrolle la galerie pour chercher manuellement.
+            {bibErreur ? 'Vérifie ta connexion, puis retape ton dossard.' : 'Scrolle la galerie pour chercher manuellement.'}
           </Text>
         </View>
       );

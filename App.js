@@ -8585,6 +8585,8 @@ function App() {
   // Champ dossard de la barre flottante : le bandeau d un event passe y renvoie.
   const bibInputRef = useRef(null);
   const [bibResults, setBibResults] = useState(null);
+  // Echec reseau / serveur : distinct de « aucune photo » (audit du 25/11).
+  const [bibErreur, setBibErreur] = useState(false);
   const [bibSearching, setBibSearching] = useState(false);
   const [bibKeyboardH, setBibKeyboardH] = useState(0);
   // EventDetailScreen photo count -> conditionne l affichage de la pill bib
@@ -10266,10 +10268,16 @@ function App() {
       return;
     }
     setBibSearching(true);
+    setBibErreur(false);
+    // Une reponse lente pour « 1 » ne doit pas ecraser celle de « 12 ».
+    let perimee = false;
     const t = setTimeout(async () => {
       try {
         const r = await fetch(`${API_URL}/search-bib?eventCode=${encodeURIComponent(eventInPanel.code)}&bib=${encodeURIComponent(q)}`);
-        const data = r.ok ? await r.json() : { photos: [] };
+        if (perimee) return;
+        if (!r.ok) { setBibResults([]); setBibErreur(true); return; }
+        const data = await r.json();
+        if (perimee) return;
         const mapped = (data?.photos || []).map(p => ({
           id: p.key, key: p.key,
           uri: p.url, thumbUri: p.thumb_url || p.url,
@@ -10281,12 +10289,14 @@ function App() {
         }));
         setBibResults(mapped);
       } catch {
+        if (perimee) return;
         setBibResults([]);
+        setBibErreur(true);
       } finally {
-        setBibSearching(false);
+        if (!perimee) setBibSearching(false);
       }
     }, 400);
-    return () => clearTimeout(t);
+    return () => { perimee = true; clearTimeout(t); };
   }, [bibQuery, eventInPanel?.code]);
 
   // Quand on ferme l event, vide la recherche pour repartir clean au prochain open.
@@ -10489,6 +10499,7 @@ function App() {
                     bibQuery={bibQuery}
                     bibResults={bibResults}
                     bibSearching={bibSearching}
+                    bibErreur={bibErreur}
                     onChercherDossard={() => bibInputRef.current?.focus()}
                     photoFavoritesSet={photoFavoritesSet}
                     isAuthed={!!runnerSession}
