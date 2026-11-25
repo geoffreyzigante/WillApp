@@ -290,7 +290,7 @@ export function BurgerMenuModal({
                         <Icon.User size={26} color="#FFFFFF" />
                       )}
                     </View>
-                    <View style={[styles.heroDot, { backgroundColor: selfieOk ? '#34D399' : '#ef4444' }]} />
+                    <View style={[styles.heroDot, { backgroundColor: selfieOk ? '#34D399' : '#B42318' }]} />
                   </TouchableOpacity>
                   <Text style={styles.heroName} numberOfLines={1}>
                     Salut {runnerFirstName || 'toi'}

@@ -206,7 +206,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
               <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, color: succes.brouillon ? C.primary : '#047857' }}>
                 {succes.brouillon ? 'Ton event est créé' : 'Ton event est parti en validation'}
               </Text>
-              <Text style={{ fontFamily: 'Montserrat', fontSize: 13, lineHeight: 19, color: 'rgba(10,10,10,0.65)', marginTop: 4 }}>
+              <Text style={{ fontFamily: 'Montserrat', fontSize: 13, lineHeight: 19, color: 'rgba(26,20,38,0.65)', marginTop: 4 }}>
                 {succes.brouillon
                   ? "Il est dans ton espace, personne ne le voit encore. Complète-le, puis envoie-le."
                   : "L'équipe Will le vérifie sous 24 h. Tu recevras un email dès que c'est bon."}
@@ -271,7 +271,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
 
               {missing.length > 0 ? (
                 <>
-                  <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: 'rgba(10,10,10,0.6)', marginTop: 14, marginBottom: 8 }}>
+                  <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: 'rgba(26,20,38,0.6)', marginTop: 14, marginBottom: 8 }}>
                     Il te manque encore :
                   </Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -362,7 +362,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
           {afficheVisibilite ? (
           <View style={{ marginHorizontal: 16, marginTop: 28 }}>
             <Text style={{ fontSize: 16, fontFamily: 'Montserrat-SemiBold', color: C.text }}>Visibilité</Text>
-            <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: 'rgba(10,10,10,0.5)', marginTop: 2 }}>
+            <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: 'rgba(26,20,38,0.5)', marginTop: 2 }}>
               {listed
                 ? 'Visible dans la liste publique Will.'
                 : 'Masqué de la liste publique, accessible par lien direct.'}

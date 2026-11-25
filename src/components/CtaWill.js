@@ -41,7 +41,7 @@ const VARIANTES_N2 = {
   violet: { fg: '#3B0A96', bg: '#E3D4FF', ic: '#3B0A96' },
   blanc: { fg: '#FFFFFF', bg: 'rgba(255,255,255,0.28)', ic: '#FFFFFF' },
   // Action destructive (Supprimer) : rouge d erreur de la charte.
-  erreur: { fg: '#C5475E', bg: '#F9E1E5', ic: '#C5475E' },
+  erreur: { fg: '#B42318', bg: '#F9E1E5', ic: '#B42318' },
 };
 
 export function CtaWill2({ label, onPress, variante = 'violet', icone, taille = 28, style, ...reste }) {

@@ -13,7 +13,7 @@ export const T = {
       "#9E5BFF",
       "#D67CF8"
     ],
-    texte: "#221c30",
+    texte: "#1A1426",
     texteDoux: "#6b6480",
     texteChamp: "#4a4458",
     champFond: "#F5F3FA",
@@ -21,7 +21,7 @@ export const T = {
     champTexteFantome: "#a8a2b8",
     filet: "#efeaf8",
     encart: "#FAF8FF",
-    erreur: "#C5475E",
+    erreur: "#B42318",
     attente: {
       fond: "#FEF3C7",
       texte: "#b45309"

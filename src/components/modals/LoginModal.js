@@ -312,7 +312,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         paddingHorizontal: 14,
                         paddingVertical: 11,
                         fontSize: 14,
-                        color: '#221c30',
+                        color: '#1A1426',
                       }}
                     />
                     <View style={{ height: 1, backgroundColor: 'rgba(0,0,0,0.06)' }} />
@@ -349,7 +349,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                           paddingHorizontal: 14,
                           paddingVertical: 11,
                           fontSize: 14,
-                          color: '#221c30',
+                          color: '#1A1426',
                         }}
                       />
                       <TouchableOpacity

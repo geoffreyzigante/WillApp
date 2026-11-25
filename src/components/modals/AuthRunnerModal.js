@@ -44,7 +44,7 @@ const T = {
   borderCheckbox: '#d9cef4',
   primary: '#7B2FFF',
   primaryDark: '#6d28d9',
-  textStrong: '#221c30',
+  textStrong: '#1A1426',
   textBody: '#5a5468',
   textMuted: '#8b83a0',
   textLabel: '#3F3F46',
@@ -973,7 +973,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
             {mode === 'register' && password && passwordConfirm ? (
               <Text style={{
                 fontSize: 11, fontFamily: 'Montserrat-SemiBold', marginTop: -6, marginBottom: 10, paddingHorizontal: 4,
-                color: passwordConfirm === password ? '#3BA55D' : '#C5475E',
+                color: passwordConfirm === password ? '#3BA55D' : '#B42318',
               }}>
                 {passwordConfirm === password ? 'Les mots de passe correspondent' : 'Les mots de passe ne correspondent pas'}
               </Text>

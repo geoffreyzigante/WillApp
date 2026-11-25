@@ -11,8 +11,8 @@
 // perception sur device s avere trop agressive, introduire une valeur
 // compensee apres test reel a l oeil (comme #E476FF -> #D67CF8 en 2026-06-02).
 //
-// Semantiques UI-09 (2026-06-04). Rouge canonique = #DC2626 (utilise plus
-// largement que #EF4444 dans le code). Toute reference success/error/
+// Semantiques UI-09 (2026-06-04). Rouge canonique = #B42318 (unifie le
+// 2026-11-25 : #EF4444 echouait au contraste, 3,8 sur blanc). Toute reference success/error/
 // warning doit utiliser ces tokens, pas les hex bruts.
 
 // Charte partagee avec le site : WILL/charte/tokens.json.
@@ -28,7 +28,7 @@ export const C = {
   primary: T.couleur.primaire,
   primaryDark: '#5A1FCC',
   primaryLight: T.couleur.primaireClair,
-  text: '#0A0A0A',
+  text: '#1A1426',
   // Etait rgba(123,47,255,0.3) — un violet a 30 % illisible sur blanc,
   // constate sur tous les ecrans (2026-08-31). Regle : texte secondaire en
   // gris moyen ; les placeholders et etats vides utilisent #A89CB8 en dur.
@@ -48,7 +48,7 @@ export const C = {
   card: '#FFFFFF',
   shadow: 'rgba(123,47,255, 0.08)',
   success: '#10B981',
-  error: '#DC2626',
+  error: '#B42318',
   warning: '#F59E0B',
 };
 
