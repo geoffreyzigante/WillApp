@@ -895,7 +895,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           marginTop: 4,
         }}>
           {toastPhase === 'searching' && <SpinningLoader size={14} color="#c9beed" />}
-          <Text style={{ color: '#c9beed', fontSize: 14, fontFamily: 'Montserrat-Medium' }}>
+          <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-Medium' }}>
             {toastPhase === 'searching' ? 'Mise à jour…' : (refreshToast || '')}
           </Text>
         </Animated.View>
@@ -947,7 +947,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
           </View>
           <TouchableOpacity
             onPress={() => { setErreurChargement(null); setLoading(photos.length === 0); refreshAll({ force: true }); }}
-            style={{ backgroundColor: '#C82424', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999 }}
+            style={{ backgroundColor: C.error, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999 }}
             activeOpacity={0.85}
           >
             <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold', fontSize: 13 }}>Réessayer</Text>
@@ -1005,7 +1005,9 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
       ) : (
         <>
           {barreFiltres}
-          {photos.length > 1 && (
+          {/* La liste affichee (onglet Moi / Favoris / Tous), pas toutes les
+              photos : « Selectionner » restait sur un onglet vide (25/11). */}
+          {visiblePhotos.length > 1 && (
             <View style={{
               flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
               paddingHorizontal: 2, paddingTop: 4, marginBottom: 8,
@@ -1019,7 +1021,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
                     onPress={() => { if (downloading) { dlAnnuleRef.current = true; } else { exitSelection(); } }}
                     hitSlop={10}
                   >
-                    <Text style={{ color: downloading ? '#C82424' : C.textSoft, fontSize: 13, fontFamily: downloading ? 'Montserrat-SemiBold' : 'Montserrat-Medium' }}>
+                    <Text style={{ color: downloading ? C.error : C.textSoft, fontSize: 13, fontFamily: downloading ? 'Montserrat-SemiBold' : 'Montserrat-Medium' }}>
                       {downloading ? 'Arrêter' : 'Annuler'}
                     </Text>
                   </TouchableOpacity>
@@ -1029,7 +1031,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
                     </Text>
                   ) : dlEchecs.length > 0 ? (
                     <TouchableOpacity onPress={() => downloadSelected(dlEchecs)} hitSlop={10}>
-                      <Text style={{ color: '#C82424', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
+                      <Text style={{ color: C.error, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
                         {`Réessayer ${dlEchecs.length} échec${dlEchecs.length > 1 ? 's' : ''}`}
                       </Text>
                     </TouchableOpacity>
@@ -1048,7 +1050,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
                 </>
               ) : (
                 <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
-                  <Text style={{ color: '#c9beed', fontSize: 13, fontFamily: 'Montserrat-Medium' }}>Sélectionner</Text>
+                  <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-Medium' }}>Sélectionner</Text>
                 </TouchableOpacity>
               )}
             </View>

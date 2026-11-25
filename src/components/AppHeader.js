@@ -69,8 +69,8 @@ export function AppHeader({ runnerFirstName = '', selfieUri = null, selfieUpload
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }}>
         {runnerFirstName ? (
           <TouchableOpacity onPress={onOpenProfile} activeOpacity={0.7} hitSlop={6} style={{ alignItems: 'flex-end', flexShrink: 1 }}>
-            <Text style={[s.welcome, { color: '#c9beed', fontSize: 15, lineHeight: lh(15, 17) }]} numberOfLines={1}>Hello</Text>
-            <Text style={[s.welcome, { color: '#c9beed', fontSize: 17, lineHeight: lh(17, 19) }]} numberOfLines={1}>{runnerFirstName}</Text>
+            <Text style={[s.welcome, { color: C.primary, fontSize: 15, lineHeight: lh(15, 17) }]} numberOfLines={1}>Hello</Text>
+            <Text style={[s.welcome, { color: C.primary, fontSize: 17, lineHeight: lh(17, 19) }]} numberOfLines={1}>{runnerFirstName}</Text>
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity

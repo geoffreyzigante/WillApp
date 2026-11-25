@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Alert, AppState, ActivityIndicator } from 'react-native';
+import { C } from '../constants/colors';
 
 export function ConsentRenewBanner({ runnerApiFetch, isAuthed }) {
   const [status, setStatus] = useState(null);
@@ -90,7 +91,7 @@ export function ConsentRenewBanner({ runnerApiFetch, isAuthed }) {
         onPress={handleRenew}
         disabled={busy}
         style={{
-          backgroundColor: isUrgent ? '#C82424' : '#7B2FFF',
+          backgroundColor: isUrgent ? C.error : '#7B2FFF',
           paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999,
           opacity: busy ? 0.6 : 1,
         }}
