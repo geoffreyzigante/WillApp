@@ -34,6 +34,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BoutonsConnexion } from '../BoutonsConnexion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { lh } from '../../constants/typo';
+import { C } from '../../constants/colors';
 import { COURBE, DUREE } from '../../constants/anim';
 
 const T = {
