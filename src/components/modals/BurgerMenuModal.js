@@ -15,14 +15,6 @@ import { GrainViolet } from '../GrainViolet';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Alert } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
-import { Canvas, Image as SkiaImage, Blur, Rect as SkiaRect } from '@shopify/react-native-skia';
-
-// Le canvas Skia (GL) fait planter l'emulateur Android a l'ouverture du menu
-// (SIGSEGV dans libEGL_emulation.so, eglSwapBuffers, constate le 2026-11-21).
-// Sur emulateur on garde le voile simple ; les vrais telephones gardent le flou.
-const EST_EMULATEUR = Platform.OS === 'android' &&
-  /sdk_gphone|emulator|generic|goldfish|ranchu/i.test(`${Platform.constants?.Model || ''} ${Platform.constants?.Fingerprint || ''} ${Platform.constants?.Brand || ''}`);
-import { capturerPage } from '../../services/capturePage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image as ExpoImage } from 'expo-image';
 import * as Updates from 'expo-updates';
@@ -174,18 +166,6 @@ export function BurgerMenuModal({
   // de l animation, comme le fait ProfileMenuModal.
   const [monte, setMonte] = useState(visible);
   useEffect(() => { if (visible) setMonte(true); }, [visible]);
-  // Android : photo de la page prise a l ouverture, floutee par Skia (expo-blur
-  // ne voit rien a travers une Modal). Echec = on garde le voile sombre.
-  const [fondFloute, setFondFloute] = useState(null);
-  const fondOp = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (Platform.OS !== 'android') return undefined;
-    if (!visible) return undefined;
-    let vivant = true;
-    capturerPage().then((img) => { if (!vivant) return; if (img) { fondOp.setValue(0); setFondFloute(img); Animated.timing(fondOp, { toValue: 1, duration: 260, useNativeDriver: true }).start(); } });
-    return () => { vivant = false; };
-  }, [visible]);
-  useEffect(() => { if (!monte) setFondFloute(null); }, [monte]);
 
   useEffect(() => {
     if (!monte) return;
@@ -259,21 +239,12 @@ export function BurgerMenuModal({
           {Platform.OS === 'ios' ? (
             <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFillObject} />
           ) : (
-            <>
-              {/* En attendant la photo de la page : voile leger, pour ne pas
-                  assombrir puis eclaircir au moment ou le flou arrive. */}
-              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,7,35,0.2)' }]} />
-              {fondFloute && !EST_EMULATEUR ? (
-                <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: fondOp }]}>
-                  <Canvas style={StyleSheet.absoluteFillObject}>
-                    <SkiaImage image={fondFloute} x={0} y={0} width={Dimensions.get('window').width} height={Dimensions.get('window').height} fit="fill">
-                      <Blur blur={14} />
-                    </SkiaImage>
-                    <SkiaRect x={0} y={0} width={Dimensions.get('window').width} height={Dimensions.get('window').height} color="rgba(15,7,35,0.2)" />
-                  </Canvas>
-                </Animated.View>
-              ) : null}
-            </>
+            // Android : voile sombre immediat, comme les tiroirs Material de
+            // Google (Gmail, Drive). Le flou Skia d avant photographiait toute
+            // la page a l ouverture : 2 a 3 s de retard sur une galerie
+            // pleine d images (constate le 25 nov 2026), et un plantage GL
+            // sur emulateur. Decision : flou sur iOS seulement.
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(15,7,35,0.4)' }]} />
           )}
         </TouchableOpacity>
       </Animated.View>

@@ -15,7 +15,6 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { setCaptureRoot } from './src/services/capturePage';
 import { Image as ExpoImage } from 'expo-image';
 import * as Font from 'expo-font';
 import * as ImagePicker from 'expo-image-picker';
@@ -10403,12 +10402,10 @@ function App() {
     </View>
   ) : null;
 
-  const captureRacineRef = useRef(null);
-  useEffect(() => { setCaptureRoot(captureRacineRef); }, []);
   return (
     <SafeAreaProvider>
     <GestureHandlerRootView style={{ flex: 1 }}>
-    <SafeAreaView ref={captureRacineRef} collapsable={false} style={s.root}>
+    <SafeAreaView style={s.root}>
       <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
 
       {!organizerEventPhotosTarget && (
