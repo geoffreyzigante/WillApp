@@ -1,7 +1,7 @@
 // Ecran galerie photos d'un event cote organisateur. Mode preview : voit
-// TOUTES les photos (before + during event, masquees comprises avec opacite
-// reduite + dot rouge). Les coureurs ne voient que les photos publiees
-// apres l heure de leur course.
+// TOUTES les photos (before + during event). Celles qui manquent a la
+// galerie publique ont une opacite reduite + dot rouge : la raison vient du
+// worker (`hors_public`, meme regle que /list-public, time-gate compris).
 //
 // Features :
 // - Filtres par distance (pills horizontales)
@@ -22,6 +22,19 @@ import { C, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
 import { formatDateLong, cityLabel } from '../utils/format';
 import { raceTitle, extractBurstTs, extractIdx } from '../utils/photo';
+
+// Absente de la galerie publique, et pourquoi (null = presente). Repli sur
+// `hidden` tant qu un worker plus ancien n envoie pas `hors_public`.
+function raisonHors(p) {
+  if (p.hors_public !== undefined) return p.hors_public || null;
+  return p.hidden === true ? 'masquee' : null;
+}
+const LIBELLE_HORS = {
+  masquee: 'Photo masquée',
+  sans_visage: 'Sans visage, hors galerie',
+  avant_depart: 'Avant le départ, hors galerie',
+  passage: 'Écartée, hors galerie',
+};
 
 export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose, onOpenPhoto }) {
   const [photos, setPhotos] = useState([]);
@@ -56,8 +69,10 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
           race_label: p.race_label || null,
           race_label_only: p.race_label_only === true,
           hidden: p.hidden === true,
+          horsPublic: raisonHors(p),
         }));
-      setHiddenCount(typeof data.hidden_count === 'number' ? data.hidden_count : 0);
+      // Meme compte que la galerie publique : tout ce qu elle n affiche pas.
+      setHiddenCount(raw.filter(p => p && raisonHors(p)).length);
       list.sort((a, b) => {
         const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
         if (dt !== 0) return dt;
@@ -276,7 +291,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         Photos {photos.length > 0 ? `(${filteredPhotos.length})` : ''}
         {hiddenCount > 0 && (
           <Text style={{ color: C.error, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
-            {'  · '}{hiddenCount} masquée{hiddenCount > 1 ? 's' : ''}
+            {'  · '}{hiddenCount} hors galerie
           </Text>
         )}
       </Text>
@@ -318,6 +333,10 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
   const renderItem = ({ item: photo, index }) => {
     const isSelected = selectedKeys.has(photo.id);
     const isHidden = photo.hidden === true;
+    const horsPublic = photo.horsPublic || null;
+    // « Publier » leve le masquage et le filtre visage, pas le time-gate :
+    // inutile de le proposer sur une photo d avant le depart.
+    const peutPublier = isHidden && horsPublic !== 'avant_depart';
     const isBusy = busyKey === photo.id;
     return (
       <TouchableOpacity
@@ -332,7 +351,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#eee' }}>
           <ExpoImage
             source={{ uri: photo.uri }}
-            style={[StyleSheet.absoluteFillObject, isHidden ? { opacity: 0.55 } : null]}
+            style={[StyleSheet.absoluteFillObject, horsPublic ? { opacity: 0.55 } : null]}
             contentFit="cover"
             cachePolicy="memory-disk"
             priority="low"
@@ -357,10 +376,10 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
           {isSelected && (
             <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(124, 58, 237, 0.25)' }]} />
           )}
-          {/* Point rouge en haut a gauche : photo masquee (face_count=0). */}
-          {isHidden && !selectionMode && (
+          {/* Point rouge en haut a gauche : absente de la galerie publique. */}
+          {horsPublic && !selectionMode && (
             <View
-              accessibilityLabel="Photo masquée"
+              accessibilityLabel={LIBELLE_HORS[horsPublic] || 'Hors galerie'}
               style={{
                 position: 'absolute', top: 6, left: 6,
                 width: 10, height: 10, borderRadius: 5,
@@ -371,7 +390,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
           )}
           {/* Bouton "Publier" : clic explicite de l'orga pour basculer
               une photo masquee vers la galerie publique. Jamais automatique. */}
-          {isHidden && !selectionMode && (
+          {peutPublier && !selectionMode && (
             <TouchableOpacity
               onPress={(e) => {
                 e.stopPropagation?.();
