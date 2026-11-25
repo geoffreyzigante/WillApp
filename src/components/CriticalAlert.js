@@ -17,7 +17,7 @@
 //   OK cache l overlay tant que la condition ne se resoud pas puis reapparait.
 
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, Linking, StyleSheet } from 'react-native';
 
 export const CRITICAL_KINDS = {
   camera: {
@@ -85,16 +85,12 @@ export default function CriticalAlert({ kind, onDismiss, onAction }) {
   };
 
   return (
-    <Modal
-      visible
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={() => {
-        // Android back : bloquer si non-dismissible.
-        if (cfg.dismissible) onDismiss?.(kind);
-      }}
-    >
+    // Vue superposee, pas une Modal (audit du 25/11) : une Modal presentee
+    // pendant qu une autre se ferme (galerie, journal) echoue en silence sur
+    // iOS et peut figer l ecran. Rendue en dernier enfant de l ecran
+    // photographe, elle couvre tout ce qui n est pas une Modal ; si une
+    // feuille est ouverte, l alerte apparait a sa fermeture.
+    <View style={[StyleSheet.absoluteFillObject, { zIndex: 10000, elevation: 10000 }]}>
       <View
         style={{
           flex: 1,
@@ -163,6 +159,6 @@ export default function CriticalAlert({ kind, onDismiss, onAction }) {
           </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+    </View>
   );
 }
