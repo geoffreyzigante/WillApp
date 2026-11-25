@@ -2449,22 +2449,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
       const state = await NetInfo.fetch().catch(() => null);
       const online = state ? (!!state.isConnected && state.isInternetReachable !== false) : true;
       if (online) drainQueue();
-      // Alerte de reprise : "X photos en attente depuis [date]. Reprendre ?"
-      const lastTsRaw = await AsyncStorage.getItem(LAST_CAPTURE_KEY).catch(() => null);
-      const lastTs = lastTsRaw ? parseInt(lastTsRaw, 10) : 0;
-      const whenLabel = lastTs ? formatTimeAgo(lastTs) : 'de ta session précédente';
-      const n = cleaned.length;
-      const noteAutres = autresEvents > 0
-        ? `\n\n${autresEvents} de ces photos appartiennent à un autre event : elles ne partiront que depuis cet event, sinon elles apparaîtront « à renvoyer ». Elles ne sont pas supprimées.`
-        : '';
-      Alert.alert(
-        'Photos en attente',
-        `Tu as ${n} photo${n > 1 ? 's' : ''} en attente d'upload (${whenLabel}). Reprendre maintenant ?${noteAutres}`,
-        [
-          { text: 'Plus tard', style: 'cancel' },
-          { text: 'Reprendre', onPress: () => drainQueue() },
-        ],
-      );
+      // Plus d alerte « Photos en attente… Reprendre ? » (retiree le 25/11) :
+      // le drain part deja ci-dessus, « Plus tard » ne faisait rien, et
+      // l alerte revenait a chaque ouverture de l ecran. Le compteur
+      // « N en attente » suffit.
     })();
     return () => { alive = false; };
   }, []);
@@ -4603,7 +4591,10 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   // Depend de pendingCount → declare ici, apres son calcul.
   const rawCriticalKind = useMemo(() => {
     if (!hasPermission) return 'camera';
-    if (freeDiskGB < 2) return 'storage';
+    // 1 Go, pas 2 : sous 2 Go est l etat ordinaire d un iPhone bien rempli,
+    // et l alerte bloquait l ecran sans raison (audit du 25/11). La vraie
+    // protection est DISK_CRITICAL_PERCENT, qui desarme la capture.
+    if (freeDiskGB < 1) return 'storage';
     const charging = batteryState === Battery.BatteryState.CHARGING || batteryState === Battery.BatteryState.FULL;
     if (batteryLevel <= 0.15 && !charging) return 'battery';
     if (thermalStateStr === 'serious' || thermalStateStr === 'critical') return 'thermal';
@@ -4675,6 +4666,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             {cameraPermissionDenied ? 'Ouvrir les réglages' : 'Autoriser'}
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={onExit || onLogout} style={{ marginTop: 18, padding: 12 }}>
+          <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 15, fontWeight: '600' }}>Retour</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -4693,6 +4687,9 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
     return (
       <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
         <Text style={{ fontFamily: 'Montserrat', color: C.text, textAlign: 'center' }}>Caméra arrière indisponible</Text>
+        <TouchableOpacity onPress={onExit || onLogout} style={{ marginTop: 18, padding: 12 }}>
+          <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 15, fontWeight: '600' }}>Retour</Text>
+        </TouchableOpacity>
       </View>
     );
   }

@@ -11,9 +11,9 @@
 //     onAction={(k) => { if (k === 'session') retryLogin(); }}
 //   />
 //
-// - Les kinds camera/storage/session ne sont PAS dismissable (dismissible: false),
+// - Les kinds camera/session ne sont PAS dismissable (dismissible: false),
 //   le bouton declenche uniquement une action.
-// - Les autres (battery, thermal, network, queue) sont dismissables : le clic
+// - Les autres (storage, battery, thermal, network, queue) sont dismissables : le clic
 //   OK cache l overlay tant que la condition ne se resoud pas puis reapparait.
 
 import React from 'react';
@@ -30,21 +30,21 @@ export const CRITICAL_KINDS = {
   session: {
     icon: '🔒',
     title: 'Session déconnectée',
-    subtitle: 'Appelle Geoffrey pour qu\'il te reconnecte.',
+    subtitle: 'Reconnecte-toi avec le code de l\'event.',
     action: { label: 'Réessayer', kind: 'onAction' },
     dismissible: false,
   },
   storage: {
     icon: '💾',
-    title: 'iPhone plein',
-    subtitle: 'Plus assez d\'espace pour enregistrer les photos. Appelle Geoffrey.',
-    action: { label: 'OK', kind: 'noop' },
-    dismissible: false,
+    title: 'Téléphone presque plein',
+    subtitle: 'Libère de la place (vidéos, apps) pour continuer à enregistrer les photos.',
+    action: { label: 'OK', kind: 'dismiss' },
+    dismissible: true,
   },
   battery: {
     icon: '🔋',
     title: 'Batterie faible',
-    subtitle: 'Branche le téléphone maintenant. La capture reprend seule.',
+    subtitle: 'Branche le téléphone maintenant. Si la capture s\'arrête, touche Go! pour la relancer.',
     action: { label: 'OK', kind: 'dismiss' },
     dismissible: true,
   },
