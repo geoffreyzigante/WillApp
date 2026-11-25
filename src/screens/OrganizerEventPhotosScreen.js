@@ -278,6 +278,9 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         </Text>
       </View>
 
+      {/* Puces inactives en lavande (C.pillBg), comme la fiche event : sur
+          C.fondApp, la couleur de la page, elles ne se lisaient pas comme des
+          boutons (25/11). */}
       {distances.length > 0 && (
         <ScrollView
           horizontal showsHorizontalScrollIndicator={false}
@@ -287,10 +290,10 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
             onPress={() => setRaceFilter('all')}
             style={{
               paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-              backgroundColor: raceFilter === 'all' ? C.primary : C.fondApp,
+              backgroundColor: raceFilter === 'all' ? C.primary : C.pillBg,
             }}
           >
-            <Text style={{ color: raceFilter === 'all' ? '#fff' : C.text, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Toutes</Text>
+            <Text style={{ color: raceFilter === 'all' ? '#fff' : C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Toutes</Text>
           </TouchableOpacity>
           {distances.map((d, i) => {
             const val = String(d.id || d.km);
@@ -301,10 +304,10 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
                 onPress={() => setRaceFilter(val)}
                 style={{
                   paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-                  backgroundColor: active ? C.primary : C.fondApp,
+                  backgroundColor: active ? C.primary : C.pillBg,
                 }}
               >
-                <Text style={{ color: active ? '#fff' : C.text, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>{raceTitle(d)}</Text>
+                <Text style={{ color: active ? '#fff' : C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>{raceTitle(d)}</Text>
               </TouchableOpacity>
             );
           })}
