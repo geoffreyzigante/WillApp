@@ -126,6 +126,10 @@
         {
           "ios": {
             "deploymentTarget": "16.0"
+          },
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "extraProguardRules": "# R8 (Play Console, fevrier 2027) : classes appelees depuis C++/JNI ou par nom.\n# Frame processors VisionCamera : la classe de base est annotee, pas nos sous-classes.\n-keep class * extends com.mrousavy.camera.frameprocessors.FrameProcessorPlugin { *; }\n-keep class com.mrousavy.camera.** { *; }\n# Skia : JNI et vues natives.\n-keep class com.shopify.reactnative.skia.** { *; }\n# Plugins natifs maison (detecteur, scoring, upload) : package de l app.\n-keep class com.will.photos.** { *; }\n# ML Kit visage : chargement des modeles par reflexion.\n-keep class com.google.mlkit.** { *; }\n-dontwarn com.google.mlkit.**"
           }
         }
       ],
