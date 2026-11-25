@@ -23,6 +23,7 @@ import { Icon } from '../Icon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BoutonsConnexion } from '../BoutonsConnexion';
 import { lh } from '../../constants/typo';
+import { C } from '../../constants/colors';
 
 const T = {
   bg: '#ffffff',
@@ -351,7 +352,7 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
               </Text>
             ) : null}
 
-            {error ? <Text style={{ fontFamily: 'Montserrat', color: '#ff6b6b', fontSize: 13, marginTop: 12 }}>{error}</Text> : null}
+            {error ? <Text style={{ fontFamily: 'Montserrat', color: C.error, fontSize: 13, marginTop: 12 }}>{error}</Text> : null}
 
             <View style={{ marginTop: 22, alignItems: 'center', gap: 16 }}>
               <TouchableOpacity

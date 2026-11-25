@@ -1111,7 +1111,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
             )}
 
             {/* Erreur */}
-            {error ? <Text style={{ fontFamily: 'Montserrat', color: '#ff6b6b', fontSize: 13, marginTop: 12 }}>{error}</Text> : null}
+            {error ? <Text style={{ fontFamily: 'Montserrat', color: C.error, fontSize: 13, marginTop: 12 }}>{error}</Text> : null}
 
             {/* Compte non confirme : ce n est pas un mauvais mot de passe. */}
             {emailNonVerifie && mode === 'login' ? (
@@ -1134,7 +1134,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                       </Text>
                     </TouchableOpacity>
                     {renvoi.message ? (
-                      <Text style={{ fontFamily: 'Montserrat', color: '#ff6b6b', fontSize: 13, marginTop: 6 }}>{renvoi.message}</Text>
+                      <Text style={{ fontFamily: 'Montserrat', color: C.error, fontSize: 13, marginTop: 6 }}>{renvoi.message}</Text>
                     ) : null}
                   </>
                 )}

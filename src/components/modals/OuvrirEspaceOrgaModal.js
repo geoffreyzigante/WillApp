@@ -93,7 +93,7 @@ export function OuvrirEspaceOrgaModal({ visible, onClose, onOuvrir, busy = false
           </View>
 
           {erreur ? (
-            <Text style={{ fontFamily: 'Montserrat', color: '#ff6b6b', fontSize: 13, textAlign: 'center', marginTop: 16, paddingHorizontal: 34 }}>
+            <Text style={{ fontFamily: 'Montserrat', color: C.error, fontSize: 13, textAlign: 'center', marginTop: 16, paddingHorizontal: 34 }}>
               {erreur}
             </Text>
           ) : null}
