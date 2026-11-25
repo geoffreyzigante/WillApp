@@ -10,6 +10,7 @@
 // Toutes les actions ferment le drawer + setTimeout 200ms avant l action
 // suivante (modal stacking iOS, cf feedback_rn_modal_stacking).
 
+import Constants from 'expo-constants';
 import React, { useRef, useEffect, useState } from 'react';
 import { GrainViolet } from '../GrainViolet';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, Animated, Dimensions, Platform, Alert } from 'react-native';
@@ -75,8 +76,20 @@ function SousRow({ label, onPress, dernier }) {
 
 // Ce qui tourne, en clair. Hors de tout composant : aucune dependance au
 // rendu, et ca ne change pas pendant la vie de l app.
+// Version du BINAIRE (1.1.2 (23)), pas du runtime : depuis que
+// runtimeVersion est fige a 1.1.0, la ligne affichait « 1.1.0 » sur un
+// binaire 1.1.2 et ne disait plus ce qui etait installe (constate le 25/11).
+// expo-constants est deja dans le binaire : aucun module natif ajoute.
+function versionBinaire() {
+  const v = Constants.expoConfig?.version || Updates.runtimeVersion || '—';
+  const n = Platform.OS === 'ios'
+    ? Constants.platform?.ios?.buildNumber
+    : Constants.platform?.android?.versionCode;
+  return n ? `${v} (${n})` : v;
+}
+
 function libelleVersion() {
-  const runtime = Updates.runtimeVersion || '—';
+  const runtime = versionBinaire();
   if (Updates.isEmbeddedLaunch || !Updates.createdAt) return `${runtime} · binaire`;
   try {
     const d = new Date(Updates.createdAt);

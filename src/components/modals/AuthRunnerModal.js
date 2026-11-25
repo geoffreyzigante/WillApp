@@ -630,12 +630,32 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
   // marges, ce qui rend ~80 pt au formulaire. La croix et les onglets
   // restent : ce sont les deux seules commandes de l entete.
   const [clavierOuvert, setClavierOuvert] = useState(false);
+  // Android : le KeyboardAvoidingView reduit la zone, mais rien ne fait
+  // defiler jusqu au champ actif -- le mot de passe restait a moitie sous le
+  // clavier (emulateur Pixel 7, 25/11). iOS le fait deja nativement
+  // (automaticallyAdjustKeyboardInsets) : on n y touche pas.
+  const defilementRef = useRef(null);
+  const montrerChampActif = () => {
+    if (Platform.OS !== 'android') return;
+    setTimeout(() => {
+      try {
+        const champ = TextInput.State.currentlyFocusedInput();
+        const zone = defilementRef.current;
+        if (!champ || !zone || typeof champ.measureLayout !== 'function') return;
+        // Position dans le CONTENU defilant, pas dans le cadre visible.
+        const contenu = typeof zone.getInnerViewRef === 'function' ? zone.getInnerViewRef() : zone;
+        champ.measureLayout(contenu, (_x, y) => {
+          zone.scrollTo({ y: Math.max(0, y - 120), animated: true });
+        }, () => {});
+      } catch {}
+    }, 120);
+  };
   useEffect(() => {
     const ouvre = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const ferme = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     const anime = () => LayoutAnimation.configureNext(
       LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
-    const a = Keyboard.addListener(ouvre, () => { anime(); setClavierOuvert(true); });
+    const a = Keyboard.addListener(ouvre, () => { anime(); setClavierOuvert(true); montrerChampActif(); });
     const b = Keyboard.addListener(ferme, () => { anime(); setClavierOuvert(false); });
     return () => { a.remove(); b.remove(); };
   }, []);
@@ -786,6 +806,10 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
             CLAUDE.md, « Clavier iOS ». */}
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? undefined : 'height'}>
           <ScrollView
+            ref={defilementRef}
+            // Passage d un champ a l autre clavier deja ouvert : pas de
+            // nouvel evenement clavier, on recale au toucher.
+            onTouchEnd={() => { if (clavierOuvert) montrerChampActif(); }}
             style={{ backgroundColor: T.bg }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
