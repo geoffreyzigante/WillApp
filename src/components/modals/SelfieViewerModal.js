@@ -5,9 +5,11 @@ import { Modal, View, TouchableOpacity } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import Svg, { Path } from 'react-native-svg';
 
-export function SelfieViewerModal({ visible, uri, onClose }) {
+// onDismiss (iOS) : appele quand la fermeture est REELLEMENT terminee. C est
+// le seul moment ou iOS accepte de presenter une autre Modal.
+export function SelfieViewerModal({ visible, uri, onClose, onDismiss }) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onDismiss={onDismiss}>
       {/* Fond sombre plutot que violet plein cadre : on regarde une photo,
           on ne change pas d univers. */}
       <TouchableOpacity

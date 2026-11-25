@@ -8506,6 +8506,9 @@ function App() {
   const [profileMenu, setProfileMenu] = useState(false);
   const [burgerMenu, setBurgerMenu] = useState(false);
   const [selfieViewer, setSelfieViewer] = useState(false);
+  // Retour vers le menu apres la visionneuse du selfie : iOS le declenche a
+  // la fin REELLE de la fermeture (onDismiss), cf. SelfieViewerModal.
+  const retourApresSelfie = useRef(null);
   // D ou l on vient quand on regarde son selfie : le retour doit rendre
   // l ecran qu on a quitte (le menu seul, ou le menu + la carte compte).
   const [selfieViewerFrom, setSelfieViewerFrom] = useState('account');
@@ -11160,12 +11163,30 @@ function App() {
         onClose={() => {
           setSelfieViewer(false);
           // On revient la ou on etait : le menu, plus la carte compte si
-          // c est d elle qu on venait. 250 ms = le temps que cette modale
-          // soit demontee, iOS refusant d en presenter une pendant.
-          setTimeout(() => {
+          // c est d elle qu on venait.
+          const retour = () => {
             setBurgerMenu(true);
             if (selfieViewerFrom === 'account') setProfileMenu(true);
-          }, 250);
+          };
+          // iOS : on attend onDismiss. Les 250 ms d avant tombaient PENDANT le
+          // fondu de fermeture (~300 ms) : iOS refusait de presenter le menu,
+          // l app le croyait ouvert, et sa fermeture laissait une fenetre
+          // invisible sur l ecran -- galerie figee (signale le 25 nov 2026).
+          if (Platform.OS === 'ios') {
+            retourApresSelfie.current = retour;
+            // Filet : si onDismiss ne venait pas, on rouvre quand meme, une
+            // seule fois, bien apres la fin du fondu.
+            setTimeout(() => {
+              if (retourApresSelfie.current !== retour) return;
+              retourApresSelfie.current = null;
+              retour();
+            }, 700);
+          } else setTimeout(retour, 250);
+        }}
+        onDismiss={() => {
+          const retour = retourApresSelfie.current;
+          retourApresSelfie.current = null;
+          if (retour) retour();
         }}
       />
 
