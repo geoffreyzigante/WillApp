@@ -515,6 +515,15 @@ function Panneau({ onFermer, children }) {
   );
 }
 
+// Refus du selfie par le worker : les trois codes videent le selfie local
+// et proposent d en reprendre un. Avant le 25/11, seul face_too_small le
+// faisait ; les deux autres faisaient renvoyer en boucle la photo refusee.
+const TITRES_SELFIE_REFUSE = {
+  face_too_small: 'Visage trop petit',
+  no_face_detected: 'Aucun visage détecté',
+  multiple_faces_detected: 'Plusieurs visages',
+};
+
 function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch }) {
   // Ecran toujours allume pendant la session photographe : evite que la veille
   // iOS suspende process/drain (les fetch upload sont coupes en background).
@@ -8566,6 +8575,8 @@ function App() {
   const pendingApresInscriptionRef = useRef(null);
   const infoEmailApresInscriptionRef = useRef(false);
   const selfieRefuseInscriptionRef = useRef(false);
+  // Vrai des que l ecran d inscription a enregistre un selfie.
+  const selfieInscriptionRef = useRef(false);
   // Recherche par dossard : state lifte au root pour rendre la pill
   // au-dessus du degrade blanc du footer (zIndex 5 root-level). Tant que la
   // pill etait dans EventDetailScreen, elle restait coincee sous le degrade.
@@ -9001,6 +9012,7 @@ function App() {
       pendingApresInscriptionRef.current = pendingActionRef.current;
       infoEmailApresInscriptionRef.current = stored?.profile?.email_verified !== true;
       selfieRefuseInscriptionRef.current = false;
+      selfieInscriptionRef.current = false;
       pendingActionRef.current = null;
       // Atterrissage : par defaut l Accueil (un compte tout neuf ne suit
       // aucun event, l onglet Photos ne lui montrerait qu un ecran vide).
@@ -9214,6 +9226,11 @@ function App() {
     const sub = Linking.addEventListener('url', (ev) => lireLienWillRef.current?.(ev?.url));
     return () => { try { sub?.remove?.(); } catch {} };
   }, []);
+
+  // Action « ouvrir le selfie », marquee : si elle attendait une inscription
+  // et que l inscription a deja pris le selfie, on ne la rejoue pas — elle
+  // rouvrait une SelfieModal vide (audit coureur du 25/11).
+  const ouvrirSelfieModal = useMemo(() => Object.assign(() => setSelfieModal(true), { estSelfie: true }), []);
 
   const requireAuth = useCallback((action) => {
     if (runnerSession) {
@@ -10061,17 +10078,19 @@ function App() {
       setSelfieUploadState('failed');
       // Erreur "visage trop petit" : on clear le selfie local pour que
       // l user soit invite a refaire un selfie + Alert avec message clair.
-      if (e?.code === 'face_too_small') {
+      if (TITRES_SELFIE_REFUSE[e?.code]) {
         setSelfieUri(null);
         oublierSelfieLocal();
-        Alert.alert(
-          'Visage trop petit',
+        // Apres la fermeture de la SelfieModal : une Alert posee pendant
+        // qu elle se ferme peut disparaitre avec elle sur iOS.
+        setTimeout(() => Alert.alert(
+          TITRES_SELFIE_REFUSE[e.code],
           e.userMessage || 'Approche-toi de la caméra pour remplir l\'ovale.',
           [
             { text: 'Plus tard', style: 'cancel' },
             { text: 'Reprendre mon selfie', onPress: () => setSelfieModal(true) },
           ],
-        );
+        ), 400);
         return;
       }
       // Audit coureur 1 — l echec posait un etat 'failed' que rien n affichait
@@ -10079,14 +10098,14 @@ function App() {
       // recevra aucune photo : c est le seul moment ou le lui dire compte.
       // La carte SelfieBlock (etat 'failed') reste ensuite visible en tete de
       // l onglet Photos tant que l envoi n a pas abouti.
-      Alert.alert(
+      setTimeout(() => Alert.alert(
         'Selfie non envoyé',
         e?.userMessage || "Ton selfie n'est pas arrivé sur nos serveurs. Sans lui, Will ne peut pas te reconnaître sur les photos.",
         [
           { text: 'Plus tard', style: 'cancel' },
           { text: "Réessayer l'envoi", onPress: () => { runSelfieUploadRef.current?.(uri); } },
         ],
-      );
+      ), 400);
     }
   }, [runnerSession?.profile?.userId, runnerSession?.token]);
 
@@ -10455,7 +10474,7 @@ function App() {
                       setOpenedEvent(null);
                       setBottomTab('home');
                     }}
-                    onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
+                    onOpenSelfie={() => requireAuth(ouvrirSelfieModal)}
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
                     onOpenProfile={() => setBurgerMenu(true)}
@@ -10522,7 +10541,7 @@ function App() {
                   headerH={headerH}
                   events={events}
                   onOpenEvent={setOpenedEvent}
-                  onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
+                  onOpenSelfie={() => requireAuth(ouvrirSelfieModal)}
                   onOpenOrg={() => setOrgModal(true)}
                   onOpenOrgRole={handlePickRole}
                   onOpenSearch={() => setSearchModal(true)}
@@ -10555,7 +10574,7 @@ function App() {
                     headerH={headerH}
                     events={events}
                     runnerFirstName={runnerSession?.profile?.firstName || ''}
-                    onOpenSelfie={() => requireAuth(() => setSelfieModal(true))}
+                    onOpenSelfie={() => requireAuth(ouvrirSelfieModal)}
                     selfieUri={selfieUri}
                     onDeleteSelfie={deleteSelfie}
                     onOpenProfile={() => setBurgerMenu(true)}
@@ -11111,7 +11130,7 @@ function App() {
           }}
           onRetake={() => {
             setProfileMenu(false); setBurgerMenu(false);
-            setTimeout(() => requireAuth(() => setSelfieModal(true)), 300);
+            setTimeout(() => requireAuth(ouvrirSelfieModal), 300);
           }}
           onDelete={() => {
             // Audit modal-stacking iOS : Alert.alert (dans deleteSelfie) ne saffiche
@@ -11124,8 +11143,10 @@ function App() {
           runnerApiFetch={runnerApiFetch}
           onLogout={logoutRunner}
           onUpdateProfile={updateRunnerProfile}
-          onDeleteAccount={() => { setProfileMenu(false); setBurgerMenu(false); deleteRunnerAccount(); }}
-          onDeleteFaceData={() => { setProfileMenu(false); setBurgerMenu(false); deleteFaceData(); }}
+          // Meme delai que onDelete : l Alert de confirmation ne s affiche pas
+          // si le menu est encore en train de se fermer (audit du 25/11).
+          onDeleteAccount={() => { setProfileMenu(false); setBurgerMenu(false); setTimeout(() => deleteRunnerAccount(), 300); }}
+          onDeleteFaceData={() => { setProfileMenu(false); setBurgerMenu(false); setTimeout(() => deleteFaceData(), 300); }}
           uploadState={selfieUploadState}
           onRetryUpload={retrySelfieUpload}
           onActiverNotifs={async () => {
@@ -11256,7 +11277,8 @@ function App() {
           // peut s afficher sans se retrouver derriere lui.
           const aRejouer = pendingApresInscriptionRef.current;
           pendingApresInscriptionRef.current = null;
-          if (aRejouer) setTimeout(() => aRejouer(), 350);
+          const selfieDejaPris = aRejouer?.estSelfie && selfieInscriptionRef.current && !selfieRefuseInscriptionRef.current;
+          if (aRejouer && !selfieDejaPris) setTimeout(() => aRejouer(), 350);
           // Compte tout juste cree : on dit qu il faut valider l adresse.
           // Une seule alerte a la fois — si le selfie a ete refuse, c est
           // elle qui parle (le bandeau de l Accueil porte l info ensuite).
@@ -11273,6 +11295,7 @@ function App() {
         }}
         onSuccess={handleAuthSuccess}
         onSelfieSaved={async (uri, creds) => {
+          selfieInscriptionRef.current = true;
           setSelfieUri(uri);
           AsyncStorage.removeItem('@will_selfie_skipped').catch(() => {});
           setSelfieSkipped(false);
@@ -11290,7 +11313,7 @@ function App() {
           } catch (e) {
             console.warn('selfie upload R2 (inscription)', e?.message || e);
             setSelfieUploadState('failed');
-            if (e?.code === 'face_too_small') {
+            if (TITRES_SELFIE_REFUSE[e?.code]) {
               setSelfieUri(null);
               oublierSelfieLocal();
               // L ecran d inscription est encore ouvert (il se ferme juste
@@ -11300,7 +11323,7 @@ function App() {
               selfieRefuseInscriptionRef.current = true;
               setTimeout(() => {
                 Alert.alert(
-                  'Visage trop petit',
+                  TITRES_SELFIE_REFUSE[e.code],
                   e.userMessage || "Approche-toi de la caméra pour remplir l'ovale.",
                   [
                     { text: 'Plus tard', style: 'cancel' },

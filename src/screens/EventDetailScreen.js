@@ -149,13 +149,31 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   //     envoie souvent le lendemain) ;
   //   - passe, en cours de chargement : rien, plutot qu un bandeau qui
   //     changerait sous les yeux.
-  const bandeau = upcoming
-    ? { titre: 'Ne cherche plus tes photos', texte: "Un selfie suffit, Will te les envoie après l'event.", dossard: false }
-    : loading
+  // Audit du 25/11 : `upcoming` reste vrai le jour J et le lendemain
+  // (tolerance d un jour, utils/format.js), alors que des photos peuvent
+  // deja etre en ligne. Les photos chargees passent donc AVANT la date.
+  // Seul un event strictement futur (J-n) affiche le selfie sans attendre
+  // le chargement. Erreur de chargement : aucun bandeau, plutot qu une
+  // promesse que l erreur juste dessous contredit.
+  const futurStrict = (() => {
+    if (!event.event_date) return false;
+    const d = new Date(event.event_date);
+    if (isNaN(d.getTime())) return false;
+    d.setHours(0, 0, 0, 0);
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    return t < d;
+  })();
+  const bandeauDossard = onChercherDossard ? { titre: 'Retrouve tes photos', texte: 'Entre ton dossard pour les voir.', dossard: true } : null;
+  const bandeauSelfie = { titre: 'Ne cherche plus tes photos', texte: "Un selfie suffit, Will te les envoie après l'event.", dossard: false };
+  const bandeau = futurStrict
+    ? bandeauSelfie
+    : (loading || erreurChargement)
       ? null
       : photos.length > 0
-        ? (onChercherDossard ? { titre: 'Retrouve tes photos', texte: 'Entre ton dossard pour les voir.', dossard: true } : null)
-        : { titre: 'Tes photos arrivent bientôt', texte: 'Dépose ton selfie maintenant : Will te reconnaîtra sur les photos à leur arrivée.', dossard: false };
+        ? bandeauDossard
+        : upcoming
+          ? bandeauSelfie
+          : { titre: 'Tes photos arrivent bientôt', texte: 'Dépose ton selfie maintenant : Will te reconnaîtra sur les photos à leur arrivée.', dossard: false };
 
   const countdown = (() => {
     if (!event.event_date) return null;
