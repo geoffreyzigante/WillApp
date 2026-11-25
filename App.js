@@ -7594,6 +7594,8 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={fermerAvecGarde}>
+      {/* Entete violet : barre d etat claire (25/11). */}
+      <StatusBar barStyle="light-content" animated />
       <View style={{ flex: 1, backgroundColor: '#fff' }}>
         <View style={{ flex: 1 }}>
             <ScrollView
