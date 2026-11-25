@@ -45,16 +45,27 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
-  const [hiddenCount, setHiddenCount] = useState(0);
   const [busyKey, setBusyKey] = useState(null);
+  // Erreur de chargement : distincte de « aucune photo » (audit du 25/11).
+  const [erreur, setErreur] = useState(false);
   const tint = colorForType(event.event_type);
 
-  const loadPhotos = useCallback(async () => {
-    setLoading(true);
-    setVisibleCount(20);
+  // silencieux : rechargement apres un geste (publier) sans vider la grille
+  // ni la remonter en haut.
+  const loadPhotos = useCallback(async ({ silencieux = false } = {}) => {
+    if (!silencieux) {
+      setLoading(true);
+      setVisibleCount(20);
+    }
+    setErreur(false);
     try {
       const r = await organizerApiFetch(`/organizer/event-photos/${event.code}`);
-      const data = r.ok ? await r.json() : { before_event: [], during_event: [], hidden_count: 0 };
+      if (!r.ok) {
+        // 401 : organizerApiFetch deconnecte deja. Le reste est une erreur.
+        if (r.status !== 401) setErreur(true);
+        return;
+      }
+      const data = await r.json();
       const raw = [...(data.during_event || []), ...(data.before_event || [])];
       const list = raw
         .filter(p => p && typeof p.url === 'string' && p.url.length > 0
@@ -71,17 +82,17 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
           hidden: p.hidden === true,
           horsPublic: raisonHors(p),
         }));
-      // Meme compte que la galerie publique : tout ce qu elle n affiche pas.
-      setHiddenCount(raw.filter(p => p && raisonHors(p)).length);
       list.sort((a, b) => {
         const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
         if (dt !== 0) return dt;
         return extractIdx(b.id) - extractIdx(a.id);
       });
-      setPhotos(list.slice(0, 500));
+      // Plus de plafond a 500 : le compteur doit dire le vrai total, et
+      // l affichage est deja progressif (visibleCount).
+      setPhotos(list);
     } catch (e) {
       console.warn('loadPhotos failed:', e?.message || e);
-      setPhotos([]);
+      setErreur(true);
     } finally {
       setLoading(false);
     }
@@ -107,14 +118,25 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
     return () => clearTimeout(t);
   }, [visibleCount, photos.length]);
 
+  const distances = Array.isArray(event.distances) ? event.distances : [];
+
+  // Meme regle que le site (photoRaceKey / photosDeLaSelection dans
+  // website/event/index.html) : une photo sans course appartient a la course
+  // unique s il n y en a qu une, a aucune sinon. Avant le 25/11, elle
+  // apparaissait dans CHAQUE course.
+  const cleCourseUnique = distances.length === 1 && distances[0]
+    ? (distances[0].id ? String(distances[0].id) : (distances[0].km != null && String(distances[0].km).trim() !== '' ? String(distances[0].km) : null))
+    : null;
+  const cleCourse = (p) => {
+    if (p && p.race_distance_id) return String(p.race_distance_id);
+    if (p && p.race != null && String(p.race).trim() !== '') return String(p.race);
+    return cleCourseUnique;
+  };
   const filteredPhotos = raceFilter === 'all'
     ? photos
-    : photos.filter(p => {
-        const k = (p && p.race_distance_id) ? String(p.race_distance_id) : (p && p.race ? String(p.race) : null);
-        return k === raceFilter || !p.race;
-      });
-
-  const distances = Array.isArray(event.distances) ? event.distances : [];
+    : photos.filter(p => cleCourse(p) === raceFilter);
+  // Le compteur « hors galerie » suit le filtre, comme le total.
+  const hiddenCount = filteredPhotos.filter(p => p.horsPublic).length;
 
   const toggleSelect = (key) => {
     setSelectedKeys(prev => {
@@ -250,7 +272,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
           <Path d="M12 8v5M12 16h.01" stroke="#92400E" strokeWidth={1.8} strokeLinecap="round" />
         </Svg>
         <Text style={{ fontFamily: 'Montserrat', color: '#92400E', fontSize: 12, flex: 1 }}>
-          Mode preview : tu vois toutes les photos, même celles prises avant le départ.{'\n'}Les participants ne voient que les photos après l'heure de leur épreuve.
+          Mode aperçu : tu vois toutes les photos, y compris celles que la galerie publique n'affiche pas (prises avant le départ, sans visage, ou masquées).
         </Text>
       </View>
 
@@ -302,7 +324,14 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
     <View style={{ paddingVertical: 40, alignItems: 'center' }}>
       {loading
         ? <ActivityIndicator color={C.primary} />
-        : <Text style={{ fontFamily: 'Montserrat', color: C.textSoft }}>Aucune photo pour le moment</Text>}
+        : erreur
+          ? (
+            <TouchableOpacity onPress={() => loadPhotos()} style={{ alignItems: 'center' }}>
+              <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, textAlign: 'center' }}>Impossible de charger les photos.</Text>
+              <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.primary, marginTop: 8 }}>Réessayer</Text>
+            </TouchableOpacity>
+          )
+          : <Text style={{ fontFamily: 'Montserrat', color: C.textSoft }}>Aucune photo pour le moment</Text>}
     </View>
   );
 
@@ -320,7 +349,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         Alert.alert('Erreur', data?.error || 'Modification impossible');
         return false;
       }
-      await loadPhotos();
+      await loadPhotos({ silencieux: true });
       return true;
     } catch (e) {
       Alert.alert('Erreur', e?.message || 'Modification impossible');
