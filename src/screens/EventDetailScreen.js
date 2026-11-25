@@ -131,7 +131,13 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
   // C est le passage d un registre a l autre qui m a coute quatre commits :
   // j ai voulu garder le programme dans le registre du choix, ou il n a pas de
   // sens, et chaque correctif ajoutait une regle au lieu d en retirer une.
-  const registreProgramme = photos.length === 0;
+  //
+  // Et on ne choisit le registre qu une fois les photos CHARGEES : pendant le
+  // chargement, `photos` est vide comme sur un event sans photo, et le
+  // programme s affichait une fraction de seconde avant d etre remplace par
+  // les vrais filtres (signale le 25 nov 2026). Tant qu on ne sait pas, on
+  // ne montre ni l un ni l autre.
+  const registreProgramme = !loading && photos.length === 0;
 
   const countdown = (() => {
     if (!event.event_date) return null;
@@ -705,7 +711,7 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
     // montre rien : on ne sait pas s il y a des photos.
     // Registre du programme : rien a filtrer. Il est rendu plus haut, dans
     // l en-tete, pour suivre la hero.
-    if (erreurChargement || registreProgramme) return <View />;
+    if (erreurChargement || registreProgramme || loading) return <View />;
     return (
       <View style={{ marginHorizontal: -20 }}>
         <FiltresGalerie
