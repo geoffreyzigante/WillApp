@@ -153,7 +153,8 @@ function WelcomeCard({ onSignup, onLogin }) {
         <View style={{ alignItems: 'flex-start', gap: 12, marginTop: 16 }}>
           <CtaWill label="S’inscrire" onPress={onSignup} variante="pink" hauteur={34} style={{ alignSelf: 'flex-start' }} />
           <TouchableOpacity onPress={onLogin} hitSlop={10} style={{ marginLeft: 17 }}>
-            <Text style={{ color: C.pinkPill, fontFamily: 'Montserrat-Medium', fontSize: 15 }}>Connexion</Text>
+            {/* Blanc : le rose sur violet n atteignait que 3,2:1 (5,7 en blanc). */}
+            <Text style={{ color: '#FFFFFF', fontFamily: 'Montserrat-Medium', fontSize: 15 }}>Connexion</Text>
           </TouchableOpacity>
         </View>
       </GrainViolet>

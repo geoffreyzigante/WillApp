@@ -30,7 +30,7 @@ const T = {
   primary: '#7B2FFF',
   textStrong: '#1A1426',
   textBody: '#5a5468',
-  textMuted: '#8b83a0',
+  textMuted: '#6b6480', // charte texteDoux : 5,6:1 sur blanc (#8b83a0 n avait que 3,6)
   textLabel: '#3F3F46',
   textTab: '#9A93A8',
   rule: '#E7E4EE',
@@ -203,6 +203,9 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
 
   return (
     <Modal visible={visible} onRequestClose={onClose} animationType="slide" presentationStyle="fullScreen">
+      {/* Entete violet sous la barre d etat : heure et batterie en clair, comme
+          les feuilles sombres d iOS (en sombre, elles etaient illisibles). */}
+      <StatusBar barStyle="light-content" animated />
       <View style={{ flex: 1, backgroundColor: T.bg }}>
         <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={{ paddingHorizontal: 24, paddingTop: padHaut }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>

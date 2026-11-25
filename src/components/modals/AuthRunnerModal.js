@@ -46,7 +46,7 @@ const T = {
   primaryDark: '#6d28d9',
   textStrong: '#1A1426',
   textBody: '#5a5468',
-  textMuted: '#8b83a0',
+  textMuted: '#6b6480', // charte texteDoux : 5,6:1 sur blanc (#8b83a0 n avait que 3,6)
   textLabel: '#3F3F46',
   textTab: '#9A93A8',
   rule: '#E7E4EE',
@@ -659,6 +659,9 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
 
   return (
     <Modal visible={visible} onRequestClose={onClose} onDismiss={onDismiss} animationType="slide" presentationStyle="fullScreen">
+      {/* Entete violet sous la barre d etat : heure et batterie en clair, comme
+          les feuilles sombres d iOS (en sombre, elles etaient illisibles). */}
+      <StatusBar barStyle="light-content" animated />
       <View style={{ flex: 1, backgroundColor: T.bg }}>
         {/* Entete degrade (identique au header du menu) : croix, titre et
             onglets Connexion/Inscription y vivent desormais — le blanc du

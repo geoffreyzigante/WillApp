@@ -601,9 +601,12 @@ const styles = StyleSheet.create({
   },
   ctaPrimaryText: { color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' },
   ctaSecondary: {
-    paddingVertical: 13,
+    // 14 comme ctaPrimary : deux boutons freres, meme hauteur.
+    paddingVertical: 14,
     borderRadius: 14,
-    backgroundColor: 'rgba(123,47,255,0.08)',
+    // Opaque : a 8 % sur le flou du menu, le bouton prenait la teinte de ce
+    // qui passait dessous (vert sous une carte trail, mesure du 25/11).
+    backgroundColor: C.pillBg,
     alignItems: 'center',
   },
   ctaSecondaryText: { color: C.primary, fontSize: 15, fontFamily: 'Montserrat-SemiBold' },

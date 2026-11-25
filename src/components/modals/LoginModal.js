@@ -249,11 +249,16 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
 
   return (
     <Modal visible={visible} onRequestClose={onClose} animationType="slide" presentationStyle="fullScreen">
+      {/* Entete violet sous la barre d etat : heure et batterie en clair, comme
+          les feuilles sombres d iOS (en sombre, elles etaient illisibles). */}
+      <StatusBar barStyle="light-content" animated />
       <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
         <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={{ paddingHorizontal: 24, paddingTop: padHaut, paddingBottom: 24 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
-            <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontFamily: 'Montserrat', color: '#4a4458', fontSize: 22, lineHeight: lh(22, 24, 'Montserrat') }}>✕</Text>
+            {/* Meme croix que les ecrans freres (inscription coureur et orga) :
+                rond de 30, blanc a 20 %, croix blanche. */}
+            <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>✕</Text>
             </TouchableOpacity>
             {/* Le logo manquait a l appel sur les ecrans d entree : c est
                 pourtant la qu il compte, quand on ne sait pas encore ou on
@@ -404,7 +409,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 <View style={{ marginBottom: 12 }}>
                   {upcomingSearched.length === 0 && (
                     <View style={{ padding: 24, alignItems: 'center' }}>
-                      <Text style={{ fontFamily: 'Montserrat', color: C.muted, fontSize: 13 }}>
+                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 13 }}>
                         {upcoming.length === 0
                           ? 'Aucun événement à venir'
                           : 'Aucun résultat pour cette recherche'}
@@ -493,7 +498,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 <Text style={{ color: C.text, fontSize: 14, fontFamily: 'Montserrat-SemiBold', marginBottom: 6 }}>
                   {resetMode === 'reset-request' ? 'Réinitialiser ton mot de passe' : 'Vérifier le code reçu'}
                 </Text>
-                <Text style={{ fontFamily: 'Montserrat', color: C.muted, fontSize: 12, marginBottom: 14 }}>
+                <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginBottom: 14 }}>
                   {resetMode === 'reset-request'
                     ? `Un code à 6 chiffres sera envoyé à l'email enregistré pour cet événement.`
                     : `Code envoyé à l'email de l'organisateur. Valable 15 minutes.`}
@@ -582,7 +587,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   hitSlop={6}
                   style={{ alignItems: 'center', paddingVertical: 10, marginTop: 4 }}
                 >
-                  <Text style={{ fontFamily: 'Montserrat', color: C.muted, fontSize: 13 }}>Annuler</Text>
+                  <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 13 }}>Annuler</Text>
                 </TouchableOpacity>
               </>
             ) : role === 'photographer' ? null : (
