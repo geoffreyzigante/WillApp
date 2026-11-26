@@ -1,5 +1,5 @@
 // Affichage PIN en lecture seule (detail event organizer, masque/reveal).
-// Chiffres gros, espaces 10px, monospace violet. 4 ou 6 chiffres selon
+// Chiffres gros, espaces 10px, monospace noir (orga). 4 ou 6 chiffres selon
 // l epoque de l event (cf src/utils/pin.js).
 
 import React from 'react';
@@ -19,7 +19,7 @@ export function PinDisplay({ pin, masked = true }) {
           style={{
             fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
             fontSize: 28, 
-            color: valid ? C.primary : C.muted,
+            color: valid ? C.orga : C.muted,
             minWidth: 22, textAlign: 'center',
           }}
         >

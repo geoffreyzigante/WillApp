@@ -19,20 +19,25 @@
 // texte est un aplat opaque, tout trait blanc pose sur l image porte un
 // halo sombre pour garantir son contraste independamment du fond.
 
+import { T } from './tokens';
+
+// Espaces organisateur et photographe au noir de la charte (decision
+// Geoffrey, 26/11) : les violets d accent du handoff passent sur
+// T.couleur.orga. Les surfaces, filets et libelles restent ceux du handoff.
 export const P = {
   // Surfaces
   appBg: '#F6F3FF',            // fond de l ecran
   surface: '#FFFFFF',          // rangees de commande, panneaux
-  surfacePressed: '#F0EAFC',   // rangee blanche pressee
+  surfacePressed: T.couleur.orga.accentClair, // rangee blanche pressee, puce inactive (etait #F0EAFC)
   panelPressed: '#F6F3FF',     // rangee de panneau pressee
   framePlaceholder: '#DCCFF7', // fond du cadre avant le flux camera
 
-  // Violets
-  brand: '#8B2FE8',            // titre, valeurs, glyphe retour
-  ink: '#4A0E96',              // texte des panneaux et de la molette
-  soft: '#E7DEFB',             // fond du bouton retour
-  softPressed: '#D9CBF8',      // bouton retour presse
-  wheelBand: '#F2EDFD',        // bande de selection de la molette
+  // Accents (noir orga depuis le 26/11, violets avant)
+  brand: T.couleur.orga.accent, // titre, valeurs, glyphe retour (etait #8B2FE8)
+  ink: T.couleur.orga.accent,   // texte des panneaux et de la molette (etait #4A0E96)
+  soft: T.couleur.orga.accentClair, // fond du bouton retour (etait #E7DEFB)
+  softPressed: '#E4E2E8',      // bouton retour presse (etait #D9CBF8 ; gris un cran sous accentClair)
+  wheelBand: T.couleur.orga.accentClair, // bande de selection de la molette (etait #F2EDFD)
   divider: '#F0EAFC',          // filets 1 px
 
   // Libelles

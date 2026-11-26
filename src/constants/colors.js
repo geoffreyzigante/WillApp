@@ -50,6 +50,12 @@ export const C = {
   success: '#10B981',
   error: '#B42318',
   warning: '#F59E0B',
+  // Espaces organisateur et photographe : noir de la charte a la place du
+  // violet (decision Geoffrey, 26/11). Le violet reste la couleur du coureur.
+  // Texte blanc sur orga, texte orga sur orgaClair : contrastes > 15.
+  orga: T.couleur.orga.accent,
+  orgaSurvol: T.couleur.orga.accentSurvol,
+  orgaClair: T.couleur.orga.accentClair,
 };
 
 // Palette arc-en-ciel synchronisee avec dashboard (src/orga/pages/

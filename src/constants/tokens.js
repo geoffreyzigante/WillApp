@@ -25,6 +25,12 @@ export const T = {
     attente: {
       fond: "#FEF3C7",
       texte: "#b45309"
+    },
+    orga: {
+      _note: "Accent des espaces organisateur et photographe (decision Geoffrey, 26/11). Le violet reste la couleur du coureur ; les teintes d event ne changent pas.",
+      accent: "#1A1426",
+      accentSurvol: "#000000",
+      accentClair: "#F2F1F4"
     }
   },
   rayon: {

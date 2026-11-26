@@ -19,7 +19,7 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
             <View style={s.modalHandle} />
           </TouchableOpacity>
 
-          <Text style={[s.welcome, { color: C.pinkPill, fontSize: 22, marginBottom: 4, marginTop: 4 }]}>
+          <Text style={[s.welcome, { color: C.orga, fontSize: 22, marginBottom: 4, marginTop: 4 }]}>
             Organisation
           </Text>
           <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 13, marginBottom: 20 }}>
@@ -31,7 +31,7 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
             onPress={() => onPickRole('organizer')}
             activeOpacity={0.85}
             style={{
-              backgroundColor: '#faf9ff',
+              backgroundColor: C.orgaClair,
               borderRadius: 18,
               padding: 16,
               marginBottom: 12,
@@ -41,7 +41,7 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
           >
             <View style={{
               width: 48, height: 48, borderRadius: 24,
-              backgroundColor: C.pinkPill,
+              backgroundColor: C.orga,
               alignItems: 'center', justifyContent: 'center',
               marginRight: 14,
             }}>
@@ -66,7 +66,7 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
             onPress={() => onPickRole('photographer')}
             activeOpacity={0.85}
             style={{
-              backgroundColor: '#faf9ff',
+              backgroundColor: C.orgaClair,
               borderRadius: 18,
               padding: 16,
               marginBottom: 8,
@@ -76,7 +76,7 @@ export function OrganizationModal({ visible, onClose, onPickRole }) {
           >
             <View style={{
               width: 48, height: 48, borderRadius: 24,
-              backgroundColor: C.primary,
+              backgroundColor: C.orga,
               alignItems: 'center', justifyContent: 'center',
               marginRight: 14,
             }}>

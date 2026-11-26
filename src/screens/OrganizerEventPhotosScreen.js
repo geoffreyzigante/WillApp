@@ -224,14 +224,14 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
     <>
       <View style={s.headerRow}>
         <View style={s.headerLeft}>
-          <Text style={[s.welcome, { color: C.primary, fontSize: 18 }]}>
+          <Text style={[s.welcome, { color: C.orga, fontSize: 18 }]}>
             {selectionMode ? `${selectedKeys.size} sélectionnée${selectedKeys.size > 1 ? 's' : ''}` : "Photos de l'event"}
           </Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
           {!selectionMode && photos.length > 0 ? (
             <TouchableOpacity onPress={() => setSelectionMode(true)} hitSlop={10}>
-              <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Sélectionner</Text>
+              <Text style={{ color: C.orga, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Sélectionner</Text>
             </TouchableOpacity>
           ) : selectionMode ? (
             <TouchableOpacity onPress={exitSelection} hitSlop={10}>
@@ -278,9 +278,9 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         </Text>
       </View>
 
-      {/* Puces inactives en lavande (C.pillBg), comme la fiche event : sur
-          C.fondApp, la couleur de la page, elles ne se lisaient pas comme des
-          boutons (25/11). */}
+      {/* Puces inactives en blanc, active en noir orga (26/11). Ni lavande ni
+          C.orgaClair : sur C.fondApp, la couleur de la page, une puce pale ne se
+          lit pas comme un bouton (constate le 25/11). */}
       {distances.length > 0 && (
         <ScrollView
           horizontal showsHorizontalScrollIndicator={false}
@@ -290,10 +290,10 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
             onPress={() => setRaceFilter('all')}
             style={{
               paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-              backgroundColor: raceFilter === 'all' ? C.primary : C.pillBg,
+              backgroundColor: raceFilter === 'all' ? C.orga : C.white,
             }}
           >
-            <Text style={{ color: raceFilter === 'all' ? '#fff' : C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Toutes</Text>
+            <Text style={{ color: raceFilter === 'all' ? '#fff' : C.orga, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Toutes</Text>
           </TouchableOpacity>
           {distances.map((d, i) => {
             const val = String(d.id || d.km);
@@ -304,10 +304,10 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
                 onPress={() => setRaceFilter(val)}
                 style={{
                   paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-                  backgroundColor: active ? C.primary : C.pillBg,
+                  backgroundColor: active ? C.orga : C.white,
                 }}
               >
-                <Text style={{ color: active ? '#fff' : C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>{raceTitle(d)}</Text>
+                <Text style={{ color: active ? '#fff' : C.orga, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>{raceTitle(d)}</Text>
               </TouchableOpacity>
             );
           })}
@@ -328,12 +328,12 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
   const ListEmpty = (
     <View style={{ paddingVertical: 40, alignItems: 'center' }}>
       {loading
-        ? <ActivityIndicator color={C.primary} />
+        ? <ActivityIndicator color={C.orga} />
         : erreur
           ? (
             <TouchableOpacity onPress={() => loadPhotos()} style={{ alignItems: 'center' }}>
               <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, textAlign: 'center' }}>Impossible de charger les photos.</Text>
-              <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.primary, marginTop: 8 }}>Réessayer</Text>
+              <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.orga, marginTop: 8 }}>Réessayer</Text>
             </TouchableOpacity>
           )
           : <Text style={{ fontFamily: 'Montserrat', color: C.textSoft }}>Aucune photo pour le moment</Text>}
@@ -396,7 +396,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
             <View style={{
               position: 'absolute', top: 6, right: 6,
               width: 22, height: 22, borderRadius: 11,
-              backgroundColor: isSelected ? C.primary : 'rgba(0,0,0,0.4)',
+              backgroundColor: isSelected ? C.orga : 'rgba(0,0,0,0.4)',
               borderWidth: 2, borderColor: '#fff',
               alignItems: 'center', justifyContent: 'center',
             }}>
@@ -408,7 +408,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
             </View>
           )}
           {isSelected && (
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(124, 58, 237, 0.25)' }]} />
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(26, 20, 38, 0.25)' }]} />
           )}
           {/* Point rouge en haut a gauche : absente de la galerie publique. */}
           {horsPublic && !selectionMode && (
@@ -434,7 +434,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
               hitSlop={6}
               style={{
                 position: 'absolute', bottom: 4, right: 4,
-                backgroundColor: isBusy ? 'rgba(0,0,0,0.4)' : C.primary,
+                backgroundColor: isBusy ? 'rgba(0,0,0,0.4)' : C.orga,
                 paddingHorizontal: 8, paddingVertical: 4,
                 borderRadius: 999,
               }}
@@ -459,7 +459,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
           renderItem={renderItem}
           ListHeaderComponent={ListHeader}
           ListEmptyComponent={ListEmpty}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={C.primary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPullRefresh} tintColor={C.orga} />}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           removeClippedSubviews

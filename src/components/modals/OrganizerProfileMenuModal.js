@@ -34,7 +34,7 @@ function Ligne({ label, value, dernier }) {
 }
 
 function Action({ label, onPress, ton = 'normal', dernier }) {
-  const couleur = ton === 'danger' ? T.couleur.erreur : ton === 'lien' ? C.primary : T.couleur.texte;
+  const couleur = ton === 'danger' ? T.couleur.erreur : ton === 'lien' ? C.orga : T.couleur.texte;
   return (
     <TouchableOpacity
       style={[compte.action, !dernier && compte.ligneSeparee]}
@@ -204,13 +204,13 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                   <TouchableOpacity
                     onPress={() => setEditing(false)}
-                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.fondApp }}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.orgaClair }}
                   >
                     <Text style={{ color: C.text, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={save} disabled={busy}
-                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.primary, opacity: busy ? 0.6 : 1 }}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.orga, opacity: busy ? 0.6 : 1 }}
                   >
                     {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>Enregistrer</Text>}
                   </TouchableOpacity>
@@ -248,13 +248,13 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                   <TouchableOpacity
                     onPress={() => { setChangingPwd(false); setOldPwd(''); setNewPwd(''); setPwdConfirm(''); setPwdError(''); }}
-                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.fondApp }}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.orgaClair }}
                   >
                     <Text style={{ color: C.text, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={submitPwd} disabled={pwdBusy}
-                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.primary, opacity: pwdBusy ? 0.6 : 1 }}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: C.orga, opacity: pwdBusy ? 0.6 : 1 }}
                   >
                     {pwdBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>Modifier</Text>}
                   </TouchableOpacity>

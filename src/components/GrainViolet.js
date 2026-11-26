@@ -38,9 +38,15 @@ function GrainPave({ largeur, hauteur, opacite = 1 }) {
   return <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, { opacity: opacite }]}>{tuiles}</View>;
 }
 
+// color : le fond sous le grain. Violet de marque par defaut (coureur) ;
+// les espaces orga et photographe passent C.orga (noir de la charte, 26/11)
+// et ne posent pas de fleur.
 // fleur : { taille, haut, gauche | droite } -> la fleur de marque en degrade lilas (hero-fl-l
 // du site), posee en coin sous le contenu et rognee par le bord de la carte.
-export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, fleur, grain = 1, ...reste }) {
+// grain : opacite du grain. Sur le noir orga, les points clairs ressortent
+// trois fois plus que sur le violet : 0,35 y donne la finesse du site.
+export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, fleur, grain, ...reste }) {
+  const opaciteGrain = grain ?? (color === '#7B2FFF' ? 1 : 0.35);
   const [taille, setTaille] = useState({ w: 0, h: 0 });
   const surLayout = (e) => {
     const { width, height } = e.nativeEvent.layout;
@@ -49,7 +55,7 @@ export function GrainViolet({ style, children, color = '#7B2FFF', onLayout, fleu
   };
   return (
     <View {...reste} onLayout={surLayout} style={[{ backgroundColor: color, overflow: 'hidden' }, style]}>
-      <GrainPave largeur={taille.w} hauteur={taille.h} opacite={grain} />
+      <GrainPave largeur={taille.w} hauteur={taille.h} opacite={opaciteGrain} />
       {fleur ? (
         <Image
           source={fleur.droite != null ? FLEUR_D : FLEUR_G}

@@ -28,8 +28,8 @@ export const V = {
   filet: '#E9E5F3',
   bord: '#E6E1F2',
   bordManque: '#E8B4BC',
-  actif: C.primary,
-  focus: '#EFEAFB',
+  actif: C.orga,
+  focus: '#FFFFFF', // sur la ligne #F5F3FA, un fond pale ne se verrait pas
 };
 
 export function Bloc({ children }) {
@@ -141,7 +141,7 @@ export function Champ({ manque, style, onFocus, onBlur, multiline, aGauche, ...p
 }
 
 // Champ qui ouvre un selecteur (type, date, heure) : valeur a droite, et
-// l icone violette qui dit ce qui va s ouvrir.
+// l icone (noir orga) qui dit ce qui va s ouvrir.
 export function ChampBouton({ valeur, placeholder, manque, onPress, style, centre, icone }) {
   return (
     <TouchableOpacity
@@ -156,9 +156,9 @@ export function ChampBouton({ valeur, placeholder, manque, onPress, style, centr
         {valeur || placeholder}
       </Text>
       {icone === 'liste' ? (
-        <Text style={{ fontFamily: 'Montserrat', fontSize: 15, color: C.primary, marginTop: -6 }}>⌄</Text>
+        <Text style={{ fontFamily: 'Montserrat', fontSize: 15, color: C.orga, marginTop: -6 }}>⌄</Text>
       ) : icone === 'calendrier' ? (
-        <Icon.Calendar size={17} color={C.primary} />
+        <Icon.Calendar size={17} color={C.orga} />
       ) : null}
     </TouchableOpacity>
   );
@@ -253,7 +253,7 @@ export function AjouterEpreuve({ onPress, coinHaut, coinBas }) {
       activeOpacity={0.7}
       style={[{ minHeight: 54, justifyContent: 'center', paddingHorizontal: 14, backgroundColor: V.ligne }, coins(coinHaut, coinBas)]}
     >
-      <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, color: C.primary }}>+ Ajouter une épreuve</Text>
+      <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, color: C.orga }}>+ Ajouter une épreuve</Text>
     </TouchableOpacity>
   );
 }

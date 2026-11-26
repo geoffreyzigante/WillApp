@@ -126,13 +126,13 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
         style={{ flex: 1, height: 42, alignItems: 'center', justifyContent: 'center' }}
       >
         {showLeftBar ? (
-          <View style={{ position: 'absolute', top: 6, bottom: 6, left: 0, right: '50%', backgroundColor: '#EDE5FF' }} />
+          <View style={{ position: 'absolute', top: 6, bottom: 6, left: 0, right: '50%', backgroundColor: C.orgaClair }} />
         ) : null}
         {showRightBar ? (
-          <View style={{ position: 'absolute', top: 6, bottom: 6, left: '50%', right: 0, backgroundColor: '#EDE5FF' }} />
+          <View style={{ position: 'absolute', top: 6, bottom: 6, left: '50%', right: 0, backgroundColor: C.orgaClair }} />
         ) : null}
         {isEdge ? (
-          <View style={{ position: 'absolute', width: 36, height: 36, borderRadius: 18, backgroundColor: C.primary }} />
+          <View style={{ position: 'absolute', width: 36, height: 36, borderRadius: 18, backgroundColor: C.orga }} />
         ) : null}
         <Text style={{
           color: disabled ? '#cfcadd' : isEdge ? '#fff' : (showLeftBar || showRightBar) ? C.text : C.text,
@@ -151,12 +151,12 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
       <TouchableOpacity activeOpacity={1} onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.55)', justifyContent: 'flex-end' }}>
         <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, paddingBottom: 30 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <TouchableOpacity onPress={goPrev} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: C.fondApp }}>
-              <Text style={{ fontFamily: 'Montserrat', fontSize: 22, color: C.primary, marginTop: -2 }}>‹</Text>
+            <TouchableOpacity onPress={goPrev} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: C.orgaClair }}>
+              <Text style={{ fontFamily: 'Montserrat', fontSize: 22, color: C.orga, marginTop: -2 }}>‹</Text>
             </TouchableOpacity>
             <Text style={{ fontSize: 17, fontFamily: 'Montserrat-SemiBold', color: C.text }}>{monthLabel}</Text>
-            <TouchableOpacity onPress={goNext} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: C.fondApp }}>
-              <Text style={{ fontFamily: 'Montserrat', fontSize: 22, color: C.primary, marginTop: -2 }}>›</Text>
+            <TouchableOpacity onPress={goNext} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: C.orgaClair }}>
+              <Text style={{ fontFamily: 'Montserrat', fontSize: 22, color: C.orga, marginTop: -2 }}>›</Text>
             </TouchableOpacity>
           </View>
           <View style={{ flexDirection: 'row', marginBottom: 2 }}>
@@ -179,10 +179,10 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
               onPress={handleTbd}
               style={{
                 marginTop: 14, paddingVertical: 13, borderRadius: 14,
-                alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E0FF',
+                alignItems: 'center', borderWidth: 1.5, borderColor: '#E4E4E7',
               }}
             >
-              <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>
+              <Text style={{ color: C.orga, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>
                 Date à venir
               </Text>
               <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, marginTop: 2 }}>
@@ -191,10 +191,10 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
             </TouchableOpacity>
           )}
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
-            <TouchableOpacity onPress={onClose} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.fondApp }}>
-              <Text style={{ color: C.primary, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
+            <TouchableOpacity onPress={onClose} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.orgaClair }}>
+              <Text style={{ color: C.orga, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleConfirm} disabled={!canConfirm} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.primary, opacity: canConfirm ? 1 : 0.4 }}>
+            <TouchableOpacity onPress={handleConfirm} disabled={!canConfirm} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.orga, opacity: canConfirm ? 1 : 0.4 }}>
               <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Confirmer</Text>
             </TouchableOpacity>
           </View>

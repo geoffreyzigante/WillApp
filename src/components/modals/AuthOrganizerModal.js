@@ -5,8 +5,9 @@
 // Design : ALIGNE sur AuthRunnerModal (decision user 2026-08-31,
 // uniformisation des ecrans de connexion) — fullscreen blanc, titre
 // AVEstiana violet, onglets Connexion/Inscription soulignes, labels
-// au-dessus des champs, aplats #F5F3FA, bouton violet plein. L accent
-// rose distinctif est abandonne : tout en violet.
+// au-dessus des champs, aplats #F5F3FA, bouton plein. Entete et bouton au
+// noir orga depuis le 26/11 (le violet reste au coureur). L accent
+// rose ne reste que sur le soulignement de l onglet actif.
 
 import React, { useState, useEffect } from 'react';
 import { GrainViolet } from '../GrainViolet';
@@ -28,7 +29,7 @@ import { C } from '../../constants/colors';
 const T = {
   bg: '#ffffff',
   surface: '#F5F3FA',
-  primary: '#7B2FFF',
+  primary: C.orga, // noir orga depuis le 26/11 (etait #7B2FFF)
   textStrong: '#1A1426',
   textBody: '#5a5468',
   textMuted: '#6b6480', // charte texteDoux : 5,6:1 sur blanc (#8b83a0 n avait que 3,6)
@@ -204,11 +205,11 @@ export function AuthOrganizerModal({ visible, onClose, onSuccess }) {
 
   return (
     <Modal visible={visible} onRequestClose={onClose} animationType="slide" presentationStyle="fullScreen">
-      {/* Entete violet sous la barre d etat : heure et batterie en clair, comme
+      {/* Entete noir orga (26/11) sous la barre d etat : heure et batterie en clair, comme
           les feuilles sombres d iOS (en sombre, elles etaient illisibles). */}
       <StatusBar barStyle="light-content" animated />
       <View style={{ flex: 1, backgroundColor: T.bg }}>
-        <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={{ paddingHorizontal: 24, paddingTop: padHaut }}>
+        <GrainViolet color={C.orga} style={{ paddingHorizontal: 24, paddingTop: padHaut }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
             <TouchableOpacity onPress={onClose} hitSlop={10} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontFamily: 'Montserrat', color: '#fff', fontSize: 16, lineHeight: lh(16, 18, 'Montserrat') }}>✕</Text>

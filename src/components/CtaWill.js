@@ -4,12 +4,15 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { T } from '../constants/tokens';
 
 const VARIANTES = {
   pink: { bg: '#F4A6FF', fg: '#3B0A96' },
   v7: { bg: '#5E1AD6', fg: '#FFFFFF' },
   violet: { bg: '#7B2FFF', fg: '#FFFFFF' },
   white: { bg: '#FFFFFF', fg: '#5E1AD6' },
+  // Espace orga (26/11) : pastille blanche, texte et fleche au noir orga.
+  blancOrga: { bg: '#FFFFFF', fg: T.couleur.orga.accent },
 };
 
 export function CtaWill({ label, onPress, variante = 'pink', hauteur = 40, icone, style }) {

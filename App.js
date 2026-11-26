@@ -4690,7 +4690,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   if (!cameraPrete) {
     return (
       <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
-        <ActivityIndicator color={C.primary} />
+        <ActivityIndicator color={C.orga} />
         <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, marginTop: 12, fontSize: 13 }}>Préparation de la caméra…</Text>
       </View>
     );
@@ -5676,7 +5676,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
             </View>
             <Text style={{
               fontFamily: 'AVEstiana', fontStyle: 'normal',
-              fontSize: 30, color: C.primary, textAlign: 'center', marginBottom: 16,
+              fontSize: 30, color: C.orga, textAlign: 'center', marginBottom: 16,
             }}>
               Mes photos{myPhotos.length > 0 ? ` (${myPhotos.length})` : ''}
             </Text>
@@ -5684,7 +5684,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
           {myPhotosLoading && myPhotos.length === 0 ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <ActivityIndicator color={C.primary} />
+              <ActivityIndicator color={C.orga} />
             </View>
           ) : myPhotosError && myPhotos.length === 0 ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
@@ -5693,7 +5693,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               </Text>
               <TouchableOpacity
                 onPress={fetchMyPhotos}
-                style={{ backgroundColor: C.primary, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 18 }}
+                style={{ backgroundColor: C.orga, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 18 }}
               >
                 <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Réessayer</Text>
               </TouchableOpacity>
@@ -5730,7 +5730,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 <RefreshControl
                   refreshing={myPhotosLoading}
                   onRefresh={fetchMyPhotos}
-                  tintColor={C.primary}
+                  tintColor={C.orga}
                 />
               }
               contentContainerStyle={{ padding: 12, paddingBottom: 40 }}
@@ -6614,9 +6614,10 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
               scrollEventThrottle={16}
               contentContainerStyle={{ paddingBottom: 22 + (Platform.OS === 'ios' ? 0 : hauteurClavier) }}
             >
-          {/* Meme entete degradee que les ecrans Connexion / Inscription :
-              c est le meme moment du parcours — on entre quelque part. */}
-          <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={{ paddingHorizontal: 22, paddingTop: 74, paddingBottom: 22 }}>
+          {/* Meme entete que les ecrans Connexion / Inscription orga : c est le
+              meme moment du parcours. Noir orga avec le grain, sans la fleur
+              lilas (espaces orga et photographe au noir, 26/11). */}
+          <GrainViolet color={C.orga} style={{ paddingHorizontal: 22, paddingTop: 74, paddingBottom: 22 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <TouchableOpacity
                 onPress={fermerAvecGarde}
@@ -6720,8 +6721,8 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     <Text style={{ flex: 1, fontFamily: 'Montserrat', fontSize: 14, color: V.texte }}>Date pas encore fixée</Text>
                     <View style={{
                       width: 22, height: 22, borderRadius: 6,
-                      borderWidth: 2, borderColor: dateTbd ? C.primary : '#d9cef4',
-                      backgroundColor: dateTbd ? C.primary : '#fff',
+                      borderWidth: 2, borderColor: dateTbd ? C.orga : C.muted,
+                      backgroundColor: dateTbd ? C.orga : '#fff',
                       alignItems: 'center', justifyContent: 'center',
                     }}>
                       {dateTbd ? (
@@ -6877,11 +6878,11 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     style={[cadreChamp(false), { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }]}
                   >
                     {coverBusy ? (
-                      <ActivityIndicator size="small" color={C.primary} />
+                      <ActivityIndicator size="small" color={C.orga} />
                     ) : apercuCover ? (
                       <ExpoImage source={{ uri: apercuCover }} style={{ width: 56, height: 28, borderRadius: 6 }} contentFit="cover" />
                     ) : null}
-                    <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Montserrat', fontSize: 15, color: apercuCover ? C.primary : V.placeholder }}>
+                    <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Montserrat', fontSize: 15, color: apercuCover ? C.orga : V.placeholder }}>
                       {apercuCover ? "Changer l'image" : 'Choisir une image'}
                     </Text>
                   </TouchableOpacity>
@@ -6922,7 +6923,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         accessibilityRole="button"
                         style={{ height: 38, paddingHorizontal: 8, justifyContent: 'center' }}
                       >
-                        <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 14, color: C.primary }}>Générer</Text>
+                        <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 14, color: C.orga }}>Générer</Text>
                       </TouchableOpacity>
                     </View>
                   </Ligne>
@@ -6944,8 +6945,8 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                   >
                     <View style={{
                       width: 20, height: 20, borderRadius: 6, borderWidth: 2,
-                      borderColor: gateCompte ? C.primary : '#d9cef4',
-                      backgroundColor: gateCompte ? C.primary : '#fff',
+                      borderColor: gateCompte ? C.orga : C.muted,
+                      backgroundColor: gateCompte ? C.orga : '#fff',
                       alignItems: 'center', justifyContent: 'center',
                     }}>
                       {gateCompte ? (
@@ -6971,7 +6972,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                       {/* Une ligne dit ce qui se passe, au lieu de demander
                           a l orga de choisir entre creer et se connecter :
                           le serveur sait deja, lui. */}
-                      <Text style={{ fontFamily: 'Montserrat', fontSize: 13, lineHeight: lh(13, 19, 'Montserrat'), color: modeCompte === 'existing' ? C.primary : C.textSoft, marginTop: -4, marginBottom: 12 }}>
+                      <Text style={{ fontFamily: 'Montserrat', fontSize: 13, lineHeight: lh(13, 19, 'Montserrat'), color: modeCompte === 'existing' ? C.orga : C.textSoft, marginTop: -4, marginBottom: 12 }}>
                         {modeCompte === 'existing'
                           ? (cPrenomConnu
                               ? `Content de te revoir, ${cPrenomConnu} ! Entre ton mot de passe Will.`
@@ -7040,7 +7041,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                           hitSlop={12}
                           style={{ position: 'absolute', right: 14, top: 15 }}
                         >
-                          <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.primary, fontSize: 12 }}>
+                          <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.orga, fontSize: 12 }}>
                             {cVoirMdp ? 'Masquer' : 'Voir'}
                           </Text>
                         </TouchableOpacity>
@@ -7054,7 +7055,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                           hitSlop={8}
                           style={{ alignSelf: 'flex-start', paddingVertical: 6, marginTop: -4, marginBottom: 8, marginLeft: 4 }}
                         >
-                          <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.primary, fontSize: 13 }}>
+                          <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.orga, fontSize: 13 }}>
                             Mot de passe oublié ?
                           </Text>
                         </TouchableOpacity>
@@ -7087,8 +7088,8 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                           >
                             <View style={{
                               width: 20, height: 20, borderRadius: 6, borderWidth: 2,
-                              borderColor: cCgu ? C.primary : '#d9cef4',
-                              backgroundColor: cCgu ? C.primary : '#fff',
+                              borderColor: cCgu ? C.orga : C.muted,
+                              backgroundColor: cCgu ? C.orga : '#fff',
                               alignItems: 'center', justifyContent: 'center',
                             }}>
                               {cCgu ? (
@@ -7125,7 +7126,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
             <TouchableOpacity
               onPress={trySubmit}
               disabled={busy}
-              style={{ paddingVertical: 15, borderRadius: 14, alignItems: 'center', backgroundColor: C.primary, opacity: busy ? 0.6 : 1 }}
+              style={{ paddingVertical: 15, borderRadius: 14, alignItems: 'center', backgroundColor: C.orga, opacity: busy ? 0.6 : 1 }}
             >
               {busy ? <ActivityIndicator color="#fff" /> : (
                 <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>
@@ -7148,7 +7149,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                   + ' Tu les complètes ensuite depuis ton espace.'}{'\n'}
               En continuant, tu acceptes les{' '}
               <Text
-                style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold' }}
+                style={{ color: C.orga, fontFamily: 'Montserrat-SemiBold' }}
                 onPress={() => Linking.openURL('https://will-app.com/cgv').catch(() => {})}
               >CGV organisateur</Text>.
             </Text>
@@ -7195,7 +7196,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                           const min = m2 ? m2[1] : '00';
                           updateDistance(timePickerIdx, 'time', `${String(h).padStart(2, '0')}:${min}`);
                         }}
-                        style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
+                        style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.orga : 'transparent', marginBottom: 2 }}
                       >
                         <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{h}h</Text>
                       </TouchableOpacity>
@@ -7221,7 +7222,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                           const h = m2 ? m2[1] : '9';
                           updateDistance(timePickerIdx, 'time', `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`);
                         }}
-                        style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
+                        style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.orga : 'transparent', marginBottom: 2 }}
                       >
                         <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{String(min).padStart(2, '0')}</Text>
                       </TouchableOpacity>
@@ -7230,7 +7231,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                 </ScrollView>
               </View>
             </View>
-            <TouchableOpacity onPress={() => setTimePickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
+            <TouchableOpacity onPress={() => setTimePickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.orga, alignItems: 'center' }}>
               <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
             </TouchableOpacity>
           </TouchableOpacity>

@@ -115,15 +115,15 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
                   width: boxW, height: boxH,
                   borderRadius: 14,
                   borderWidth: 1.5,
-                  borderColor: error ? C.error : (filled ? C.primary : '#e8defc'),
-                  backgroundColor: filled ? '#faf9ff' : '#fff',
+                  borderColor: error ? C.error : (filled ? C.orga : '#E4E4E7'),
+                  backgroundColor: filled ? C.orgaClair : '#fff',
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
                 <Text style={{
                   fontSize, 
                   fontFamily: 'AVEstiana',
-                  color: C.primary,
+                  color: C.orga,
                 }}>
                   {digits[i]}
                 </Text>
@@ -163,7 +163,7 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
                     activeOpacity={0.5}
                     style={{
                       width: 64, height: 64, borderRadius: 32,
-                      backgroundColor: C.fondApp,
+                      backgroundColor: C.orgaClair,
                       alignItems: 'center', justifyContent: 'center',
                     }}
                   >
@@ -202,11 +202,11 @@ export function PinInputRow({ value, onChange, onComplete, autoFocus = true, foc
               width: boxW, height: boxH,
               borderRadius: 14,
               borderWidth: 1.5,
-              borderColor: error ? C.error : (filled ? C.primary : '#e8defc'),
-              backgroundColor: filled ? '#faf9ff' : '#fff',
+              borderColor: error ? C.error : (filled ? C.orga : '#E4E4E7'),
+              backgroundColor: filled ? C.orgaClair : '#fff',
               fontSize, 
               fontFamily: 'AVEstiana',
-              color: C.primary,
+              color: C.orga,
               textAlign: 'center',
             }}
           />

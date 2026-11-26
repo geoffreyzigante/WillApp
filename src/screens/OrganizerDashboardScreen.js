@@ -170,15 +170,15 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
     // personne tant qu il n est pas soumis (audit du 25/11).
     if (e.is_draft === true) return { label: 'Brouillon · à compléter', n: 1, couleur: T.couleur.attente.texte, detail: 'Complète-le et envoie-le : il sera validé ensuite.' };
     if (st === 'pending') return { label: 'En validation', n: 1, couleur: T.couleur.attente.texte, detail: "L'équipe Will revient vers toi sous 24 h." };
-    if (st === 'validated') return { label: "En cours d'activation", n: 2, couleur: C.primary };
-    if (st === 'pending_payment') return { label: 'À régler', n: 2, couleur: C.primary };
+    if (st === 'validated') return { label: "En cours d'activation", n: 2, couleur: C.orga };
+    if (st === 'pending_payment') return { label: 'À régler', n: 2, couleur: C.orga };
     if (st === 'rejected') return { label: 'Demande non retenue', n: 1, couleur: T.couleur.erreur, erreur: true, detail: e.rejected_motif || '' };
     if (st === 'free' || st === 'paid') {
-      if (passe) return { label: 'Terminé', n: 4, couleur: C.primary, passe: true };
+      if (passe) return { label: 'Terminé', n: 4, couleur: C.orga, passe: true };
       const cd = decompte(e);
-      return { label: st === 'free' ? 'En ligne · gratuit' : 'En ligne', n: 3, couleur: C.primary, detail: cd === 'GO !' ? '' : 'Les photos arrivent le jour J', enCours: cd === 'GO !' };
+      return { label: st === 'free' ? 'En ligne · gratuit' : 'En ligne', n: 3, couleur: C.orga, detail: cd === 'GO !' ? '' : 'Les photos arrivent le jour J', enCours: cd === 'GO !' };
     }
-    return { label: 'En cours', n: 1, couleur: C.primary };
+    return { label: 'En cours', n: 1, couleur: C.orga };
   };
 
   return (
@@ -191,7 +191,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
       <View style={{ height: 14 }} />
 
       {loading ? (
-        <ActivityIndicator color={C.primary} style={{ marginVertical: 24 }} />
+        <ActivityIndicator color={C.orga} style={{ marginVertical: 24 }} />
       ) : events.length === 0 ? (
         <View style={{ paddingVertical: 36, paddingHorizontal: 24, alignItems: 'center' }}>
           <Text style={{ color: '#1a0a3e', fontSize: 16, fontFamily: 'Montserrat-SemiBold', marginBottom: 6 }}>
@@ -273,10 +273,10 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                     paying === e.code ? (
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                      <CtaWill label="Mettre en ligne" variante="white" onPress={() => pay(e)} style={{ alignSelf: 'center' }} />
+                      <CtaWill label="Mettre en ligne" variante="blancOrga" onPress={() => pay(e)} style={{ alignSelf: 'center' }} />
                     )
                   ) : photosEnPremier ? (
-                    <CtaWill label="Photos" variante="white" onPress={() => onOpenEventPhotos?.(e)} style={{ alignSelf: 'center' }} />
+                    <CtaWill label="Photos" variante="blancOrga" onPress={() => onOpenEventPhotos?.(e)} style={{ alignSelf: 'center' }} />
                   ) : null}
                 </View>
               </View>
@@ -287,7 +287,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
 
       <TouchableOpacity
         onPress={onCreateEvent}
-        style={{ backgroundColor: C.primary, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 6 }}
+        style={{ backgroundColor: C.orga, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 6 }}
         activeOpacity={0.85}
       >
         <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>+ Créer un événement</Text>

@@ -136,7 +136,7 @@ function PickerHeure({ visible, valeur, titre, onClose, onChoix }) {
     setH(r ? parseInt(r[1], 10) : -1);
     setM(r ? parseInt(r[2], 10) : -1);
   }, [visible, valeur]);
-  const pastille = (actif) => ({ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: actif ? C.pinkPill : 'transparent', marginBottom: 2 });
+  const pastille = (actif) => ({ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: actif ? C.orga : 'transparent', marginBottom: 2 });
   const chiffre = (actif) => ({ color: actif ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 });
   const valider = () => {
     if (h < 0 && m < 0) { onClose(); return; }
@@ -172,10 +172,10 @@ function PickerHeure({ visible, valeur, titre, onClose, onChoix }) {
         </View>
       </View>
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 14, marginHorizontal: 20 }}>
-        <TouchableOpacity onPress={() => onChoix('')} style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: C.fondApp, alignItems: 'center' }}>
-          <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold' }}>Effacer</Text>
+        <TouchableOpacity onPress={() => onChoix('')} style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: C.orgaClair, alignItems: 'center' }}>
+          <Text style={{ color: C.orga, fontFamily: 'Montserrat-SemiBold' }}>Effacer</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={valider} style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
+        <TouchableOpacity onPress={valider} style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: C.orga, alignItems: 'center' }}>
           <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
         </TouchableOpacity>
       </View>
@@ -193,10 +193,10 @@ function PickerType({ visible, valeur, onClose, onChoix }) {
             <TouchableOpacity
               key={t}
               onPress={() => onChoix(t)}
-              style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12, backgroundColor: actif ? C.fondApp : 'transparent' }}
+              style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12, backgroundColor: actif ? C.orgaClair : 'transparent' }}
             >
-              <Text style={{ flex: 1, fontFamily: 'Montserrat-Medium', fontSize: 16, color: actif ? C.primary : C.text }}>{displayEventType(t)}</Text>
-              {actif ? <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 18 }}>✓</Text> : null}
+              <Text style={{ flex: 1, fontFamily: 'Montserrat-Medium', fontSize: 16, color: actif ? C.orga : C.text }}>{displayEventType(t)}</Text>
+              {actif ? <Text style={{ color: C.orga, fontFamily: 'Montserrat-SemiBold', fontSize: 18 }}>✓</Text> : null}
             </TouchableOpacity>
           );
         })}
@@ -529,8 +529,8 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
               </Text>
             )}
             <View style={{ position: 'absolute', right: 10, bottom: 10, backgroundColor: '#fff', borderRadius: 999, paddingVertical: 7, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              {coverBusy ? <ActivityIndicator size="small" color={C.primary} /> : null}
-              <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 13, color: C.primary }}>
+              {coverBusy ? <ActivityIndicator size="small" color={C.orga} /> : null}
+              <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 13, color: C.orga }}>
                 {coverBusy ? 'Envoi…' : cover ? 'Changer la photo' : 'Choisir une photo'}
               </Text>
             </View>
@@ -606,7 +606,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
                           const loc = `${v} (${cp})`;
                           if (loc !== sauve.current.location) enregistrer({ location: loc });
                         }}
-                        style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: actif ? C.primary : '#fff', borderWidth: 1, borderColor: actif ? C.primary : V.bord }}
+                        style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: actif ? C.orga : '#fff', borderWidth: 1, borderColor: actif ? C.orga : V.bord }}
                       >
                         <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 13, color: actif ? '#fff' : V.texte }}>{v}</Text>
                       </TouchableOpacity>

@@ -9,7 +9,7 @@
 //
 // Design : ALIGNE sur AuthRunnerModal (decision user 2026-08-31,
 // uniformisation des ecrans de connexion) — fullscreen blanc, croix en
-// haut a gauche, titre AVEstiana violet, tout en violet (rose abandonne).
+// haut a gauche, titre AVEstiana, accents au noir orga depuis le 26/11.
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { GrainViolet } from '../GrainViolet';
@@ -249,11 +249,11 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
 
   return (
     <Modal visible={visible} onRequestClose={onClose} animationType="slide" presentationStyle="fullScreen">
-      {/* Entete violet sous la barre d etat : heure et batterie en clair, comme
+      {/* Entete noir orga (26/11) sous la barre d etat : heure et batterie en clair, comme
           les feuilles sombres d iOS (en sombre, elles etaient illisibles). */}
       <StatusBar barStyle="light-content" animated />
       <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
-        <GrainViolet fleur={{ taille: 220, droite: -60, haut: -90 }} style={{ paddingHorizontal: 24, paddingTop: padHaut, paddingBottom: 24 }}>
+        <GrainViolet color={C.orga} style={{ paddingHorizontal: 24, paddingTop: padHaut, paddingBottom: 24 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18 }}>
             {/* Meme croix que les ecrans freres (inscription coureur et orga) :
                 rond de 30, blanc a 20 %, croix blanche. */}
@@ -389,7 +389,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                         }}
                       >
                         <Text style={{
-                          color: codeInput.trim() ? C.primary : C.muted,
+                          color: codeInput.trim() ? C.orga : C.muted,
                           fontSize: 14, fontFamily: 'Montserrat-SemiBold',
                         }}>
                           {codeLoading ? '…' : 'Ouvrir'}
@@ -486,7 +486,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                       ) : null}
                       {busy ? (
                         <View style={{ alignItems: 'center', marginTop: 12 }}>
-                          <ActivityIndicator color={C.primary} />
+                          <ActivityIndicator color={C.orga} />
                         </View>
                       ) : null}
                     </View>
@@ -558,7 +558,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   hitSlop={8}
                   style={{ alignSelf: 'flex-end', paddingVertical: 6, paddingHorizontal: 4, marginTop: -4, marginBottom: 4 }}
                 >
-                  <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Mot de passe oublié ?</Text>
+                  <Text style={{ color: C.orga, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Mot de passe oublié ?</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -569,7 +569,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                   onPress={resetMode === 'reset-request' ? requestReset : verifyReset}
                   disabled={resetBusy || (resetMode === 'reset-request' ? !code : (!resetCode || !resetNewPassword))}
                   style={{
-                    backgroundColor: C.primary, paddingVertical: 14, borderRadius: 14,
+                    backgroundColor: C.orga, paddingVertical: 14, borderRadius: 14,
                     alignItems: 'center', marginTop: 8,
                     opacity: resetBusy ? 0.7 : 1,
                   }}
@@ -598,7 +598,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 onPress={submit}
                 disabled={busy || !code || !password}
                 style={{
-                  backgroundColor: (code && password) ? C.primary : '#e9e4f9',
+                  backgroundColor: (code && password) ? C.orga : C.orgaClair,
                   paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginTop: 8,
                 }}
               >
