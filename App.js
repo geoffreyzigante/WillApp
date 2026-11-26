@@ -206,7 +206,7 @@ import {
   BIOMETRIC_CONSENT_KEY,
 } from './src/services/secureStore';
 import { api, apiFetch, ensurePushRegistered, jetonPushLocal, uploadSelfieToR2, loadSelfieDataUri } from './src/services/api';
-import { modeChipStyleApp, modeChipTextStyleApp, selfieDotColor } from './src/utils/styleHelpers';
+import { selfieDotColor } from './src/utils/styleHelpers';
 import { Icon } from './src/components/Icon';
 import { PasswordInput } from './src/components/PasswordInput';
 import {
@@ -245,7 +245,9 @@ import { EventDetailScreen } from './src/screens/EventDetailScreen';
 import { PhotoViewerModal } from './src/components/modals/PhotoViewerModal';
 import { PIN_REGEX, isValidPin, generateRandomPin } from './src/utils/pin';
 import { useLongueurPinAPoser } from './src/utils/usePinLength';
-import { PinInputRow } from './src/components/PinInputRow';
+import {
+  V, Bloc, Ligne, Champ, ChampBouton, TitreSection, Pied, AjouterEpreuve, cadreChamp,
+} from './src/components/formLignes';
 import { Haptics } from './src/services/haptics';
 import { PhotoCell, PhotoGrid, PhotoGridItem } from './src/components/PhotoGrid';
 import { OverlayWheel } from './src/components/OverlayWheel';
@@ -5882,7 +5884,8 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 // telephone, site web). Auto-focus a l'ouverture, KeyboardAvoidingView pour
 // que le bouton Enregistrer reste visible. Save par section via onSave.
 
-// PIN helpers + PinInputRow + PinDisplay -> src/utils/pin.js, src/components/Pin*
+// PIN helpers + PinDisplay -> src/utils/pin.js, src/components/Pin*
+// (le formulaire de creation saisit le PIN dans une ligne, cf formLignes)
 
 
 function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, organizerSession, organizerApiFetch, editEvent, demanderCompte }) {
@@ -5935,8 +5938,6 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
   // affichage = label seul (sans km).
   const [distances, setDistances] = useState([]);
   const [timePickerIdx, setTimePickerIdx] = useState(null);
-  const [elevPickerIdx, setElevPickerIdx] = useState(null);
-  const [kmPickerIdx, setKmPickerIdx] = useState(null);
   const [coverImage, setCoverImage] = useState(null); // URL distante après upload
   const [pendingCoverLocal, setPendingCoverLocal] = useState(null); // URI locale pendant la création (pas encore d'event)
   const [coverBusy, setCoverBusy] = useState(false);
@@ -6212,15 +6213,6 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
       it.label_only || (it.label && it.label !== avant) ? it : { ...it, label: eventType }
     )));
   }, [eventType]);
-  const setDistanceMode = (idx, labelOnly) => {
-    setDistances(d => d.map((it, i) => {
-      if (i !== idx) return it;
-      let nextLabel = it.label;
-      if (!labelOnly && !nextLabel) nextLabel = eventType || '';
-      if (labelOnly && nextLabel === eventType) nextLabel = '';
-      return { ...it, label_only: labelOnly, label: nextLabel };
-    }));
-  };
   const updateDistance = (idx, field, value) => {
     setDistances(d => d.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   };
@@ -6355,19 +6347,6 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
 
   // Le wizard a cede la place a une page unique : goStep, tryNext et la
   // glissiere n avaient plus de raison d etre.
-
-  // Ce qui est rempli sur ce que la version courante demande. La version
-  // complete compte plus de champs, donc le meme event y affiche un
-  // pourcentage plus bas — c est exactement ce qu on veut dire.
-  const champsVersion = [
-    !!name?.trim(), !!eventType, dateOk, /^\d{5}$/.test(postalCode), !!city?.trim(),
-    distances.length > 0, !!address?.trim(), !!(coverImage || pendingCoverLocal),
-    !!website?.trim(), !!phone?.trim(), isValidPin(password, pinLen),
-    !!estimatedParticipants, !!message?.trim(),
-  ];
-  const pourcentageRempli = Math.round(
-    (champsVersion.filter(Boolean).length / champsVersion.length) * 100,
-  );
 
   const trySubmit = () => {
     // Version rapide : seuls le nom, le type, la date et le lieu sont
@@ -6605,6 +6584,19 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
   // "Course a pied" et "VTT".
   const types = EVENT_TYPES;
 
+  // Bas de casse, comme « Modifier mon event » (« Sam. 5 décembre 2026 ») :
+  // les capitales de formatDateForForm conviennent aux cartes, pas a un champ.
+  const dateAffichee = (() => {
+    if (!eventDate) return dateTbd ? 'À venir' : '';
+    const t = formatDateForForm(isoJourLocal(eventDate), eventDateEnd ? isoJourLocal(eventDateEnd) : null).toLowerCase();
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  })();
+  const erreurLieu = !showErr[2] ? ''
+    : !/^\d{5}$/.test(postalCode) ? 'Code postal : 5 chiffres requis'
+    : !city?.trim() ? 'Ville requise' : '';
+  const apercuCover = pendingCoverLocal || coverImage;
+  const pinManque = !!showErr[4] && !isValidPin(password, pinLen);
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={fermerAvecGarde}>
       {/* Entete violet : barre d etat claire (25/11). */}
@@ -6645,339 +6637,328 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
             {/* La promesse tenait un ecran entier avant le formulaire. Elle
                 tient en deux lignes ici, et l orga commence a remplir tout
                 de suite. */}
-            <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, lineHeight: 21, color: 'rgba(255,255,255,0.92)', textAlign: 'center', marginTop: 10 }}>
+            <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, lineHeight: lh(15, 21, 'Montserrat'), color: 'rgba(255,255,255,0.92)', textAlign: 'center', marginTop: 10 }}>
               Rends tes photos accessibles{'\n'}à tous les participants
             </Text>
           </GrainViolet>
 
-              <View style={{ paddingHorizontal: 22, paddingTop: 22 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: C.text }}>L'essentiel</Text>
-                <View style={{ flex: 1, height: 1, backgroundColor: '#efeaf8' }} />
-              </View>
-              <Text style={formSectionStyle.heading}>Nom de l'event *</Text>
-                    <TextInput placeholder="Ex : Trail des Violettes" placeholderTextColor={C.muted} value={name} onChangeText={setName} style={formSectionStyle.input} />
-                    {showErr[1] && !name?.trim() && <Text style={errStyle}>Champ requis</Text>}
-
-                    <Text style={formSectionStyle.heading}>Type d'épreuve *</Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                      {types.map(t => (
+              {/* Refonte du 26/11 : meme grammaire que « Modifier mon event »
+                  et que le formulaire du site (src/components/formLignes.js).
+                  Une ligne par info, libelle a gauche, champ a droite. Tout ce
+                  que l espace orga sait porter est saisissable ici ; ce qui
+                  manque se complete plus tard et decide seulement si l event
+                  part en validation maintenant ou apres. */}
+              <View style={{ paddingHorizontal: 16, paddingTop: 22 }}>
+              <TitreSection premier>L'event</TitreSection>
+              <Bloc>
+                <Ligne seule erreur={showErr[1] && !name?.trim() ? 'Donne un nom à ton event' : ''}>
+                  <Champ
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="Nom de l'event"
+                    accessibilityLabel="Nom de l'event"
+                    autoCapitalize="sentences"
+                    returnKeyType="done"
+                    manque={showErr[1] && !name?.trim()}
+                    style={{ height: 44, fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}
+                  />
+                </Ligne>
+                <Ligne
+                  libelle="Type"
+                  libelleDessus
+                  erreur={showErr[1] && !eventType ? 'Sélectionne un type' : ''}
+                  style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}
+                >
+                  {types.map((t) => {
+                    const actif = eventType === t;
+                    return (
+                      <TouchableOpacity
+                        key={t}
+                        onPress={() => setEventType(t)}
+                        activeOpacity={0.85}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: actif }}
+                        style={{
+                          backgroundColor: actif ? colorForType(t) : '#fff',
+                          borderWidth: 1, borderColor: actif ? colorForType(t) : V.bord,
+                          borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14,
+                        }}
+                      >
+                        <Text style={{ fontSize: 13, fontFamily: actif ? 'Montserrat-SemiBold' : 'Montserrat', color: actif ? '#fff' : V.texte }}>
+                          {displayEventType(t)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </Ligne>
+                <Ligne
+                  libelle="Date"
+                  manque={showErr[1] && !dateOk}
+                  erreur={showErr[1] && !dateOk ? 'Choisis une date, ou coche « Date pas encore fixée »' : ''}
+                >
+                  <ChampBouton
+                    valeur={dateAffichee}
+                    placeholder="Choisir"
+                    manque={showErr[1] && !dateOk}
+                    onPress={() => { Keyboard.dismiss(); setShowCalendar(true); }}
+                  />
+                </Ligne>
+                <Ligne aide={dateTbd ? "Sans date, ton event reste dans ton espace : tu l'enverras en validation quand elle sera fixée." : ''}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const suivant = !dateTbd;
+                      setDateTbd(suivant);
+                      if (suivant) { setEventDate(null); setEventDateEnd(null); }
+                    }}
+                    activeOpacity={0.8}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: dateTbd }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 38 }}
+                  >
+                    <Text style={{ flex: 1, fontFamily: 'Montserrat', fontSize: 14, color: V.texte }}>Date pas encore fixée</Text>
+                    <View style={{
+                      width: 22, height: 22, borderRadius: 6,
+                      borderWidth: 2, borderColor: dateTbd ? C.primary : '#d9cef4',
+                      backgroundColor: dateTbd ? C.primary : '#fff',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {dateTbd ? (
+                        <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                          <Path d="M20 6 9 17l-5-5" stroke="#fff" strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" />
+                        </Svg>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                </Ligne>
+                <Ligne
+                  libelle="Lieu"
+                  manque={!!erreurLieu}
+                  erreur={erreurLieu}
+                  aide={cityFetchFailed && !city ? 'Recherche de villes indisponible. Saisis ta ville à la main.' : ''}
+                >
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <Champ
+                      value={postalCode}
+                      onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
+                      keyboardType="number-pad"
+                      maxLength={5}
+                      placeholder="27400"
+                      accessibilityLabel="Code postal"
+                      manque={showErr[2] && !/^\d{5}$/.test(postalCode)}
+                      style={{ width: 78 }}
+                    />
+                    {/* Un vrai champ : quand la recherche de communes tombe,
+                        la ville se saisit a la main. */}
+                    <Champ
+                      value={city}
+                      onChangeText={setCity}
+                      placeholder="Ville"
+                      accessibilityLabel="Ville"
+                      autoCapitalize="words"
+                      manque={showErr[2] && !city?.trim()}
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                </Ligne>
+                {/* Les communes ne s affichent que s il faut choisir, comme
+                    dans « Modifier mon event ». */}
+                {citySuggestions.length > 1 && !citySuggestions.includes(city) ? (
+                  <Ligne libelle=" ">
+                    <View ref={blocVilleRef} collapsable={false} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingVertical: 8 }}>
+                      {citySuggestions.map((c) => (
                         <TouchableOpacity
-                          key={t}
-                          onPress={() => setEventType(t)}
-                          activeOpacity={0.85}
-                          style={{
-                            backgroundColor: eventType === t ? colorForType(t) : '#F5F3FA',
-                            borderRadius: 999, paddingVertical: 9, paddingHorizontal: 16, marginBottom: 6,
-                          }}
+                          key={c}
+                          onPress={() => setCity(c)}
+                          style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: '#fff', borderWidth: 1, borderColor: V.bord }}
                         >
-                          <Text style={{
-                            fontSize: 13,
-                            fontFamily: eventType === t ? 'Montserrat-SemiBold' : 'Montserrat',
-                            color: eventType === t ? '#fff' : '#4a4458',
-                          }}>
-                            {displayEventType(t)}
-                          </Text>
+                          <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 13, color: V.texte }}>{c}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
-                    {showErr[1] && !eventType && <Text style={errStyle}>Sélectionne un type</Text>}
+                  </Ligne>
+                ) : null}
+                <Ligne libelle="Participants">
+                  <Champ
+                    value={estimatedParticipants}
+                    onChangeText={(v) => setEstimatedParticipants(v.replace(/\D/g, '').slice(0, 6))}
+                    keyboardType="number-pad"
+                    placeholder="500"
+                    accessibilityLabel="Participants estimés"
+                  />
+                </Ligne>
+              </Bloc>
 
-                    <Text style={formSectionStyle.heading}>Date(s) *</Text>
-                    <TouchableOpacity
-                      onPress={() => setShowCalendar(true)}
-                      style={[formSectionStyle.input, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
-                    >
-                      <Text style={{ fontFamily: 'Montserrat', color: (eventDate || dateTbd) ? C.text : C.muted, fontSize: 15 }}>
-                        {eventDate
-                          ? formatDateForForm(
-                              isoJourLocal(eventDate),
-                              eventDateEnd ? isoJourLocal(eventDateEnd) : null,
-                            )
-                          : (dateTbd ? 'Date à venir' : 'Choisir une date (ou une plage)')}
-                      </Text>
-                      <Svg width={19} height={19} viewBox="0 0 24 24" fill="none">
-                        <Path d="M3 8a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8Z" stroke={C.primary} strokeWidth={2} strokeLinecap="round" />
-                        <Path d="M8 3v4M16 3v4M3 10h18" stroke={C.primary} strokeWidth={2} strokeLinecap="round" />
-                      </Svg>
-                    </TouchableOpacity>
-                    <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
-                      Un seul jour ? Tape deux fois la même date.
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        const suivant = !dateTbd;
-                        setDateTbd(suivant);
-                        if (suivant) { setEventDate(null); setEventDateEnd(null); }
-                      }}
-                      activeOpacity={0.8}
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, marginLeft: 2 }}
-                    >
-                      <View style={{
-                        width: 20, height: 20, borderRadius: 6,
-                        borderWidth: 2, borderColor: dateTbd ? C.primary : '#d9cef4',
-                        backgroundColor: dateTbd ? C.primary : '#fff',
-                        alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {dateTbd ? (
-                          <Svg width={12} height={12} viewBox="0 0 24 24" fill="none">
-                            <Path d="M20 6 9 17l-5-5" stroke="#fff" strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" />
-                          </Svg>
-                        ) : null}
-                      </View>
-                      <Text style={{ fontFamily: 'Montserrat', fontSize: 14, color: C.text }}>Date pas encore fixée</Text>
-                    </TouchableOpacity>
-                    {dateTbd && (
-                      <Text style={{ fontFamily: 'Montserrat', fontSize: 12, lineHeight: 17, color: C.textSoft, marginTop: -4, marginBottom: 10, marginLeft: 4 }}>
-                        Sans date, ton event reste dans ton espace : tu l'enverras en validation quand elle sera fixée.
-                      </Text>
-                    )}
-                    {showErr[1] && !dateOk && <Text style={errStyle}>Choisis une date, ou « Date à venir » si elle n'est pas fixée</Text>}
-                  
-                    <View style={{ flexDirection: 'row', gap: 10 }}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={formSectionStyle.heading}>Code postal *</Text>
-                        <TextInput
-                          placeholder="27400"
-                          placeholderTextColor={C.muted}
-                          value={postalCode}
-                          onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
-                          keyboardType="number-pad"
-                          maxLength={5}
-                          style={formSectionStyle.input}
+              <TitreSection>Épreuves</TitreSection>
+              <Bloc>
+                {distances.map((d, idx) => {
+                  const kmManque = showErr[2] && !(parseFloat(d.km) > 0);
+                  return (
+                    <Ligne key={idx} seule erreur={kmManque ? 'Indique la distance de cette épreuve' : ''}>
+                      <View style={{ gap: 6 }}>
+                        <Champ
+                          value={d.label}
+                          onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
+                          placeholder={eventType ? displayEventType(eventType) : 'Nom'}
+                          accessibilityLabel="Nom de l'épreuve"
+                          autoCapitalize="sentences"
+                          maxLength={40}
                         />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={formSectionStyle.heading}>Ville *</Text>
-                        {/* Le champ etait un bouton : quand la recherche de
-                            communes tombait, le message invitait a saisir la
-                            ville a la main alors que rien n etait saisissable
-                            — et l event devenait impossible a creer. C est un
-                            vrai champ, la liste ne fait que le remplir. */}
-                        <TextInput
-                          placeholder="Louviers"
-                          placeholderTextColor={C.muted}
-                          value={city}
-                          onChangeText={setCity}
-                          autoCapitalize="words"
-                          style={formSectionStyle.input}
-                        />
-                      </View>
-                    </View>
-                    {showErr[2] && !/^\d{5}$/.test(postalCode) && <Text style={errStyle}>5 chiffres requis</Text>}
-                    {cityFetchFailed && !city && (
-                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginBottom: 8, marginLeft: 4 }}>
-                        Recherche de villes indisponible. Saisis ta ville à la main.
-                      </Text>
-                    )}
-                    {citySuggestions.length > 0 && !city && (
-                      <ScrollView
-                        ref={blocVilleRef}
-                        style={{ maxHeight: 140, marginBottom: 8, borderRadius: 12, backgroundColor: C.fondApp }}
-                        keyboardShouldPersistTaps="handled"
-                        nestedScrollEnabled
-                      >
-                        {citySuggestions.map((c) => (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Champ
+                              value={String(d.km || '')}
+                              onChangeText={(v) => updateDistance(idx, 'km', v.replace(',', '.').replace(/[^\d.]/g, ''))}
+                              keyboardType="decimal-pad"
+                              placeholder="21"
+                              accessibilityLabel="Distance en km"
+                              manque={kmManque}
+                              style={{ flex: 1 }}
+                            />
+                            <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: kmManque ? C.error : V.libelle }}>km</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <ChampBouton valeur={d.time} placeholder="Départ" onPress={() => { Keyboard.dismiss(); setTimePickerIdx(idx); }} />
+                          </View>
+                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Champ
+                              value={String(d.elevation || '')}
+                              onChangeText={(v) => updateDistance(idx, 'elevation', v.replace(/\D/g, '').slice(0, 5))}
+                              keyboardType="number-pad"
+                              placeholder="D+"
+                              accessibilityLabel="Dénivelé positif en mètres"
+                              style={{ flex: 1 }}
+                            />
+                            <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: V.libelle }}>m</Text>
+                          </View>
                           <TouchableOpacity
-                            key={c}
-                            onPress={() => { setCity(c); setCitySuggestions([]); }}
-                            style={{ paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e9e4f9' }}
+                            onPress={() => removeDistance(idx)}
+                            hitSlop={8}
+                            accessibilityLabel="Retirer cette épreuve"
+                            style={{ width: 32, height: 38, alignItems: 'center', justifyContent: 'center' }}
                           >
-                            <Text style={{ fontFamily: 'Montserrat', color: C.text, fontSize: 14 }}>{c}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    )}
-                    {showErr[2] && !city?.trim() && <Text style={errStyle}>Ville requise</Text>}
-
-                    <Text style={formSectionStyle.heading}>Participants estimés</Text>
-                    <TextInput
-                      placeholder="500"
-                      placeholderTextColor={C.muted}
-                      value={estimatedParticipants}
-                      onChangeText={(v) => setEstimatedParticipants(v.replace(/\D/g, '').slice(0, 6))}
-                      keyboardType="number-pad"
-                      style={formSectionStyle.input}
-                    />
-
-                    
-              {/* Tout ce que l espace orga sait porter est saisissable ici.
-                  Rien n est obligatoire : ce qui manque se complete plus tard
-                  depuis l event, et decide seulement s il part en validation
-                  maintenant ou apres. */}
-              <>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 12 }}>
-                <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: C.text }}>Les épreuves</Text>
-                <View style={{ flex: 1, height: 1, backgroundColor: '#efeaf8' }} />
-              </View>
-<Text style={formSectionStyle.heading}>Épreuves</Text>
-                    {distances.map((d, idx) => (
-                      <View key={idx} style={{ backgroundColor: '#faf9ff', borderRadius: 12, padding: 10, marginBottom: 8 }}>
-                        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
-                          <TouchableOpacity onPress={() => setDistanceMode(idx, false)} style={modeChipStyleApp(!d.label_only)}>
-                            <Text style={modeChipTextStyleApp(!d.label_only)}>Type d'épreuve</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={() => setDistanceMode(idx, true)} style={modeChipStyleApp(!!d.label_only)}>
-                            <Text style={modeChipTextStyleApp(!!d.label_only)}>Nom personnalisé</Text>
+                            <Text style={{ fontFamily: 'Montserrat', fontSize: 15, color: V.placeholder }}>✕</Text>
                           </TouchableOpacity>
                         </View>
-                        <View style={{ marginBottom: 8 }}>
-                          <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>{d.label_only ? 'NOM' : 'TYPE'}</Text>
-                          <TextInput
-                            value={d.label}
-                            onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
-                            placeholder={d.label_only ? 'Nom de l\u2019épreuve' : (eventType || 'Type')}
-                            placeholderTextColor={C.muted}
-                            maxLength={40}
-                            style={[formSectionStyle.input, { marginBottom: 0 }]}
-                          />
-                        </View>
-                        <View style={{ flexDirection: 'row', gap: 6 }}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DISTANCE</Text>
-                            <TouchableOpacity onPress={() => setKmPickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
-                              <Text style={{ fontFamily: 'Montserrat', color: d.km ? C.text : C.muted, fontSize: 15 }}>{d.km ? `${d.km} km` : '—'}</Text>
-                            </TouchableOpacity>
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉPART</Text>
-                            <TouchableOpacity onPress={() => setTimePickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
-                              <Text style={{ fontFamily: 'Montserrat', color: d.time ? C.text : C.muted, fontSize: 15 }}>{d.time || '—'}</Text>
-                            </TouchableOpacity>
-                          </View>
-                          <View style={{ flex: 1.2 }}>
-                            <Text style={{ color: C.textSoft, fontSize: 9, fontFamily: 'Montserrat-SemiBold', letterSpacing: 0.4, marginBottom: 4, marginLeft: 4 }}>DÉNIVELÉ</Text>
-                            <TouchableOpacity onPress={() => setElevPickerIdx(idx)} style={[formSectionStyle.input, { marginBottom: 0, justifyContent: 'center' }]}>
-                              <Text style={{ fontFamily: 'Montserrat', color: d.elevation ? C.text : C.muted, fontSize: 15 }}>{d.elevation || '—'}</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                        <TouchableOpacity onPress={() => removeDistance(idx)} hitSlop={12} style={{ alignSelf: 'flex-end', marginTop: 6, paddingVertical: 8, paddingHorizontal: 6 }}>
-                          <Text style={{ color: C.error, fontSize: 12, fontFamily: 'Montserrat-SemiBold' }}>Supprimer</Text>
-                        </TouchableOpacity>
                       </View>
-                    ))}
-                    <TouchableOpacity
-                      onPress={addDistance}
-                      style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 12, backgroundColor: C.fondApp, marginBottom: 8 }}
-                    >
-                      <Text style={{ color: C.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 14 }}>+ Ajouter une épreuve</Text>
-                    </TouchableOpacity>
-                    {showErr[2] && distances.length > 0 && !distances.every(d => parseFloat(d.km) > 0) && (
-                      <Text style={errStyle}>Distance &gt; 0 requise pour chaque épreuve</Text>
-                    )}
-                  
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 12 }}>
-                <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: C.text }}>Les contacts</Text>
-                <View style={{ flex: 1, height: 1, backgroundColor: '#efeaf8' }} />
-              </View>
-                    <Text style={formSectionStyle.heading}>Contact administratif</Text>
-                    <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -8, marginBottom: 8, marginLeft: 4, lineHeight: 16 }]}>
-                      Email interne pour la validation de ton event et les messages d'admin Will. NON affiché publiquement.
-                    </Text>
-                    <TextInput placeholder="Email administratif *" placeholderTextColor={C.muted} value={contactAdmin} onChangeText={setContactAdmin} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
-                    {showErr[3] && !emailAdminFormat && <Text style={errStyle}>Email administratif invalide</Text>}
+                    </Ligne>
+                  );
+                })}
+                <AjouterEpreuve onPress={addDistance} />
+              </Bloc>
 
-                    <Text style={[formSectionStyle.heading, { marginTop: 12 }]}>Contact public</Text>
-                    <Text style={[formSectionStyle.subheading, { fontSize: 11, marginTop: -8, marginBottom: 8, marginLeft: 4, lineHeight: 16 }]}>
-                      Au moins UNE info parmi email, téléphone et site web. Affichées sur la page publique de ton événement.
-                    </Text>
-                    <TextInput placeholder="Email de contact public" placeholderTextColor={C.muted} value={contact} onChangeText={setContact} autoCapitalize="none" keyboardType="email-address" style={formSectionStyle.input} />
-                    {showErr[3] && contact?.trim() && !emailPublicFormat && <Text style={errStyle}>Email public invalide</Text>}
-                    <TextInput placeholder="Téléphone" placeholderTextColor={C.muted} value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={formSectionStyle.input} />
-                    <TextInput placeholder="Site web" placeholderTextColor={C.muted} value={website} onChangeText={setWebsite} autoCapitalize="none" style={formSectionStyle.input} />
-                    {showErr[3] && !hasPublicContact && <Text style={errStyle}>Renseigne au moins une info de contact public.</Text>}
-                  
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 12 }}>
-                <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: C.text }}>La page de ton event</Text>
-                <View style={{ flex: 1, height: 1, backgroundColor: '#efeaf8' }} />
-              </View>
-                    <Text style={formSectionStyle.heading}>Adresse de départ</Text>
-                    <TextInput
-                      placeholder="Place Ernest Thorel, Louviers"
-                      placeholderTextColor={C.muted}
-                      value={address}
-                      onChangeText={setAddress}
-                      style={formSectionStyle.input}
-                    />
+              <TitreSection>Contact</TitreSection>
+              <Bloc>
+                <Ligne
+                  libelle="Email privé"
+                  manque={showErr[3] && !emailAdminFormat}
+                  erreur={showErr[3] && !emailAdminFormat ? 'Email invalide' : ''}
+                  aide="Pour la validation de ton event. Jamais affiché."
+                >
+                  <Champ
+                    value={contactAdmin}
+                    onChangeText={setContactAdmin}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="toi@monclub.fr"
+                    accessibilityLabel="Email privé"
+                    manque={showErr[3] && !emailAdminFormat}
+                  />
+                </Ligne>
+                <Ligne libelle="Email" erreur={showErr[3] && contact?.trim() && !emailPublicFormat ? 'Email invalide' : ''}>
+                  <Champ
+                    value={contact}
+                    onChangeText={setContact}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="contact@monevent.fr"
+                    accessibilityLabel="Email de contact"
+                    manque={!!(showErr[3] && contact?.trim() && !emailPublicFormat)}
+                  />
+                </Ligne>
+                <Ligne libelle="Téléphone">
+                  <Champ value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="Facultatif" accessibilityLabel="Téléphone" />
+                </Ligne>
+                <Ligne libelle="Site web">
+                  <Champ
+                    value={website}
+                    onChangeText={setWebsite}
+                    keyboardType="url"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="Facultatif"
+                    accessibilityLabel="Site web"
+                  />
+                </Ligne>
+              </Bloc>
+              <Pied erreur={showErr[3] && !hasPublicContact}>
+                Email, téléphone ou site : au moins un s'affiche sur la page de l'event.
+              </Pied>
 
-                    <Text style={formSectionStyle.heading}>Description</Text>
-                    <TextInput
-                      placeholder="Parcours, ambiance, ravitaillements, ce qu'il faut savoir avant de venir…"
-                      placeholderTextColor={C.muted}
-                      value={message}
-                      onChangeText={setMessage}
-                      multiline
-                      style={[formSectionStyle.input, { height: 96, paddingTop: 12, textAlignVertical: 'top' }]}
-                    />
-                    <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginTop: -4, marginBottom: 8, marginLeft: 4 }}>
-                      {message.trim().length
-                        ? `${message.trim().length} caractère${message.trim().length > 1 ? 's' : ''}`
-                        : 'Ce que le participant doit savoir avant de venir.'}
+              <TitreSection>Page de l'event</TitreSection>
+              <Bloc>
+                <Ligne libelle="Couverture" aide="Format paysage : tu la cadres juste après.">
+                  <TouchableOpacity
+                    onPress={pickAndUploadCover}
+                    disabled={coverBusy}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={apercuCover ? "Changer l'image de couverture" : 'Choisir une image de couverture'}
+                    style={[cadreChamp(false, false), { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: apercuCover ? 4 : 10 }]}
+                  >
+                    {coverBusy ? (
+                      <ActivityIndicator size="small" color={C.primary} />
+                    ) : apercuCover ? (
+                      <ExpoImage source={{ uri: apercuCover }} style={{ width: 56, height: 28, borderRadius: 6 }} contentFit="cover" />
+                    ) : null}
+                    <Text numberOfLines={1} style={{ flex: 1, fontFamily: 'Montserrat', fontSize: 15, color: apercuCover ? C.primary : V.placeholder }}>
+                      {apercuCover ? "Changer l'image" : 'Choisir une image'}
                     </Text>
-
-                    <Text style={formSectionStyle.heading}>Image de couverture</Text>
-                    <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginBottom: 10, marginLeft: 4, lineHeight: 17 }}>
-                      Cette image sera affichée sur la page de ton event et dans l'app Will. Format paysage 2:1 — tu la cadreras à l'étape suivante.
-                    </Text>
-                    <TouchableOpacity
-                      onPress={pickAndUploadCover}
-                      disabled={coverBusy}
-                      style={{
-                        height: 160, borderRadius: 12, backgroundColor: '#faf9ff', marginBottom: 8,
-                        overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
-                        borderWidth: (coverImage || pendingCoverLocal) ? 0 : 1, borderStyle: 'dashed', borderColor: '#d9d4ec',
-                      }}
-                    >
-                      {coverBusy ? (
-                        <ActivityIndicator color={C.primary} />
-                      ) : (coverImage || pendingCoverLocal) ? (
-                        <ExpoImage source={{ uri: pendingCoverLocal || coverImage }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
-                      ) : (
-                        <>
-                          <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold', marginBottom: 4 }}>+ Choisir une image</Text>
-                          <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11 }}>Depuis ta galerie</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                    {(coverImage || pendingCoverLocal) && !coverBusy && (
-                      <TouchableOpacity onPress={pickAndUploadCover} hitSlop={12} style={{ alignSelf: 'flex-end', marginTop: -4, marginBottom: 8, paddingVertical: 8, paddingHorizontal: 6 }}>
-                        <Text style={{ color: C.primary, fontSize: 12, fontFamily: 'Montserrat-SemiBold' }}>Changer l'image</Text>
+                  </TouchableOpacity>
+                </Ligne>
+                <Ligne seule>
+                  <Champ
+                    value={message}
+                    onChangeText={setMessage}
+                    multiline
+                    placeholder="Description : parcours, ambiance, ce qu'il faut savoir avant de venir"
+                    accessibilityLabel="Description"
+                    autoCapitalize="sentences"
+                  />
+                </Ligne>
+                <Ligne libelle="Adresse">
+                  <Champ value={address} onChangeText={setAddress} placeholder="Lieu de départ" accessibilityLabel="Adresse de départ" autoCapitalize="sentences" />
+                </Ligne>
+                {!isEdit ? (
+                  <Ligne
+                    libelle="Code PIN"
+                    manque={pinManque}
+                    erreur={pinManque ? `Le code PIN doit être composé de ${pinLen} chiffres` : ''}
+                    aide={`${pinLen} chiffres à donner à tes photographes : ils se connectent avec le jour J.`}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Champ
+                        value={password}
+                        onChangeText={(v) => setPassword(v.replace(/\D/g, '').slice(0, pinLen))}
+                        keyboardType="number-pad"
+                        maxLength={pinLen}
+                        accessibilityLabel="Code PIN photographe"
+                        manque={pinManque}
+                        style={{ flex: 1, fontFamily: 'Montserrat-SemiBold', letterSpacing: 3 }}
+                      />
+                      <TouchableOpacity
+                        onPress={() => setPassword(generateRandomPin(pinLen))}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        style={{ height: 38, paddingHorizontal: 8, justifyContent: 'center' }}
+                      >
+                        <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 14, color: C.primary }}>Générer</Text>
                       </TouchableOpacity>
-                    )}
-                    {!(coverImage || pendingCoverLocal) && (
-                      <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, textAlign: 'center', marginTop: 8, lineHeight: 17 }}>
-                        Pas de visuel sous la main ? Tu peux ajouter l'image plus tard depuis l'édition de ton event.
-                      </Text>
-                    )}
-                  
-                    <Text style={formSectionStyle.heading}>Code PIN photographe</Text>
-                    <Text style={[formSectionStyle.subheading, { fontSize: 13, marginBottom: 22, marginLeft: 4, lineHeight: 18 }]}>
-                      {pinLen} chiffres à transmettre à tes photographes le jour J. Ils l'utiliseront pour se connecter à ton event sur l'app Will.
-                    </Text>
-                    {!isEdit && (
-                      <>
-                        <PinInputRow
-                          value={password}
-                          onChange={setPassword}
-                          autoFocus={false}
-                          focusTrigger={0}
-                          length={pinLen}
-                          error={showErr[4] && !isValidPin(password, pinLen)}
-                        />
-                        <TouchableOpacity
-                          onPress={() => setPassword(generateRandomPin(pinLen))}
-                          style={{ alignSelf: 'center', marginTop: 18, paddingVertical: 8, paddingHorizontal: 14 }}
-                        >
-                          <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Générer aléatoirement</Text>
-                        </TouchableOpacity>
-                        {showErr[4] && !isValidPin(password, pinLen) && (
-                          <Text style={[errStyle, { textAlign: 'center', marginTop: 6 }]}>Le code PIN doit être composé de {pinLen} chiffres</Text>
-                        )}
-                      </>
-                    )}
-                  
-                </>
+                    </View>
+                  </Ligne>
+                ) : null}
+              </Bloc>
 
               {/* Le compte arrive apres l event, et seulement si l orga
                   coche : meme ordre que sur le site. */}
@@ -7004,7 +6985,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         </Svg>
                       ) : null}
                     </View>
-                    <Text style={{ flex: 1, fontFamily: 'Montserrat', fontSize: 14, lineHeight: 20, color: C.text }}>
+                    <Text style={{ flex: 1, fontFamily: 'Montserrat', fontSize: 14, lineHeight: lh(14, 20, 'Montserrat'), color: C.text }}>
                       Je crée mon compte Will, ou je me connecte, pour publier cet event.
                     </Text>
                   </TouchableOpacity>
@@ -7021,7 +7002,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                       {/* Une ligne dit ce qui se passe, au lieu de demander
                           a l orga de choisir entre creer et se connecter :
                           le serveur sait deja, lui. */}
-                      <Text style={{ fontFamily: 'Montserrat', fontSize: 13, lineHeight: 19, color: modeCompte === 'existing' ? C.primary : C.textSoft, marginTop: -4, marginBottom: 12 }}>
+                      <Text style={{ fontFamily: 'Montserrat', fontSize: 13, lineHeight: lh(13, 19, 'Montserrat'), color: modeCompte === 'existing' ? C.primary : C.textSoft, marginTop: -4, marginBottom: 12 }}>
                         {modeCompte === 'existing'
                           ? (cPrenomConnu
                               ? `Content de te revoir, ${cPrenomConnu} ! Entre ton mot de passe Will.`
@@ -7147,7 +7128,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                                 </Svg>
                               ) : null}
                             </View>
-                            <Text style={{ flex: 1, fontFamily: 'Montserrat', fontSize: 13, lineHeight: 19, color: C.text }}>
+                            <Text style={{ flex: 1, fontFamily: 'Montserrat', fontSize: 13, lineHeight: lh(13, 19, 'Montserrat'), color: C.text }}>
                               J'accepte les CGU, les CGV et la politique de confidentialité.
                             </Text>
                           </TouchableOpacity>
@@ -7169,22 +7150,13 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
             {/* Un seul geste, en bas, sur son propre socle : sans filet, la
                 derniere ligne du formulaire passait sous le bouton. */}
             <View style={{ borderTopWidth: 1, borderTopColor: '#efeaf8', paddingTop: 14, paddingHorizontal: 22, paddingBottom: 22 }}>
-            {/* Avancement du remplissage, plutot qu un numero d etape : ce
-                qui compte est ce qui manque, pas ou l on se trouve. */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <View style={{ flex: 1, height: 4, backgroundColor: '#e9e4f9', borderRadius: 2 }}>
-                <View style={{ height: 4, width: `${pourcentageRempli}%`, backgroundColor: C.primary, borderRadius: 2 }} />
-              </View>
-              <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.textSoft, fontSize: 12 }}>{pourcentageRempli} %</Text>
-            </View>
-
             {/* Une seule page, comme le modal du site : on voit tout ce
                 qu on doit remplir, et le pouce fait le reste. */}
 
             <TouchableOpacity
               onPress={trySubmit}
               disabled={busy}
-              style={{ marginTop: 14, paddingVertical: 15, borderRadius: 14, alignItems: 'center', backgroundColor: C.primary, opacity: busy ? 0.6 : 1 }}
+              style={{ paddingVertical: 15, borderRadius: 14, alignItems: 'center', backgroundColor: C.primary, opacity: busy ? 0.6 : 1 }}
             >
               {busy ? <ActivityIndicator color="#fff" /> : (
                 <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}>
@@ -7198,7 +7170,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                 </Text>
               )}
             </TouchableOpacity>
-            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginTop: 8, lineHeight: 16 }}>
+            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginTop: 8, lineHeight: lh(11, 16, 'Montserrat') }}>
               {eventComplet
                 ? "L'équipe Will valide ton event sous 24 h."
                 : (manquantsForm.length <= 3
@@ -7290,70 +7262,6 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
               </View>
             </View>
             <TouchableOpacity onPress={() => setTimePickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Picker Dénivelé */}
-      <Modal visible={elevPickerIdx !== null} transparent animationType="slide" onRequestClose={() => setElevPickerIdx(null)}>
-        <TouchableOpacity activeOpacity={1} onPress={() => setElevPickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
-            <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold', textAlign: 'center', marginBottom: 4 }}>Dénivelé positif</Text>
-            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>Par incréments de 10 m</Text>
-            <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
-              {Array.from({ length: 301 }).map((_, i) => {
-                const m = i * 10;
-                const cur = distances[elevPickerIdx]?.elevation || '';
-                const curM = parseInt((cur.match(/(\d+)/) || [])[1], 10);
-                const active = curM === m;
-                return (
-                  <TouchableOpacity
-                    key={m}
-                    onPress={() => {
-                      updateDistance(elevPickerIdx, 'elevation', String(m));
-                    }}
-                    style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
-                  >
-                    <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{m} m</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity onPress={() => setElevPickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Picker Distance (km) */}
-      <Modal visible={kmPickerIdx !== null} transparent animationType="slide" onRequestClose={() => setKmPickerIdx(null)}>
-        <TouchableOpacity activeOpacity={1} onPress={() => setKmPickerIdx(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, paddingBottom: 36 }}>
-            <Text style={{ color: C.text, fontSize: 16, fontFamily: 'Montserrat-SemiBold', textAlign: 'center', marginBottom: 4 }}>Distance</Text>
-            <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 11, textAlign: 'center', marginBottom: 12 }}>De 1 à 200 km</Text>
-            <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20 }}>
-              {Array.from({ length: 200 }).map((_, i) => {
-                const km = i + 1;
-                const cur = distances[kmPickerIdx]?.km || '';
-                const curKm = parseFloat(cur);
-                const active = curKm === km;
-                return (
-                  <TouchableOpacity
-                    key={km}
-                    onPress={() => {
-                      updateDistance(kmPickerIdx, 'km', String(km));
-                    }}
-                    style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
-                  >
-                    <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{km} km</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity onPress={() => setKmPickerIdx(null)} style={{ marginTop: 14, marginHorizontal: 20, paddingVertical: 12, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center' }}>
               <Text style={{ color: '#fff', fontFamily: 'Montserrat-SemiBold' }}>OK</Text>
             </TouchableOpacity>
           </TouchableOpacity>

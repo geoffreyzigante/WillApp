@@ -33,18 +33,9 @@ import { EVENT_TYPES, displayEventType, formatDateForForm, isoJourLocal } from '
 import { REQUIRED_FIELDS } from '../../utils/eventCompletion';
 import { CalendarRangeModal } from './CalendarRangeModal';
 import { CropImageModal } from './CropImageModal';
-
-// Valeurs de la maquette (evf-* dans dashboard/src/design/styles.css).
-const V = {
-  texte: '#1A1426',
-  libelle: '#6b6480',
-  placeholder: '#a8a2b8',
-  ligne: '#F5F3FA',
-  filet: '#E9E5F3',
-  bord: '#E6E1F2',
-  bordManque: '#E8B4BC',
-  actif: C.primary,
-};
+import {
+  V, Bloc, Ligne, Champ, ChampBouton, TitreSection, Pied, AjouterEpreuve,
+} from '../formLignes';
 
 // ── Lecture / ecriture, memes regles que le web ─────────────────────────
 // "Louviers (27400)" -> { ville, cp }
@@ -114,106 +105,6 @@ function distancesPourEnvoi(courses) {
 // Les 6 infos de validation que cet ecran peut completer : celles du worker
 // (CHAMPS_EVENT_REQUIS), moins l email administratif qui vit dans le compte.
 const REQUIS = REQUIRED_FIELDS.filter(f => f.id !== 'contact_admin');
-
-// ── Briques d affichage (hors du composant : un composant redefini a chaque
-//    rendu perdrait le focus du champ a chaque frappe) ───────────────────
-function Bloc({ children }) {
-  const lignes = React.Children.toArray(children).filter(React.isValidElement);
-  const n = lignes.length;
-  return (
-    <View style={{ backgroundColor: V.filet, borderRadius: 14, gap: 1 }}>
-      {lignes.map((l, i) => React.cloneElement(l, { coinHaut: i === 0, coinBas: i === n - 1 }))}
-    </View>
-  );
-}
-
-function coins(coinHaut, coinBas) {
-  return {
-    borderTopLeftRadius: coinHaut ? 14 : 0, borderTopRightRadius: coinHaut ? 14 : 0,
-    borderBottomLeftRadius: coinBas ? 14 : 0, borderBottomRightRadius: coinBas ? 14 : 0,
-  };
-}
-
-function Ligne({ libelle, manque, children, coinHaut, coinBas, seule, style }) {
-  return (
-    <View style={[{
-      flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 54,
-      paddingLeft: seule ? 8 : 14, paddingRight: 8, paddingVertical: seule ? 8 : 0,
-      backgroundColor: V.ligne,
-    }, coins(coinHaut, coinBas), style]}>
-      {libelle ? (
-        <Text style={{ width: 92, fontFamily: 'Montserrat', fontSize: 14, color: manque ? C.error : V.libelle }}>
-          {libelle}
-        </Text>
-      ) : null}
-      <View style={{ flex: 1, minWidth: 0 }}>{children}</View>
-    </View>
-  );
-}
-
-function cadreChamp(actif, manque) {
-  const bw = actif ? 2 : 1;
-  return {
-    height: 38, borderRadius: 10, backgroundColor: '#fff',
-    borderWidth: bw, borderColor: actif ? V.actif : (manque ? V.bordManque : V.bord),
-    // La bordure s epaissit au focus : on retire d autant le retrait interieur
-    // pour que le texte ne bouge pas.
-    paddingHorizontal: 10 - (bw - 1),
-  };
-}
-
-function Champ({ manque, style, onFocus, onBlur, multiline, ...props }) {
-  const [actif, setActif] = useState(false);
-  return (
-    <TextInput
-      {...props}
-      multiline={multiline}
-      placeholderTextColor={manque ? C.error : V.placeholder}
-      onFocus={(e) => { setActif(true); onFocus?.(e); }}
-      onBlur={(e) => { setActif(false); onBlur?.(e); }}
-      style={[
-        cadreChamp(actif, manque),
-        { fontFamily: 'Montserrat', fontSize: 15, color: V.texte, paddingVertical: 0 },
-        multiline && { height: undefined, minHeight: 84, paddingTop: 10, paddingBottom: 10, textAlignVertical: 'top' },
-        style,
-      ]}
-    />
-  );
-}
-
-// Champ qui ouvre un selecteur (type, date, heure) : meme cadre qu un champ.
-function ChampBouton({ valeur, placeholder, manque, onPress, style, centre }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.7}
-      style={[cadreChamp(false, manque), { justifyContent: 'center', alignItems: centre ? 'center' : 'flex-start' }, style]}
-    >
-      <Text
-        numberOfLines={1}
-        style={{ fontFamily: 'Montserrat', fontSize: 15, color: valeur ? V.texte : (manque ? C.error : V.placeholder) }}
-      >
-        {valeur || placeholder}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-function TitreSection({ children }) {
-  return (
-    <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: V.texte, marginTop: 26, marginBottom: 10, marginLeft: 4 }}>
-      {children}
-    </Text>
-  );
-}
-
-function Pied({ erreur, children }) {
-  return (
-    <Text style={{ fontFamily: 'Montserrat', fontSize: 12.5, lineHeight: lh(12.5, 17.5, 'Montserrat'), color: erreur ? C.error : V.libelle, marginTop: 8, marginHorizontal: 4 }}>
-      {children}
-    </Text>
-  );
-}
 
 // ── Selecteurs (rendus DANS la feuille : sur iOS, une Modal ne se presente
 //    au-dessus d une autre que si elle en est l enfant) ─────────────────
@@ -911,18 +802,6 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
         onConfirm={envoyerCover}
       />
     </Modal>
-  );
-}
-
-function AjouterEpreuve({ onPress, coinHaut, coinBas }) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.7}
-      style={[{ minHeight: 54, justifyContent: 'center', paddingHorizontal: 14, backgroundColor: V.ligne }, coins(coinHaut, coinBas)]}
-    >
-      <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, color: C.primary }}>+ Ajouter une épreuve</Text>
-    </TouchableOpacity>
   );
 }
 
