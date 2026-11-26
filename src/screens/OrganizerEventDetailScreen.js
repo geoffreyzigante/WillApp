@@ -26,6 +26,7 @@ import { PinDisplay } from '../components/PinDisplay';
 import { PinInputRow } from '../components/PinInputRow';
 import { completionOf, billingLabel } from '../utils/eventCompletion';
 import { MARGE_HAUT_FEUILLE } from '../constants/typo';
+import { T } from '../constants/tokens';
 import { BoutonRetour } from '../components/BoutonRetour';
 
 export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, succes, onClose, onEdit, onOpenPhotos, onDeleted, onRefresh }) {
@@ -251,7 +252,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
       onRequestClose={onClose}
       onDismiss={() => { const suite = apresFermeture.current; apresFermeture.current = null; if (suite) suite(); }}
     >
-      <SafeAreaView style={{ flex: 1, backgroundColor: C.fondApp }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: MARGE_HAUT_FEUILLE, paddingBottom: 12 }}>
           <BoutonRetour onPress={onClose} libelle="Fermer" />
         </View>
@@ -260,7 +261,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
           {/* Arrivee depuis la creation : le bandeau remplace l ecran de
               confirmation, qui disait ce que cette page dit deja. */}
           {succes ? (
-            <View style={{ marginHorizontal: 16, marginBottom: 14, borderRadius: 14, backgroundColor: succes.brouillon ? '#fff' : '#E7F8F0', borderWidth: succes.brouillon ? 1 : 0, borderColor: '#E4E4E7', paddingHorizontal: 16, paddingVertical: 14 }}>
+            <View style={{ marginHorizontal: 16, marginBottom: 14, borderRadius: 14, backgroundColor: succes.brouillon ? T.couleur.champFond : '#E7F8F0', paddingHorizontal: 16, paddingVertical: 14 }}>
               <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, color: succes.brouillon ? C.orga : '#047857' }}>
                 {succes.brouillon ? 'Ton event est créé' : 'Ton event est parti en validation'}
               </Text>
@@ -338,7 +339,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
                         key={f.id}
                         onPress={modifier}
                         hitSlop={10}
-                        style={{ paddingHorizontal: 14, paddingVertical: 11, borderRadius: 999, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E4E4E7' }}
+                        style={{ paddingHorizontal: 14, paddingVertical: 11, borderRadius: 999, backgroundColor: T.couleur.champFond }}
                       >
                         <Text style={{ color: C.orga, fontSize: 13, fontFamily: 'Montserrat-Medium' }}>+ {f.label}</Text>
                       </TouchableOpacity>
@@ -354,7 +355,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 18 }}>
                 {isComplete ? (
                   <>
-                    <TouchableOpacity onPress={modifier} style={{ flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E4E4E7', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+                    <TouchableOpacity onPress={modifier} style={{ flex: 1, backgroundColor: T.couleur.champFond, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
                       <Text style={{ color: C.orga, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Modifier les infos</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -382,11 +383,11 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
               <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Voir les photos</Text>
             </TouchableOpacity>
             {!isDraft ? (
-              <TouchableOpacity onPress={modifier} style={{ flex: 2, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E4E4E7', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+              <TouchableOpacity onPress={modifier} style={{ flex: 2, backgroundColor: T.couleur.champFond, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
                 <Text style={{ color: C.orga, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Modifier les infos</Text>
               </TouchableOpacity>
             ) : null}
-            <TouchableOpacity onPress={sharePublicLink} style={{ flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E4E4E7', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+            <TouchableOpacity onPress={sharePublicLink} style={{ flex: 1, backgroundColor: T.couleur.champFond, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
               <Text style={{ color: C.orga, fontSize: 18, fontFamily: 'Montserrat-SemiBold' }}>↗</Text>
             </TouchableOpacity>
           </View>

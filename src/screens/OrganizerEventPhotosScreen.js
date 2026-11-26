@@ -23,6 +23,7 @@ import { s } from '../constants/styles';
 import { formatDateLong, cityLabel } from '../utils/format';
 import { raceTitle, extractBurstTs, extractIdx } from '../utils/photo';
 import { BoutonRetour } from '../components/BoutonRetour';
+import { T } from '../constants/tokens';
 
 // Absente de la galerie publique, et pourquoi (null = presente). Repli sur
 // `hidden` tant qu un worker plus ancien n envoie pas `hors_public`.
@@ -287,7 +288,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
             onPress={() => setRaceFilter('all')}
             style={{
               paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-              backgroundColor: raceFilter === 'all' ? C.orga : C.white,
+              backgroundColor: raceFilter === 'all' ? C.orga : T.couleur.champFond,
             }}
           >
             <Text style={{ color: raceFilter === 'all' ? '#fff' : C.orga, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>Toutes</Text>
@@ -301,7 +302,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
                 onPress={() => setRaceFilter(val)}
                 style={{
                   paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999,
-                  backgroundColor: active ? C.orga : C.white,
+                  backgroundColor: active ? C.orga : T.couleur.champFond,
                 }}
               >
                 <Text style={{ color: active ? '#fff' : C.orga, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>{raceTitle(d)}</Text>
@@ -448,7 +449,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
 
   return (
     <GridErrorBoundary>
-      <View style={{ flex: 1, backgroundColor: C.fondApp }}>
+      <View style={{ flex: 1, backgroundColor: '#fff' }}>
         <FlatList
           data={loading ? [] : filteredPhotos.slice(0, visibleCount)}
           numColumns={3}

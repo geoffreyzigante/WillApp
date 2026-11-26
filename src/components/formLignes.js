@@ -18,6 +18,7 @@ import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { C } from '../constants/colors';
 import { lh } from '../constants/typo';
 import { Icon } from './Icon';
+import { T } from '../constants/tokens';
 
 // Valeurs de la maquette (evf-* dans dashboard/src/design/styles.css).
 export const V = {
@@ -27,20 +28,22 @@ export const V = {
   // Page en lavande (C.fondApp) : les lignes sont BLANCHES avec un filet gris,
   // comme la fiche d event et l espace orga. Un fond #F5F3FA se confondait
   // avec la page (ecart imperceptible).
-  ligne: '#FFFFFF',
-  filet: '#E4E4E7',
-  champ: '#F5F3FA',
+  // Jetons de la charte (charte/tokens.json) : lignes en gris de champ,
+  // filet fin entre elles, AUCUN contour. Fond de page blanc.
+  ligne: T.couleur.champFond,
+  filet: T.couleur.filet,
+  champ: T.couleur.champFond,
   bord: '#E6E1F2',
   bordManque: '#E8B4BC',
   actif: C.orga,
-  focus: '#F5F3FA',
+  focus: T.couleur.champFondActif,
 };
 
 export function Bloc({ children }) {
   const lignes = React.Children.toArray(children).filter(React.isValidElement);
   const n = lignes.length;
   return (
-    <View style={{ backgroundColor: V.filet, borderRadius: 14, gap: 1, borderWidth: 1, borderColor: V.filet }}>
+    <View style={{ backgroundColor: V.filet, borderRadius: T.rayon.bloc, gap: 1 }}>
       {lignes.map((l, i) => React.cloneElement(l, { coinHaut: i === 0, coinBas: i === n - 1 }))}
     </View>
   );
@@ -48,8 +51,8 @@ export function Bloc({ children }) {
 
 export function coins(coinHaut, coinBas) {
   return {
-    borderTopLeftRadius: coinHaut ? 13 : 0, borderTopRightRadius: coinHaut ? 13 : 0,
-    borderBottomLeftRadius: coinBas ? 13 : 0, borderBottomRightRadius: coinBas ? 13 : 0,
+    borderTopLeftRadius: coinHaut ? T.rayon.bloc : 0, borderTopRightRadius: coinHaut ? T.rayon.bloc : 0,
+    borderBottomLeftRadius: coinBas ? T.rayon.bloc : 0, borderBottomRightRadius: coinBas ? T.rayon.bloc : 0,
   };
 }
 
@@ -169,7 +172,7 @@ export function ChampBouton({ valeur, placeholder, manque, onPress, style, centr
 }
 
 // Pastille blanche d une epreuve : un petit champ, ou un bouton (heure).
-const pastille = { height: 32, borderRadius: 8, backgroundColor: V.champ, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' };
+const pastille = { height: 32, borderRadius: 8, backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' };
 const textePastille = { fontFamily: 'Montserrat', fontSize: 14, color: V.texte, paddingVertical: 0 };
 
 // Une epreuve = une ligne : nom a gauche, distance · heure · D+ a droite.
