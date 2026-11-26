@@ -15,8 +15,11 @@ import { T } from '../constants/tokens';
 import { API_URL } from '../constants/api';
 
 const NOIR = T.couleur.orga.accent;
-const LIGNE = T.couleur.champFond;
-const FILET = T.couleur.filet;
+// La liste de la fiche reprend celle du site telle qu elle est (blanc, filet
+// #E4E4E7 autour et entre les lignes, rayon 14) : c est la reference.
+const LIGNE = '#FFFFFF';
+const FILET = '#E4E4E7';
+const TUILE = T.couleur.champFond;
 const DOUX = T.couleur.texteDoux;
 
 // ── Icones de ligne (memes dessins que le site) ──────────────────────────
@@ -31,7 +34,7 @@ const ICONES = {
 
 export function Pastille({ type }) {
   return (
-    <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: TUILE, alignItems: 'center', justifyContent: 'center' }}>
       <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={NOIR} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         {ICONES[type]}
       </Svg>
@@ -44,7 +47,7 @@ export function ListeLignes({ children }) {
   const lignes = React.Children.toArray(children).filter(React.isValidElement);
   const n = lignes.length;
   return (
-    <View style={{ backgroundColor: FILET, borderRadius: T.rayon.bloc, gap: 1, overflow: 'hidden' }}>
+    <View style={{ backgroundColor: FILET, borderRadius: T.rayon.bloc, gap: 1, overflow: 'hidden', borderWidth: 1, borderColor: FILET }}>
       {lignes.map((l, i) => React.cloneElement(l, { key: l.key ?? i, dernier: i === n - 1 }))}
     </View>
   );
@@ -223,7 +226,7 @@ function LigneArchive({ code, organizerApiFetch, photographerId, nom, nbPhotos }
   };
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, backgroundColor: '#fff', borderRadius: 12 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, backgroundColor: TUILE, borderRadius: 12 }}>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text numberOfLines={1} style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 14, color: C.text }}>{nom}</Text>
         <Text style={{ fontFamily: 'Montserrat', fontSize: 12, color: DOUX, marginTop: 2 }}>
