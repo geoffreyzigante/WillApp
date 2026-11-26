@@ -1,7 +1,8 @@
 // Ecran detail event organisateur — aligne sur la carte event du dashboard
 // web (/orga) : bandeau cover avec statut + facturation en pastilles, bloc de
 // completion (jauge, champs manquants, "Compléter" / "Soumettre mon event"),
-// puis photos, code PIN en clair, visibilite publique et suppression.
+// puis photos, code PIN en clair (modifiable ici), visibilite publique et
+// suppression.
 //
 // Les champs requis et le calcul du pourcentage vivent dans
 // utils/eventCompletion.js, miroir de EventCompletionPanel.js cote web.
@@ -13,14 +14,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   Modal, SafeAreaView, View, Text, TouchableOpacity, ScrollView,
-  Alert, Share, Switch,
+  Alert, Share, Switch, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { C, colorForType } from '../constants/colors';
 import { displayEventType } from '../utils/format';
-import { isKnownPin } from '../utils/pin';
+import { isKnownPin, isValidPin, generateRandomPin } from '../utils/pin';
+import { useLongueurPinAPoser } from '../utils/usePinLength';
 import { PinDisplay } from '../components/PinDisplay';
+import { PinInputRow } from '../components/PinInputRow';
 import { completionOf, billingLabel } from '../utils/eventCompletion';
 
 export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, succes, onClose, onEdit, onOpenPhotos, onDeleted, onRefresh }) {
@@ -30,7 +33,16 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
   const [listed, setListed] = useState(event?.listed !== false);
   const [savingListed, setSavingListed] = useState(false);
   const [copied, setCopied] = useState(false);
-  const photographerPwd = event?.photographer_password || '';
+  // Le PIN se modifie ici depuis le 26/11 : la feuille « Modifier mon
+  // event » ne porte plus que les infos de la page publique, comme sur le
+  // web. On garde la valeur posee localement : `event` ne se rafraichit pas
+  // tant que la fiche est ouverte.
+  const [pinPose, setPinPose] = useState(null);
+  const photographerPwd = pinPose ?? (event?.photographer_password || '');
+  const [pinOuvert, setPinOuvert] = useState(false);
+  const [pinSaisi, setPinSaisi] = useState('');
+  const [pinBusy, setPinBusy] = useState(false);
+  const pinLen = useLongueurPinAPoser(pinOuvert);
   const isReady = !!event?.active;
   const dotColor = isReady ? '#34D399' : '#FBBF24';
   const statusLabel = isReady ? 'Prêt à démarrer' : 'En attente';
@@ -97,6 +109,34 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
       }
     } catch (e) {
       console.warn('[event] partage PIN :', e?.message || e);
+    }
+  };
+
+  const ouvrirPin = () => {
+    setPinSaisi(isKnownPin(photographerPwd) ? photographerPwd : '');
+    setPinOuvert(true);
+  };
+  const enregistrerPin = async () => {
+    if (!isValidPin(pinSaisi, pinLen)) {
+      Alert.alert('Code PIN', `Le code PIN doit être composé de ${pinLen} chiffres.`);
+      return;
+    }
+    setPinBusy(true);
+    try {
+      const r = await organizerApiFetch(`/organizer/event/${event.code}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photographer_password: pinSaisi }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || 'Modification impossible');
+      setPinPose(pinSaisi);
+      setPinOuvert(false);
+      onRefresh?.();
+    } catch (e) {
+      Alert.alert('Erreur', e.message || 'Modification impossible');
+    } finally {
+      setPinBusy(false);
     }
   };
 
@@ -343,20 +383,25 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
             </Text>
             <View style={{ marginTop: 14, alignItems: 'center' }}>
               {isKnownPin(photographerPwd) ? (
-                <TouchableOpacity onPress={onEdit} activeOpacity={0.6}>
+                <TouchableOpacity onPress={ouvrirPin} activeOpacity={0.6}>
                   <PinDisplay pin={photographerPwd} masked={false} />
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity onPress={onEdit} hitSlop={8}>
+                <TouchableOpacity onPress={ouvrirPin} hitSlop={8}>
                   <Text style={{ color: C.primary, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Définir</Text>
                 </TouchableOpacity>
               )}
               {isKnownPin(photographerPwd) ? (
-                <TouchableOpacity onPress={copyPin} hitSlop={8} style={{ marginTop: 12 }}>
-                  <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-Medium' }}>
-                    {copied ? 'Partagé' : 'Partager le code'}
-                  </Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 24, marginTop: 12 }}>
+                  <TouchableOpacity onPress={copyPin} hitSlop={8}>
+                    <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-Medium' }}>
+                      {copied ? 'Partagé' : 'Partager le code'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={ouvrirPin} hitSlop={8}>
+                    <Text style={{ color: C.primary, fontSize: 13, fontFamily: 'Montserrat-Medium' }}>Modifier</Text>
+                  </TouchableOpacity>
+                </View>
               ) : null}
             </View>
           </View>
@@ -393,6 +438,43 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      {/* Modification du PIN — reprise telle quelle de l ancienne feuille
+          d edition. Enfant de la fiche pour se presenter au-dessus d elle. */}
+      <Modal visible={pinOuvert} animationType="slide" transparent onRequestClose={() => setPinOuvert(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <TouchableOpacity activeOpacity={1} onPress={() => setPinOuvert(false)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 24 }}>
+            <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ backgroundColor: '#fff', borderRadius: 18, padding: 24 }}>
+              <Text style={{ fontSize: 18, fontFamily: 'Montserrat-SemiBold', color: C.text, marginBottom: 4 }}>Code PIN photographe</Text>
+              <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: C.textSoft, marginBottom: 22 }}>
+                {pinLen} chiffres à transmettre à tes photographes le jour J.
+              </Text>
+              <PinInputRow value={pinSaisi} onChange={setPinSaisi} autoFocus length={pinLen} />
+              <TouchableOpacity onPress={() => setPinSaisi(generateRandomPin(pinLen))} style={{ alignSelf: 'center', marginTop: 18, paddingVertical: 8 }}>
+                <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Générer aléatoirement</Text>
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 22 }}>
+                <TouchableOpacity onPress={() => setPinOuvert(false)} style={{ flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: C.fondApp }}>
+                  <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={enregistrerPin}
+                  disabled={!isValidPin(pinSaisi, pinLen) || pinBusy}
+                  style={{
+                    flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center',
+                    backgroundColor: isValidPin(pinSaisi, pinLen) ? C.primary : '#e9e4f9',
+                    opacity: pinBusy ? 0.6 : 1,
+                  }}
+                >
+                  {pinBusy
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={{ color: isValidPin(pinSaisi, pinLen) ? '#fff' : C.muted, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Confirmer</Text>}
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
     </Modal>
   );
 }
