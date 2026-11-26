@@ -194,7 +194,7 @@ export function CalendarRangeModal({ visible, onClose, initialStart, initialEnd,
             <TouchableOpacity onPress={onClose} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.fondApp }}>
               <Text style={{ color: C.primary, fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleConfirm} disabled={!canConfirm} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.pinkPill, opacity: canConfirm ? 1 : 0.5 }}>
+            <TouchableOpacity onPress={handleConfirm} disabled={!canConfirm} style={{ flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', backgroundColor: C.primary, opacity: canConfirm ? 1 : 0.4 }}>
               <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>Confirmer</Text>
             </TouchableOpacity>
           </View>
