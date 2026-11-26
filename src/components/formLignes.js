@@ -232,7 +232,8 @@ export function LigneEpreuve({
 
 export function TitreSection({ children, premier }) {
   return (
-    <Text style={{ fontFamily: 'AVEstiana', fontSize: 19, color: V.texte, marginTop: premier ? 0 : 26, marginBottom: 10, marginLeft: 4 }}>
+    // Violet de marque, un cran plus gros (demande du 26/11), comme l espace orga.
+    <Text style={{ fontFamily: 'AVEstiana', fontSize: 23, lineHeight: lh(23, 28, 'AVEstiana'), color: C.primary, marginTop: premier ? 0 : 28, marginBottom: 12, marginLeft: 4 }}>
       {children}
     </Text>
   );
