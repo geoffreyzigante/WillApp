@@ -11,7 +11,7 @@
 // rien apres : un compte a rebours ecoule ne compte plus rien. End absent ->
 // single-day.
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, SafeAreaView, View, Text, TouchableOpacity, ScrollView,
   Alert, Share, Switch, KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -28,6 +28,18 @@ import { completionOf, billingLabel } from '../utils/eventCompletion';
 
 export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, succes, onClose, onEdit, onOpenPhotos, onDeleted, onRefresh }) {
   const tint = colorForType(event.event_type);
+  // « Modifier » : la fiche est une pageSheet iOS. Presenter la feuille
+  // d edition pendant que celle-ci se retire echoue EN SILENCE (constate le
+  // 26/11 : la fiche se fermait, rien ne s ouvrait). On ferme donc la fiche
+  // nous-memes et on n ouvre l edition qu une fois iOS revenu (onDismiss).
+  // Android n a pas onDismiss et empile les Modal sans souci : appel direct.
+  const [ouverte, setOuverte] = useState(true);
+  const apresFermeture = useRef(null);
+  const modifier = () => {
+    if (Platform.OS !== 'ios') { onEdit?.(); return; }
+    apresFermeture.current = onEdit;
+    setOuverte(false);
+  };
   const [deleting, setDeleting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [listed, setListed] = useState(event?.listed !== false);
@@ -230,7 +242,13 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
   const sub = [event.location, event.event_type ? displayEventType(event.event_type) : null].filter(Boolean).join(' · ');
 
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal
+      visible={ouverte}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+      onDismiss={() => { const suite = apresFermeture.current; apresFermeture.current = null; if (suite) suite(); }}
+    >
       <SafeAreaView style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 }}>
           <TouchableOpacity onPress={onClose} hitSlop={12}>
@@ -318,7 +336,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
                     {missing.map(f => (
                       <TouchableOpacity
                         key={f.id}
-                        onPress={onEdit}
+                        onPress={modifier}
                         hitSlop={10}
                         style={{ paddingHorizontal: 14, paddingVertical: 11, borderRadius: 999, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E4E4E7' }}
                       >
@@ -336,7 +354,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 18 }}>
                 {isComplete ? (
                   <>
-                    <TouchableOpacity onPress={onEdit} style={{ flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E4E4E7', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+                    <TouchableOpacity onPress={modifier} style={{ flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E4E4E7', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
                       <Text style={{ color: C.orga, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Modifier les infos</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -350,7 +368,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
                     </TouchableOpacity>
                   </>
                 ) : (
-                  <TouchableOpacity onPress={onEdit} style={{ flex: 1, backgroundColor: C.orga, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+                  <TouchableOpacity onPress={modifier} style={{ flex: 1, backgroundColor: C.orga, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
                     <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Compléter mon event</Text>
                   </TouchableOpacity>
                 )}
@@ -364,7 +382,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
               <Text style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Voir les photos</Text>
             </TouchableOpacity>
             {!isDraft ? (
-              <TouchableOpacity onPress={onEdit} style={{ flex: 2, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E4E4E7', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
+              <TouchableOpacity onPress={modifier} style={{ flex: 2, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E4E4E7', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
                 <Text style={{ color: C.orga, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Modifier les infos</Text>
               </TouchableOpacity>
             ) : null}

@@ -9551,11 +9551,11 @@ function App() {
           succes={succesEvent}
           onClose={() => { setOrganizerEventDetailTarget(null); setSuccesEvent(null); }}
           onEdit={() => {
+            // Appele par la fiche une fois sa pageSheet sortie (onDismiss iOS) :
+            // l edition peut se presenter tout de suite.
             const e = organizerEventDetailTarget;
             setOrganizerEventDetailTarget(null);
-            // La fiche est une pageSheet : presenter l edition pendant
-            // qu elle se ferme echoue en silence sur iOS (audit du 25/11).
-            setTimeout(() => setEditEventTarget(e), 350);
+            setEditEventTarget(e);
           }}
           onOpenPhotos={() => {
             const e = organizerEventDetailTarget;
