@@ -22,6 +22,7 @@ import { C, colorForType } from '../constants/colors';
 import { s } from '../constants/styles';
 import { formatDateLong, cityLabel } from '../utils/format';
 import { raceTitle, extractBurstTs, extractIdx } from '../utils/photo';
+import { BoutonRetour } from '../components/BoutonRetour';
 
 // Absente de la galerie publique, et pourquoi (null = presente). Repli sur
 // `hidden` tant qu un worker plus ancien n envoie pas `hors_public`.
@@ -223,7 +224,8 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
   const ListHeader = (
     <>
       <View style={s.headerRow}>
-        <View style={s.headerLeft}>
+        <View style={[s.headerLeft, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
+          <BoutonRetour onPress={onClose} libelle="Fermer" />
           <Text style={[s.welcome, { color: C.orga, fontSize: 18 }]}>
             {selectionMode ? `${selectedKeys.size} sélectionnée${selectedKeys.size > 1 ? 's' : ''}` : "Photos de l'event"}
           </Text>
@@ -238,11 +240,6 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
               <Text style={{ color: C.textSoft, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Annuler</Text>
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity onPress={onClose} hitSlop={10}>
-            <Svg width={26} height={26} viewBox="0 0 24 24" fill="none">
-              <Path d="m8 8 8 8M16 8l-8 8" stroke={C.textSoft} strokeWidth={2} strokeLinecap="round" />
-            </Svg>
-          </TouchableOpacity>
         </View>
       </View>
 

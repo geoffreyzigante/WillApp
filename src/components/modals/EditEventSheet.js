@@ -36,6 +36,7 @@ import { CropImageModal } from './CropImageModal';
 import {
   V, Bloc, Ligne, LigneEpreuve, Champ, ChampBouton, TitreSection, Pied, AjouterEpreuve,
 } from '../formLignes';
+import { BoutonRetour } from '../BoutonRetour';
 
 // ── Lecture / ecriture, memes regles que le web ─────────────────────────
 // "Louviers (27400)" -> { ville, cp }
@@ -476,15 +477,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
             noir et rappel de l event modifie, comme Reglages d Apple. Meme
             entete que l espace orga (evf-entete). */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: MARGE_HAUT_FEUILLE, paddingBottom: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#E4E4E7' }}>
-          <TouchableOpacity
-            onPress={fermer}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Retour"
-            style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: '#E4E4E7', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 20, lineHeight: lh(20, 24, 'Montserrat'), color: V.texte, marginTop: -2 }}>‹</Text>
-          </TouchableOpacity>
+          <BoutonRetour onPress={fermer} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={{ fontFamily: 'AVEstiana', fontSize: 22, lineHeight: lh(22, 26, 'AVEstiana'), color: V.texte }}>
               Modifier mon event
