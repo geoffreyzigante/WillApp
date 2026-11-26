@@ -6681,7 +6681,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         accessibilityRole="button"
                         accessibilityState={{ selected: actif }}
                         style={{
-                          backgroundColor: actif ? colorForType(t) : '#FFFFFF',
+                          backgroundColor: actif ? colorForType(t) : V.champ,
                           borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14,
                         }}
                       >
@@ -6771,7 +6771,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         <TouchableOpacity
                           key={c}
                           onPress={() => setCity(c)}
-                          style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: '#FFFFFF' }}
+                          style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: V.champ }}
                         >
                           <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 13, color: V.texte }}>{c}</Text>
                         </TouchableOpacity>
