@@ -25,3 +25,9 @@ export function lh(fontSize, demande, police = 'AVEstiana') {
   const ratio = police.startsWith('Montserrat') ? RATIO.Montserrat : RATIO.AVEstiana;
   return Math.max(demande, Math.ceil(fontSize * ratio));
 }
+
+// Marge entre le bord haut d une feuille iOS (pageSheet / formSheet) et son
+// entete (retour, titre). Sous 20 pt, le retour se colle au coin arrondi de
+// la feuille (constat du 26/11 sur la fiche et « Modifier mon event »). Les
+// Reglages d Apple laissent ~28 pt : c est la valeur commune.
+export const MARGE_HAUT_FEUILLE = 28;

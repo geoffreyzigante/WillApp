@@ -25,6 +25,7 @@ import { useLongueurPinAPoser } from '../utils/usePinLength';
 import { PinDisplay } from '../components/PinDisplay';
 import { PinInputRow } from '../components/PinInputRow';
 import { completionOf, billingLabel } from '../utils/eventCompletion';
+import { MARGE_HAUT_FEUILLE } from '../constants/typo';
 
 export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, succes, onClose, onEdit, onOpenPhotos, onDeleted, onRefresh }) {
   const tint = colorForType(event.event_type);
@@ -250,7 +251,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
       onDismiss={() => { const suite = apresFermeture.current; apresFermeture.current = null; if (suite) suite(); }}
     >
       <SafeAreaView style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: MARGE_HAUT_FEUILLE, paddingBottom: 12 }}>
           <TouchableOpacity onPress={onClose} hitSlop={12}>
             <Text style={{ color: C.orga, fontSize: 16, fontFamily: 'Montserrat-Medium' }}>‹ Fermer</Text>
           </TouchableOpacity>

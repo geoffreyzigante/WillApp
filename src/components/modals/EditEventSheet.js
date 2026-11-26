@@ -28,7 +28,7 @@ import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { C } from '../../constants/colors';
 import { API_URL } from '../../constants/api';
-import { lh } from '../../constants/typo';
+import { lh, MARGE_HAUT_FEUILLE } from '../../constants/typo';
 import { EVENT_TYPES, displayEventType, formatDateForForm, isoJourLocal } from '../../utils/format';
 import { REQUIRED_FIELDS } from '../../utils/eventCompletion';
 import { CalendarRangeModal } from './CalendarRangeModal';
@@ -475,7 +475,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
         {/* Entete B (validee le 26/11) : pas de bandeau. Retour rond, titre
             noir et rappel de l event modifie, comme Reglages d Apple. Meme
             entete que l espace orga (evf-entete). */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 18, paddingBottom: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#E4E4E7' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: MARGE_HAUT_FEUILLE, paddingBottom: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#E4E4E7' }}>
           <TouchableOpacity
             onPress={fermer}
             hitSlop={12}

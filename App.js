@@ -69,7 +69,7 @@ installerJournal();
 import { API_URL, PRICE_PER_PHOTO_EUR } from './src/constants/api';
 import { completionOf } from './src/utils/eventCompletion';
 import { BoutonApple } from './src/components/BoutonApple';
-import { lh } from './src/constants/typo';
+import { lh, MARGE_HAUT_FEUILLE } from './src/constants/typo';
 import {
   LAST_CAPTURE_KEY,
   PENDING_DIR_NAME,
@@ -5648,7 +5648,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
           {/* Meme gabarit que les pages de connexion : croix carree arrondie
               en haut a gauche, action a droite, puis grand titre AVEstiana
               violet centre (uniformisation 2026-08-31). */}
-          <View style={{ paddingHorizontal: 28, paddingTop: 20 }}>
+          <View style={{ paddingHorizontal: 28, paddingTop: MARGE_HAUT_FEUILLE }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
               <TouchableOpacity
                 onPress={() => setGalleryOpen(false)}
