@@ -6299,7 +6299,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Autorisation refusée', 'Active l\'accès à tes photos dans les réglages.');
+        Alert.alert('Accès aux photos refusé', 'Active l\'accès à tes photos dans les réglages.', [{ text: 'Plus tard', style: 'cancel' }, { text: 'Ouvrir les réglages', onPress: () => Linking.openSettings() }]);
         return;
       }
       const r = await ImagePicker.launchImageLibraryAsync({

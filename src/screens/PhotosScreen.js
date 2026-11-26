@@ -18,6 +18,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import {
   View, Text, TouchableOpacity, Image, Animated, Alert, Dimensions,
 } from 'react-native';
+import { Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
@@ -715,7 +716,7 @@ export function PhotosScreen({ events = [], runnerFirstName = '', onOpenSelfie, 
     try {
       const perm = await MediaLibrary.requestPermissionsAsync(true);
       if (!perm.granted) {
-        Alert.alert('Permission refusée', 'Autorise l\'accès aux photos pour sauvegarder dans la pellicule.');
+        Alert.alert('Accès aux photos refusé', 'Autorise l\'accès aux photos pour sauvegarder dans la pellicule.', [{ text: 'Plus tard', style: 'cancel' }, { text: 'Ouvrir les réglages', onPress: () => Linking.openSettings() }]);
         return;
       }
       const net = await NetInfo.fetch().catch(() => null);
