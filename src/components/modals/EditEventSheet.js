@@ -36,7 +36,6 @@ import { CropImageModal } from './CropImageModal';
 import {
   V, Bloc, Ligne, LigneEpreuve, Champ, ChampBouton, TitreSection, Pied, AjouterEpreuve,
 } from '../formLignes';
-import { GrainViolet } from '../GrainViolet';
 
 // ── Lecture / ecriture, memes regles que le web ─────────────────────────
 // "Louviers (27400)" -> { ville, cp }
@@ -473,35 +472,35 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
       onDismiss={prevenirFermeture}
     >
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#fff' }} behavior={Platform.OS === 'ios' ? undefined : 'height'}>
-        {/* Entete violette au grain, comme « Lancer mon event » et la maquette
-            validee : retour · titre · etat d enregistrement. */}
-        <GrainViolet style={{ paddingTop: 16, paddingBottom: 16, paddingHorizontal: 16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ width: 84 }}>
-              <TouchableOpacity
-                onPress={fermer}
-                hitSlop={14}
-                accessibilityRole="button"
-                accessibilityLabel="Retour"
-                style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 18, lineHeight: lh(18, 22, 'Montserrat'), color: '#fff', marginTop: -2 }}>‹</Text>
-              </TouchableOpacity>
-            </View>
-            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ flex: 1, textAlign: 'center', fontFamily: 'AVEstiana', fontSize: 22, color: '#fff' }}>
+        {/* Entete B (validee le 26/11) : pas de bandeau. Retour rond, titre
+            noir et rappel de l event modifie, comme Reglages d Apple. Meme
+            entete que l espace orga (evf-entete). */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 18, paddingBottom: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#E4E4E7' }}>
+          <TouchableOpacity
+            onPress={fermer}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Retour"
+            style={{ width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: '#E4E4E7', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 20, lineHeight: lh(20, 24, 'Montserrat'), color: V.texte, marginTop: -2 }}>‹</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={{ fontFamily: 'AVEstiana', fontSize: 22, lineHeight: lh(22, 26, 'AVEstiana'), color: V.texte }}>
               Modifier mon event
             </Text>
-            <View style={{ width: 84, alignItems: 'flex-end' }}>
-              <Text
-                accessibilityLiveRegion="polite"
-                numberOfLines={3}
-                style={{ fontFamily: 'Montserrat', fontSize: 12, lineHeight: lh(12, 15, 'Montserrat'), color: etatErreur ? '#FFD4D0' : 'rgba(255,255,255,0.9)', textAlign: 'right' }}
-              >
-                {etatTexte}
-              </Text>
-            </View>
+            <Text numberOfLines={1} style={{ fontFamily: 'Montserrat', fontSize: 12.5, lineHeight: lh(12.5, 16, 'Montserrat'), color: V.libelle }}>
+              {[nom.trim() || ev.name, dateAffichee].filter(Boolean).join(' · ')}
+            </Text>
           </View>
-        </GrainViolet>
+          <Text
+            accessibilityLiveRegion="polite"
+            numberOfLines={2}
+            style={{ maxWidth: 96, fontFamily: 'Montserrat', fontSize: 12, lineHeight: lh(12, 15, 'Montserrat'), color: etatErreur ? C.error : V.libelle, textAlign: 'right' }}
+          >
+            {etatTexte}
+          </Text>
+        </View>
 
         <ScrollView
           ref={defilementRef}
