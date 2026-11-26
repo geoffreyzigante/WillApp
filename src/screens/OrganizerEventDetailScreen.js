@@ -14,7 +14,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, SafeAreaView, View, Text, TouchableOpacity, ScrollView,
-  Alert, Share, Switch, KeyboardAvoidingView, Platform, ActivityIndicator,
+  Alert, Share, Switch, KeyboardAvoidingView, Platform, ActivityIndicator, Linking,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,6 +27,7 @@ import { PinInputRow } from '../components/PinInputRow';
 import { completionOf, billingLabel } from '../utils/eventCompletion';
 import { MARGE_HAUT_FEUILLE } from '../constants/typo';
 import { T } from '../constants/tokens';
+import { BandeMiniatures, ListeLignes, LigneIcone, LigneTelechargement, FeuillePartage, DroitePin, Chevron, FlecheExterne } from '../components/FicheEventDepliee';
 import { BoutonRetour } from '../components/BoutonRetour';
 
 // inline : la fiche se deplie DANS la carte de la liste (comme le site) ; seul
@@ -59,6 +60,21 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
   const [pinOuvert, setPinOuvert] = useState(false);
   const [pinSaisi, setPinSaisi] = useState('');
   const [pinBusy, setPinBusy] = useState(false);
+  // Carte depliee : les photos (miniatures, archives) et la feuille de partage.
+  const [photosData, setPhotosData] = useState(null);
+  const [partageOuvert, setPartageOuvert] = useState(false);
+  useEffect(() => {
+    if (!inline) return undefined;
+    let annule = false;
+    (async () => {
+      try {
+        const r = await organizerApiFetch(`/organizer/event-photos/${event.code}`);
+        const d = r.ok ? await r.json() : null;
+        if (!annule) setPhotosData(d || { during_event: [], before_event: [], total_raw_count: 0 });
+      } catch { if (!annule) setPhotosData({ during_event: [], before_event: [], total_raw_count: 0 }); }
+    })();
+    return () => { annule = true; };
+  }, [inline, event.code]);
   const pinLen = useLongueurPinAPoser(pinOuvert);
   const isReady = !!event?.active;
   const dotColor = isReady ? '#34D399' : '#FBBF24';
@@ -246,7 +262,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
 
   const sub = [event.location, event.event_type ? displayEventType(event.event_type) : null].filter(Boolean).join(' · ');
 
-  const corps = (
+  const blocCompletion = (
     <>
           {/* Completion — brouillons uniquement, comme sur le web */}
           {isDraft ? (
@@ -307,6 +323,12 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
             </View>
           ) : null}
 
+    </>
+  );
+
+  const corps = (
+    <>
+          {blocCompletion}
           {/* Actions */}
           <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 16 }}>
             <TouchableOpacity onPress={onOpenPhotos} style={{ flex: 2, backgroundColor: C.orga, paddingVertical: 14, borderRadius: 12, alignItems: 'center' }}>
@@ -430,10 +452,54 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
   );
 
   if (inline) {
+    const urlGalerie = `https://will-app.com/event/${event.code}`;
+    const pinConnu = isKnownPin(photographerPwd);
     return (
-      <View style={{ backgroundColor: '#fff', paddingBottom: 20 }}>
-        {corps}
+      <View style={{ backgroundColor: '#fff', paddingTop: 16, paddingBottom: 20 }}>
+        {isDraft ? blocCompletion : null}
+
+        <BandeMiniatures
+          photos={photosData?.during_event || []}
+          total={photosData ? (photosData.total_raw_count ?? (photosData.during_event || []).length) : 0}
+          chargement={photosData === null}
+          onVoirTout={onOpenPhotos}
+        />
+
+        <View style={{ marginHorizontal: 16 }}>
+          <ListeLignes>
+            {!isDraft ? (
+              <LigneIcone type="infos" titre="Infos de l'event" sous="Nom, date, lieu, épreuves, photo de couverture" droite={<Chevron />} onPress={modifier} />
+            ) : null}
+            <LigneIcone
+              type="pin"
+              titre="Code PIN photographe"
+              sous={isReady ? 'À transmettre à tes photographes' : 'Il marchera dès que ton event sera validé'}
+              enfants={<DroitePin pin={pinConnu ? photographerPwd : null} onModifier={ouvrirPin} onCopier={copyPin} />}
+            />
+            {afficheVisibilite ? (
+              <LigneIcone
+                type="visibilite"
+                titre="Visibilité"
+                sous={listed ? 'Visible dans la liste publique Will.' : 'Masqué de la liste publique, accessible par lien direct.'}
+                droite={<Switch value={listed} onValueChange={toggleListed} disabled={savingListed} trackColor={{ false: '#D4D4D8', true: C.orga }} thumbColor="#fff" />}
+              />
+            ) : null}
+            <LigneTelechargement code={event.code} organizerApiFetch={organizerApiFetch} photosData={photosData} />
+            <LigneIcone type="galerie" titre="Galerie publique" sous="Voir l'event comme un participant" droite={<FlecheExterne />} onPress={() => Linking.openURL(urlGalerie).catch(() => {})} />
+            <LigneIcone type="partage" titre="Partager" sous="Lien et QR code de l'event" droite={<Chevron />} onPress={() => setPartageOuvert(true)} />
+          </ListeLignes>
+        </View>
+
+        <View style={{ marginTop: 24, marginHorizontal: 20, alignItems: 'flex-end' }}>
+          <TouchableOpacity onPress={confirmDelete} disabled={deleting} hitSlop={12}>
+            <Text style={{ color: deleting ? C.textSoft : C.error, fontSize: 14, fontFamily: 'Montserrat-Medium' }}>
+              {deleting ? 'Suppression…' : 'Supprimer cet événement'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {modalPin}
+        <FeuillePartage visible={partageOuvert} code={event.code} onClose={() => setPartageOuvert(false)} />
       </View>
     );
   }
