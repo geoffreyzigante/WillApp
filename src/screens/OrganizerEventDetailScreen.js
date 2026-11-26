@@ -29,7 +29,9 @@ import { MARGE_HAUT_FEUILLE } from '../constants/typo';
 import { T } from '../constants/tokens';
 import { BoutonRetour } from '../components/BoutonRetour';
 
-export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, succes, onClose, onEdit, onOpenPhotos, onDeleted, onRefresh }) {
+// inline : la fiche se deplie DANS la carte de la liste (comme le site) ; seul
+// le contenu est rendu, sans feuille, sans entete ni bandeau colore.
+export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, succes, onClose, onEdit, onOpenPhotos, onDeleted, onRefresh, inline = false }) {
   const tint = colorForType(event.event_type);
   // « Modifier » : la fiche est une pageSheet iOS. Presenter la feuille
   // d edition pendant que celle-ci se retire echoue EN SILENCE (constate le
@@ -39,7 +41,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
   const [ouverte, setOuverte] = useState(true);
   const apresFermeture = useRef(null);
   const modifier = () => {
-    if (Platform.OS !== 'ios') { onEdit?.(); return; }
+    if (inline || Platform.OS !== 'ios') { onEdit?.(); return; }
     apresFermeture.current = onEdit;
     setOuverte(false);
   };
@@ -244,80 +246,8 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
 
   const sub = [event.location, event.event_type ? displayEventType(event.event_type) : null].filter(Boolean).join(' · ');
 
-  return (
-    <Modal
-      visible={ouverte}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-      onDismiss={() => { const suite = apresFermeture.current; apresFermeture.current = null; if (suite) suite(); }}
-    >
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: MARGE_HAUT_FEUILLE, paddingBottom: 12 }}>
-          <BoutonRetour onPress={onClose} libelle="Fermer" />
-        </View>
-
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-          {/* Arrivee depuis la creation : le bandeau remplace l ecran de
-              confirmation, qui disait ce que cette page dit deja. */}
-          {succes ? (
-            <View style={{ marginHorizontal: 16, marginBottom: 14, borderRadius: 14, backgroundColor: succes.brouillon ? T.couleur.champFond : '#E7F8F0', paddingHorizontal: 16, paddingVertical: 14 }}>
-              <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, color: succes.brouillon ? C.orga : '#047857' }}>
-                {succes.brouillon ? 'Ton event est créé' : 'Ton event est parti en validation'}
-              </Text>
-              <Text style={{ fontFamily: 'Montserrat', fontSize: 13, lineHeight: 19, color: 'rgba(26,20,38,0.65)', marginTop: 4 }}>
-                {succes.brouillon
-                  ? "Il est dans ton espace, personne ne le voit encore. Complète-le, puis envoie-le."
-                  : "L'équipe Will le vérifie sous 24 h. Tu recevras un email dès que c'est bon."}
-              </Text>
-              {succes.coverFailed ? (
-                <Text style={{ fontFamily: 'Montserrat', fontSize: 12, lineHeight: 17, color: '#b45309', marginTop: 8 }}>
-                  L'image de couverture n'a pas pu être envoyée. Tu peux la recharger ci-dessous.
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-          {/* Bandeau colore */}
-          <View style={{ height: 180, marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: tint, position: 'relative' }}>
-            {event.cover_image ? (
-              <ExpoImage source={{ uri: event.cover_image }} style={{ position: 'absolute', width: '100%', height: '100%' }} contentFit="cover" />
-            ) : null}
-            <LinearGradient
-              colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.55)']}
-              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-            />
-            <View style={{ flex: 1, padding: 18, justifyContent: 'flex-end' }}>
-              <Text style={{ color: 'rgba(255,255,255,0.92)', fontSize: 12, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.2, marginBottom: 6 }}>
-                {dateStr}
-              </Text>
-              <Text style={{ color: '#fff', fontSize: 24, fontFamily: 'Montserrat-SemiBold' }} numberOfLines={1}>
-                {event.name}
-              </Text>
-              {sub ? (
-                <Text style={{ fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.9)', fontSize: 13, marginTop: 4 }} numberOfLines={1}>
-                  {sub}
-                </Text>
-              ) : null}
-              {/* Statut + facturation : deux pastilles, comme le bandeau web. */}
-              <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.92)' }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: dotColor }} />
-                  <Text style={{ color: '#1A1A1A', fontSize: 12, fontFamily: 'Montserrat-Medium' }}>{statusLabel}</Text>
-                </View>
-                {facturation ? (
-                  <View style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.2)' }}>
-                    <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'Montserrat-Medium' }}>{facturation}</Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
-            {countdown ? (
-              <Text style={{ position: 'absolute', right: 14, bottom: 10, color: '#fff', fontSize: 32, fontWeight: '700', fontStyle: 'italic', letterSpacing: -1 }}>
-                {countdown}
-              </Text>
-            ) : null}
-          </View>
-
+  const corps = (
+    <>
           {/* Completion — brouillons uniquement, comme sur le web */}
           {isDraft ? (
             <View style={{ marginHorizontal: 16, marginTop: 16, backgroundColor: '#fff', borderRadius: 18, padding: 18 }}>
@@ -455,9 +385,11 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
               </Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </SafeAreaView>
+    </>
+  );
 
+  const modalPin = (
+    <>
       {/* Modification du PIN — reprise telle quelle de l ancienne feuille
           d edition. Enfant de la fiche pour se presenter au-dessus d elle. */}
       <Modal visible={pinOuvert} animationType="slide" transparent onRequestClose={() => setPinOuvert(false)}>
@@ -494,6 +426,97 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <View style={{ backgroundColor: '#fff', paddingBottom: 20 }}>
+        {corps}
+        {modalPin}
+      </View>
+    );
+  }
+
+  return (
+    <Modal
+      visible={ouverte}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+      onDismiss={() => { const suite = apresFermeture.current; apresFermeture.current = null; if (suite) suite(); }}
+    >
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: MARGE_HAUT_FEUILLE, paddingBottom: 12 }}>
+          <BoutonRetour onPress={onClose} libelle="Fermer" />
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+          {/* Arrivee depuis la creation : le bandeau remplace l ecran de
+              confirmation, qui disait ce que cette page dit deja. */}
+          {succes ? (
+            <View style={{ marginHorizontal: 16, marginBottom: 14, borderRadius: 14, backgroundColor: succes.brouillon ? T.couleur.champFond : '#E7F8F0', paddingHorizontal: 16, paddingVertical: 14 }}>
+              <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 15, color: succes.brouillon ? C.orga : '#047857' }}>
+                {succes.brouillon ? 'Ton event est créé' : 'Ton event est parti en validation'}
+              </Text>
+              <Text style={{ fontFamily: 'Montserrat', fontSize: 13, lineHeight: 19, color: 'rgba(26,20,38,0.65)', marginTop: 4 }}>
+                {succes.brouillon
+                  ? "Il est dans ton espace, personne ne le voit encore. Complète-le, puis envoie-le."
+                  : "L'équipe Will le vérifie sous 24 h. Tu recevras un email dès que c'est bon."}
+              </Text>
+              {succes.coverFailed ? (
+                <Text style={{ fontFamily: 'Montserrat', fontSize: 12, lineHeight: 17, color: '#b45309', marginTop: 8 }}>
+                  L'image de couverture n'a pas pu être envoyée. Tu peux la recharger ci-dessous.
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          {/* Bandeau colore */}
+          <View style={{ height: 180, marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: tint, position: 'relative' }}>
+            {event.cover_image ? (
+              <ExpoImage source={{ uri: event.cover_image }} style={{ position: 'absolute', width: '100%', height: '100%' }} contentFit="cover" />
+            ) : null}
+            <LinearGradient
+              colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.55)']}
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+            />
+            <View style={{ flex: 1, padding: 18, justifyContent: 'flex-end' }}>
+              <Text style={{ color: 'rgba(255,255,255,0.92)', fontSize: 12, fontFamily: 'Montserrat-SemiBold', letterSpacing: 1.2, marginBottom: 6 }}>
+                {dateStr}
+              </Text>
+              <Text style={{ color: '#fff', fontSize: 24, fontFamily: 'Montserrat-SemiBold' }} numberOfLines={1}>
+                {event.name}
+              </Text>
+              {sub ? (
+                <Text style={{ fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.9)', fontSize: 13, marginTop: 4 }} numberOfLines={1}>
+                  {sub}
+                </Text>
+              ) : null}
+              {/* Statut + facturation : deux pastilles, comme le bandeau web. */}
+              <View style={{ marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.92)' }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: dotColor }} />
+                  <Text style={{ color: '#1A1A1A', fontSize: 12, fontFamily: 'Montserrat-Medium' }}>{statusLabel}</Text>
+                </View>
+                {facturation ? (
+                  <View style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                    <Text style={{ color: '#fff', fontSize: 12, fontFamily: 'Montserrat-Medium' }}>{facturation}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+            {countdown ? (
+              <Text style={{ position: 'absolute', right: 14, bottom: 10, color: '#fff', fontSize: 32, fontWeight: '700', fontStyle: 'italic', letterSpacing: -1 }}>
+                {countdown}
+              </Text>
+            ) : null}
+          </View>
+
+          {corps}
+        </ScrollView>
+      </SafeAreaView>
+
+      {modalPin}
     </Modal>
   );
 }

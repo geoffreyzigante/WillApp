@@ -16,6 +16,7 @@ import { View, Text, TouchableOpacity, ActivityIndicator, Alert, Linking, AppSta
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CtaWill, CtaWill2 } from '../components/CtaWill';
+import { OrganizerEventDetailScreen } from './OrganizerEventDetailScreen';
 import { isUpcoming, formatDateLong, cityLabel, displayEventType } from '../utils/format';
 import { T } from '../constants/tokens';
 import { RefreshableScrollView } from '../components/loaders';
@@ -73,6 +74,9 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(null);
   const [checkoutOuvert, setCheckoutOuvert] = useState(false);
+  // Carte depliee (code de l event) : un tap deplie la fiche DANS la carte,
+  // comme sur le site, au lieu d ouvrir une feuille. Une seule a la fois.
+  const [depliee, setDepliee] = useState(null);
 
   const reload = async () => {
     setLoading(true);
@@ -211,7 +215,10 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                hauteur (moitie droite, fondu vers la couleur), nom, avancement,
                statut en mots. Actions alignees sur une meme ligne :
                Modifier (N2) a gauche, Photos / Mettre en ligne (N1) a droite. */
-            <View key={e.code || i} style={{ marginBottom: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: colorForType(e.event_type) }}>
+            <View key={e.code || i} style={{ marginBottom: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: '#fff' }}>
+              {/* Bloc colore : la photo et le fondu ne couvrent que lui, pas
+                  la fiche depliee dessous. */}
+              <View style={{ backgroundColor: colorForType(e.event_type) }}>
               {e.cover_image ? (
                 <>
                   <ExpoImage
@@ -231,7 +238,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                   />
                 </>
               ) : null}
-              <TouchableOpacity activeOpacity={0.9} onPress={() => (onOpenEventDetail || onOpenEventPhotos)?.(e)} style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }} />
+              <TouchableOpacity activeOpacity={0.9} onPress={() => setDepliee(c => (c === e.code ? null : e.code))} style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }} accessibilityRole="button" accessibilityState={{ expanded: depliee === e.code }} />
 
               <View pointerEvents="box-none" style={{ padding: 16 }}>
                 <View pointerEvents="none">
@@ -280,6 +287,22 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                   ) : null}
                 </View>
               </View>
+              </View>
+
+              {/* Fiche depliee : meme contenu que l ancienne feuille, dans la
+                  carte (fond blanc sous le bloc colore). */}
+              {depliee === e.code ? (
+                <OrganizerEventDetailScreen
+                  inline
+                  session={session}
+                  organizerApiFetch={organizerApiFetch}
+                  event={e}
+                  onEdit={() => onEditEvent?.(e)}
+                  onOpenPhotos={() => onOpenEventPhotos?.(e)}
+                  onDeleted={() => { setDepliee(null); reload(); }}
+                  onRefresh={reload}
+                />
+              ) : null}
             </View>
           );
         })
