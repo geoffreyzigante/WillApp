@@ -6183,7 +6183,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
         // /villes garde la France sur geo.api — meilleure source pour ce pays
         // — mais bascule sur sa table embarquee quand elle ne repond pas, et
         // sait repondre pour les autres pays le jour venu.
-        const r = await fetch(`${API_URL}/villes?cp=${postalCode}`, { signal: ctl.signal });
+        const r = await fetch(`${API_URL}/villes?cp=${postalCode}&v=2`, { signal: ctl.signal });
         clearTimeout(timeoutId);
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();

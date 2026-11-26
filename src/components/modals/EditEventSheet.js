@@ -333,7 +333,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
     let annule = false;
     const ctl = new AbortController();
     const minuterie = setTimeout(() => ctl.abort(), 3000);
-    fetch(`${API_URL}/villes?cp=${cp}`, { signal: ctl.signal })
+    fetch(`${API_URL}/villes?cp=${cp}&v=2`, { signal: ctl.signal })
       .then(r => (r.ok ? r.json() : { villes: [] }))
       .then((d) => {
         if (annule) return;
@@ -599,7 +599,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
                           const loc = `${v} (${cp})`;
                           if (loc !== sauve.current.location) enregistrer({ location: loc });
                         }}
-                        style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: actif ? C.orga : V.champ }}
+                        style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: actif ? C.orga : '#FFFFFF' }}
                       >
                         <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 13, color: actif ? '#fff' : V.texte }}>{v}</Text>
                       </TouchableOpacity>
