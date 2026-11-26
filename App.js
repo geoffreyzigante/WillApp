@@ -6690,7 +6690,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                 <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
                   {Array.from({ length: 24 }).map((_, h) => {
                     const cur = distances[timePickerIdx]?.time || '';
-                    const m = cur.match(/^(\d{1,2})h(\d{2})?/);
+                    const m = cur.match(/^(\d{1,2})[h:](\d{2})?/);
                     const curH = m ? parseInt(m[1], 10) : -1;
                     const active = curH === h;
                     return (
@@ -6698,9 +6698,9 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         key={h}
                         onPress={() => {
                           const cur2 = distances[timePickerIdx]?.time || '';
-                          const m2 = cur2.match(/h(\d{2})/);
+                          const m2 = cur2.match(/[h:](\d{2})/);
                           const min = m2 ? m2[1] : '00';
-                          updateDistance(timePickerIdx, 'time', `${h}h${min}`);
+                          updateDistance(timePickerIdx, 'time', `${String(h).padStart(2, '0')}:${min}`);
                         }}
                         style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                       >
@@ -6716,7 +6716,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                   {Array.from({ length: 12 }).map((_, i) => {
                     const min = i * 5;
                     const cur = distances[timePickerIdx]?.time || '';
-                    const m = cur.match(/h(\d{2})/);
+                    const m = cur.match(/[h:](\d{2})/);
                     const curM = m ? parseInt(m[1], 10) : -1;
                     const active = curM === min;
                     return (
@@ -6724,9 +6724,9 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         key={min}
                         onPress={() => {
                           const cur2 = distances[timePickerIdx]?.time || '';
-                          const m2 = cur2.match(/^(\d{1,2})h/);
+                          const m2 = cur2.match(/^(\d{1,2})[h:]/);
                           const h = m2 ? m2[1] : '9';
-                          updateDistance(timePickerIdx, 'time', `${h}h${String(min).padStart(2, '0')}`);
+                          updateDistance(timePickerIdx, 'time', `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`);
                         }}
                         style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                       >
@@ -6759,7 +6759,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                 return (
                   <TouchableOpacity
                     key={m}
-                    onPress={() => updateDistance(elevPickerIdx, 'elevation', `${m}m D+`)}
+                    onPress={() => updateDistance(elevPickerIdx, 'elevation', String(m))}
                     style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                   >
                     <Text style={{ color: active ? '#fff' : C.text, fontFamily: 'Montserrat-SemiBold', fontSize: 16 }}>{m} m</Text>
@@ -8229,7 +8229,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                 <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
                   {Array.from({ length: 24 }).map((_, h) => {
                     const cur = distances[timePickerIdx]?.time || '';
-                    const m = cur.match(/^(\d{1,2})h(\d{2})?/);
+                    const m = cur.match(/^(\d{1,2})[h:](\d{2})?/);
                     const curH = m ? parseInt(m[1], 10) : -1;
                     const active = curH === h;
                     return (
@@ -8237,9 +8237,9 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         key={h}
                         onPress={() => {
                           const cur = distances[timePickerIdx]?.time || '';
-                          const m2 = cur.match(/h(\d{2})/);
+                          const m2 = cur.match(/[h:](\d{2})/);
                           const min = m2 ? m2[1] : '00';
-                          updateDistance(timePickerIdx, 'time', `${h}h${min}`);
+                          updateDistance(timePickerIdx, 'time', `${String(h).padStart(2, '0')}:${min}`);
                         }}
                         style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                       >
@@ -8255,7 +8255,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                   {Array.from({ length: 12 }).map((_, i) => {
                     const min = i * 5;
                     const cur = distances[timePickerIdx]?.time || '';
-                    const m = cur.match(/h(\d{2})/);
+                    const m = cur.match(/[h:](\d{2})/);
                     const curM = m ? parseInt(m[1], 10) : -1;
                     const active = curM === min;
                     return (
@@ -8263,9 +8263,9 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         key={min}
                         onPress={() => {
                           const cur = distances[timePickerIdx]?.time || '';
-                          const m2 = cur.match(/^(\d{1,2})h/);
+                          const m2 = cur.match(/^(\d{1,2})[h:]/);
                           const h = m2 ? m2[1] : '9';
-                          updateDistance(timePickerIdx, 'time', `${h}h${String(min).padStart(2, '0')}`);
+                          updateDistance(timePickerIdx, 'time', `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`);
                         }}
                         style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                       >
@@ -8299,7 +8299,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                   <TouchableOpacity
                     key={m}
                     onPress={() => {
-                      updateDistance(elevPickerIdx, 'elevation', `${m}m D+`);
+                      updateDistance(elevPickerIdx, 'elevation', String(m));
                     }}
                     style={{ paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: active ? C.pinkPill : 'transparent', marginBottom: 2 }}
                   >

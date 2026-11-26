@@ -369,7 +369,10 @@ function EventDetailScreenInner({ event, onClose, onLogoPress, onOpenSelfie, sel
       // affichait « 17:00 · 0 mD+ ». Les organisateurs laissent le champ a 0
       // quand le parcours est plat, ce qui va de soi sur une course sur route.
       const elevBrut = d && d.elevation !== undefined && d.elevation !== null ? String(d.elevation).trim() : '';
-      const elev = elevBrut && Number(elevBrut) > 0 ? elevBrut : '';
+      // « 450 » (site) comme « 450m D+ » (anciennes saisies de l app) : sans
+      // parseInt, le second format ne s affichait jamais (audit du 26/11).
+      const elevNum = parseInt(elevBrut, 10);
+      const elev = elevNum > 0 ? String(elevNum) : '';
       return {
         key: `info-${i}`,
         // Memes deux regles que dans le panneau qu elle remplace : majuscule
