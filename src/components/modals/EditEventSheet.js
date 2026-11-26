@@ -472,7 +472,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
       onRequestClose={fermer}
       onDismiss={prevenirFermeture}
     >
-      <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#fff' }} behavior={Platform.OS === 'ios' ? undefined : 'height'}>
+      <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.fondApp }} behavior={Platform.OS === 'ios' ? undefined : 'height'}>
         {/* Entete B (validee le 26/11) : pas de bandeau. Retour rond, titre
             noir et rappel de l event modifie, comme Reglages d Apple. Meme
             entete que l espace orga (evf-entete). */}
@@ -512,7 +512,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
             onPress={choisirCover}
             disabled={coverBusy}
             activeOpacity={0.85}
-            style={{ height: 160, borderRadius: 18, overflow: 'hidden', backgroundColor: V.ligne, alignItems: 'center', justifyContent: 'center' }}
+            style={{ height: 160, borderRadius: 18, overflow: 'hidden', backgroundColor: V.ligne, borderWidth: 1, borderColor: V.filet, alignItems: 'center', justifyContent: 'center' }}
           >
             {cover ? (
               <ExpoImage source={{ uri: cover }} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} contentFit="cover" />
@@ -599,7 +599,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
                           const loc = `${v} (${cp})`;
                           if (loc !== sauve.current.location) enregistrer({ location: loc });
                         }}
-                        style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: actif ? C.orga : '#fff', borderWidth: 1, borderColor: actif ? C.orga : V.bord }}
+                        style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: actif ? C.orga : V.champ, borderWidth: 1, borderColor: actif ? C.orga : V.bord }}
                       >
                         <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 13, color: actif ? '#fff' : V.texte }}>{v}</Text>
                       </TouchableOpacity>

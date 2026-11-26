@@ -6601,7 +6601,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={fermerAvecGarde}>
       {/* Entete violet : barre d etat claire (25/11). */}
       <StatusBar barStyle="light-content" animated />
-      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+      <View style={{ flex: 1, backgroundColor: C.fondApp }}>
         <View style={{ flex: 1 }}>
             <ScrollView
               ref={listeRef}
@@ -6681,7 +6681,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         accessibilityRole="button"
                         accessibilityState={{ selected: actif }}
                         style={{
-                          backgroundColor: actif ? colorForType(t) : '#fff',
+                          backgroundColor: actif ? colorForType(t) : V.champ,
                           borderWidth: 1, borderColor: actif ? colorForType(t) : V.bord,
                           borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14,
                         }}
@@ -6772,7 +6772,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                         <TouchableOpacity
                           key={c}
                           onPress={() => setCity(c)}
-                          style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: '#fff', borderWidth: 1, borderColor: V.bord }}
+                          style={{ paddingVertical: 7, paddingHorizontal: 11, borderRadius: 999, backgroundColor: V.champ, borderWidth: 1, borderColor: V.bord }}
                         >
                           <Text style={{ fontFamily: 'Montserrat-Medium', fontSize: 13, color: V.texte }}>{c}</Text>
                         </TouchableOpacity>

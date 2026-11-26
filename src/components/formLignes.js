@@ -24,19 +24,23 @@ export const V = {
   texte: '#1A1426',
   libelle: '#6b6480',
   placeholder: '#a8a2b8',
-  ligne: '#F5F3FA',
-  filet: '#E9E5F3',
+  // Page en lavande (C.fondApp) : les lignes sont BLANCHES avec un filet gris,
+  // comme la fiche d event et l espace orga. Un fond #F5F3FA se confondait
+  // avec la page (ecart imperceptible).
+  ligne: '#FFFFFF',
+  filet: '#E4E4E7',
+  champ: '#F5F3FA',
   bord: '#E6E1F2',
   bordManque: '#E8B4BC',
   actif: C.orga,
-  focus: '#FFFFFF', // sur la ligne #F5F3FA, un fond pale ne se verrait pas
+  focus: '#F5F3FA',
 };
 
 export function Bloc({ children }) {
   const lignes = React.Children.toArray(children).filter(React.isValidElement);
   const n = lignes.length;
   return (
-    <View style={{ backgroundColor: V.filet, borderRadius: 14, gap: 1 }}>
+    <View style={{ backgroundColor: V.filet, borderRadius: 14, gap: 1, borderWidth: 1, borderColor: V.filet }}>
       {lignes.map((l, i) => React.cloneElement(l, { coinHaut: i === 0, coinBas: i === n - 1 }))}
     </View>
   );
@@ -44,8 +48,8 @@ export function Bloc({ children }) {
 
 export function coins(coinHaut, coinBas) {
   return {
-    borderTopLeftRadius: coinHaut ? 14 : 0, borderTopRightRadius: coinHaut ? 14 : 0,
-    borderBottomLeftRadius: coinBas ? 14 : 0, borderBottomRightRadius: coinBas ? 14 : 0,
+    borderTopLeftRadius: coinHaut ? 13 : 0, borderTopRightRadius: coinHaut ? 13 : 0,
+    borderBottomLeftRadius: coinBas ? 13 : 0, borderBottomRightRadius: coinBas ? 13 : 0,
   };
 }
 
@@ -165,7 +169,7 @@ export function ChampBouton({ valeur, placeholder, manque, onPress, style, centr
 }
 
 // Pastille blanche d une epreuve : un petit champ, ou un bouton (heure).
-const pastille = { height: 32, borderRadius: 8, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' };
+const pastille = { height: 32, borderRadius: 8, backgroundColor: V.champ, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' };
 const textePastille = { fontFamily: 'Montserrat', fontSize: 14, color: V.texte, paddingVertical: 0 };
 
 // Une epreuve = une ligne : nom a gauche, distance · heure · D+ a droite.

@@ -251,7 +251,7 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
       onRequestClose={onClose}
       onDismiss={() => { const suite = apresFermeture.current; apresFermeture.current = null; if (suite) suite(); }}
     >
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#F2F2F7' }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: C.fondApp }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: MARGE_HAUT_FEUILLE, paddingBottom: 12 }}>
           <BoutonRetour onPress={onClose} libelle="Fermer" />
         </View>
