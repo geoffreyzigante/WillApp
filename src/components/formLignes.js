@@ -5,7 +5,10 @@
 // 26/11 » de will-launch-event-modal.js) et du dashboard (evf-*).
 //
 // Un bloc = des lignes sur fond #F5F3FA separees d 1 px (le fond du bloc,
-// #E9E5F3, passe entre elles). Libelle gris a gauche, champ blanc a droite.
+// #E9E5F3, passe entre elles). Libelle gris a gauche, valeur a droite, sans
+// cadre : c est la maquette validee le 26/11 (maquettes/modifier-event.html).
+// Le champ ne prend un fond qu au focus. Une epreuve tient sur UNE ligne :
+// son nom, puis trois pastilles blanches (distance, heure, D+).
 //
 // Ces briques vivent hors des composants : un composant redefini a chaque
 // rendu perdrait le focus du champ a chaque frappe.
@@ -14,6 +17,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { C } from '../constants/colors';
 import { lh } from '../constants/typo';
+import { Icon } from './Icon';
 
 // Valeurs de la maquette (evf-* dans dashboard/src/design/styles.css).
 export const V = {
@@ -25,6 +29,7 @@ export const V = {
   bord: '#E6E1F2',
   bordManque: '#E8B4BC',
   actif: C.primary,
+  focus: '#EFEAFB',
 };
 
 export function Bloc({ children }) {
@@ -106,18 +111,17 @@ export function Ligne({ libelle, manque, erreur, aide, libelleDessus, children, 
   );
 }
 
-export function cadreChamp(actif, manque) {
-  const bw = actif ? 2 : 1;
+export function cadreChamp(actif) {
+  // Pas de cadre : la ligne grise suffit a dire « modifiable ». Le fond
+  // n apparait qu au focus, pour montrer ou l on ecrit.
   return {
-    height: 38, borderRadius: 10, backgroundColor: '#fff',
-    borderWidth: bw, borderColor: actif ? V.actif : (manque ? V.bordManque : V.bord),
-    // La bordure s epaissit au focus : on retire d autant le retrait interieur
-    // pour que le texte ne bouge pas.
-    paddingHorizontal: 10 - (bw - 1),
+    height: 38, borderRadius: 8, paddingHorizontal: 6,
+    backgroundColor: actif ? V.focus : 'transparent',
   };
 }
 
-export function Champ({ manque, style, onFocus, onBlur, multiline, ...props }) {
+// aGauche : nom de l event, description. Par defaut la valeur est a droite.
+export function Champ({ manque, style, onFocus, onBlur, multiline, aGauche, ...props }) {
   const [actif, setActif] = useState(false);
   return (
     <TextInput
@@ -127,8 +131,8 @@ export function Champ({ manque, style, onFocus, onBlur, multiline, ...props }) {
       onFocus={(e) => { setActif(true); onFocus?.(e); }}
       onBlur={(e) => { setActif(false); onBlur?.(e); }}
       style={[
-        cadreChamp(actif, manque),
-        { fontFamily: 'Montserrat', fontSize: 15, color: V.texte, paddingVertical: 0 },
+        cadreChamp(actif),
+        { fontFamily: 'Montserrat', fontSize: 15, color: V.texte, paddingVertical: 0, textAlign: aGauche || multiline ? 'left' : 'right' },
         multiline && { height: undefined, minHeight: 84, paddingTop: 10, paddingBottom: 10, textAlignVertical: 'top' },
         style,
       ]}
@@ -136,21 +140,93 @@ export function Champ({ manque, style, onFocus, onBlur, multiline, ...props }) {
   );
 }
 
-// Champ qui ouvre un selecteur (type, date, heure) : meme cadre qu un champ.
-export function ChampBouton({ valeur, placeholder, manque, onPress, style, centre }) {
+// Champ qui ouvre un selecteur (type, date, heure) : valeur a droite, et
+// l icone violette qui dit ce qui va s ouvrir.
+export function ChampBouton({ valeur, placeholder, manque, onPress, style, centre, icone }) {
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.7}
-      style={[cadreChamp(false, manque), { justifyContent: 'center', alignItems: centre ? 'center' : 'flex-start' }, style]}
+      style={[cadreChamp(false), { flexDirection: 'row', alignItems: 'center', justifyContent: centre ? 'center' : 'flex-end', gap: 8 }, style]}
     >
       <Text
         numberOfLines={1}
-        style={{ fontFamily: 'Montserrat', fontSize: 15, color: valeur ? V.texte : (manque ? C.error : V.placeholder) }}
+        style={{ flexShrink: 1, fontFamily: 'Montserrat', fontSize: 15, color: valeur ? V.texte : (manque ? C.error : V.placeholder) }}
       >
         {valeur || placeholder}
       </Text>
+      {icone === 'liste' ? (
+        <Text style={{ fontFamily: 'Montserrat', fontSize: 15, color: C.primary, marginTop: -6 }}>⌄</Text>
+      ) : icone === 'calendrier' ? (
+        <Icon.Calendar size={17} color={C.primary} />
+      ) : null}
     </TouchableOpacity>
+  );
+}
+
+// Pastille blanche d une epreuve : un petit champ, ou un bouton (heure).
+const pastille = { height: 32, borderRadius: 8, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', justifyContent: 'center' };
+const textePastille = { fontFamily: 'Montserrat', fontSize: 14, color: V.texte, paddingVertical: 0 };
+
+// Une epreuve = une ligne : nom a gauche, distance · heure · D+ a droite.
+// Largeurs fixes : d une ligne a l autre, les pastilles font des colonnes.
+export function LigneEpreuve({
+  label, km, time, elevation, placeholderNom, kmManque, erreur,
+  onLabel, onKm, onElevation, onHeure, onRetirer, onBlur, coinHaut, coinBas,
+}) {
+  return (
+    <Ligne seule erreur={erreur} coinHaut={coinHaut} coinBas={coinBas}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 38 }}>
+        <Champ
+          value={label}
+          onChangeText={onLabel}
+          onBlur={onBlur}
+          aGauche
+          placeholder={placeholderNom}
+          accessibilityLabel="Nom de l'épreuve"
+          autoCapitalize="sentences"
+          maxLength={40}
+          style={{ flex: 1, fontSize: 14 }}
+        />
+        <View style={[pastille, { width: 60, gap: 3 }, kmManque && { borderWidth: 1, borderColor: V.bordManque }]}>
+          <TextInput
+            value={km}
+            onChangeText={onKm}
+            onBlur={onBlur}
+            keyboardType="decimal-pad"
+            placeholder="—"
+            placeholderTextColor={kmManque ? C.error : V.placeholder}
+            accessibilityLabel="Distance en km"
+            style={[textePastille, { minWidth: 14, maxWidth: 34, textAlign: 'right' }]}
+          />
+          <Text style={[textePastille, { color: kmManque ? C.error : V.texte }]}>km</Text>
+        </View>
+        <TouchableOpacity onPress={onHeure} activeOpacity={0.7} accessibilityLabel="Heure de départ" style={[pastille, { width: 54 }]}>
+          <Text style={[textePastille, !time && { color: V.placeholder }]}>{time || 'Heure'}</Text>
+        </TouchableOpacity>
+        <View style={[pastille, { width: 50, gap: 2 }]}>
+          <TextInput
+            value={elevation}
+            onChangeText={onElevation}
+            onBlur={onBlur}
+            keyboardType="number-pad"
+            placeholder="D+"
+            placeholderTextColor={V.placeholder}
+            accessibilityLabel="Dénivelé positif en mètres"
+            style={[textePastille, { minWidth: 18, maxWidth: 38, textAlign: 'center' }]}
+          />
+          {elevation ? <Text style={textePastille}>m</Text> : null}
+        </View>
+        <TouchableOpacity
+          onPress={onRetirer}
+          hitSlop={8}
+          accessibilityLabel="Retirer cette épreuve"
+          style={{ width: 20, height: 32, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: V.placeholder }}>✕</Text>
+        </TouchableOpacity>
+      </View>
+    </Ligne>
   );
 }
 

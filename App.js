@@ -246,7 +246,7 @@ import { PhotoViewerModal } from './src/components/modals/PhotoViewerModal';
 import { PIN_REGEX, isValidPin, generateRandomPin } from './src/utils/pin';
 import { useLongueurPinAPoser } from './src/utils/usePinLength';
 import {
-  V, Bloc, Ligne, Champ, ChampBouton, TitreSection, Pied, AjouterEpreuve, cadreChamp,
+  V, Bloc, Ligne, LigneEpreuve, Champ, ChampBouton, TitreSection, Pied, AjouterEpreuve, cadreChamp,
 } from './src/components/formLignes';
 import { Haptics } from './src/services/haptics';
 import { PhotoCell, PhotoGrid, PhotoGridItem } from './src/components/PhotoGrid';
@@ -6659,6 +6659,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     accessibilityLabel="Nom de l'event"
                     autoCapitalize="sentences"
                     returnKeyType="done"
+                    aGauche
                     manque={showErr[1] && !name?.trim()}
                     style={{ height: 44, fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}
                   />
@@ -6700,6 +6701,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     valeur={dateAffichee}
                     placeholder="Choisir"
                     manque={showErr[1] && !dateOk}
+                    icone="calendrier"
                     onPress={() => { Keyboard.dismiss(); setShowCalendar(true); }}
                   />
                 </Ligne>
@@ -6736,7 +6738,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                   erreur={erreurLieu}
                   aide={cityFetchFailed && !city ? 'Recherche de villes indisponible. Saisis ta ville à la main.' : ''}
                 >
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
                     <Champ
                       value={postalCode}
                       onChangeText={(v) => { setPostalCode(v.replace(/\D/g, '').slice(0, 5)); setCity(''); }}
@@ -6745,7 +6747,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                       placeholder="27400"
                       accessibilityLabel="Code postal"
                       manque={showErr[2] && !/^\d{5}$/.test(postalCode)}
-                      style={{ width: 78 }}
+                      style={{ minWidth: 56, paddingRight: 2 }}
                     />
                     {/* Un vrai champ : quand la recherche de communes tombe,
                         la ville se saisit a la main. */}
@@ -6756,7 +6758,7 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                       accessibilityLabel="Ville"
                       autoCapitalize="words"
                       manque={showErr[2] && !city?.trim()}
-                      style={{ flex: 1 }}
+                      style={{ minWidth: 52, flexShrink: 1, paddingLeft: 2 }}
                     />
                   </View>
                 </Ligne>
@@ -6793,54 +6795,21 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                 {distances.map((d, idx) => {
                   const kmManque = showErr[2] && !(parseFloat(d.km) > 0);
                   return (
-                    <Ligne key={idx} seule erreur={kmManque ? 'Indique la distance de cette épreuve' : ''}>
-                      <View style={{ gap: 6 }}>
-                        <Champ
-                          value={d.label}
-                          onChangeText={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
-                          placeholder={eventType ? displayEventType(eventType) : 'Nom'}
-                          accessibilityLabel="Nom de l'épreuve"
-                          autoCapitalize="sentences"
-                          maxLength={40}
-                        />
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Champ
-                              value={String(d.km || '')}
-                              onChangeText={(v) => updateDistance(idx, 'km', v.replace(',', '.').replace(/[^\d.]/g, ''))}
-                              keyboardType="decimal-pad"
-                              placeholder="21"
-                              accessibilityLabel="Distance en km"
-                              manque={kmManque}
-                              style={{ flex: 1 }}
-                            />
-                            <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: kmManque ? C.error : V.libelle }}>km</Text>
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <ChampBouton valeur={d.time} placeholder="Départ" onPress={() => { Keyboard.dismiss(); setTimePickerIdx(idx); }} />
-                          </View>
-                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            <Champ
-                              value={String(d.elevation || '')}
-                              onChangeText={(v) => updateDistance(idx, 'elevation', v.replace(/\D/g, '').slice(0, 5))}
-                              keyboardType="number-pad"
-                              placeholder="D+"
-                              accessibilityLabel="Dénivelé positif en mètres"
-                              style={{ flex: 1 }}
-                            />
-                            <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: V.libelle }}>m</Text>
-                          </View>
-                          <TouchableOpacity
-                            onPress={() => removeDistance(idx)}
-                            hitSlop={8}
-                            accessibilityLabel="Retirer cette épreuve"
-                            style={{ width: 32, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                          >
-                            <Text style={{ fontFamily: 'Montserrat', fontSize: 15, color: V.placeholder }}>✕</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    </Ligne>
+                    <LigneEpreuve
+                      key={idx}
+                      erreur={kmManque ? 'Indique la distance de cette épreuve' : ''}
+                      kmManque={kmManque}
+                      label={d.label}
+                      km={String(d.km || '')}
+                      time={d.time}
+                      elevation={String(d.elevation || '')}
+                      placeholderNom={eventType ? displayEventType(eventType) : 'Nom'}
+                      onLabel={(v) => updateDistance(idx, 'label', v.slice(0, 40))}
+                      onKm={(v) => updateDistance(idx, 'km', v.replace(',', '.').replace(/[^\d.]/g, ''))}
+                      onElevation={(v) => updateDistance(idx, 'elevation', v.replace(/\D/g, '').slice(0, 5))}
+                      onHeure={() => { Keyboard.dismiss(); setTimePickerIdx(idx); }}
+                      onRetirer={() => removeDistance(idx)}
+                    />
                   );
                 })}
                 <AjouterEpreuve onPress={addDistance} />
@@ -6905,14 +6874,14 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     activeOpacity={0.7}
                     accessibilityRole="button"
                     accessibilityLabel={apercuCover ? "Changer l'image de couverture" : 'Choisir une image de couverture'}
-                    style={[cadreChamp(false, false), { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: apercuCover ? 4 : 10 }]}
+                    style={[cadreChamp(false), { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }]}
                   >
                     {coverBusy ? (
                       <ActivityIndicator size="small" color={C.primary} />
                     ) : apercuCover ? (
                       <ExpoImage source={{ uri: apercuCover }} style={{ width: 56, height: 28, borderRadius: 6 }} contentFit="cover" />
                     ) : null}
-                    <Text numberOfLines={1} style={{ flex: 1, fontFamily: 'Montserrat', fontSize: 15, color: apercuCover ? C.primary : V.placeholder }}>
+                    <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: 'Montserrat', fontSize: 15, color: apercuCover ? C.primary : V.placeholder }}>
                       {apercuCover ? "Changer l'image" : 'Choisir une image'}
                     </Text>
                   </TouchableOpacity>

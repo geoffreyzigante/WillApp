@@ -34,8 +34,9 @@ import { REQUIRED_FIELDS } from '../../utils/eventCompletion';
 import { CalendarRangeModal } from './CalendarRangeModal';
 import { CropImageModal } from './CropImageModal';
 import {
-  V, Bloc, Ligne, Champ, ChampBouton, TitreSection, Pied, AjouterEpreuve,
+  V, Bloc, Ligne, LigneEpreuve, Champ, ChampBouton, TitreSection, Pied, AjouterEpreuve,
 } from '../formLignes';
+import { GrainViolet } from '../GrainViolet';
 
 // ── Lecture / ecriture, memes regles que le web ─────────────────────────
 // "Louviers (27400)" -> { ville, cp }
@@ -83,7 +84,11 @@ function coursesDepuisEvent(ev) {
     km: String(d.km || ''),
     time: heureHHMM(d.time),
     elevation: metres(d.elevation),
-  } : { _k: nouvelleCle(), label: '', label_only: false, km: String(d), time: '', elevation: '' }));
+  } : { _k: nouvelleCle(), label: '', label_only: false, km: String(d), time: '', elevation: '' }))
+    // Dans l ordre des departs, comme le programme d une course. Le tri ne
+    // se fait qu a l ouverture : une ligne ne saute pas pendant la saisie.
+    // Sans heure, l epreuve garde sa place apres les autres (tri stable).
+    .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
 }
 
 function distancesPourEnvoi(courses) {
@@ -468,31 +473,40 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
       onDismiss={prevenirFermeture}
     >
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#fff' }} behavior={Platform.OS === 'ios' ? undefined : 'height'}>
-        {/* Entete : retour · titre · etat d enregistrement */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 14, paddingBottom: 10, paddingHorizontal: 16 }}>
-          <View style={{ width: 92 }}>
-            <TouchableOpacity onPress={fermer} hitSlop={14} accessibilityRole="button" accessibilityLabel="Retour" style={{ alignSelf: 'flex-start', paddingRight: 12 }}>
-              <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 28, color: C.primary }}>‹</Text>
-            </TouchableOpacity>
-          </View>
-          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ flex: 1, textAlign: 'center', fontFamily: 'AVEstiana', fontSize: 20, color: V.texte }}>
-            Modifier mon event
-          </Text>
-          <View style={{ width: 92, alignItems: 'flex-end' }}>
-            <Text
-              accessibilityLiveRegion="polite"
-              numberOfLines={3}
-              style={{ fontFamily: 'Montserrat', fontSize: 12, lineHeight: lh(12, 15, 'Montserrat'), color: etatErreur ? C.error : V.libelle, textAlign: 'right' }}
-            >
-              {etatTexte}
+        {/* Entete violette au grain, comme « Lancer mon event » et la maquette
+            validee : retour · titre · etat d enregistrement. */}
+        <GrainViolet style={{ paddingTop: 16, paddingBottom: 16, paddingHorizontal: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ width: 84 }}>
+              <TouchableOpacity
+                onPress={fermer}
+                hitSlop={14}
+                accessibilityRole="button"
+                accessibilityLabel="Retour"
+                style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.20)', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 18, lineHeight: lh(18, 22, 'Montserrat'), color: '#fff', marginTop: -2 }}>‹</Text>
+              </TouchableOpacity>
+            </View>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={{ flex: 1, textAlign: 'center', fontFamily: 'AVEstiana', fontSize: 22, color: '#fff' }}>
+              Modifier mon event
             </Text>
+            <View style={{ width: 84, alignItems: 'flex-end' }}>
+              <Text
+                accessibilityLiveRegion="polite"
+                numberOfLines={3}
+                style={{ fontFamily: 'Montserrat', fontSize: 12, lineHeight: lh(12, 15, 'Montserrat'), color: etatErreur ? '#FFD4D0' : 'rgba(255,255,255,0.9)', textAlign: 'right' }}
+              >
+                {etatTexte}
+              </Text>
+            </View>
           </View>
-        </View>
+        </GrainViolet>
 
         <ScrollView
           ref={defilementRef}
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 18, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           automaticallyAdjustKeyboardInsets
@@ -536,17 +550,19 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
                 accessibilityLabel="Nom de l'event"
                 autoCapitalize="sentences"
                 returnKeyType="done"
+                aGauche
                 style={{ height: 44, fontSize: 16, fontFamily: 'Montserrat-SemiBold' }}
               />
             </Ligne>
             <Ligne libelle="Type">
-              <ChampBouton valeur={type ? displayEventType(type) : ''} placeholder="Choisir" onPress={() => { Keyboard.dismiss(); setPicker('type'); }} />
+              <ChampBouton valeur={type ? displayEventType(type) : ''} placeholder="Choisir" icone="liste" onPress={() => { Keyboard.dismiss(); setPicker('type'); }} />
             </Ligne>
             <Ligne libelle="Date" manque={manquants.has('event_date')}>
               <ChampBouton
                 valeur={dateAffichee}
                 placeholder={manquants.has('event_date') ? 'À renseigner' : 'À venir'}
                 manque={manquants.has('event_date')}
+                icone="calendrier"
                 onPress={() => { Keyboard.dismiss(); setPicker('date'); }}
               />
             </Ligne>
@@ -554,7 +570,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
               <ChampBouton valeur={heure} placeholder="Facultatif" onPress={() => { Keyboard.dismiss(); setPicker('heure'); }} />
             </Ligne>
             <Ligne libelle="Lieu">
-              <View style={{ flexDirection: 'row', gap: 6 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
                 <Champ
                   value={cp}
                   onChangeText={(v) => setCp(v.replace(/\D/g, '').slice(0, 5))}
@@ -563,7 +579,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
                   maxLength={5}
                   placeholder="27400"
                   accessibilityLabel="Code postal"
-                  style={{ width: 78 }}
+                  style={{ minWidth: 56, paddingRight: 2 }}
                 />
                 <Champ
                   value={ville}
@@ -572,7 +588,7 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
                   placeholder="Ville"
                   accessibilityLabel="Ville"
                   autoCapitalize="words"
-                  style={{ flex: 1 }}
+                  style={{ minWidth: 52, flexShrink: 1, paddingLeft: 2 }}
                 />
               </View>
             </Ligne>
@@ -616,54 +632,20 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
           <TitreSection>Épreuves</TitreSection>
           <Bloc>
             {courses.map((c, i) => (
-              <Ligne key={c._k} seule style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-                <Champ
-                  value={c.label}
-                  onChangeText={(v) => majCourse(i, 'label', v.slice(0, 40))}
-                  onBlur={() => valider.distances()}
-                  placeholder={type ? displayEventType(type) : 'Nom'}
-                  accessibilityLabel="Nom de l'épreuve"
-                  autoCapitalize="sentences"
-                  maxLength={40}
-                />
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Champ
-                      value={c.km}
-                      onChangeText={(v) => majCourse(i, 'km', v.replace(',', '.').replace(/[^\d.]/g, ''))}
-                      onBlur={() => valider.distances()}
-                      keyboardType="decimal-pad"
-                      placeholder="21"
-                      accessibilityLabel="Distance en km"
-                      style={{ flex: 1 }}
-                    />
-                    <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: V.libelle }}>km</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <ChampBouton valeur={c.time} placeholder="Départ" onPress={() => { Keyboard.dismiss(); setPicker({ course: i }); }} />
-                  </View>
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Champ
-                      value={c.elevation}
-                      onChangeText={(v) => majCourse(i, 'elevation', v.replace(/\D/g, '').slice(0, 5))}
-                      onBlur={() => valider.distances()}
-                      keyboardType="number-pad"
-                      placeholder="D+"
-                      accessibilityLabel="Dénivelé positif en mètres"
-                      style={{ flex: 1 }}
-                    />
-                    <Text style={{ fontFamily: 'Montserrat', fontSize: 13, color: V.libelle }}>m</Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => retirerCourse(i)}
-                    hitSlop={8}
-                    accessibilityLabel="Retirer cette épreuve"
-                    style={{ width: 32, height: 38, alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <Text style={{ fontFamily: 'Montserrat', fontSize: 15, color: V.placeholder }}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-              </Ligne>
+              <LigneEpreuve
+                key={c._k}
+                label={c.label}
+                km={c.km}
+                time={c.time}
+                elevation={c.elevation}
+                placeholderNom={type ? displayEventType(type) : 'Nom'}
+                onLabel={(v) => majCourse(i, 'label', v.slice(0, 40))}
+                onKm={(v) => majCourse(i, 'km', v.replace(',', '.').replace(/[^\d.]/g, ''))}
+                onElevation={(v) => majCourse(i, 'elevation', v.replace(/\D/g, '').slice(0, 5))}
+                onHeure={() => { Keyboard.dismiss(); setPicker({ course: i }); }}
+                onRetirer={() => retirerCourse(i)}
+                onBlur={() => valider.distances()}
+              />
             ))}
             <AjouterEpreuve onPress={ajouterCourse} />
           </Bloc>
