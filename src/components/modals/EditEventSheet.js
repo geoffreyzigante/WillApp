@@ -239,6 +239,11 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
 
   // Etat affiche en haut : '' | 'encours' | 'ok' | message d erreur.
   const [etat, setEtat] = useState('');
+  // Derniere erreur d envoi, en ref SYNCHRONE : fermer() la lit juste apres
+  // `await fileEnvoi.current`, avant que React ait re-rendu l etat.
+  const erreurEnvoiRef = useRef('');
+  // Erreur affichee sous la ligne Lieu (code postal incomplet).
+  const [lieuErreur, setLieuErreur] = useState('');
   const aEnregistre = useRef(false);
   const fileEnvoi = useRef(Promise.resolve());
   // Derniere valeur envoyee, cle par cle : un champ quitte sans changement
@@ -273,10 +278,12 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error || 'Enregistrement impossible');
         aEnregistre.current = true;
+        erreurEnvoiRef.current = '';
         setEtat('ok');
       } catch (e) {
         Object.assign(sauve.current, avant);
-        setEtat(e?.message || 'Enregistrement impossible');
+        erreurEnvoiRef.current = e?.message || 'Enregistrement impossible';
+        setEtat(erreurEnvoiRef.current);
       }
     });
     return fileEnvoi.current;
@@ -287,7 +294,14 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
     name: () => { const v = nom.trim(); if (v && v !== sauve.current.name) enregistrer({ name: v }); },
     location: () => {
       const v = ville.trim();
-      if (!v || !/^\d{5}$/.test(cp)) return;
+      if (!/^\d{5}$/.test(cp)) {
+        // Avant : retour silencieux. L orga quittait le champ avec 4
+        // chiffres et croyait son lieu enregistre.
+        setLieuErreur(cp || v ? 'Code postal incomplet : 5 chiffres attendus.' : '');
+        return;
+      }
+      setLieuErreur('');
+      if (!v) return;
       const loc = `${v} (${cp})`;
       if (loc !== sauve.current.location) enregistrer({ location: loc });
     },
@@ -316,15 +330,33 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
     fileEnvoi.current.then(() => { if (aEnregistre.current) onSaved?.(); });
   }, [onClose, onSaved]);
 
+  const sortir = () => {
+    setOuvert(false);
+    // iOS previent par onDismiss, une fois la feuille sortie de l ecran.
+    // Ailleurs (et si onDismiss ne venait pas), on attend la fin du slide.
+    setTimeout(prevenirFermeture, Platform.OS === 'ios' ? 700 : 300);
+  };
+
   const fermer = async () => {
     // Le champ en cours de saisie n a pas encore ete quitte : on l envoie.
     Object.values(valider).forEach(f => f());
     Keyboard.dismiss();
     await fileEnvoi.current;
-    setOuvert(false);
-    // iOS previent par onDismiss, une fois la feuille sortie de l ecran.
-    // Ailleurs (et si onDismiss ne venait pas), on attend la fin du slide.
-    setTimeout(prevenirFermeture, Platform.OS === 'ios' ? 700 : 300);
+    // Un envoi a echoue : fermer maintenant jetterait la saisie sans un mot
+    // (l etat d erreur du bandeau disparait avec la feuille).
+    const e = erreurEnvoiRef.current;
+    if (e) {
+      Alert.alert(
+        'Des infos ne sont pas enregistrées',
+        e,
+        [
+          { text: 'Réessayer', onPress: () => { Object.values(valider).forEach(f => f()); } },
+          { text: 'Quitter sans enregistrer', style: 'destructive', onPress: sortir },
+        ],
+      );
+      return;
+    }
+    sortir();
   };
 
   // ── Code postal -> communes via /villes ───────────────────────────────
@@ -433,9 +465,11 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
         if (!up.ok) throw new Error(data.error || 'Envoi impossible');
         setCover(data.cover_image || cover);
         aEnregistre.current = true;
+        erreurEnvoiRef.current = '';
         setEtat('ok');
       } catch (e) {
-        setEtat(e?.message || 'Envoi impossible');
+        erreurEnvoiRef.current = e?.message || 'Envoi impossible';
+        setEtat(erreurEnvoiRef.current);
       } finally {
         setCoverBusy(false);
       }
@@ -446,9 +480,29 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
   const majCourse = (i, champ, valeur) =>
     setCourses(l => l.map((c, idx) => (idx === i ? { ...c, [champ]: valeur } : c)));
   const retirerCourse = (i) => {
-    const suivantes = courses.filter((_, idx) => idx !== i);
-    setCourses(suivantes);
-    valider.distances(suivantes);
+    const c = courses[i];
+    const faire = () => {
+      const suivantes = courses.filter((_, idx) => idx !== i);
+      setCourses(suivantes);
+      valider.distances(suivantes);
+    };
+    // Ligne encore vide (epreuve tout juste ajoutee) : rien a perdre.
+    const vide = c && !String(c.km || '').trim() && !String(c.label || '').trim()
+      && !c.time && !String(c.elevation || '').trim();
+    if (vide) { faire(); return; }
+    // Cette feuille ne sait pas si des photos sont deja rattachees a
+    // l epreuve (l info n arrive pas ici) : on confirme donc toujours.
+    // Supprimer une epreuve detache ses photos (race_distance_id orphelin).
+    const titre = String(c?.label || '').trim()
+      || (String(c?.km || '').trim() ? `${String(c.km).trim()} km` : 'cette épreuve');
+    Alert.alert(
+      `Retirer ${titre} ?`,
+      "Les photos déjà rattachées à cette épreuve resteront dans l'event, sans course associée.",
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Retirer', style: 'destructive', onPress: faire },
+      ],
+    );
   };
   const ajouterCourse = () =>
     setCourses(l => [...l, { _k: nouvelleCle(), label: '', label_only: false, km: '', time: '', elevation: '' }]);
@@ -584,6 +638,13 @@ export function EditEventSheet({ event, organizerApiFetch, organizerSession, onC
                 />
               </View>
             </Ligne>
+            {lieuErreur ? (
+              <Ligne libelle=" ">
+                <Text style={{ fontFamily: 'Montserrat', fontSize: 12, color: C.error, textAlign: 'right', paddingVertical: 8 }}>
+                  {lieuErreur}
+                </Text>
+              </Ligne>
+            ) : null}
             {/* Les communes ne s affichent que s il faut choisir : une ville deja
                 valide (Louviers pour 27400) n affiche plus les 30 communes. */}
             {villes.length > 1 && !villes.includes(ville) ? (

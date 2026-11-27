@@ -176,7 +176,10 @@ function echecReseau(e) {
 export const api = {
   async getEvents() {
     const r = await fetch(`${API_URL}/public-events`);
-    return r.ok ? r.json() : [];
+    // Un 5xx n est pas « zero event » : on leve, le caller garde son cache
+    // et peut afficher un etat d erreur au lieu d une liste faussement vide.
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
   },
   async login(code, password, role, photographer_name) {
     const r = await fetch(`${API_URL}/auth/login`, {
@@ -292,47 +295,51 @@ export async function jetonPushLocal() {
 // (b) ask + register apres premier follow. Idempotent : iOS ne re-affiche
 // pas le prompt une fois denied (Notifications.requestPermissionsAsync
 // retourne la decision existante).
+// Corps entier sous try/catch : getPermissionsAsync / requestPermissionsAsync
+// peuvent rejeter (module notifications indisponible) et les appelants ne
+// catchent pas tous -> rejet non gere. Le push est un confort, jamais une
+// raison de faire planter le parcours.
 export async function ensurePushRegistered(runnerToken, { ask = false } = {}) {
-  if (!Device.isDevice) return; // simulator -> rien a faire
-  if (!runnerToken) return;
-  let { status } = await Notifications.getPermissionsAsync();
-  if (status !== 'granted') {
-    if (!ask) return; // boot silencieux : on n'embete pas le user
-    const req = await Notifications.requestPermissionsAsync();
-    status = req.status;
-    if (status !== 'granted') return;
-  }
-  // Android : le canal DOIT exister avant la premiere notification, pas a
-  // sa reception. Sans lui, expo-notifications en cree un « miscellaneous »
-  // a importance par defaut -- pas de banniere, pas de son, et un libelle
-  // incomprehensible dans les reglages systeme du telephone. Le worker
-  // nomme ce meme canal ("photos") dans chacun de ses envois.
-  // setNotificationChannelAsync est idempotent : le rappeler a chaque
-  // enregistrement met aussi a jour le libelle si on le change un jour.
-  if (Platform.OS === 'android') {
-    try {
-      await Notifications.setNotificationChannelAsync('photos', {
-        name: 'Photos prêtes',
-        description: 'Quand tes photos sont en ligne.',
-        importance: Notifications.AndroidImportance.HIGH,
-        lightColor: '#7B2FFF',
-        vibrationPattern: [0, 250, 250, 250],
-      });
-    } catch (e) { console.warn('[push] setNotificationChannelAsync', e?.message || e); }
-  }
-
-  const projectId = Constants?.expoConfig?.extra?.eas?.projectId
-    || Constants?.easConfig?.projectId;
-  if (!projectId) {
-    console.warn('[push] projectId introuvable dans expo.extra.eas');
-    return;
-  }
   try {
+    if (!Device.isDevice) return; // simulator -> rien a faire
+    if (!runnerToken) return;
+    let { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') {
+      if (!ask) return; // boot silencieux : on n'embete pas le user
+      const req = await Notifications.requestPermissionsAsync();
+      status = req.status;
+      if (status !== 'granted') return;
+    }
+    // Android : le canal DOIT exister avant la premiere notification, pas a
+    // sa reception. Sans lui, expo-notifications en cree un « miscellaneous »
+    // a importance par defaut -- pas de banniere, pas de son, et un libelle
+    // incomprehensible dans les reglages systeme du telephone. Le worker
+    // nomme ce meme canal ("photos") dans chacun de ses envois.
+    // setNotificationChannelAsync est idempotent : le rappeler a chaque
+    // enregistrement met aussi a jour le libelle si on le change un jour.
+    if (Platform.OS === 'android') {
+      try {
+        await Notifications.setNotificationChannelAsync('photos', {
+          name: 'Photos prêtes',
+          description: 'Quand tes photos sont en ligne.',
+          importance: Notifications.AndroidImportance.HIGH,
+          lightColor: '#7B2FFF',
+          vibrationPattern: [0, 250, 250, 250],
+        });
+      } catch (e) { console.warn('[push] setNotificationChannelAsync', e?.message || e); }
+    }
+
+    const projectId = Constants?.expoConfig?.extra?.eas?.projectId
+      || Constants?.easConfig?.projectId;
+    if (!projectId) {
+      console.warn('[push] projectId introuvable dans expo.extra.eas');
+      return;
+    }
     const tokenObj = await Notifications.getExpoPushTokenAsync({ projectId });
     const expoToken = tokenObj?.data;
     if (!expoToken) return;
     await api.registerPushToken(runnerToken, expoToken, Platform.OS);
   } catch (e) {
-    console.warn('[push] getExpoPushTokenAsync', e?.message || e);
+    console.warn('[push] ensurePushRegistered', e?.message || e);
   }
 }

@@ -77,15 +77,23 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
   // Carte depliee (code de l event) : un tap deplie la fiche DANS la carte,
   // comme sur le site, au lieu d ouvrir une feuille. Une seule a la fois.
   const [depliee, setDepliee] = useState(null);
+  // Echec de rechargement : on GARDE l ancienne liste et on le dit. Avant,
+  // un 5xx faisait passer `data` (objet erreur) dans le tri -> liste videe.
+  const [loadError, setLoadError] = useState(false);
 
   const reload = async () => {
-    setLoading(true);
+    // Spinner plein ecran au PREMIER chargement seulement : le pull-to-
+    // refresh et les retours de fiche ne doivent pas remplacer la liste par
+    // un spinner (remontee en haut + flash).
+    setLoading(events.length === 0);
     try {
       const r = await organizerApiFetch(`/organizer/my-events`);
+      if (!r.ok) { setLoadError(true); return; }
       const data = await r.json();
-      const sorted = Array.isArray(data) ? [...data].sort(comparerEvents) : [];
-      setEvents(sorted);
-    } catch {} finally { setLoading(false); }
+      if (!Array.isArray(data)) { setLoadError(true); return; }
+      setEvents([...data].sort(comparerEvents));
+      setLoadError(false);
+    } catch { setLoadError(true); } finally { setLoading(false); }
   };
 
   useEffect(() => { reload(); }, [refreshKey]);
@@ -194,9 +202,15 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
           "Autres espaces" du menu. Il ne reste que le titre. */}
       <View style={{ height: 14 }} />
 
+      {loadError && !loading ? (
+        <Text style={{ fontFamily: 'Montserrat', color: T.couleur.erreur, fontSize: 13, textAlign: 'center', marginBottom: 12, paddingHorizontal: 24 }}>
+          Impossible de rafraîchir la liste. Tire vers le bas pour réessayer.
+        </Text>
+      ) : null}
+
       {loading ? (
         <ActivityIndicator color={C.orga} style={{ marginVertical: 24 }} />
-      ) : events.length === 0 ? (
+      ) : events.length === 0 && !loadError ? (
         <View style={{ paddingVertical: 36, paddingHorizontal: 24, alignItems: 'center' }}>
           <Text style={{ color: '#1a0a3e', fontSize: 16, fontFamily: 'Montserrat-SemiBold', marginBottom: 6 }}>
             Aucun event pour l'instant
@@ -255,7 +269,7 @@ export function OrganizerDashboardScreen({ session, organizerApiFetch, onLogout,
                   </View>
                   {cd ? (
                     /* Meme decompte que la hero de la fiche event. */
-                    <Text style={{ position: 'absolute', top: 0, right: 0, color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, lineHeight: 28, includeFontPadding: false, letterSpacing: -0.8, transform: [{ skewX: '-14deg' }] }}>
+                    <Text style={{ position: 'absolute', top: 0, right: 0, color: '#fff', fontFamily: 'Montserrat-Bold', fontSize: 28, lineHeight: lh(28, 28, 'Montserrat'), includeFontPadding: false, letterSpacing: -0.8, transform: [{ skewX: '-14deg' }] }}>
                       {cd}
                     </Text>
                   ) : null}

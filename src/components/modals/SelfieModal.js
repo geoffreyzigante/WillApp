@@ -77,7 +77,15 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
 
   const acceptConsent = async () => {
     if (!consentChecked) return;
-    await Secure.setItem(BIOMETRIC_CONSENT_KEY, new Date().toISOString());
+    // Keychain indisponible : l ecriture peut rejeter, et le bouton restait
+    // muet (rejet non gere, rien ne se passait a l ecran). Le consentement
+    // vient d etre donne explicitement : on continue pour la session, il
+    // sera simplement redemande la prochaine fois.
+    try {
+      await Secure.setItem(BIOMETRIC_CONSENT_KEY, new Date().toISOString());
+    } catch (e) {
+      console.warn('[selfie] consentement non persiste :', e?.message || e);
+    }
     setConsentGiven(true);
   };
 

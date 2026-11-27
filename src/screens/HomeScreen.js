@@ -21,7 +21,7 @@ import { isUpcoming } from '../utils/format';
 import { API_URL } from '../constants/api';
 import { lh } from '../constants/typo';
 
-export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, cartTotal = 0, onOpenPanier, headerH = 0, runnerApiFetch, runnerUserId, isActive = true }) {
+export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpenOrgRole, tab, setTab, onOpenSearch, selfieUri, onDeleteSelfie, onOpenProfile, follows, onToggleFollow, onRefresh, runnerFirstName, selfieSkipped = false, isAuthed = false, onOpenAuthSignup, onOpenAuthLogin, selfieUploadState = 'idle', onRetryUpload, scrollToTopSignal = 0, cartTotal = 0, onOpenPanier, headerH = 0, runnerApiFetch, runnerUserId, isActive = true, eventsLoadError = false }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   // Event resolu par code exact via /public-events/{code}. Couvre les events
@@ -471,6 +471,33 @@ export function HomeScreen({ events, onOpenEvent, onOpenSelfie, onOpenOrg, onOpe
               titre={'Pas encore\nde suivis'}
               sousTexte={"Ajoute tes events à suivre"}
             />
+          ) : eventsLoadError && events.length === 0 ? (
+          /* /public-events a echoue et aucun cache : « Aucun événement à
+             venir » serait un mensonge — la liste n a jamais pu etre lue. */
+          <View style={{
+            paddingVertical: 40,
+            alignItems: 'center', justifyContent: 'center',
+          }}>
+            <View style={{ alignItems: 'center', gap: 3, flexShrink: 1 }}>
+              <Text style={{
+                color: '#C9B6FF', fontSize: 18, textAlign: 'center',
+                fontFamily: 'AVEstiana-Bold', letterSpacing: -0.2,
+              }}>
+                Pas de connexion
+              </Text>
+              <Text style={{
+                color: C.textSoft, fontSize: 13, textAlign: 'center',
+                fontFamily: 'Montserrat', marginTop: 4,
+              }}>
+                Les événements n'ont pas pu être chargés.
+              </Text>
+              <TouchableOpacity onPress={onRefresh} hitSlop={10} style={{ marginTop: 12 }}>
+                <Text style={{ color: C.primary, fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>
+                  Réessayer
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
           ) : (
           <View style={{
             paddingVertical: 40,

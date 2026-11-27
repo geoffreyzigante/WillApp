@@ -168,6 +168,7 @@ import {
   bgUploaderEmitter,
   pendingBgUploads,
   setOrphanUploadHandler,
+  setDefaultOrphanUploadHandler,
 } from './src/services/backgroundUploader';
 import {
   hasThermalMonitor,
@@ -525,6 +526,64 @@ const TITRES_SELFIE_REFUSE = {
   no_face_detected: 'Aucun visage détecté',
   multiple_faces_detected: 'Plusieurs visages',
 };
+
+// ─── Generation de file d upload (niveau module) ─────────────────────────
+// La file (queueRef) est recreee a chaque montage de PhotographerScreen,
+// mais un drain lance par un montage PRECEDENT peut encore tourner (les
+// closures survivent au demontage, et pendingBgUploads est module-level).
+// A sa fin, il persistait dans AsyncStorage une file perimee et ecrasait
+// l etat du nouveau montage. Chaque montage incremente donc une generation ;
+// commitQueue, processQueue et drainQueue d une vieille generation ne
+// touchent plus ni AsyncStorage ni le disque.
+let generationFileUpload = 0;
+// Reveil leger apres la sortie de l ecran : si le flush de sortie part hors
+// ligne, rien ne repartait avant la prochaine entree. Un seul timer, au
+// niveau module, arrete des que la file est vide ou qu un nouvel ecran
+// prend la main.
+let relanceApresSortie = null;
+function arreterRelanceApresSortie() {
+  if (relanceApresSortie) { clearInterval(relanceApresSortie); relanceApresSortie = null; }
+}
+
+// ─── Fin d upload natif recue SANS ecran monte ───────────────────────────
+// URLSession d arriere-plan finit ses PUT meme app fermee / ecran quitte.
+// Sans gestionnaire par defaut, l event Complete etait ignore : l item
+// restait 'uploading' en AsyncStorage, repassait 'pending' au prochain
+// montage et la photo etait RENVOYEE (double analyse payante). Ici on
+// applique le resultat directement sur la file persistee. Quand un ecran
+// est monte, son propre gestionnaire (setOrphanUploadHandler) a priorite.
+setDefaultOrphanUploadHandler(async (evt) => {
+  const { itemId, success, statusCode } = evt || {};
+  if (!itemId) return;
+  const estLeger = String(itemId).endsWith(LIGHT_ID_SUFFIX);
+  const vraiId = estLeger ? String(itemId).slice(0, -LIGHT_ID_SUFFIX.length) : itemId;
+  const ok = !!success && statusCode >= 200 && statusCode < 300;
+  try {
+    const arr = await loadUploadQueue();
+    const idx = arr.findIndex(it => it && it.id === vraiId);
+    if (idx === -1) return;
+    const item = arr[idx];
+    let next;
+    if (ok && estLeger) {
+      // Seule la copie legere est passee : l original reste a envoyer.
+      next = arr.map((it, i) => i === idx
+        ? { ...it, lightDone: true, status: 'pending', retries: 0, nextAttemptAt: null }
+        : it);
+    } else if (ok) {
+      // Original sur R2 : fichier local supprime, item sorti de la file.
+      try { new File(item.localUri).delete(); } catch {}
+      if (item.processed === false && item.id) deleteSidecar(item.id);
+      next = arr.filter((_, i) => i !== idx);
+    } else {
+      // Echec : on repose l item en 'pending', le prochain montage retente.
+      next = arr.map((it, i) => i === idx ? { ...it, status: 'pending', nextAttemptAt: null } : it);
+    }
+    await saveUploadQueue(next);
+    console.log(`[bgupload] orphelin ${vraiId} reconcilie hors ecran (ok=${ok}, leger=${estLeger})`);
+  } catch (e) {
+    console.warn('[bgupload] orphelin hors ecran', e?.message || e);
+  }
+});
 
 function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photographerApiFetch }) {
   // Ecran toujours allume pendant la session photographe : evite que la veille
@@ -2338,25 +2397,46 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
   // - Métadonnées dans AsyncStorage UPLOAD_QUEUE_KEY (single global queue)
   // - Upload gated par NetInfo (pas de tentative si offline)
   // - status: 'pending' | 'uploading' | 'failed' (max retries atteint)
-  const [queueStats, setQueueStats] = useState({ total: 0, pending: 0, uploading: 0, failed: 0 });
+  const [queueStats, setQueueStats] = useState({ total: 0, pending: 0, uploading: 0, failed: 0, autresEvents: 0 });
   const [isOnline, setIsOnline] = useState(true);
   const queueRef = useRef([]);
   const drainingRef = useRef(false);
+  // Generation de cette instance d ecran (cf. generationFileUpload, niveau
+  // module). Incrementee UNE fois par montage ; les workers d une vieille
+  // generation detectent qu ils sont perimes et ne persistent plus rien.
+  const queueEpochRef = useRef(null);
+  if (queueEpochRef.current === null) {
+    queueEpochRef.current = ++generationFileUpload;
+    // Le nouvel ecran reprend la main : le reveil post-sortie n a plus lieu d etre.
+    arreterRelanceApresSortie();
+  }
+  const generationPerimee = () => queueEpochRef.current !== generationFileUpload;
+  // Nombre d items d un AUTRE event dans la file : lu par captureBurstLoop
+  // (barriere pipeline) sans refiltrer la file a chaque shot.
+  const autresEventsRef = useRef(0);
   // Anti-spam de l'alerte "queue > 100" et seuil "espace disque faible".
   const lastQueueWarnAtRef = useRef(0);
   const lastDiskWarnAtRef = useRef(0);
+  const lastStorageFullWarnAtRef = useRef(0);
   // Progress bar : nombre de fichiers à uploader au démarrage du drain courant.
   // Reset à 0 quand le drain finit. Affichée si > 5.
   const drainStartTotalRef = useRef(0);
   const [drainStartTotal, setDrainStartTotal] = useState(0);
 
   function recomputeStats(arr) {
-    const stats = { total: arr.length, pending: 0, uploading: 0, failed: 0 };
+    // Les photos d un AUTRE event (deconnexion puis reconnexion ailleurs) ne
+    // partent pas d ici : drainQueue les ignore. Elles sortent donc des
+    // compteurs de transit (pending/uploading/failed) et sont comptees a
+    // part, pour etre affichees a part (« N photos d'un autre event »).
+    const eventCourant = session?.event?.code;
+    const stats = { total: arr.length, pending: 0, uploading: 0, failed: 0, autresEvents: 0 };
     for (const it of arr) {
+      if (it.eventCode !== eventCourant) { stats.autresEvents++; continue; }
       if (it.status === 'failed') stats.failed++;
       else if (it.status === 'uploading') stats.uploading++;
       else stats.pending++;
     }
+    autresEventsRef.current = stats.autresEvents;
     return stats;
   }
 
@@ -2370,6 +2450,10 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
   const commitChainRef = useRef(Promise.resolve());
 
   async function commitQueue(arr) {
+    // Verrou de generation : un drain/process survivant d un MONTAGE
+    // PRECEDENT ne doit plus rien persister — il ecraserait la file du
+    // montage courant avec un etat perime (cf. generationFileUpload).
+    if (generationPerimee()) return;
     queueRef.current = arr;     // SYNC : état mémoire à jour immédiatement
     if (isMountedRef.current) {
       setQueueStats(recomputeStats(arr));
@@ -2420,19 +2504,18 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
       // mot). Elles restent dans la file avec leur eventCode d origine :
       // chaque item porte sa propre cle R2 ({eventCode}/...), drainQueue
       // construit l URL depuis l item. Reconnecte sur le meme event, elles
-      // repartent ; sur un autre event le serveur repond 403 et l item finit
-      // 'failed' apres MAX_RETRIES, visible sur la ligne « X a renvoyer ».
-      // Meme regle que logoutPhotographer.
-      const currentEvent = session?.event?.code;
+      // repartent ; sur un autre event drainQueue les IGNORE (le Bearer ne
+      // produirait qu un 403 en boucle) et elles s affichent a part sur la
+      // ligne « N d'un autre event ». Meme regle que logoutPhotographer.
       const cleaned = [];
-      let autresEvents = 0;
       for (const rawIt of arr) {
         // Migration : items legacy sans `processed` ont deja ete enhance/burn
         // par l'ancien pipeline -> on les marque processed:true.
         const it = rawIt.processed === undefined
           ? { ...rawIt, processed: true }
           : rawIt;
-        if (it.eventCode !== currentEvent) autresEvents += 1;
+        // Le comptage « d'un autre event » vit dans recomputeStats (via
+        // commitQueue) : une seule regle, pas deux.
         const fileExists = (() => {
           try { return new File(it.localUri).exists; } catch { return false; }
         })();
@@ -2456,6 +2539,12 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
       }
       if (!alive) return;
       await commitQueue(cleaned);
+      // Balayage des fichiers orphelins — promis par le commentaire
+      // d enqueueBurstItems (« un fichier orphelin a sweep plus tard »),
+      // jamais ecrit jusqu ici : les HEIC dont le sidecar avait echoue et
+      // les fichiers sans item de file s accumulaient sans limite. Differe
+      // (15 s) pour laisser le drain initial partir d abord.
+      setTimeout(() => { balayerOrphelins(); }, 15000);
       if (cleaned.length === 0) return;
       // Demarrage immediat des workers : process pour les brut, drain pour les
       // processed. Si online, les deux partent en parallele (workers separes).
@@ -2470,6 +2559,42 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
     })();
     return () => { alive = false; };
   }, []);
+
+  // ─── Balayage des orphelins disque ────────────────────────────────────
+  // Supprime de raw/ et processed/ les fichiers absents de la file.
+  // Garde-fous :
+  //   - generation courante uniquement (un vieil ecran ne supprime rien) ;
+  //   - fichiers de moins de 5 min epargnes : un enqueue en cours pose le
+  //     HEIC AVANT d ecrire le sidecar puis l item (l age se lit dans l id,
+  //     format {timestamp base36}_{random} de generateItemId) ;
+  //   - l appartenance a la file est relue au moment du delete.
+  function balayerOrphelins() {
+    if (generationPerimee()) return;
+    try {
+      const maintenant = Date.now();
+      const idDepuisNom = (nom) => String(nom || '').replace(/\.(json\.tmp|json|heic|dng|jpe?g)$/i, '');
+      const tropRecent = (id) => {
+        const ts = parseInt(String(id).split('_')[0], 36);
+        return Number.isFinite(ts) && maintenant - ts < 5 * 60 * 1000;
+      };
+      let supprimes = 0;
+      for (const dir of [rawDir(), processedDir()]) {
+        let noeuds = [];
+        try { if (dir.exists) noeuds = dir.list(); } catch { continue; }
+        for (const node of noeuds) {
+          if (!(node instanceof File)) continue;
+          const nom = node.name || String(node.uri || '').split('/').pop();
+          const id = idDepuisNom(nom);
+          if (!id || tropRecent(id)) continue;
+          if (queueRef.current.some(it => it.id === id)) continue;
+          try { node.delete(); supprimes += 1; } catch {}
+        }
+      }
+      if (supprimes > 0) {
+        console.log(`[sweep] ${supprimes} fichier(s) orphelin(s) supprime(s) de pendingDir`);
+      }
+    } catch (e) { console.warn('balayerOrphelins', e?.message); }
+  }
 
   // NetInfo: relance le drain au retour du réseau, met à jour l'indicateur.
   // processQueue est offline-safe (pas d'upload) donc on le pousse aussi :
@@ -2747,8 +2872,17 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
         const d = r && r.ok ? await r.json().catch(() => null) : null;
         if (annule) return;
         if (d && d.accepted) { AsyncStorage.setItem(cleMention, 'yes').catch(() => {}); setMentionAMontrer(false); }
-        else setMentionAMontrer(true);
-      } catch { if (!annule) setMentionAMontrer(true); }
+        else if (d) setMentionAMontrer(true);
+        // r non-ok ou JSON illisible (5xx, passerelle) : on ne sait PAS si la
+        // mention a ete acceptee. Bloquer ici coincait le photographe — la
+        // modale exigeait le reseau pour « C'est parti ». On laisse passer et
+        // on redemandera au prochain acces (rien n est memorise en local).
+        else setMentionAMontrer(false);
+      } catch {
+        // Erreur reseau : meme regle. Ne pas confondre « hors ligne » avec
+        // « pas encore accepte ».
+        if (!annule) setMentionAMontrer(false);
+      }
     })();
     return () => { annule = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2970,9 +3104,15 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
     AsyncStorage.setItem(LAST_CAPTURE_KEY, String(nowCapTs)).catch(() => {});
     lastCaptureTsRef.current = nowCapTs;
 
-    // Alerte de stockage local (pendingDir) — déjà en place
-    const sizeBytes = pendingDirSizeBytes();
-    if (sizeBytes > STORAGE_WARN_BYTES) {
+    // Alerte de stockage local (pendingDir). Version CACHEE du walk : la
+    // version synchrone parcourait tout le dossier A CHAQUE enqueue, en
+    // pleine rafale (5-7 ph/s) c etait un cout paye par la capture.
+    // Throttle 10 min sur l alerte : elle revenait a chaque photo une fois
+    // le seuil franchi.
+    const sizeBytes = pendingDirSizeBytesCached();
+    if (sizeBytes > STORAGE_WARN_BYTES
+        && Date.now() - lastStorageFullWarnAtRef.current > 10 * 60 * 1000) {
+      lastStorageFullWarnAtRef.current = Date.now();
       Alert.alert(
         'Stockage local plein',
         `Plus de 5 Go de photos en attente d'upload (${(sizeBytes / 1024 / 1024 / 1024).toFixed(1)} Go). Connecte-toi à un wifi pour libérer de l'espace.`,
@@ -3158,6 +3298,7 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
 
   const processingRef = useRef(false);
   async function processQueue() {
+    if (generationPerimee()) return;
     const verboseProcess = !!eventConfigRef.current.debug?.verboseLogs;
     if (processingRef.current) return;
     processingRef.current = true;
@@ -3606,6 +3747,7 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
   }
 
   async function drainQueue() {
+    if (generationPerimee()) return;
     if (drainingRef.current) return;
     if (!session?.token) return;
 
@@ -3658,10 +3800,17 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
       // un rollback immediat via /config sans OTA en cas de regression.
       const gateEnabled = eventConfigRef.current.upload?.gate_enabled ?? true;
       console.log('[drain] dropEnabled=', dropEnabled, 'gateEnabled=', gateEnabled, '(from /config, refetch 5 min)');
+      // Photos d un AUTRE event : JAMAIS dans le drain. Le Bearer de la
+      // session courante ne peut produire qu un 403 — avant, elles
+      // reessayaient toutes les 5 min (jusqu a ~50 fois) pour rien. Elles
+      // restent en file, comptees a part (« N photos d'un autre event »),
+      // et repartiront a la reconnexion sur LEUR event.
+      const eventCourant = session?.event?.code;
       const uploadable = arr
         .map((it, i) => ({ it, i }))
         .filter(({ it }) => it.processed === true
           && it.status === 'pending'
+          && it.eventCode === eventCourant
           && (gateEnabled ? it.upload_kept === true : it.upload_skipped !== true)
           && (!it.nextAttemptAt || it.nextAttemptAt <= now));
       if (uploadable.length === 0) {
@@ -4440,7 +4589,9 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
         //    recursif ne doit PAS tourner par shot a 5-7 ph/s. Au-dela on
         //    risque de saturer le disque iPhone ; mieux vaut pauser que rendre
         //    le tel inutilisable pour le reste de la course.
-        const pipelineLoad = queueRef.current.length + inFlightSetRef.current.size;
+        // Les photos d un autre event (hors drain, cf. recomputeStats) ne
+        // comptent pas dans la barriere : elles ne bougeront pas d ici.
+        const pipelineLoad = queueRef.current.length - autresEventsRef.current + inFlightSetRef.current.size;
         if (pipelineLoad >= MAX_TOTAL_IN_PIPELINE) {
           console.warn(`[burst] backpressure: pipeline=${pipelineLoad}/${MAX_TOTAL_IN_PIPELINE} — pause burst`);
           break;
@@ -4480,7 +4631,7 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
       const dt = Date.now() - burstStartedAt;
       const reason = !faceInZoneRef.current ? 'face-left-zone'
                    : shotsInBurst >= capRafale() ? 'max-burst-cap'
-                   : (queueRef.current.length + inFlightSetRef.current.size) >= MAX_TOTAL_IN_PIPELINE ? 'backpressure-queue'
+                   : (queueRef.current.length - autresEventsRef.current + inFlightSetRef.current.size) >= MAX_TOTAL_IN_PIPELINE ? 'backpressure-queue'
                    : pendingDirSizeBytesCached() > STORAGE_WARN_BYTES ? 'backpressure-disk'
                    : 'disarmed';
       console.log(`[burst] launched ${shotsInBurst} shots in ${dt}ms (${reason}), inFlight=${inFlightSetRef.current.size}`);
@@ -4827,6 +4978,20 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
           try { await BackgroundUploaderModule?.endProtectedWindow?.(); } catch {}
         })();
       }, 1200);
+      // Hors ligne au moment de la sortie, le flush ci-dessus ne peut rien
+      // envoyer — et rien ne repartait avant la prochaine entree sur
+      // l ecran. Reveil leger (60 s) tant que la file n est pas vide ;
+      // s arrete seul quand elle se vide ou qu un nouvel ecran monte
+      // (cf. arreterRelanceApresSortie au montage).
+      arreterRelanceApresSortie();
+      relanceApresSortie = setInterval(() => {
+        if (generationPerimee() || queueRef.current.length === 0) {
+          arreterRelanceApresSortie();
+          return;
+        }
+        processQueue();
+        drainQueue();
+      }, 60000);
     }
   }
 
@@ -4873,9 +5038,11 @@ function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photogra
   // « à renvoyer » = echecs definitifs, rejouables. Les photos perdues
   // (fichier disparu) ne se renvoient pas : comptees a part (audit 25/11).
   const aRenvoyer = queueStats?.failed || 0;
+  const autresEvents = queueStats?.autresEvents || 0;
   const compteursTexte = `${uploadedCount} sauvegardée${uploadedCount > 1 ? 's' : ''} · ${pendingCount} en attente`
     + (aRenvoyer > 0 ? ` · ${aRenvoyer} à renvoyer` : '')
-    + (lostCount > 0 ? ` · ${lostCount} perdue${lostCount > 1 ? 's' : ''}` : '');
+    + (lostCount > 0 ? ` · ${lostCount} perdue${lostCount > 1 ? 's' : ''}` : '')
+    + (autresEvents > 0 ? ` · ${autresEvents} d'un autre event` : '');
 
   // Voyant de luminosite : toujours visible (le handoff en fait une pastille
   // permanente), contrairement a l ancienne pill qui n apparaissait qu en
@@ -6579,10 +6746,12 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
       // renvoie le code retenu : la boucle de retry client, plafonnee a -5,
       // n a plus lieu d etre — et elle divergeait de ce que fait le site.
       const r = await envoyer(payload);
-      const data = await r.json();
+      // Reponse non JSON (502 passerelle, page HTML) : pas de « JSON Parse
+      // error » a l ecran, un message generique a la place.
+      const data = await r.json().catch(() => ({}));
       const codeFinal = data?.code || payload.code;
       if (!r.ok) {
-        Alert.alert('Erreur', data.error || 'Échec');
+        Alert.alert('Erreur', data.error || 'Le serveur ne répond pas pour le moment. Réessaie dans un instant.');
       } else {
         // Si création + cover en attente, on l'uploade maintenant — strictement
         // séquentiel (POST submit-event terminé avant PUT cover) pour éviter
@@ -7582,12 +7751,18 @@ function App() {
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
+  // Echec de /public-events SANS cache : l accueil affichait « Aucun
+  // événement à venir », une information fausse. Cet etat permet a
+  // HomeScreen d afficher « Pas de connexion » + Reessayer a la place.
+  const [eventsLoadError, setEventsLoadError] = useState(false);
   const reloadEvents = useCallback(async () => {
     try {
       const data = await api.getEvents();
       if (Array.isArray(data) && data.length > 0) setEvents(data);
+      setEventsLoadError(false);
     } catch {
       // offline : on garde la liste cachée (préchargée au boot)
+      setEventsLoadError(true);
     }
   }, []);
 
@@ -7779,12 +7954,15 @@ function App() {
     // Sessions sensibles : migration AsyncStorage → SecureStore puis lecture.
     (async () => {
       await migrateSensitiveKeysToSecureStore();
+      // .catch obligatoire : un keychain indisponible au boot (rejet de
+      // getItem) laissait la session non restauree EN SILENCE — l utilisateur
+      // se croyait deconnecte sans raison.
       Secure.getItem('@will_runner').then(v => {
         if (v) try { setRunnerSession(JSON.parse(v)); } catch {}
-      });
+      }).catch(() => null);
       Secure.getItem('@will_organizer').then(v => {
         if (v) try { setOrganizerSession(JSON.parse(v)); } catch {}
-      });
+      }).catch(() => null);
       // Boot : on lit la session pour permettre un retour rapide en mode
       // photographe (sans re-saisir le mdp), mais on ouvre par défaut sur
       // l'accueil. L'utilisateur tap "Photographe" pour entrer dans le mode.
@@ -8228,6 +8406,9 @@ function App() {
     if (tk) { jetonPushLocal().then(jeton => api.deletePushToken(tk, jeton)); }
     setRunnerSession(null);
     setSelfieUri(null);
+    // Etat d envoi du selfie : il appartient a la session qui part. Sans ce
+    // reset, un 'failed' (ou 'uploading') restait affiche au compte suivant.
+    setSelfieUploadState('idle');
     // Purge in-memory uniquement : les caches @will_follows_<uid> et
     // @will_photo_favorites_<uid> restent en storage, scopes par userId
     // (pas de fuite cross-compte). Au re-login du meme user, les useEffects
@@ -8441,9 +8622,10 @@ function App() {
     // pas depuis la session (`${API_URL}/${item.key}`). Seul le Bearer
     // vient de la session courante :
     //   - reconnexion sur le MEME event  -> les photos repartent ;
-    //   - reconnexion sur un AUTRE event -> 403, l item finit en failed
-    //     apres MAX_RETRIES et s affiche sur la ligne « X a renvoyer ».
-    //     Jamais d upload silencieux sur le mauvais event.
+    //   - reconnexion sur un AUTRE event -> drainQueue les ignore (hors
+    //     drain, hors compteur « en attente ») et la ligne « N d'un autre
+    //     event » les signale. Jamais d upload silencieux sur le mauvais
+    //     event, et plus de retries 403 en boucle.
     // Le dossier se vide de lui-meme : chaque fichier est supprime a son
     // PUT reussi, le delete global ici n etait que destructif.
     //
@@ -8872,24 +9054,29 @@ function App() {
     }
   }, [runnerSession]);
 
+  // Retourne true si le profil est enregistre : le formulaire du menu orga
+  // ne se ferme que sur succes (sinon la saisie partait a la poubelle avec
+  // une simple Alert par-dessus la vue lecture).
   const updateOrganizerProfile = useCallback(async (changes) => {
-    if (!organizerSession?.token) return;
+    if (!organizerSession?.token) return false;
     try {
       const r = await organizerApiFetch(`/organizer/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(changes),
       });
-      const data = await r.json();
+      const data = await r.json().catch(() => ({}));
       if (r.ok && data.profile) {
         const next = { ...organizerSession, profile: data.profile };
         setOrganizerSession(next);
         Secure.setItem('@will_organizer', JSON.stringify(next)).catch(() => {});
-      } else {
-        Alert.alert('Erreur', data.error || 'Impossible de modifier les infos');
+        return true;
       }
+      Alert.alert('Erreur', data.error || 'Impossible de modifier les infos');
+      return false;
     } catch (e) {
       Alert.alert('Erreur', e.message || 'Erreur réseau');
+      return false;
     }
   }, [organizerSession]);
 
@@ -9002,6 +9189,11 @@ function App() {
     // Garde-fou : seul un runner connecte peut likeer une photo. Le caller
     // doit deja wrapper avec requireAuth pour ouvrir le modal de login si non.
     if (!photoId || !userId || !runnerSession) return;
+    // Requete deja en vol pour cette photo : un second tap pendant
+    // l aller-retour croiserait POST et DELETE (reponses dans le desordre,
+    // rollback sur le mauvais etat). On ignore le tap, l icone reflete deja
+    // le premier geste.
+    if (favorisEnVolRef.current.has(photoId)) return;
     // L etat AVANT le tap doit etre lu ici, pas dans l updater : React
     // n execute pas l updater au moment de l appel mais au rendu suivant.
     // `wasFav` restait donc toujours faux et la requete partait toujours en
@@ -9045,12 +9237,16 @@ function App() {
   // Audit B15 — Upload R2 traque via selfieUploadState. Appele par onSaved
   // (nouveau selfie) et par retrySelfieUpload (tap pastille rouge / bouton
   // SelfieBlock / lien ProfileMenu).
+  // Retourne true si le selfie est arrive sur R2, false sinon : l appelant
+  // (onSaved de la SelfieModal) ne rejoue le follow en attente que sur
+  // succes — rejouer sur echec produisait un 400 selfie_required qui
+  // rouvrait la modale par-dessus l alerte d echec.
   const runSelfieUpload = useCallback(async (uri) => {
-    if (!uri) return;
+    if (!uri) return false;
     // path correct = runnerSession.profile.userId (cf 6 autres occurrences).
     const userId = runnerSession?.profile?.userId;
     const token = runnerSession?.token;
-    if (!userId || !token) return;
+    if (!userId || !token) return false;
     setSelfieUploadState('uploading');
     try {
       // Audit B14a followup : token manuel (pas runnerApiFetch) pour ne pas
@@ -9058,6 +9254,7 @@ function App() {
       // uploadSelfieToR2).
       await uploadSelfieToR2(uri, userId, token);
       setSelfieUploadState('ok');
+      return true;
     } catch (e) {
       console.warn('selfie upload R2', e?.message || e);
       setSelfieUploadState('failed');
@@ -9076,7 +9273,7 @@ function App() {
             { text: 'Reprendre mon selfie', onPress: () => setSelfieModal(true) },
           ],
         ), 400);
-        return;
+        return false;
       }
       // Audit coureur 1 — l echec posait un etat 'failed' que rien n affichait
       // et ne disait rien. Sans selfie arrive sur le serveur, le coureur ne
@@ -9091,6 +9288,7 @@ function App() {
           { text: "Réessayer l'envoi", onPress: () => { runSelfieUploadRef.current?.(uri); } },
         ],
       ), 400);
+      return false;
     }
   }, [runnerSession?.profile?.userId, runnerSession?.token]);
 
@@ -9251,8 +9449,12 @@ function App() {
     // Une reponse lente pour « 1 » ne doit pas ecraser celle de « 12 ».
     let perimee = false;
     const t = setTimeout(async () => {
+      // Timeout 15 s, comme les autres appels : sans lui, un reseau muet
+      // laissait le spinner tourner indefiniment (fetch RN sans delai borne).
+      const ctl = new AbortController();
+      const minuterie = setTimeout(() => ctl.abort(), 15000);
       try {
-        const r = await fetch(`${API_URL}/search-bib?eventCode=${encodeURIComponent(eventInPanel.code)}&bib=${encodeURIComponent(q)}`);
+        const r = await fetch(`${API_URL}/search-bib?eventCode=${encodeURIComponent(eventInPanel.code)}&bib=${encodeURIComponent(q)}`, { signal: ctl.signal });
         if (perimee) return;
         if (!r.ok) { setBibResults([]); setBibErreur(true); return; }
         const data = await r.json();
@@ -9272,6 +9474,7 @@ function App() {
         setBibResults([]);
         setBibErreur(true);
       } finally {
+        clearTimeout(minuterie);
         if (!perimee) setBibSearching(false);
       }
     }, 400);
@@ -9557,6 +9760,7 @@ function App() {
                   follows={follows}
                   onToggleFollow={(code) => requireAuth(() => toggleFollowStable(code))}
                   onRefresh={reloadEvents}
+                  eventsLoadError={eventsLoadError}
                   runnerFirstName={runnerSession?.profile?.firstName}
                   selfieSkipped={!!runnerSession && selfieSkipped && !selfieUri}
                   selfieUploadState={selfieUploadState}
@@ -9937,7 +10141,7 @@ function App() {
           // pendingFollow. Sans await, toggleFollow part avec un selfie pas
           // encore propage cote worker -> 400 selfie_required -> re-ouvre la
           // SelfieModal en boucle.
-          await runSelfieUpload(uri);
+          const selfieEnvoye = await runSelfieUpload(uri);
           // Notifications : c est ICI qu il faut demander la permission. Le
           // selfie enregistre, l app vient de promettre « on te reconnait sur
           // les photos » — la notification est la suite logique de cette
@@ -9946,10 +10150,13 @@ function App() {
           // donc jamais joignable (zero jeton enregistre cote serveur).
           const jeton = runnerSession?.token;
           if (jeton) ensurePushRegistered(jeton, { ask: true });
-          // Phase D : si un follow attendait le selfie, relance-le maintenant.
+          // Phase D : si un follow attendait le selfie, relance-le maintenant
+          // — UNIQUEMENT si le selfie est bien sur R2. Sinon le follow
+          // repondrait 400 selfie_required et rouvrirait la SelfieModal
+          // par-dessus l alerte « Selfie non envoyé ».
           const pendingEvent = pendingFollowRef.current;
-          if (pendingEvent) {
-            pendingFollowRef.current = null;
+          pendingFollowRef.current = null;
+          if (pendingEvent && selfieEnvoye) {
             // setTimeout pour laisser le modal se fermer proprement avant le toast eventuel
             setTimeout(() => { toggleFollowStable(pendingEvent); }, 200);
           }

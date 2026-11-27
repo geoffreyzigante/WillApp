@@ -95,6 +95,10 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
                        && typeof p.key === 'string' && p.key.length > 0)
         .map(p => ({
           uri: p.url,
+          // La grille (vignettes 1/3 d ecran) charge la derivee, pas le
+          // plein format : 60 photos en pleine resolution saturaient memoire
+          // et reseau. `uri` reste le plein format pour le viewer.
+          thumb: p.thumb_md_url || p.thumb_url || p.url,
           id: p.key,
           tint,
           race: p.race,
@@ -168,6 +172,13 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
     ? parCourse
     : parCourse.filter(p => statutDe(p) === statutFiltre);
 
+  // Changer de filtre (course ou statut) vide la selection : des photos
+  // selectionnees mais sorties de l affichage restaient comptees dans
+  // « Masquer / Publier / Supprimer (N) » — on agissait sur de l invisible.
+  useEffect(() => {
+    setSelectedKeys(new Set());
+  }, [raceFilter, statutFiltre]);
+
   const toggleSelect = (key) => {
     setSelectedKeys(prev => {
       const next = new Set(prev);
@@ -217,11 +228,23 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
                 body: JSON.stringify({ keys: Array.from(selectedKeys) }),
               });
               if (r.ok) {
-                const keysToRemove = selectedKeys;
-                setPhotos(prev => prev.filter(p => !keysToRemove.has(p.id)));
+                // Le serveur dit combien ont REELLEMENT ete supprimees :
+                // filtrer localement en bloc affichait une grille fausse
+                // quand une partie du lot avait echoue. On recharge
+                // (silencieux : pas de remontee en haut) et on previent si
+                // le compte ne tombe pas juste.
+                const data = await r.json().catch(() => ({}));
+                const demandees = selectedKeys.size;
                 exitSelection();
+                await loadPhotos({ silencieux: true });
+                if (typeof data.deleted === 'number' && data.deleted < demandees) {
+                  Alert.alert(
+                    'Suppression partielle',
+                    `${data.deleted} photo${data.deleted > 1 ? 's' : ''} supprimée${data.deleted > 1 ? 's' : ''} sur ${demandees}.`,
+                  );
+                }
               } else {
-                const data = await r.json();
+                const data = await r.json().catch(() => ({}));
                 Alert.alert('Erreur', data.error || 'Échec de la suppression');
               }
             } catch (e) {
@@ -245,7 +268,11 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
     setLotEnCours(true);
     let echecs = 0;
     try {
-      await enLots(liste, 4, async (p) => {
+      // Concurrence 1 : le worker fait un read-modify-write SANS verrou sur
+      // la liste de visibilite. Quatre POST en parallele s ecrasaient
+      // mutuellement (dernier ecrivain gagne, les autres modifications
+      // perdues). Sequentiel = plus lent, mais chaque photo compte.
+      await enLots(liste, 1, async (p) => {
         try {
           const r = await organizerApiFetch(`/organizer/photo-visibility`, {
             method: 'POST',
@@ -467,7 +494,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
       >
         <View style={{ flex: 1, borderRadius: 8, overflow: 'hidden', backgroundColor: '#eee' }}>
           <ExpoImage
-            source={{ uri: photo.uri }}
+            source={{ uri: photo.thumb || photo.uri }}
             style={[StyleSheet.absoluteFillObject, horsPublic ? { opacity: 0.55 } : null]}
             contentFit="cover"
             cachePolicy="memory-disk"

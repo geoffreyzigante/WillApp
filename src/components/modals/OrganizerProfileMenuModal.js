@@ -169,8 +169,13 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
   const save = async () => {
     setBusy(true);
     try {
-      await onUpdate?.({ firstName, lastName, organization: organisation.trim(), phone: telephone.trim() });
-      setEditing(false);
+      // onUpdate (updateOrganizerProfile) retourne true sur succes : on ne
+      // referme le formulaire que dans ce cas. Avant, un echec fermait quand
+      // meme et la saisie etait perdue derriere l Alert d erreur.
+      const ok = onUpdate
+        ? await onUpdate({ firstName, lastName, organization: organisation.trim(), phone: telephone.trim() })
+        : false;
+      if (ok) setEditing(false);
     } finally {
       setBusy(false);
     }

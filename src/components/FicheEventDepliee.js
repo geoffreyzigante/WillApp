@@ -158,23 +158,40 @@ function LigneArchive({ code, organizerApiFetch, photographerId, nom, nbPhotos }
   const auto = useRef(false);
 
   // Sondage tant qu une partie est en cours (comme le site, toutes les 5 s).
+  // Tolerance aux erreurs passageres : un sondage qui echoue (4G qui tousse,
+  // 502) n enterre pas une archive en cours de generation. On garde le
+  // dernier statut connu et on reessaie ; « Échec » n apparait qu apres
+  // 3 echecs CONSECUTIFS sur la meme partie.
   useEffect(() => {
     if (ids.every(i => !i)) return undefined;
     let annule = false;
     let timer;
+    const echecs = ids.map(() => 0);
+    let derniers = ids.map(() => null);
     const tick = async () => {
       const res = await Promise.all(ids.map(async (id) => {
         if (!id) return null;
         try {
           const r = await fetch(`${API_URL}/archive/${encodeURIComponent(id)}/status`);
           const d = await r.json().catch(() => ({}));
-          if (!r.ok) return { status: 'error', error: d.error || 'Statut indisponible' };
+          if (!r.ok) return { transitoire: true, error: d.error || 'Statut indisponible' };
           return d;
-        } catch (e) { return { status: 'error', error: 'Statut indisponible' }; }
+        } catch (e) { return { transitoire: true, error: 'Statut indisponible' }; }
       }));
       if (annule) return;
-      setStatuts(res);
-      if (res.some(s => s && s.status === 'pending')) timer = setTimeout(tick, 5000);
+      const prochains = res.map((s, i) => {
+        if (!s) return null;
+        if (s.transitoire) {
+          echecs[i] += 1;
+          if (echecs[i] < 3) return derniers[i] || { status: 'pending' };
+          return { status: 'error', error: s.error };
+        }
+        echecs[i] = 0;
+        return s;
+      });
+      derniers = prochains;
+      setStatuts(prochains);
+      if (prochains.some(s => s && s.status === 'pending')) timer = setTimeout(tick, 5000);
     };
     tick();
     return () => { annule = true; clearTimeout(timer); };
@@ -252,7 +269,10 @@ function LigneArchive({ code, organizerApiFetch, photographerId, nom, nbPhotos }
 
 export function LigneTelechargement({ code, organizerApiFetch, photosData }) {
   const groupes = useMemo(() => groupesPhotographes(photosData), [photosData]);
-  const total = photosData?.during_event?.length || 0;
+  // La somme des groupes, pas seulement during_event : les groupes (et le
+  // ZIP « tous ») couvrent AUSSI before_event. Compter l un et archiver
+  // l autre affichait un nombre faux et un decoupage en parts errone.
+  const total = groupes.reduce((t, g) => t + g.count, 0);
   return (
     <LigneIcone
       type="archive"

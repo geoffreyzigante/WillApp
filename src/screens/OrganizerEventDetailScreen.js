@@ -229,9 +229,18 @@ export function OrganizerEventDetailScreen({ session, organizerApiFetch, event, 
   };
 
   const confirmDelete = () => {
+    // L orga doit savoir ce qui part avec l event : le nombre de photos
+    // (quand on le connait) et la galerie des coureurs. « Définitive et
+    // irréversible » seul ne disait pas l essentiel.
+    const nbPhotos = photosData
+      ? ((photosData.during_event?.length || 0) + (photosData.before_event?.length || 0))
+      : null;
+    const corps = nbPhotos
+      ? `Cette action est définitive et irréversible. Les ${nbPhotos} photo${nbPhotos > 1 ? 's' : ''} de l'event et la galerie des coureurs seront supprimées définitivement.`
+      : "Cette action est définitive et irréversible. Les photos de l'event et la galerie des coureurs seront supprimées définitivement.";
     Alert.alert(
       'Supprimer cet événement ?',
-      'Cette action est définitive et irréversible.',
+      corps,
       [
         { text: 'Annuler', style: 'cancel' },
         {

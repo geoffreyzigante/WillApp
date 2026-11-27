@@ -319,7 +319,18 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
           check_only: verifierSeulement,
         }),
       });
-      const data = await r.json();
+      // Reponse non JSON (502 de la passerelle, page HTML...) : sans ce
+      // catch, le parse levait et le catch global affichait « Vérifie ton
+      // réseau » alors que le reseau allait tres bien. Meme regle que le
+      // login email plus bas.
+      const data = await r.json().catch(() => null);
+      if (!data) {
+        setError(r.ok
+          ? 'Réponse inattendue du serveur. Réessaie dans un instant.'
+          : 'Le serveur ne répond pas pour le moment. Réessaie dans un instant.');
+        setBusy(false);
+        return;
+      }
       if (!r.ok) {
         setError(data.error || `Connexion ${nomFournisseur} refusée.`);
         setBusy(false);
@@ -512,6 +523,10 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
       if (ageFromIso(dateOfBirth) < 13) { setError('Tu dois avoir au moins 13 ans pour créer un compte.'); return; }
       if (password !== passwordConfirm) { setError('Les deux mots de passe ne correspondent pas.'); return; }
       if (!cguAccepted) { setError("Tu dois accepter les CGU et la politique de confidentialité."); return; }
+      // Verrou AVANT le premier await : pendant l ecriture keychain
+      // ci-dessous, le bouton restait actif et un double tap envoyait deux
+      // inscriptions.
+      setBusy(true);
       // La case des CGU porte aussi le consentement biometrique : on le
       // date ici, au moment ou elle est validee.
       await Secure.setItem(BIOMETRIC_CONSENT_KEY, new Date().toISOString()).catch(() => {});

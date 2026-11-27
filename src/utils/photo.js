@@ -33,11 +33,18 @@ export const extractIdx = (key) => {
 
 // Compose le titre d'une course. label_only=true => juste le label (mode
 // nom personnalise). Sinon => `${label} ${km} km` ou `${km} km`.
+// Miroir EXACT de raceTitle() du dashboard (src/lib/eventDisplay.js) et de
+// nomDossierCourse() du worker : majuscule initiale, respect de label_only,
+// et label sans km => label seul (jamais «  km »). Toute divergence entre
+// les trois recree des dossiers orphelins (cf WILL/CLAUDE.md, « Nommage des
+// dossiers de course »).
 export function raceTitle({ label, label_only, km } = {}) {
-  const l = (label || '').toString().trim();
+  const brut = (label || '').toString().trim();
+  const l = brut ? brut.charAt(0).toUpperCase() + brut.slice(1) : brut;
   if (label_only && l) return l;
+  if (l && !km) return l;
   if (l) return `${l} ${km} km`;
-  return `${km} km`;
+  return km ? `${km} km` : '';
 }
 
 // Titre depuis une photo (race + race_label + race_label_only).

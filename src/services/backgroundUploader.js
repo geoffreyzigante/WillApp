@@ -49,6 +49,12 @@ export const pendingBgUploads = new Map();
 // D ou ce dispatch unique : la voie orpheline n est empruntee que si aucune
 // promise n attend, ce qui est exactement sa raison d etre.
 let orphanHandler = null;
+// Gestionnaire PAR DEFAUT, enregistre une fois au niveau module (App.js) :
+// il recoit les orphelins quand AUCUN ecran photographe n est monte. Sans
+// lui, un event Complete arrive apres la sortie de l ecran etait perdu :
+// l item restait 'uploading' en AsyncStorage, repassait 'pending' au
+// prochain montage, et la photo etait renvoyee (double analyse payante).
+let defaultOrphanHandler = null;
 
 /**
  * Enregistre le gestionnaire des uploads orphelins. Retourne une fonction de
@@ -57,6 +63,14 @@ let orphanHandler = null;
 export function setOrphanUploadHandler(fn) {
   orphanHandler = fn;
   return () => { if (orphanHandler === fn) orphanHandler = null; };
+}
+
+/**
+ * Gestionnaire de repli, utilise quand aucun ecran n a enregistre le sien.
+ * Enregistre une fois a l import d App.js, jamais desenregistre.
+ */
+export function setDefaultOrphanUploadHandler(fn) {
+  defaultOrphanHandler = fn;
 }
 
 if (bgUploaderEmitter) {
@@ -68,8 +82,9 @@ if (bgUploaderEmitter) {
       pending.resolve({ ok: !!success, status: statusCode || 0, error: error || null });
       return;
     }
-    if (orphanHandler) {
-      try { orphanHandler(evt); } catch (e) { console.warn('[bgupload] orphan handler', e?.message || e); }
+    const handler = orphanHandler || defaultOrphanHandler;
+    if (handler) {
+      try { handler(evt); } catch (e) { console.warn('[bgupload] orphan handler', e?.message || e); }
     }
   });
 }
