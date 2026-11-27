@@ -5,14 +5,14 @@
 //
 // Features :
 // - Filtres par distance (pills horizontales)
-// - Mode selection long-press + bouton "Supprimer (N)" en bas
+// - Mode selection long-press + barre « Masquer / Publier / Supprimer (N) » en bas
 // - Tap photo masquee -> bouton "Publier" en overlay (POST visibility)
 // - PhotoViewer integre via callback onOpenPhoto avec optimistic override
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList, RefreshControl, ScrollView,
-  StyleSheet, Alert, ActivityIndicator,
+  StyleSheet, Alert, ActivityIndicator, Linking,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,12 +31,31 @@ function raisonHors(p) {
   if (p.hors_public !== undefined) return p.hors_public || null;
   return p.hidden === true ? 'masquee' : null;
 }
+// Memes mots que la galerie de l espace orga (GalerieEvent.js, FLAG_HORS).
 const LIBELLE_HORS = {
-  masquee: 'Photo masquée',
-  sans_visage: 'Sans visage, hors galerie',
-  avant_depart: 'Avant le départ, hors galerie',
-  passage: 'Écartée, hors galerie',
+  masquee: 'Masquée',
+  sans_visage: 'Masquée · aucun visage',
+  avant_depart: 'Masquée · avant le départ',
+  passage: 'Masquée · hors de l\'heure de passage',
 };
+// Photo envoyee recemment et pas encore analysee (comme le site : fenetre de 6 h).
+// Une photo ancienne jamais analysee est un reliquat : le serveur la tient pour
+// visible. Sans le champ (serveur plus ancien), on ne dit rien.
+const FENETRE_TRAITEMENT = 6 * 3600 * 1000;
+function statutDe(p) {
+  if (p.horsPublic) return 'masquee';
+  if (p.processed === false && p.uploaded) {
+    const t = new Date(p.uploaded).getTime();
+    if (t && Date.now() - t < FENETRE_TRAITEMENT) return 'proc';
+  }
+  return 'ok';
+}
+// Lance `fn` sur chaque element, `n` a la fois (le serveur masque une photo par appel).
+async function enLots(liste, n, fn) {
+  let i = 0;
+  const travailleur = async () => { while (i < liste.length) { const k = i++; await fn(liste[k]); } };
+  await Promise.all(Array.from({ length: Math.min(n, liste.length) }, travailleur));
+}
 
 export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, onClose, onOpenPhoto }) {
   const [photos, setPhotos] = useState([]);
@@ -47,6 +66,8 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [lotEnCours, setLotEnCours] = useState(false);
+  const [statutFiltre, setStatutFiltre] = useState('all');
   const [busyKey, setBusyKey] = useState(null);
   // Erreur de chargement : distincte de « aucune photo » (audit du 25/11).
   const [erreur, setErreur] = useState(false);
@@ -83,6 +104,8 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
           race_label_only: p.race_label_only === true,
           hidden: p.hidden === true,
           horsPublic: raisonHors(p),
+          uploaded: p.uploaded || null,
+          processed: typeof p.processed_quality === 'boolean' ? p.processed_quality : undefined,
         }));
       list.sort((a, b) => {
         const dt = extractBurstTs(b.id) - extractBurstTs(a.id);
@@ -134,11 +157,16 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
     if (p && p.race != null && String(p.race).trim() !== '') return String(p.race);
     return cleCourseUnique;
   };
-  const filteredPhotos = raceFilter === 'all'
+  const parCourse = raceFilter === 'all'
     ? photos
     : photos.filter(p => cleCourse(p) === raceFilter);
-  // Le compteur « hors galerie » suit le filtre, comme le total.
-  const hiddenCount = filteredPhotos.filter(p => p.horsPublic).length;
+  // Les compteurs « masquées » et « en traitement » suivent la course choisie,
+  // comme le total (et comme la galerie de l espace orga).
+  const hiddenCount = parCourse.filter(p => statutDe(p) === 'masquee').length;
+  const procCount = parCourse.filter(p => statutDe(p) === 'proc').length;
+  const filteredPhotos = statutFiltre === 'all'
+    ? parCourse
+    : parCourse.filter(p => statutDe(p) === statutFiltre);
 
   const toggleSelect = (key) => {
     setSelectedKeys(prev => {
@@ -205,6 +233,36 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         },
       ]
     );
+  };
+
+  // Masquer / Publier en lot : le serveur traite une photo par appel, on en
+  // lance quelques-uns a la fois. « Publier » leve le masquage, pas le
+  // time-gate : une photo d avant le depart est ignoree.
+  const aMasquer = photos.filter(p => selectedKeys.has(p.id) && !p.hidden && p.horsPublic !== 'avant_depart' && statutDe(p) !== 'masquee');
+  const aPublier = photos.filter(p => selectedKeys.has(p.id) && p.hidden === true && p.horsPublic !== 'avant_depart');
+  const changerVisibilite = async (liste, visible) => {
+    if (!liste.length || lotEnCours) return;
+    setLotEnCours(true);
+    let echecs = 0;
+    try {
+      await enLots(liste, 4, async (p) => {
+        try {
+          const r = await organizerApiFetch(`/organizer/photo-visibility`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: p.id, visible }),
+          });
+          if (!r.ok) echecs++;
+        } catch { echecs++; }
+      });
+      await loadPhotos({ silencieux: true });
+      exitSelection();
+      if (echecs > 0) {
+        Alert.alert('Erreur', `${liste.length - echecs} modifiée${liste.length - echecs > 1 ? 's' : ''}, ${echecs} en erreur.`);
+      }
+    } finally {
+      setLotEnCours(false);
+    }
   };
 
   const deleteFromViewer = async (keys) => {
@@ -276,6 +334,14 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         </Text>
       </View>
 
+      <TouchableOpacity
+        onPress={() => Linking.openURL(`https://will-app.com/event/${event.code}`).catch(() => {})}
+        hitSlop={8}
+        style={{ alignSelf: 'flex-start', marginBottom: 12 }}
+      >
+        <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 13, color: C.orga }}>Voir comme un coureur ↗</Text>
+      </TouchableOpacity>
+
       {/* Puces inactives en blanc, active en noir orga (26/11). Ni lavande ni
           C.orgaClair : sur C.fondApp, la couleur de la page, une puce pale ne se
           lit pas comme un bouton (constate le 25/11). */}
@@ -312,13 +378,32 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         </ScrollView>
       )}
 
+      {/* Toutes / Masquées / En traitement : meme filtre que la galerie de l
+          espace orga. Affiche seulement s il y a de quoi filtrer. */}
+      {(hiddenCount > 0 || procCount > 0 || statutFiltre !== 'all') && (
+        <View style={{ flexDirection: 'row', backgroundColor: T.couleur.champFond, borderRadius: 12, padding: 3, marginBottom: 6 }}>
+          {[
+            { k: 'all', l: 'Toutes' },
+            { k: 'masquee', l: `${hiddenCount} masquée${hiddenCount > 1 ? 's' : ''}` },
+            { k: 'proc', l: `${procCount} en traitement` },
+          ].map(({ k, l }) => {
+            const actif = statutFiltre === k;
+            return (
+              <TouchableOpacity
+                key={k}
+                onPress={() => setStatutFiltre(k)}
+                accessibilityState={{ selected: actif }}
+                style={{ flex: k === 'proc' ? 1.5 : 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center', backgroundColor: actif ? C.orga : 'transparent' }}
+              >
+                <Text numberOfLines={1} style={{ color: actif ? '#fff' : C.orga, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>{l}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       <Text style={[s.sectionTitle, { marginVertical: 10 }]}>
         Photos {photos.length > 0 ? `(${filteredPhotos.length})` : ''}
-        {hiddenCount > 0 && (
-          <Text style={{ color: C.error, fontSize: 13, fontFamily: 'Montserrat-SemiBold' }}>
-            {'  · '}{hiddenCount} hors galerie
-          </Text>
-        )}
       </Text>
     </>
   );
@@ -334,7 +419,7 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
               <Text style={{ fontFamily: 'Montserrat-SemiBold', color: C.orga, marginTop: 8 }}>Réessayer</Text>
             </TouchableOpacity>
           )
-          : <Text style={{ fontFamily: 'Montserrat', color: C.textSoft }}>Aucune photo pour le moment</Text>}
+          : <Text style={{ fontFamily: 'Montserrat', color: C.textSoft }}>{statutFiltre === 'masquee' ? 'Aucune photo masquée' : statutFiltre === 'proc' ? 'Aucune photo en traitement' : 'Aucune photo pour le moment'}</Text>}
     </View>
   );
 
@@ -408,10 +493,22 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
           {isSelected && (
             <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(26, 20, 38, 0.25)' }]} />
           )}
+          {/* Point orange : envoyee recemment, pas encore analysee. */}
+          {!horsPublic && !selectionMode && statutDe(photo) === 'proc' && (
+            <View
+              accessibilityLabel="En traitement"
+              style={{
+                position: 'absolute', top: 6, left: 6,
+                width: 10, height: 10, borderRadius: 5,
+                backgroundColor: '#F2A60C',
+                borderWidth: 2, borderColor: '#fff',
+              }}
+            />
+          )}
           {/* Point rouge en haut a gauche : absente de la galerie publique. */}
           {horsPublic && !selectionMode && (
             <View
-              accessibilityLabel={LIBELLE_HORS[horsPublic] || 'Hors galerie'}
+              accessibilityLabel={LIBELLE_HORS[horsPublic] || 'Masquée'}
               style={{
                 position: 'absolute', top: 6, left: 6,
                 width: 10, height: 10, borderRadius: 5,
@@ -467,38 +564,33 @@ export function OrganizerEventPhotosScreen({ session, organizerApiFetch, event, 
         />
 
         {selectionMode && selectedKeys.size > 0 && (
-          <View style={{ position: 'absolute', bottom: 20, left: 20, right: 20 }}>
+          <View style={{ position: 'absolute', bottom: 100, left: 16, right: 16, flexDirection: 'row', gap: 8, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, elevation: 12, shadowOffset: { width: 0, height: 6 } }}>
+            {[
+              { k: 'masquer', l: 'Masquer', n: aMasquer.length, f: () => changerVisibilite(aMasquer, false) },
+              { k: 'publier', l: 'Publier', n: aPublier.length, f: () => changerVisibilite(aPublier, true) },
+            ].map(({ k, l, n, f }) => (
+              <TouchableOpacity
+                key={k}
+                onPress={f}
+                disabled={n === 0 || lotEnCours || deleting}
+                style={{ flex: 1, backgroundColor: C.orga, paddingVertical: 15, borderRadius: 14, alignItems: 'center', opacity: n === 0 || lotEnCours || deleting ? 0.35 : 1 }}
+              >
+                {lotEnCours ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text numberOfLines={1} style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>{l} ({n})</Text>
+                )}
+              </TouchableOpacity>
+            ))}
             <TouchableOpacity
               onPress={deleteSelected}
-              disabled={deleting}
-              style={{
-                backgroundColor: C.error,
-                paddingVertical: 16,
-                borderRadius: 14,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-                opacity: deleting ? 0.6 : 1,
-                shadowColor: '#000',
-                shadowOpacity: 0.3,
-                shadowRadius: 12,
-                // Android n applique pas les shadow* : elevation est son equivalent.
-                elevation: 12,
-                shadowOffset: { width: 0, height: 6 },
-              }}
+              disabled={deleting || lotEnCours}
+              style={{ flex: 1, backgroundColor: C.error, paddingVertical: 15, borderRadius: 14, alignItems: 'center', opacity: deleting || lotEnCours ? 0.6 : 1 }}
             >
               {deleting ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <>
-                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                    <Path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  </Svg>
-                  <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Montserrat-SemiBold' }}>
-                    Supprimer ({selectedKeys.size})
-                  </Text>
-                </>
+                <Text numberOfLines={1} style={{ color: '#fff', fontSize: 14, fontFamily: 'Montserrat-SemiBold' }}>Supprimer ({selectedKeys.size})</Text>
               )}
             </TouchableOpacity>
           </View>
