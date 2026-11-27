@@ -9670,7 +9670,7 @@ function App() {
       />
 
       {/* Bottom Nav */}
-      <View style={s.bottomNav}>
+      <View style={[s.bottomNav, organizerSession && session?.role === 'photographer' && caps.photographerMode && { gap: 4 }]}>
         <TouchableOpacity style={s.navBtn} onPress={() => {
           if (bottomTab === 'home') {
             setHomeScrollSignal((n) => n + 1);
@@ -9714,6 +9714,20 @@ function App() {
               <Icon.GearOrg size={22} color={bottomTab === 'events' ? C.primary : C.text} />
             </View>
             <Text style={[s.navLabel, bottomTab === 'events' && { color: C.primary, fontFamily: 'Montserrat-SemiBold' }]}>Mes events</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Quatrieme onglet, reserve aux photographes connectes (27/11) : comme
+            « Mes events » pour l orga, l espace garde sa place dans la barre.
+            Sans lui, une fois sorti de la capture (fleche retour), il fallait
+            repasser par le menu. Un tap reprend la session, sans re-saisir le
+            PIN (handlePickRole garde aussi le cas Android). */}
+        {session?.role === 'photographer' && caps.photographerMode && (
+          <TouchableOpacity style={s.navBtn} onPress={() => handlePickRole('photographer')} accessibilityLabel="Espace photographe">
+            <View style={s.navIconWrap}>
+              <Icon.CamOrg size={22} color={C.text} />
+            </View>
+            <Text style={s.navLabel}>Photographe</Text>
           </TouchableOpacity>
         )}
       </View>
