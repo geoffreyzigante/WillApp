@@ -69,7 +69,11 @@ const HOOK_REPLACE = `    if device.isExposureModeSupported(.continuousAutoExpos
       }
       device.focusMode = .continuousAutoFocus
     }
-    if #available(iOS 15.4, *) {
+    // Garde 2026-11-28 : uniquement si la camera a un autofocus. La camera
+    // avant des iPhone 13 et plus anciens est a mise au point fixe ; y regler
+    // le face-driven AF est la cause presumee du plantage a l ouverture du
+    // selfie (iPhone 12, iOS 27.2.1, a chaque essai).
+    if #available(iOS 15.4, *), device.isFocusModeSupported(.continuousAutoFocus) {
       device.automaticallyAdjustsFaceDrivenAutoFocusEnabled = false
       device.isFaceDrivenAutoFocusEnabled = true
     }
