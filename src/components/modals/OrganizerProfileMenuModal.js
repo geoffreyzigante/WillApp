@@ -10,7 +10,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, TextInput, ScrollView,
   KeyboardAvoidingView, ActivityIndicator, Alert, Platform, StyleSheet,
-  Animated, Dimensions, Easing,
+  Animated, Dimensions, Easing, Linking,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { PasswordInput } from '../PasswordInput';
@@ -18,6 +18,19 @@ import { C } from '../../constants/colors';
 import { T } from '../../constants/tokens';
 import { authStyles } from '../../constants/formStyles';
 import { lh } from '../../constants/typo';
+
+// Meme calcul que « Mon compte » de l espace orga (AccountModal.js, BillingCard).
+// Deux sources, deux unites : tier_price_cents = montant debite par Stripe
+// (centimes) ; billing_amount = montant saisi par l admin (euros).
+function montantEuros(e) {
+  if (typeof e?.tier_price_cents === 'number') return e.tier_price_cents / 100;
+  return Number(e?.billing_amount || 0);
+}
+const LIENS_LEGAUX = [
+  { label: 'CGU', url: 'https://will-app.com/cgu/' },
+  { label: 'Politique de confidentialité', url: 'https://will-app.com/confidentialite/' },
+  { label: 'Support', url: 'mailto:hello@will-app.com' },
+];
 
 const SCREEN_W = Dimensions.get('window').width;
 const DRAWER_W = Math.min(340, Math.round(SCREEN_W * 0.88));
@@ -85,6 +98,10 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [organisation, setOrganisation] = useState('');
+  const [telephone, setTelephone] = useState('');
+  // Facturation : total du / regle sur tous les events de l orga, lu a l ouverture.
+  const [totaux, setTotaux] = useState(null);
   const [busy, setBusy] = useState(false);
   const [changingPwd, setChangingPwd] = useState(false);
   const [oldPwd, setOldPwd] = useState('');
@@ -124,13 +141,35 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
     if (editing && profile) {
       setFirstName(profile.firstName || '');
       setLastName(profile.lastName || '');
+      setOrganisation(profile.organization || '');
+      setTelephone(profile.phone || '');
     }
   }, [editing, profile]);
+
+  useEffect(() => {
+    if (!visible || !organizerApiFetch) return undefined;
+    let annule = false;
+    (async () => {
+      try {
+        const r = await organizerApiFetch('/organizer/my-events');
+        const data = r.ok ? await r.json() : null;
+        if (annule || !Array.isArray(data)) return;
+        let du = 0; let regle = 0;
+        for (const e of data) {
+          const m = montantEuros(e);
+          if (e.billing_status === 'pending_payment') du += m;
+          else if (e.billing_status === 'paid') regle += m;
+        }
+        setTotaux({ du, regle });
+      } catch { /* hors ligne : les montants restent « — » */ }
+    })();
+    return () => { annule = true; };
+  }, [visible, organizerApiFetch]);
 
   const save = async () => {
     setBusy(true);
     try {
-      await onUpdate?.({ firstName, lastName });
+      await onUpdate?.({ firstName, lastName, organization: organisation.trim(), phone: telephone.trim() });
       setEditing(false);
     } finally {
       setBusy(false);
@@ -180,17 +219,36 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
             <Animated.View style={{ flex: 1, opacity: contentOpacity, transform: [{ translateX: contentX }, { scale: contentScale }] }}>
 
             {profile && !editing && (
-              <View style={drawer.section}>
-                <Text style={drawer.secLabel}>Mes infos</Text>
-                <Ligne label="Prénom" value={profile.firstName} />
-                <Ligne label="Nom" value={profile.lastName} />
-                <Ligne label="Email" value={profile.email} dernier />
-              </View>
+              <>
+                <View style={drawer.section}>
+                  <Text style={drawer.secLabel}>Identité</Text>
+                  <Ligne label="Nom" value={[profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.name} />
+                  <Ligne label="Organisation" value={profile.organization || "Pas d'organisation"} dernier />
+                </View>
+                <View style={drawer.section}>
+                  <Text style={drawer.secLabel}>Coordonnées</Text>
+                  <Ligne label="Email" value={profile.email} />
+                  <Ligne label="Téléphone" value={profile.phone || 'Non renseigné'} />
+                  <Ligne label="Mot de passe" value="••••••••" dernier />
+                </View>
+                <View style={drawer.section}>
+                  <Text style={drawer.secLabel}>Facturation</Text>
+                  <Ligne label="Montant dû" value={totaux ? `${Math.round(totaux.du)} €` : '—'} />
+                  <Ligne label="Montant réglé" value={totaux ? `${Math.round(totaux.regle)} €` : '—'} />
+                  <Action label="Voir mes factures" ton="lien" onPress={() => Linking.openURL('https://will-app.com/factures').catch(() => {})} dernier />
+                </View>
+                <View style={drawer.section}>
+                  <Text style={drawer.secLabel}>Légal</Text>
+                  {LIENS_LEGAUX.map((l, i) => (
+                    <Action key={l.label} label={l.label} onPress={() => Linking.openURL(l.url).catch(() => {})} dernier={i === LIENS_LEGAUX.length - 1} />
+                  ))}
+                </View>
+              </>
             )}
 
             {profile && editing && (
               <View style={drawer.section}>
-                <Text style={drawer.secLabel}>Mes infos</Text>
+                <Text style={drawer.secLabel}>Identité</Text>
                 <TextInput
                   placeholder="Prénom" placeholderTextColor={C.muted}
                   value={firstName} onChangeText={setFirstName}
@@ -199,6 +257,19 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
                 <TextInput
                   placeholder="Nom" placeholderTextColor={C.muted}
                   value={lastName} onChangeText={setLastName}
+                  style={authStyles.input}
+                />
+                <TextInput
+                  placeholder="Organisation (facultatif)" placeholderTextColor={C.muted}
+                  value={organisation} onChangeText={setOrganisation}
+                  autoCapitalize="sentences"
+                  style={authStyles.input}
+                />
+                <Text style={[drawer.secLabel, { marginTop: 14 }]}>Coordonnées</Text>
+                <TextInput
+                  placeholder="Téléphone (06 12 34 56 78)" placeholderTextColor={C.muted}
+                  value={telephone} onChangeText={setTelephone}
+                  keyboardType="phone-pad"
                   style={authStyles.input}
                 />
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
@@ -220,15 +291,14 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
 
             {profile && !editing && !changingPwd && (
               <View style={drawer.section}>
-                <Text style={drawer.secLabel}>Réglages</Text>
                 <Action label="Modifier mes infos" onPress={() => setEditing(true)} />
-                <Action label="Modifier mon mot de passe" onPress={() => setChangingPwd(true)} dernier />
+                <Action label="Changer le mot de passe" onPress={() => setChangingPwd(true)} dernier />
               </View>
             )}
 
             {profile && changingPwd && (
               <View style={drawer.section}>
-                <Text style={drawer.secLabel}>Sécurité</Text>
+                <Text style={drawer.secLabel}>Mot de passe</Text>
                 <PasswordInput
                   placeholder="Ancien mot de passe" placeholderTextColor={C.muted}
                   value={oldPwd} onChangeText={setOldPwd}
