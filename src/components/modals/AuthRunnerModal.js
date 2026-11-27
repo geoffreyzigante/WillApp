@@ -11,7 +11,7 @@
 //   - register : prenom + nom + date + email + password + CGU + biométrique
 //   - forgot : email -> POST /runner/forgot-password
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GrainViolet } from '../GrainViolet';
 import {
   Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Keyboard,
@@ -30,6 +30,7 @@ import {
 } from '../TexteConsentBiometrique';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SelfieCameraModal } from './SelfieCameraModal';
+import { permissionCameraAvantOuverture } from '../../services/cameraPermission';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BoutonsConnexion } from '../BoutonsConnexion';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -139,6 +140,8 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
   const [registerStep, setRegisterStep] = useState('selfie'); // 'selfie' | 'form'
   const [selfieUri, setSelfieUri] = useState(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  // Autorisation demandee avant d ouvrir l ecran camera (cf. services/cameraPermission).
+  const ouvrirCamera = useCallback(async () => { await permissionCameraAvantOuverture(); setCameraOpen(true); }, []);
   const [forgotEmailSent, setForgotEmailSent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -1082,7 +1085,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                 <View style={{ alignItems: 'center', marginBottom: 26 }}>
                   {/* Prise de vue en direct uniquement : autoriser la galerie
                       reviendrait a laisser enregistrer le visage d un autre. */}
-                  <TouchableOpacity activeOpacity={0.85} onPress={() => setCameraOpen(true)}>
+                  <TouchableOpacity activeOpacity={0.85} onPress={() => ouvrirCamera()}>
                     {selfieUri ? (
                       <ExpoImage source={{ uri: selfieUri }} style={{ width: 190, height: 190, borderRadius: 24 }} contentFit="cover" />
                     ) : (
@@ -1091,7 +1094,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity
-                  onPress={() => (selfieUri ? setRegisterStep('form') : setCameraOpen(true))}
+                  onPress={() => (selfieUri ? setRegisterStep('form') : ouvrirCamera())}
                   activeOpacity={0.9}
                   style={{ height: 50, borderRadius: 12, backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', paddingHorizontal: 44 }}
                 >
@@ -1100,7 +1103,7 @@ export function AuthRunnerModal({ visible, onClose, onSuccess, onDismiss, onSelf
                   </Text>
                 </TouchableOpacity>
                 {selfieUri ? (
-                  <TouchableOpacity onPress={() => setCameraOpen(true)} style={{ paddingVertical: 14, alignItems: 'center', marginTop: 4 }}>
+                  <TouchableOpacity onPress={() => ouvrirCamera()} style={{ paddingVertical: 14, alignItems: 'center', marginTop: 4 }}>
                     <Text style={{ color: T.primary, fontFamily: 'Montserrat-SemiBold', fontSize: 13 }}>Reprendre mon selfie</Text>
                   </TouchableOpacity>
                 ) : (

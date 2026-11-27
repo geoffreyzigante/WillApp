@@ -38,6 +38,7 @@ import {
   LIEN_CONFIDENTIALITE_LABEL, PHRASE_SELFIE_AVANT_COURSE,
 } from '../TexteConsentBiometrique';
 import { SelfieCameraModal } from './SelfieCameraModal';
+import { permissionCameraAvantOuverture } from '../../services/cameraPermission';
 
 export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = false, onSkip }) {
   const [uri, setUri] = useState(null);
@@ -80,7 +81,8 @@ export function SelfieModal({ visible, onClose, onSaved, userId, signupMode = fa
     setConsentGiven(true);
   };
 
-  const take = () => {
+  const take = async () => {
+    await permissionCameraAvantOuverture();
     setCameraOpen(true);
   };
 
