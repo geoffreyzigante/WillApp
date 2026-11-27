@@ -243,6 +243,7 @@ import { PhotosScreen } from './src/screens/PhotosScreen';
 import { AppHeader } from './src/components/AppHeader';
 import { EventDetailScreen } from './src/screens/EventDetailScreen';
 import { PhotoViewerModal } from './src/components/modals/PhotoViewerModal';
+import { MentionDroitsModal } from './src/components/modals/MentionDroitsModal';
 import { PIN_REGEX, isValidPin, generateRandomPin } from './src/utils/pin';
 import { useLongueurPinAPoser } from './src/utils/usePinLength';
 import {
@@ -525,7 +526,7 @@ const TITRES_SELFIE_REFUSE = {
   multiple_faces_detected: 'Plusieurs visages',
 };
 
-function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch }) {
+function PhotographerScreen({ session, onLogout, onChangeEvent, onExit, photographerApiFetch }) {
   // Ecran toujours allume pendant la session photographe : evite que la veille
   // iOS suspende process/drain (les fetch upload sont coupes en background).
   // Cas terrain : benevole pose l'iPhone branche sur powerbank, capture +
@@ -2726,6 +2727,52 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
   };
 
   const [menuOpen, setMenuOpen] = useState(false);
+  // Mention de droits au PREMIER acces a un event (comme l espace photographe
+  // web, MentionModal.js) : acceptee une fois par photographe et par event,
+  // horodatee cote serveur (POST /photographer/accept-cgu). null = on ne sait
+  // pas encore (pas de flash de la modale chez qui l a deja acceptee).
+  const [mentionAMontrer, setMentionAMontrer] = useState(null);
+  const [mentionEnvoi, setMentionEnvoi] = useState(false);
+  const [mentionErreur, setMentionErreur] = useState('');
+  const cleMention = session?.event?.code ? `@will_mention_${session.event.code}_${session.photographer_id || ''}` : null;
+  useEffect(() => {
+    if (!cleMention) return undefined;
+    let annule = false;
+    (async () => {
+      try {
+        if ((await AsyncStorage.getItem(cleMention)) === 'yes') { if (!annule) setMentionAMontrer(false); return; }
+      } catch {}
+      try {
+        const r = await photographerApiFetch('/photographer/cgu-status');
+        const d = r && r.ok ? await r.json().catch(() => null) : null;
+        if (annule) return;
+        if (d && d.accepted) { AsyncStorage.setItem(cleMention, 'yes').catch(() => {}); setMentionAMontrer(false); }
+        else setMentionAMontrer(true);
+      } catch { if (!annule) setMentionAMontrer(true); }
+    })();
+    return () => { annule = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cleMention]);
+  const accepterMention = async () => {
+    setMentionEnvoi(true); setMentionErreur('');
+    try {
+      const r = await photographerApiFetch('/photographer/accept-cgu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error || "Impossible d'enregistrer. Réessaie.");
+      }
+      if (cleMention) AsyncStorage.setItem(cleMention, 'yes').catch(() => {});
+      setMentionAMontrer(false);
+    } catch (e) {
+      setMentionErreur(e?.message || "Impossible d'enregistrer. Réessaie.");
+    } finally {
+      setMentionEnvoi(false);
+    }
+  };
   // Selecteurs d Epreuve et de Poste. Ils remplacent la double roulette
   // toujours visible : le handoff les met dans des panneaux, pour degager le
   // bas de l ecran et laisser la zone centrale du cadre libre.
@@ -4880,6 +4927,13 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
 
   return (
     <View style={{ flex: 1, backgroundColor: P.appBg }} onTouchStart={isAutoArmed ? reveillerApercu : undefined}>
+      <MentionDroitsModal
+        visible={mentionAMontrer === true}
+        nomEvent={session?.event?.name}
+        onAccepter={accepterMention}
+        envoi={mentionEnvoi}
+        erreur={mentionErreur}
+      />
 
       {/* Fond tap-pour-fermer au niveau ECRAN. Le fond du Panneau ne couvre
           que le cadre camera (absoluteFill relatif a son parent) : taper
@@ -5273,8 +5327,29 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
               onPress={() => { fermerPanneaux(); setTechExpanded(v => !v); }}
             />
             <RangeePanneau
+              libelle="Changer d'event"
+              droite={<Text style={{ fontFamily: 'Montserrat', color: P.label, fontSize: 17 }}>›</Text>}
+              onPress={() => {
+                fermerPanneaux();
+                const changer = () => { if (onChangeEvent) onChangeEvent(); else onLogout(); };
+                if (pendingCount > 0) {
+                  Alert.alert(
+                    'Photos en cours d\'envoi',
+                    `Il te reste ${pendingCount} photo${pendingCount > 1 ? 's' : ''} à envoyer pour cet event. Elles ne partiront que si tu reviens sur cet event.`,
+                    [
+                      { text: 'Rester', style: 'cancel' },
+                      { text: 'Changer d\'event', style: 'destructive', onPress: changer },
+                    ],
+                    { cancelable: true },
+                  );
+                } else {
+                  changer();
+                }
+              }}
+            />
+            <RangeePanneau
               dernier
-              libelle="Déconnexion"
+              libelle="Se déconnecter"
               couleur={P.danger}
               onPress={() => {
                 fermerPanneaux();
@@ -5294,7 +5369,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                     'Tu devras saisir à nouveau le code PIN pour reprendre ton event.',
                     [
                       { text: 'Annuler', style: 'cancel' },
-                      { text: 'Déconnexion', style: 'destructive', onPress: onLogout },
+                      { text: 'Se déconnecter', style: 'destructive', onPress: onLogout },
                     ],
                     { cancelable: true },
                   );
@@ -9345,6 +9420,13 @@ function App() {
         // Audit B14 : factor en logoutPhotographer (reuse aussi pour
         // handlePhotographerAuthFailure).
         onLogout={logoutPhotographer}
+        // Changer d'event : on sort de celui-ci (la file survit, cf
+        // logoutPhotographer) et on rouvre tout de suite la connexion, pour
+        // choisir l autre event — le « Changer d'event » du web.
+        onChangeEvent={async () => {
+          await logoutPhotographer();
+          setTimeout(() => setLoginRole('photographer'), 350);
+        }}
       />
     </View>
   ) : null;
