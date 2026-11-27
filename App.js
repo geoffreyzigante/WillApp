@@ -6164,6 +6164,11 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
   useEffect(() => {
     if (visible) {
       setStep(1);
+      // Le parcours demanderCompte sort busy=true (voulu : le bouton reste
+      // grise pendant l enchainement compte + envoi + atterrissage). Mais le
+      // modal n est pas demonte a la fermeture : sans ce reset, la prochaine
+      // ouverture gardait le bouton en spinner pour toujours.
+      setBusy(false);
       setShowErr({ 1: false, 2: false, 3: false, 4: false });
       slideX.setValue(0);
       setUserEditedCode(false);
@@ -8303,6 +8308,11 @@ function App() {
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {
+          // Le compte est cree mais l event n est pas parti. Le modal de
+          // creation attend busy=true sans issue : on le ferme, sinon il
+          // reste un spinner sans fin (l orga retrouve son brouillon cote
+          // formulaire au prochain essai).
+          setCreateEventModal(false);
           Alert.alert('Erreur', data.error || "L'event n'a pas pu être envoyé.");
         } else {
           const codeFinal = data.code || payload.code;
@@ -8352,6 +8362,8 @@ function App() {
           return;
         }
       } catch (e) {
+        // Meme impasse que le !r.ok ci-dessus : fermer le modal bloque.
+        setCreateEventModal(false);
         Alert.alert('Erreur', 'Connexion impossible. Vérifie ton réseau.');
       }
     }
