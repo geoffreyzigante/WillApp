@@ -96,8 +96,8 @@ export function OrganizerProfileMenuModal({ visible, onClose, onBack, organizerS
 
   const submitPwd = async () => {
     setPwdError('');
-    if (newPwd !== pwdConfirm) { setPwdError('Les deux mots de passe ne correspondent pas.'); return; }
-    if (newPwd.length < 8) { setPwdError('Mot de passe : 8 caractères minimum.'); return; }
+    if (newPwd !== pwdConfirm) { setPwdError('Les deux nouveaux mots de passe ne correspondent pas.'); return; }
+    if (newPwd.length < 8) { setPwdError('Nouveau mot de passe : 8 caractères minimum.'); return; }
     setPwdBusy(true);
     try {
       const r = await organizerApiFetch(`/organizer/change-password`, {

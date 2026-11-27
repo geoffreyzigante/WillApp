@@ -5291,7 +5291,7 @@ function PhotographerScreen({ session, onLogout, onExit, photographerApiFetch })
                 } else {
                   Alert.alert(
                     'Se déconnecter ?',
-                    'Tu devras saisir à nouveau le mot de passe pour reprendre ton événement.',
+                    'Tu devras saisir à nouveau le code PIN pour reprendre ton event.',
                     [
                       { text: 'Annuler', style: 'cancel' },
                       { text: 'Déconnexion', style: 'destructive', onPress: onLogout },
@@ -6867,6 +6867,19 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
 
               <TitreSection>Page de l'event</TitreSection>
               <Bloc>
+                <Ligne libelle="Adresse">
+                  <Champ value={address} onChangeText={setAddress} placeholder="Lieu de départ" accessibilityLabel="Adresse de départ" autoCapitalize="sentences" />
+                </Ligne>
+                <Ligne seule>
+                  <Champ
+                    value={message}
+                    onChangeText={setMessage}
+                    multiline
+                    placeholder="Description : parcours, ambiance, ce qu'il faut savoir avant de venir"
+                    accessibilityLabel="Description"
+                    autoCapitalize="sentences"
+                  />
+                </Ligne>
                 <Ligne libelle="Couverture" aide="Format paysage : tu la cadres juste après.">
                   <TouchableOpacity
                     onPress={pickAndUploadCover}
@@ -6886,25 +6899,12 @@ function CreateEventModal({ visible, onClose, onCreated, onCree, onCompteApple, 
                     </Text>
                   </TouchableOpacity>
                 </Ligne>
-                <Ligne seule>
-                  <Champ
-                    value={message}
-                    onChangeText={setMessage}
-                    multiline
-                    placeholder="Description : parcours, ambiance, ce qu'il faut savoir avant de venir"
-                    accessibilityLabel="Description"
-                    autoCapitalize="sentences"
-                  />
-                </Ligne>
-                <Ligne libelle="Adresse">
-                  <Champ value={address} onChangeText={setAddress} placeholder="Lieu de départ" accessibilityLabel="Adresse de départ" autoCapitalize="sentences" />
-                </Ligne>
                 {!isEdit ? (
                   <Ligne
                     libelle="Code PIN"
                     manque={pinManque}
                     erreur={pinManque ? `Le code PIN doit être composé de ${pinLen} chiffres` : ''}
-                    aide={`${pinLen} chiffres à donner à tes photographes : ils se connectent avec le jour J.`}
+                    aide={`${pinLen} chiffres à transmettre à tes photographes le jour J. Ils l'utiliseront pour se connecter à ton event sur l'app Will.`}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <Champ

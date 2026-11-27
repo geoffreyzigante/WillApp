@@ -148,7 +148,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
 
   const doLogin = async (pwdOverride) => {
     const pwd = (pwdOverride ?? password).trim();
-    if (!code) return Alert.alert('Événement requis', role === 'photographer' ? 'Choisis un événement.' : 'Entre le code.');
+    if (!code) return Alert.alert('Event requis', role === 'photographer' ? 'Choisis ton event.' : 'Entre le code.');
     if (!pwd) {
       if (role === 'photographer') setPinError('Code PIN requis');
       else Alert.alert('Mot de passe requis');
@@ -165,10 +165,10 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
         const st = r?.status;
         let msg;
         let effacerSaisie = false;
-        if (st === 429) msg = 'Trop d\'essais, réessaie dans quelques minutes';
+        if (st === 429) msg = 'Trop de tentatives, réessaie dans quelques minutes';
         // Le worker dit pourquoi (pas encore valide / pas encore active).
-        else if (st === 403) msg = r?.error || 'Cet événement n\'est pas encore validé';
-        else if (st === 404) msg = 'Événement introuvable';
+        else if (st === 403) msg = r?.error || 'Cet event n\'est pas encore validé';
+        else if (st === 404) msg = 'Event introuvable';
         else if (st === 401) { msg = role === 'photographer' ? 'Code PIN incorrect' : 'Identifiants invalides.'; effacerSaisie = true; }
         else if (st >= 500) msg = 'Serveur indisponible, réessaie dans un instant';
         else msg = r?.error || (role === 'photographer' ? 'Connexion impossible' : 'Identifiants invalides.');
@@ -190,7 +190,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
       } else {
         Alert.alert(
           'Hors ligne',
-          'Première connexion impossible sans réseau. Connecte-toi en wifi pour activer ton événement — ensuite l\'app fonctionnera offline.',
+          'Première connexion impossible sans réseau. Connecte-toi en wifi pour activer ton event — ensuite l\'app fonctionnera offline.',
         );
       }
     }
@@ -199,7 +199,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
 
   const requestReset = async () => {
     const slug = code.trim().toLowerCase();
-    if (!slug) return Alert.alert('Code requis', 'Saisis le code de ton événement avant de demander un reset.');
+    if (!slug) return Alert.alert('Code requis', 'Saisis le code de ton event avant de demander un reset.');
     setResetBusy(true);
     try {
       const r = await fetch(`${API_URL}/auth/request-org-reset`, {
@@ -274,7 +274,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
             {role === 'organizer' ? 'Espace organisateur' : 'Espace photographe'}
           </Text>
           <Text style={{ fontFamily: 'Montserrat', color: 'rgba(255,255,255,0.75)', fontSize: 13, textAlign: 'center' }}>
-            {role === 'photographer' ? 'Sélectionne ton événement et entre ton code PIN' : 'Connecte-toi à ton événement'}
+            {role === 'photographer' ? 'Sélectionne ton event et entre ton code PIN' : 'Connecte-toi à ton event'}
           </Text>
         </GrainViolet>
 
@@ -296,7 +296,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
 
             {role === 'photographer' ? (
               <>
-                <Text style={{ fontSize: 15, fontFamily: 'Montserrat-Medium', color: '#3F3F46', marginBottom: 7 }}>Événement</Text>
+                <Text style={{ fontSize: 15, fontFamily: 'Montserrat-Medium', color: '#3F3F46', marginBottom: 7 }}>Event</Text>
                 {/* Search : filtre client. Masque quand un code est deja
                     selectionne (la liste se reduit alors a l event actif
                     et le PIN a la main, search inutile). */}
@@ -345,7 +345,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                                 setManualEvent(ev);
                                 setCode(ev.code);
                               } else {
-                                setCodeError('Aucun événement actif avec ce code.');
+                                setCodeError('Aucun event actif avec ce code.');
                               }
                             })
                             .catch(() => setCodeError('Connexion impossible. Vérifie ton réseau.'))
@@ -376,7 +376,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                                 setManualEvent(ev);
                                 setCode(ev.code);
                               } else {
-                                setCodeError('Aucun événement actif avec ce code.');
+                                setCodeError('Aucun event actif avec ce code.');
                               }
                             })
                             .catch(() => setCodeError('Connexion impossible. Vérifie ton réseau.'))
@@ -411,7 +411,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                     <View style={{ padding: 24, alignItems: 'center' }}>
                       <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 13 }}>
                         {upcoming.length === 0
-                          ? 'Aucun événement à venir'
+                          ? 'Aucun event à venir'
                           : 'Aucun résultat pour cette recherche'}
                       </Text>
                     </View>
@@ -500,11 +500,11 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
                 </Text>
                 <Text style={{ fontFamily: 'Montserrat', color: C.textSoft, fontSize: 12, marginBottom: 14 }}>
                   {resetMode === 'reset-request'
-                    ? `Un code à 6 chiffres sera envoyé à l'email enregistré pour cet événement.`
+                    ? `Un code à 6 chiffres sera envoyé à l'email enregistré pour cet event.`
                     : `Code envoyé à l'email de l'organisateur. Valable 15 minutes.`}
                 </Text>
                 <TextInput
-                  placeholder="Code de l'événement"
+                  placeholder="Code de l'event"
                   placeholderTextColor={C.muted}
                   value={code}
                   onChangeText={setCode}
@@ -538,7 +538,7 @@ export function LoginModal({ visible, role, events, onClose, onSuccess }) {
             ) : (
               <>
                 <TextInput
-                  placeholder="Code de l'événement"
+                  placeholder="Code de l'event"
                   placeholderTextColor={C.muted}
                   value={code}
                   onChangeText={setCode}
