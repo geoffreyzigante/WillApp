@@ -30,6 +30,9 @@ import { Camera as VisionCamera, useCameraPermission, useCameraDevice, useFrameP
 import { Worklets } from 'react-native-worklets-core';
 import { Image as ExpoImage } from 'expo-image';
 import * as Haptics from 'expo-haptics';
+import Constants from 'expo-constants';
+import * as Device from 'expo-device';
+import * as ImagePicker from 'expo-image-picker';
 import Svg, { Defs, Mask, Rect, Ellipse, Path, Polygon } from 'react-native-svg';
 import { detectHumans, humanDetectorPlugin } from '../../services/frameProcessors';
 import { s } from '../../constants/styles';
@@ -180,7 +183,7 @@ function MentionsRotator({ topOffset, opacity }) {
   );
 }
 
-export function SelfieCameraModal({ visible, onClose, onCaptured }) {
+function SelfieCameraGuidee({ visible, onClose, onCaptured }) {
   const cameraRef = useRef(null);
   const { hasPermission, requestPermission } = useCameraPermission();
   // U-I05 : pas de contrainte physicalDevices. Sur Android, imposer
@@ -898,4 +901,103 @@ export function SelfieCameraModal({ visible, onClose, onCaptured }) {
       </View>
     </Modal>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Secours : appareil photo du systeme (2026-11-28).
+//
+// Constat : sur un iPhone 12 (iOS 27.2.1), l app se ferme a CHAQUE ouverture
+// du selfie, alors qu un iPhone 16e passe. Cause presumee (pas de rapport de
+// crash) : le patch natif with-shutter-lock reglait le face-driven autofocus
+// sur toute camera, y compris la camera avant a mise au point fixe des iPhone
+// anterieurs a l iPhone 14. Le correctif est natif (garde isFocusModeSupported)
+// et n existe qu a partir du build PREMIER_BUILD_CORRIGE.
+//
+// En attendant que ce build soit sur l App Store, ces telephones ne montent
+// plus VisionCamera pour le selfie : ils passent par l appareil photo du
+// systeme (expo-image-picker, deja dans tous les binaires). Pas de guidage,
+// mais un recadrage carre qui aide a tenir la regle serveur (hauteur du
+// visage >= 30 % de l image).
+//
+// Tout est du JS : livrable par mise a jour OTA.
+const PREMIER_BUILD_CORRIGE = 28;
+
+function secoursSystemeRequis() {
+  try {
+    if (Platform.OS !== 'ios') return false;
+    // Numero de build NATIF (CFBundleVersion), pas celui de la mise a jour.
+    const build = parseInt(Constants.platform?.ios?.buildNumber, 10);
+    if (Number.isFinite(build) && build >= PREMIER_BUILD_CORRIGE) return false;
+    const id = String(Device.modelId || '');
+    const m = /^iPhone(\d+),(\d+)$/.exec(id);
+    // iPad / iPod : camera avant a mise au point fixe. Identifiant inconnu
+    // (simulateur) : on garde l ecran guide.
+    if (!m) return /^iP(ad|od)/.test(id);
+    const maj = parseInt(m[1], 10);
+    const min = parseInt(m[2], 10);
+    // Autofocus a l avant a partir de l iPhone 14 : iPhone14,7 (14),
+    // iPhone14,8 (14 Plus), puis tous les iPhone15,x et suivants.
+    if (maj >= 15) return false;
+    if (maj === 14) return !(min === 7 || min === 8);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+const SECOURS_SYSTEME = secoursSystemeRequis();
+
+function SelfieSysteme({ visible, onClose, onCaptured }) {
+  const enCours = useRef(false);
+  const onCloseRef = useRef(onClose);
+  const onCapturedRef = useRef(onCaptured);
+  useEffect(() => { onCloseRef.current = onClose; onCapturedRef.current = onCaptured; }, [onClose, onCaptured]);
+
+  useEffect(() => {
+    if (!visible) { enCours.current = false; return; }
+    if (enCours.current) return;
+    enCours.current = true;
+    const fermer = () => { onCloseRef.current?.(); };
+    const prendre = async () => {
+      try {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Caméra', "L'accès à la caméra a été refusé. Ouvre les réglages pour l'autoriser.", [
+            { text: 'Annuler', style: 'cancel' },
+            { text: 'Ouvrir les réglages', onPress: () => Linking.openSettings() },
+          ]);
+          fermer();
+          return;
+        }
+        const res = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          cameraType: ImagePicker.CameraType.front,
+          allowsEditing: true,
+          quality: 0.9,
+        });
+        const uri = !res.canceled && res.assets && res.assets[0] ? res.assets[0].uri : null;
+        if (uri) onCapturedRef.current?.(uri);
+        else fermer();
+      } catch (e) {
+        Alert.alert('Erreur', e?.message || String(e));
+        fermer();
+      }
+    };
+    Alert.alert(
+      'Ton selfie',
+      'Tiens le téléphone près de toi : ton visage bien de face, seul dans l’image.',
+      [
+        { text: 'Annuler', style: 'cancel', onPress: fermer },
+        // Delai : laisser l alerte se refermer avant de presenter la camera.
+        { text: 'Prendre la photo', onPress: () => { setTimeout(prendre, 500); } },
+      ],
+      { cancelable: false },
+    );
+  }, [visible]);
+
+  return null;
+}
+
+export function SelfieCameraModal(props) {
+  return SECOURS_SYSTEME ? <SelfieSysteme {...props} /> : <SelfieCameraGuidee {...props} />;
 }
